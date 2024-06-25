@@ -1,0 +1,11 @@
+services:
+  xtdb:
+    image: ghcr.io/xtdb/xtdb-standalone-ea@sha256:735f69a0a361e1e1e0ac2c1c43b76f5301ddd41808022e0bbfbcdc1b0cd4d7d2
+    ports:
+      - "6543:3000"
+    volumes:
+      - "xtdb-data:/var/lib/xtdb"
+
+volumes:
+  xtdb-data:
+    driver: local

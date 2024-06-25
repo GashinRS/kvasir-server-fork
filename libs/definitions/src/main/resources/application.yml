@@ -1,0 +1,16 @@
+mp:
+  messaging:
+    outgoing:
+      change_requests_publish:
+        connector: smallrye-kafka
+        topic: change_requests
+        merge: true
+        waitForWriteCompletion: false
+    incoming:
+      change_requests_subscribe:
+        connector: smallrye-kafka
+        topic: change_requests
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest
