@@ -9,6 +9,8 @@ interface KnowledgeGraph {
 
     fun query(request: QueryRequest): Uni<QueryResult>
 
+    fun rawQuery(q: String): Uni<QueryResult>
+
     fun history(request: HistoryRequest): Uni<HistoryResult>
 
 }

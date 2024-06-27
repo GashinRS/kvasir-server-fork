@@ -1,6 +1,10 @@
 package kvasir.plugins.kg.xtdb
 
+import com.github.jsonldjava.core.JsonLdProcessor
+import com.github.jsonldjava.core.RDFDataset
+import com.github.jsonldjava.core.RDFDatasetUtils
 import com.google.common.hash.Hashing
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
@@ -22,20 +26,46 @@ class XtdbKnowledgeGraph(
         require(request.where.isEmpty()) { "Where clause is currently not supported when processing changes." }
         require(request.deletes.isEmpty()) { "Deletes are currently not supported when processing changes." }
         try {
+            val values = toStatements(request.inserts)
             xtdb.executeTx(
-                TxOp.Sql(
-                    "INSERT INTO ${request.podId} (_id, s, p, o) VALUES (?, ?, ?, ?)",
-                    request.inserts.flatMap { toStatements(it).map { triple -> triple.toRecord() } })
+                TxOp.Sql("INSERT INTO ${request.podId} (_id, s, p, o, t) VALUES (?, ?, ?, ?, ?)", values)
             )
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }.replaceWithVoid()
 
-    override fun query(request: QueryRequest): Uni<QueryResult> = vertx.executeBlocking {
-        xtdb.openQuery("SELECT * FROM ${request.podId}").use { results ->
-            val resultsList = results.map { it.mapValues { value -> value } }.toList()
-            QueryResult(resultsList, null)
+    override fun query(request: QueryRequest): Uni<QueryResult> {
+        val q = XtdbQueryParser(request).toSQL()
+        println("Xtdb query: $q")
+        Log.debug(q)
+        return rawQuery(q)
+    }
+
+    override fun rawQuery(q: String): Uni<QueryResult> = vertx.executeBlocking {
+        xtdb.openQuery(q).use { results ->
+            val dataset = RDFDataset()
+            results.forEach { record ->
+                val type = record["t"] as Map<String, Any?>
+                val quad = RDFDataset.Quad(
+                    RDFDataset.IRI(record["s"] as String),
+                    RDFDataset.IRI(record["p"] as String),
+                    when (type["type"]) {
+                        "IRI" -> RDFDataset.IRI(record["o"] as String)
+                        "Literal" -> RDFDataset.Literal(
+                            record["o"] as String,
+                            type["datatype"] as String?,
+                            type["language"] as String?
+                        )
+
+                        else -> throw IllegalArgumentException("Unknown type: ${type["type"]}")
+                    },
+                    "@default"
+                )
+                dataset.getQuads("@default").add(quad)
+            }
+            val jsonLd = JsonLdProcessor.fromRDF(RDFDatasetUtils.toNQuads(dataset))
+            QueryResult(jsonLd as List<Map<String, Any>>)
         }
     }
 
@@ -43,29 +73,26 @@ class XtdbKnowledgeGraph(
         TODO("Not yet implemented")
     }
 
-    private fun toStatements(doc: Map<String, Any>): List<RDFTriple> {
-        val id = doc["@id"]
-        return doc.entries.filterNot { it.key == "@id" }.flatMap { (key, value) ->
-            when (value) {
-                is Map<*, *> -> toStatements(value as Map<String, Any>)
-                is List<*> -> value.flatMap { listEntry ->
-                    if (listEntry is Map<*, *>) toStatements(listEntry as Map<String, Any>)
-                    else listOf(RDFTriple(id.toString(), key, listEntry!!))
-                }
-
-                else -> listOf(RDFTriple(id.toString(), key, value))
-            }
+    private fun toStatements(docs: List<Map<String, Any>>): List<List<Any?>> {
+        val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
+        return dataset.getQuads("@default").map { quad ->
+            listOf(
+                "kvasir:" + Hashing.farmHashFingerprint64()
+                    .hashString("${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8),
+                quad.subject.value,
+                quad.predicate.value,
+                quad.`object`.value,
+                mapOf(
+                    "type" to when {
+                        quad.`object`.isIRI -> "IRI"
+                        quad.`object`.isBlankNode -> "BlankNode"
+                        quad.`object`.isLiteral -> "Literal"
+                        else -> "Unknown"
+                    },
+                    "datatype" to quad.`object`.datatype?.toString(),
+                    "language" to quad.`object`.language?.toString()
+                )
+            )
         }
-    }
-}
-
-data class RDFTriple(val s: String, val p: String, val o: Any) {
-    fun toRecord(): List<Any> {
-        return listOf(
-            "kvasir:" + Hashing.farmHashFingerprint64().hashString("$s$p$o", Charsets.UTF_8).toString(),
-            s,
-            p,
-            o
-        )
     }
 }
