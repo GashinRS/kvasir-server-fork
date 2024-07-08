@@ -21,24 +21,29 @@ class GraphQLToSQL(private val request: QueryRequest) {
         id: String = ""
     ): String {
         val dataAlias = "${id}data"
-        val subjectsAlias = "${id}subjects"
         val selectionSetContainer = node as SelectionSetContainer<*>
         val subjectWereClause = joinId?.let { " WHERE s = $joinId.o" } ?: ""
         val subjectSelection = "SELECT DISTINCT s FROM ${request.podId}$subjectWereClause"
         val fieldJoinClauses = mutableListOf<String>()
-        val selectedFields = mutableListOf<String>()
+        val nestedNonNullFields = mutableListOf<String>()
         val dataSelectClauses = selectionSetContainer.selectionSet.selections.joinToString(", ") { selection ->
             when (selection) {
                 is Field -> {
+                    val isOptional = selection.directives.any { it.name == "optional" }
                     val effectiveName = (selection.alias ?: selection.name)
                     val joinName = "${id}$effectiveName"
-                    selectedFields.add(effectiveName)
                     val fqPredicate =
                         selection.getDirectives("context").firstOrNull()
                             ?.getArgument("iri")?.value?.let { (it as StringValue).value }
                             ?: throw IllegalArgumentException("Missing semantic context for field '${selection.name}' (${selection.sourceLocation})!")
-                    fieldJoinClauses.add("JOIN (SELECT s, o FROM ${request.podId} WHERE p = '$fqPredicate') $joinName ON $joinName.s = $dataAlias.s")
+                    val fieldJoinClause =
+                        "JOIN (SELECT s, o FROM ${request.podId} WHERE p = '$fqPredicate') $joinName ON $joinName.s = $dataAlias.s"
                     if (selection.selectionSet != null) {
+                        // Workaround to make sure that null results are filtered out when the field is not optional.
+                        if (!isOptional) {
+                            nestedNonNullFields.add(effectiveName)
+                        }
+                        fieldJoinClauses.add(fieldJoinClause)
                         // Field has a nested selection set, recurse
                         "NEST_MANY(${
                             mapNode(
@@ -48,6 +53,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
                             )
                         }) AS $effectiveName"
                     } else {
+                        fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
                         // Field is a leaf node
                         "$joinName.o AS $effectiveName"
                     }
@@ -57,8 +63,10 @@ class GraphQLToSQL(private val request: QueryRequest) {
             }
         }
         val dataSelection =
-            "SELECT DISTINCT $dataSelectClauses FROM ${request.podId} $dataAlias ${fieldJoinClauses.joinToString(" ")} WHERE $subjectsAlias.s = $dataAlias.s"
-        return "SELECT ${selectedFields.joinToString(", ")} FROM ($subjectSelection) $subjectsAlias, LATERAL ($dataSelection) $dataAlias"
+            "SELECT $dataSelectClauses FROM ($subjectSelection) $dataAlias ${fieldJoinClauses.joinToString(" ")}"
+        return nestedNonNullFields.takeIf { it.isNotEmpty() }
+            ?.let { fieldsToCheck -> "SELECT * FROM ($dataSelection) ${id}env WHERE ${fieldsToCheck.joinToString(" AND ") { "$it[1] IS NOT null" }}" }
+            ?: dataSelection
     }
 }
 
@@ -69,10 +77,10 @@ fun main() {
           name @context(iri: "schema:givenName")
           email @context(iri: "schema:email")
           #friendRel:bestFriend @context(iri: "ex:friends")
-          #bestFriend @context(iri: "ex:friends") {
-          #  name @context(iri: "schema:givenName")
-          #  email @context(iri: "schema:email")
-          #}
+          bestFriend @context(iri: "ex:friends") {
+            name @context(iri: "schema:givenName")
+            email @optional @context(iri: "schema:email")
+          }
         }
     """.trimIndent()
     )
