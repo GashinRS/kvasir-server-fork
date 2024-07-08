@@ -1,6 +1,8 @@
 package kvasir.definitions.kg
 
+import graphql.language.Document
 import io.smallrye.mutiny.Uni
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 import java.util.*
 
 interface KnowledgeGraph {
@@ -8,8 +10,6 @@ interface KnowledgeGraph {
     fun process(request: ChangeRequest): Uni<Void>
 
     fun query(request: QueryRequest): Uni<QueryResult>
-
-    fun rawQuery(q: String): Uni<QueryResult>
 
     fun history(request: HistoryRequest): Uni<HistoryResult>
 
@@ -21,14 +21,13 @@ data class ChangeRequest(
     val graph: String = "", // Graph identifier
     val inserts: List<Map<String, Any>> = emptyList(),
     val deletes: List<Map<String, Any>> = emptyList(),
-    val where: List<Map<String, Any>> = emptyList(),
+    val where: List<Map<String, Any>> = emptyList(), // How does this where condition look? (since shift to GraphQL)
 )
 
+@GenerateNoArgConstructor
 data class QueryRequest(
     val podId: String,
-    val from: List<String> = emptyList(), // Graph identifiers
-    val where: List<Map<String, Any>>,
-    val select: List<Map<String, Any>>
+    val graphQL: Document
 )
 
 data class QueryResult(

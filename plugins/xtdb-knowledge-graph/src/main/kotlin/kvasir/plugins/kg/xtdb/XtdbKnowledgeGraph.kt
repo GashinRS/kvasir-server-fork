@@ -36,37 +36,43 @@ class XtdbKnowledgeGraph(
     }.replaceWithVoid()
 
     override fun query(request: QueryRequest): Uni<QueryResult> {
-        val q = XtdbQueryParser(request).toSQL()
-        println("Xtdb query: $q")
-        Log.debug(q)
-        return rawQuery(q)
+        TODO()
     }
 
-    override fun rawQuery(q: String): Uni<QueryResult> = vertx.executeBlocking {
-        xtdb.openQuery(q).use { results ->
-            val dataset = RDFDataset()
-            results.forEach { record ->
-                val type = record["t"] as Map<String, Any?>
-                val quad = RDFDataset.Quad(
-                    RDFDataset.IRI(record["s"] as String),
-                    RDFDataset.IRI(record["p"] as String),
-                    when (type["type"]) {
-                        "IRI" -> RDFDataset.IRI(record["o"] as String)
-                        "Literal" -> RDFDataset.Literal(
-                            record["o"] as String,
-                            type["datatype"] as String?,
-                            type["language"] as String?
-                        )
+//    override fun rawQuery(q: String): Uni<QueryResult> = vertx.executeBlocking {
+//        xtdb.openQuery(q).use { results ->
+//            val dataset = RDFDataset()
+//            results.forEach { record ->
+//                val type = record["t"] as Map<String, Any?>
+//                val quad = RDFDataset.Quad(
+//                    RDFDataset.IRI(record["s"] as String),
+//                    RDFDataset.IRI(record["p"] as String),
+//                    when (type["type"]) {
+//                        "IRI" -> RDFDataset.IRI(record["o"] as String)
+//                        "Literal" -> RDFDataset.Literal(
+//                            record["o"] as String,
+//                            type["datatype"] as String?,
+//                            type["language"] as String?
+//                        )
+//
+//                        else -> throw IllegalArgumentException("Unknown type: ${type["type"]}")
+//                    },
+//                    "@default"
+//                )
+//                dataset.getQuads("@default").add(quad)
+//            }
+//            val jsonLd = JsonLdProcessor.fromRDF(RDFDatasetUtils.toNQuads(dataset))
+//            QueryResult(jsonLd as List<Map<String, Any>>)
+//        }
+//    }
 
-                        else -> throw IllegalArgumentException("Unknown type: ${type["type"]}")
-                    },
-                    "@default"
-                )
-                dataset.getQuads("@default").add(quad)
-            }
-            val jsonLd = JsonLdProcessor.fromRDF(RDFDatasetUtils.toNQuads(dataset))
-            QueryResult(jsonLd as List<Map<String, Any>>)
-        }
+    // Only return targets that are effectively used in the projection
+    private fun getTargets(request: QueryRequest): List<Map<String, Any>> {
+        TODO()
+    }
+
+    private fun loadProjection(select: List<Map<String, Any>>, targets: List<Map<String, Any>>): QueryResult {
+        TODO()
     }
 
     override fun history(request: HistoryRequest): Uni<HistoryResult> {
