@@ -1,10 +1,13 @@
 package kvasir.plugins.kg.xtdb
 
+import com.google.common.hash.Hashing
 import graphql.language.*
 import graphql.parser.Parser
 import kvasir.definitions.kg.QueryRequest
 
 class GraphQLToSQL(private val request: QueryRequest) {
+
+    private val database = Hashing.farmHashFingerprint64().hashString(request.podId, Charsets.UTF_8).toString()
 
     fun toSQL(): String {
         // Verify that only a single query is specified and assign it (otherwise throw an exception)
@@ -15,6 +18,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
     }
 
 
+    // TODO: clean up & modularize
     fun mapNode(
         node: AbstractNode<*>,
         joinId: String? = null,
@@ -23,7 +27,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
         val dataAlias = "${id}data"
         val selectionSetContainer = node as SelectionSetContainer<*>
         val subjectWereClause = joinId?.let { " WHERE s = $joinId.o" } ?: ""
-        val subjectSelection = "SELECT DISTINCT s FROM ${request.podId}$subjectWereClause"
+        val subjectSelection = "SELECT DISTINCT s FROM $database$subjectWereClause"
         val fieldJoinClauses = mutableListOf<String>()
         val nestedNonNullFields = mutableListOf<String>()
         val dataSelectClauses = selectionSetContainer.selectionSet.selections.joinToString(", ") { selection ->
@@ -37,7 +41,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
                             ?.getArgument("iri")?.value?.let { (it as StringValue).value }
                             ?: throw IllegalArgumentException("Missing semantic context for field '${selection.name}' (${selection.sourceLocation})!")
                     val fieldJoinClause =
-                        "JOIN (SELECT s, o FROM ${request.podId} WHERE p = '$fqPredicate') $joinName ON $joinName.s = $dataAlias.s"
+                        "JOIN (SELECT s, o FROM $database WHERE p = '$fqPredicate') $joinName ON $joinName.s = $dataAlias.s"
                     if (selection.selectionSet != null) {
                         // Workaround to make sure that null results are filtered out when the field is not optional.
                         if (!isOptional) {
@@ -51,11 +55,11 @@ class GraphQLToSQL(private val request: QueryRequest) {
                                 joinName,
                                 effectiveName.plus("_")
                             )
-                        }) AS $effectiveName"
+                        }) AS `$effectiveName`"
                     } else {
                         fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
                         // Field is a leaf node
-                        "$joinName.o AS $effectiveName"
+                        "$joinName.o AS `$effectiveName`"
                     }
                 }
 
@@ -65,25 +69,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
         val dataSelection =
             "SELECT $dataSelectClauses FROM ($subjectSelection) $dataAlias ${fieldJoinClauses.joinToString(" ")}"
         return nestedNonNullFields.takeIf { it.isNotEmpty() }
-            ?.let { fieldsToCheck -> "SELECT * FROM ($dataSelection) ${id}env WHERE ${fieldsToCheck.joinToString(" AND ") { "$it[1] IS NOT null" }}" }
+            ?.let { fieldsToCheck -> "SELECT * FROM ($dataSelection) ${id}env WHERE ${fieldsToCheck.joinToString(" AND ") { "`$it`[1] IS NOT null" }}" }
             ?: dataSelection
     }
-}
-
-fun main() {
-    val q = Parser.parse(
-        """
-        {
-          name @context(iri: "schema:givenName")
-          email @context(iri: "schema:email")
-          #friendRel:bestFriend @context(iri: "ex:friends")
-          bestFriend @context(iri: "ex:friends") {
-            name @context(iri: "schema:givenName")
-            email @optional @context(iri: "schema:email")
-          }
-        }
-    """.trimIndent()
-    )
-    println(GraphQLToSQL(QueryRequest("docs", q)).toSQL())
-
 }

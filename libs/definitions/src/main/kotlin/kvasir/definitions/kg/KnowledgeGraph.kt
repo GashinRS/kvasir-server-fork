@@ -27,12 +27,13 @@ data class ChangeRequest(
 @GenerateNoArgConstructor
 data class QueryRequest(
     val podId: String,
-    val graphQL: Document
+    val graphQL: Document,
+    val variables: Map<String, Any>? = null,
+    val operationName: String? = null,
 )
 
 data class QueryResult(
-    val results: List<Map<String, Any>>,
-    val nextCursor: String? = null
+    val data: Collection<Any>
 )
 
 data class HistoryRequest(

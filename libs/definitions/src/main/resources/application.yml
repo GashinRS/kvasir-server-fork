@@ -14,3 +14,12 @@ mp:
         auto:
           offset:
             reset: earliest
+
+"%dev":
+   quarkus:
+     log:
+       level: INFO
+       category:
+         "kvasir":
+           level: DEBUG
+           min-level: DEBUG
