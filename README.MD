@@ -13,7 +13,7 @@ docker compose up -d
 ## Inbox endpoint
 
 A single inbox endpoint accepts mutations to the Knowledge Graph of a Pod.
-For example, the following operations writes some RDF statements as JSON-LD into the pod of Alice.
+For example, the following operation writes some RDF statements as JSON-LD into the pod of Alice.
 
 **POST** `http://localhost:8080/alice/kg/inbox`
 
@@ -52,6 +52,8 @@ Request body:
 ```
 
 This should immediately return a `202 Accepted` response.
+
+Note: at the moment, only inserts are supported. Updates and deletes will be added in the future.
 
 ## Query endpoint
 
@@ -159,7 +161,7 @@ Returns:
 ```
 
 ### Additional features
-For more advanced querying, the demo already supports some of the features of the GraphQL to SPARQL library, such as filtering by value, the `__typename` field for introspection, fragments and some directives: `@optional`, `@single` (partially).
+For more advanced querying, the demo already supports some of the features of the GraphQL to SPARQL library, such as filtering by value, aliases, the `__typename` field for introspection, fragments and some directives: `@optional`, `@single` (partially).
 
 #### Single field
 By default, all values will be considered plural, and values will always be emitted in an array. To retrieve a single value, use the `@single` directive:
@@ -290,6 +292,7 @@ Returns:
 # Future Work
 * Authentication and authorization
 * Complete the GraphQL query model with more advanced features
+* Complete the inbox API with updates and deletes
 * Design and implement a model for Virtual Knowledge Graphs (subsets of the KG based on a specific schema, with their own restricted inbox/query endpoints)
 * Design and implement an API for low-level storage (e.g. based on S3 or LDP). More advanced features can be supported via this layer in the future:
   * Auto-ingestion of semantic/structured data into the Knowledge Graph from uploaded files.
