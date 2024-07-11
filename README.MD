@@ -1,7 +1,7 @@
 PoC of a possible future Kvasir Data Storage Server
 
 # Running in dev mode
-To run the server in dev mode, you need Docker (for the dependencies) and a Java 21 JDK.
+To run the server in dev mode, you need Docker (for the dependencies Kafka and [Xtdb](https://xtdb.com)) and a Java 21 JDK.
 
 ```bash
 docker compose up -d
