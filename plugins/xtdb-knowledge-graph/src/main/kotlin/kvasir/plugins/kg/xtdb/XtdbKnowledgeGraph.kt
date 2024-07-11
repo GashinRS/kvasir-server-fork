@@ -7,6 +7,7 @@ import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
+import kvasir.definitions.rdf.XSDVocab
 
 @ApplicationScoped
 class XtdbKnowledgeGraph(
@@ -32,7 +33,7 @@ class XtdbKnowledgeGraph(
         val sql = GraphQLToSQL(request).toSQL()
         Log.debug("Xtdb query: $sql")
         return xtdbClient.query(SqlQuery(sql)).map { results ->
-            QueryResult(data = results)
+            QueryResult(data = results.map { fixNullArrays(it) })
         }
     }
 
@@ -48,7 +49,7 @@ class XtdbKnowledgeGraph(
                     .hashString("${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8),
                 quad.subject.value,
                 quad.predicate.value,
-                quad.`object`.value,
+                if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
                 mapOf(
                     "type" to when {
                         quad.`object`.isIRI -> "IRI"
@@ -62,5 +63,26 @@ class XtdbKnowledgeGraph(
                     .joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "$k:'$v'" }
             )
         }
+    }
+
+    /**
+     * Get the value of an RDF Literal as a database compatible primitive (if not supported, the string representation is used).
+     */
+    private fun getCompatibleRawValue(literalNode: RDFDataset.Literal): Any {
+        return when (literalNode.datatype) {
+            XSDVocab.int, XSDVocab.integer -> literalNode.value.toIntOrNull()
+            XSDVocab.double -> literalNode.value.toDoubleOrNull()
+            XSDVocab.long -> literalNode.value.toLongOrNull()
+            XSDVocab.boolean -> literalNode.value.toBooleanStrictOrNull()
+            else -> null
+        } ?: literalNode.value
+    }
+}
+
+private fun fixNullArrays(result: Any): Any {
+    return when (result) {
+        is List<*> -> if (result.size == 1 && result[0] == null) emptyList() else result.map { fixNullArrays(it!!) }
+        is Map<*, *> -> result.mapValues { fixNullArrays(it.value!!) }
+        else -> result
     }
 }

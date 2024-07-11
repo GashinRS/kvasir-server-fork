@@ -14,6 +14,7 @@ import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.Produces
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryRequest
+import kvasir.definitions.rdf.RDFVocab
 
 @Path("{podId}/kg/query")
 class QueryApi(
@@ -29,7 +30,8 @@ class QueryApi(
 
     private fun parseInput(podId: String, input: QueryInput): QueryRequest {
         val queryDoc = Parser.parse(input.query)
-        val contextualizedDoc = AstTransformer().transform(queryDoc, ContextualizingQueryVisitor(input.providedContext ?: emptyMap()))
+        val contextualizedDoc =
+            AstTransformer().transform(queryDoc, ContextualizingQueryVisitor(input.providedContext ?: emptyMap()))
         return QueryRequest(
             podId,
             contextualizedDoc as Document,
@@ -55,11 +57,13 @@ data class ContextualizedQueryResult(
     val context: Map<String, Any>? = null
 )
 
-class ContextualizingQueryVisitor(private val providedContext: Map<String, Any>) : NodeVisitorStub() {
+class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisitorStub() {
+
+    private val fullContext = providedContext.plus("__typename" to RDFVocab.type)
 
     override fun visitField(node: Field, traverserContext: TraverserContext<Node<*>>): TraversalControl {
         val changedField = node.transform {
-            providedContext[node.name]?.let { iri ->
+            fullContext[node.name]?.let { iri ->
                 it.directive(
                     Directive.newDirective().name("context")
                         .argument(
@@ -73,5 +77,40 @@ class ContextualizingQueryVisitor(private val providedContext: Map<String, Any>)
             }
         }
         return TreeTransformerUtil.changeNode(traverserContext, changedField)
+    }
+
+    override fun visitInlineFragment(
+        node: InlineFragment,
+        traverserContext: TraverserContext<Node<*>>
+    ): TraversalControl {
+        val changedFragment = node.transform {
+            fullContext[node.typeCondition.name]?.let { iri ->
+                it.directive(buildContextDirective(iri as String))
+            }
+        }
+        return TreeTransformerUtil.changeNode(traverserContext, changedFragment)
+    }
+
+    override fun visitFragmentDefinition(
+        node: FragmentDefinition,
+        traverserContext: TraverserContext<Node<*>>
+    ): TraversalControl {
+        val changedFragmentDefinition = node.transform {
+            fullContext[node.typeCondition.name]?.let { iri ->
+                it.directive(buildContextDirective(iri as String))
+            }
+        }
+        return TreeTransformerUtil.changeNode(traverserContext, changedFragmentDefinition)
+    }
+
+    private fun buildContextDirective(iri: String): Directive {
+        return Directive.newDirective().name("context")
+            .argument(
+                Argument.newArgument(
+                    "iri",
+                    StringValue.of(iri)
+                ).build()
+            )
+            .build()
     }
 }
