@@ -20,7 +20,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
         ) // TODO take into account field arguments as conditions
     }
 
-    fun mapNode(
+    private fun mapNode(
         node: AbstractNode<*>,
         subjectSelection: String,
         id: String = ""
@@ -28,21 +28,23 @@ class GraphQLToSQL(private val request: QueryRequest) {
         val dataAlias = "${id}data"
         val selectionSetContainer = node as SelectionSetContainer<*>
         val fieldJoinClauses = mutableListOf<String>()
-        val nestedNonNullFields = mutableListOf<String>()
+        val nestedNonNullFields = mutableListOf<NestedNonNullFieldCheck>()
         val dataSelectClauses = selectionSetContainer.selectionSet.selections.joinToString(", ") { selection ->
             mapSelection(selection, id, nestedNonNullFields, dataAlias, fieldJoinClauses)
         }
         val dataSelection =
             "SELECT $dataSelectClauses FROM ($subjectSelection) $dataAlias ${fieldJoinClauses.joinToString(" ")}"
         return nestedNonNullFields.takeIf { it.isNotEmpty() }
-            ?.let { fieldsToCheck -> "SELECT * FROM ($dataSelection) ${id}env WHERE ${fieldsToCheck.joinToString(" AND ") { "`$it`[1] IS NOT null" }}" }
+            ?.let { fieldsToCheck ->
+                "SELECT * FROM ($dataSelection) ${id}env WHERE ${fieldsToCheck.joinToString(" AND ") { "`${it.name}`${if(it.hasMultipleResults) "[1]" else ""} IS NOT null" }}"
+            }
             ?: dataSelection
     }
 
     private fun mapSelection(
         selection: Selection<*>?,
         scopeId: String,
-        nestedNonNullFields: MutableList<String>,
+        nestedNonNullFields: MutableList<NestedNonNullFieldCheck>,
         dataAlias: String,
         fieldJoinClauses: MutableList<String>,
         fqTypeBound: String? = null
@@ -72,7 +74,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
 
                     // Workaround to make sure that null results are filtered out when the field is not optional.
                     if (!isOptional) {
-                        nestedNonNullFields.add(effectiveName)
+                        nestedNonNullFields.add(NestedNonNullFieldCheck(effectiveName, hasMultipleResults))
                     }
 
                     // Calculate additional type condition (if any)
@@ -130,3 +132,5 @@ private fun <T : DirectivesContainer<T>> DirectivesContainer<T>.getContextIRI():
     return getDirectives("context").firstOrNull()?.getArgument("iri")?.value?.let { (it as StringValue).value }
         ?: throw IllegalArgumentException("Missing semantic context for ${this::class.simpleName} at ${sourceLocation}!")
 }
+
+data class NestedNonNullFieldCheck(val name: String, val hasMultipleResults: Boolean)
