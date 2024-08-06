@@ -6,10 +6,22 @@ mp:
         topic: change_requests
         merge: true
         waitForWriteCompletion: false
+      storage_mutations_publish:
+        connector: smallrye-kafka
+        topic: storage_mutations
+        merge: true
+        waitForWriteCompletion: false
     incoming:
       change_requests_subscribe:
         connector: smallrye-kafka
         topic: change_requests
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest
+      storage_mutations_subscribe:
+        connector: smallrye-kafka
+        topic: storage_mutations
         broadcast: true
         auto:
           offset:

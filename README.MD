@@ -289,13 +289,40 @@ Returns:
 }
 ```
 
+## S3 compatible storage API
+Each Kvasir pod exposes an Amazon S3 compatible storage API at the base path `/{podId}/s3`. This API can be used to store and retrieve files in the pod's storage.
+Kvasir can be configured to automatically ingest files uploaded to the S3 API into the Knowledge Graph. At the time of writing, this feature is restricted to files of limited size in JSON-LD or Turtle format.
+
+The following example uploads a text-file to the S3 API of the pod of Alice:
+
+**PUT** `http://localhost:8080/alice/s3/test.txt`
+
+Request headers must include a sha256 hash of the file content for verification:
+
+```
+X-Amz-Content-Sha256: beaead3198f7da1e70d03ab969765e0821b24fc913697e929e726aeaebf0eba3
+```
+
+Request body:
+
+```
+Hello World!
+```
+
+This should return a `200 OK` response.
+
+The following example retrieves the file from the S3 API of the pod of Alice:
+
+**GET** `http://localhost:8080/alice/s3/test.txt`
+
+
 # Future Work
 * Authentication and authorization
 * Complete the GraphQL query model with more advanced features
 * Complete the inbox API with updates and deletes
 * Design and implement a model for Virtual Knowledge Graphs (subsets of the KG based on a specific schema, with their own restricted inbox/query endpoints)
-* Design and implement an API for low-level storage (e.g. based on S3 or LDP). More advanced features can be supported via this layer in the future:
-  * Auto-ingestion of semantic/structured data into the Knowledge Graph from uploaded files.
+* Design and implement an API for low-level storage (e.g. based on S3 ~~or LDP~~). More advanced features can be supported via this layer in the future:
+  * Auto-ingestion of semantic/structured data into the Knowledge Graph from uploaded files. [Status: a PoC was implemented for JSON-LD and Turtle files.]
   * Support for streaming audio/video by adding pipelines for transcoding and indexing.
 * Add time-travel and historic access for KG data
 * Proper JSON-LD request & response types for the Query endpoint, while still conforming to the GraphQL spec w.r.t. HTTP binding.
