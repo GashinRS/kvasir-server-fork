@@ -36,7 +36,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
             "SELECT $dataSelectClauses FROM ($subjectSelection) $dataAlias ${fieldJoinClauses.joinToString(" ")}"
         return nestedNonNullFields.takeIf { it.isNotEmpty() }
             ?.let { fieldsToCheck ->
-                "SELECT * FROM ($dataSelection) ${id}env WHERE ${fieldsToCheck.joinToString(" AND ") { "`${it.name}`${if(it.hasMultipleResults) "[1]" else ""} IS NOT null" }}"
+                "SELECT * FROM ($dataSelection) ${id}env WHERE ${fieldsToCheck.joinToString(" AND ") { "`${it.name}`${if (it.hasMultipleResults) "[1]" else ""} IS NOT null" }}"
             }
             ?: dataSelection
     }
@@ -67,7 +67,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     }
                 }.orEmpty()
                 val joinName = "${scopeId}$effectiveName"
-                val fqPredicate = selection.getContextIRI()
                 val hasMultipleResults = !selection.hasDirective("single")
                 return if (selection.selectionSet != null) {
                     // Field has a nested selection set, recurse
@@ -84,22 +83,26 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
                         mapNode(
                             selection,
-                            "SELECT DISTINCT o AS s FROM $database WHERE s = ${dataAlias}.s AND p = '$fqPredicate'$valueFilter$typeCondition${if (!hasMultipleResults) " LIMIT 1" else ""}",
+                            "SELECT DISTINCT o AS s FROM $database WHERE s = ${dataAlias}.s AND p = '${selection.getContextIRI()}'$valueFilter$typeCondition${if (!hasMultipleResults) " LIMIT 1" else ""}",
                             effectiveName.plus("_")
                         )
                     }) AS `$effectiveName`"
+                } else if (selection.name == "__fieldnames") {
+                    // Special introspection field to return the field names of the current selection
+                    fieldJoinClauses.add("JOIN (SELECT s, '__fieldnames' as p, ARRAY_AGG(p) as o FROM $database) $joinName ON $joinName.s = $dataAlias.s")
+                    "$joinName.o AS `$effectiveName`"
                 } else {
                     // Field is a leaf node: use join to select objects matching the specified subject & predicate
                     val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }.orEmpty()
                     val fieldJoinClause =
-                        "JOIN (SELECT s, ARRAY_AGG(o) as o FROM $database WHERE p = '$fqPredicate'$valueFilter$typeCondition) $joinName ON $joinName.s = $dataAlias.s"
+                        "JOIN (SELECT s, ARRAY_AGG(o) as o FROM $database WHERE p = '${selection.getContextIRI()}'$valueFilter$typeCondition) $joinName ON $joinName.s = $dataAlias.s"
                     fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
                     "$joinName.o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
                 }
             }
 
             is InlineFragment -> {
-                // Inline fragment, treat included selection set as fields, but with an additional type condition )
+                // Inline fragment, treat included selection set as fields, but with an additional type condition
                 val fqType = selection.getContextIRI()
                 return selection.selectionSet.selections.joinToString(", ") { inlineSelection ->
                     mapSelection(inlineSelection, scopeId, nestedNonNullFields, dataAlias, fieldJoinClauses, fqType)
