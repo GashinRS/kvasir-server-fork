@@ -105,11 +105,7 @@ Response body:
         "bob@example.org"
       ]
     }
-  ],
-  "@context": {
-    "name": "http://example.org/name",
-    "email": "http://example.org/email"
-  }
+  ]
 }
 ```
 
@@ -151,17 +147,24 @@ Returns:
         }
       ]
     }
-  ],
-  "@context": {
-    "name": "http://example.org/name",
-    "email": "http://example.org/email",
-    "bestFriend": "http://example.org/bestFriend"
-  }
+  ]
 }
 ```
 
 ### Additional features
 For more advanced querying, the demo already supports some of the features of the GraphQL to SPARQL library, such as filtering by value, aliases, the `__typename` field for introspection, fragments and some directives: `@optional`, `@single` (partially).
+
+#### Namespace prefixes
+Up until now, the examples used complete aliases for the fields, declared in the `@context` instance. However, the system also supports namespace prefixes. Typically, prefixes are separated from the field name by a colon, e.g. `ex:name` instead of `http://example.org/name`. However, GraphQL does not support colons in field names. Therefore, Kvasir uses the underscore character `_` as a substitute for the colon. For example, the previous example query can be rewritten as:
+
+```json
+{
+  "@context": {
+    "ex": "http://example.org/"
+  },
+  "query": "{ ex_name ex_email ex_bestFriend { ex_name ex_email } }"
+}
+```
 
 #### Single field
 By default, all values will be considered plural, and values will always be emitted in an array. To retrieve a single value, use the `@single` directive:
@@ -171,11 +174,9 @@ By default, all values will be considered plural, and values will always be emit
 ```json
 {
   "@context": {
-    "name": "http://example.org/name",
-    "email": "http://example.org/email",
-    "bestFriend": "http://example.org/bestFriend"
+    "ex": "http://example.org/"
   },
-  "query": "{ name @single email @single bestFriend @single} "
+  "query": "{ ex_name @single ex_email @single ex_bestFriend @single} "
 }
 ```
 
@@ -185,16 +186,11 @@ Returns a slightly more compact response:
 {
   "data": [
     {
-      "name": "Alice",
-      "email": "alice@example.org",
-      "bestFriend": "http://example.org/bob"
+      "ex_name": "Alice",
+      "ex_email": "alice@example.org",
+      "ex_bestFriend": "http://example.org/bob"
     }
-  ],
-  "@context": {
-    "name": "http://example.org/name",
-    "email": "http://example.org/email",
-    "bestFriend": "http://example.org/bestFriend"
-  }
+  ]
 }
 ```
 
@@ -254,7 +250,36 @@ Returns:
 }
 ```
 
-Note the use of the built-in fields `id` and `__typename` for introspection.
+Note the use of the built-in fields `id` and `__typename` for introspection. Additionally, you can use the system field `__fieldnames` to retrieve all possible fields (predicate IRIs) for a selection.
+
+For example:
+
+**POST** `http://localhost:8080/alice/kg/query`
+
+```json
+{
+  "@context": {
+    "Person": "http://example.org/Person"
+  },
+  "query": "{ ... on Person { __fieldnames }}"
+}
+```
+
+Returns:
+
+```json
+{
+  "data": [
+    {
+      "__fieldnames": [
+        "http://example.org/bestFriend",
+        "http://example.org/email",
+        "http://example.org/name"
+      ]
+    }
+  ]
+}
+```
 
 #### Filtering by value
 
