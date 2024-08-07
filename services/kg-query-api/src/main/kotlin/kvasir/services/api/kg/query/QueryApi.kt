@@ -59,21 +59,16 @@ data class ContextualizedQueryResult(
 
 class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisitorStub() {
 
+    companion object {
+        private const val PREFIX_SEPARATOR = "_"
+    }
+
     private val fullContext = providedContext.plus("__typename" to RDFVocab.type)
 
     override fun visitField(node: Field, traverserContext: TraverserContext<Node<*>>): TraversalControl {
         val changedField = node.transform {
-            fullContext[node.name]?.let { iri ->
-                it.directive(
-                    Directive.newDirective().name("context")
-                        .argument(
-                            Argument.newArgument(
-                                "iri",
-                                StringValue.of(iri as String)
-                            ).build()
-                        )
-                        .build()
-                )
+            resolveIri(node.name)?.let { iri ->
+                it.directive(buildContextDirective(iri))
             }
         }
         return TreeTransformerUtil.changeNode(traverserContext, changedField)
@@ -84,8 +79,8 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
         traverserContext: TraverserContext<Node<*>>
     ): TraversalControl {
         val changedFragment = node.transform {
-            fullContext[node.typeCondition.name]?.let { iri ->
-                it.directive(buildContextDirective(iri as String))
+            resolveIri(node.typeCondition.name)?.let { iri ->
+                it.directive(buildContextDirective(iri))
             }
         }
         return TreeTransformerUtil.changeNode(traverserContext, changedFragment)
@@ -96,8 +91,8 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
         traverserContext: TraverserContext<Node<*>>
     ): TraversalControl {
         val changedFragmentDefinition = node.transform {
-            fullContext[node.typeCondition.name]?.let { iri ->
-                it.directive(buildContextDirective(iri as String))
+            resolveIri(node.typeCondition.name)?.let { iri ->
+                it.directive(buildContextDirective(iri))
             }
         }
         return TreeTransformerUtil.changeNode(traverserContext, changedFragmentDefinition)
@@ -112,5 +107,14 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
                 ).build()
             )
             .build()
+    }
+
+    private fun resolveIri(name: String): String? {
+        return fullContext[name]?.toString() ?: name.takeIf { it.contains(PREFIX_SEPARATOR) }?.let { prefixedName ->
+            val (prefix, localName) = prefixedName.split(PREFIX_SEPARATOR)
+            fullContext[prefix]?.let { prefixIri ->
+                "$prefixIri$localName"
+            }
+        }
     }
 }
