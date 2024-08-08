@@ -14,10 +14,20 @@ class GraphQLToSQL(private val request: QueryRequest) {
         val rootNode = request.graphQL.definitions.filterIsInstance<OperationDefinition>()
             .firstOrNull { it.operation == OperationDefinition.Operation.QUERY }
             ?: throw IllegalArgumentException("Only one query is allowed")
+        val idFilter = extractIdFilter(rootNode.selectionSet)?.let { " WHERE s = '$it'" } ?: ""
         return mapNode(
             rootNode,
-            "SELECT DISTINCT s FROM $database"
+            "SELECT DISTINCT s FROM $database$idFilter"
         ) // TODO take into account field arguments as conditions
+    }
+
+    // When the node contains an id field, check if a filter is specified and return it, otherwise null
+    private fun extractIdFilter(selectionSet: SelectionSet): String? {
+        val idField = selectionSet.selections.firstOrNull { it is Field && it.name == "id" } as Field?
+        return idField?.arguments?.firstOrNull { it.name == "_" }?.value?.let {
+            it as StringValue
+            it.value
+        }
     }
 
     private fun mapNode(
@@ -30,7 +40,13 @@ class GraphQLToSQL(private val request: QueryRequest) {
         val fieldJoinClauses = mutableListOf<String>()
         val nestedNonNullFields = mutableListOf<NestedNonNullFieldCheck>()
         val dataSelectClauses = selectionSetContainer.selectionSet.selections.joinToString(", ") { selection ->
-            mapSelection(selection, id, nestedNonNullFields, dataAlias, fieldJoinClauses)
+            mapSelection(
+                selection,
+                id,
+                nestedNonNullFields,
+                dataAlias,
+                fieldJoinClauses
+            )
         }
         val dataSelection =
             "SELECT $dataSelectClauses FROM ($subjectSelection) $dataAlias ${fieldJoinClauses.joinToString(" ")}"
@@ -79,11 +95,13 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     // Calculate additional type condition (if any)
                     val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "o") }.orEmpty()
 
+                    // Check for additional id filter (if an id field is specified further down the path and contains a filter argument)
+                    val idFilter = extractIdFilter(selection.selectionSet)?.let { " o = '$it' AND" } ?: ""
                     // Specify a subjectSelection based on the objects matching the specified subject & predicate)
                     "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
                         mapNode(
                             selection,
-                            "SELECT DISTINCT o AS s FROM $database WHERE s = ${dataAlias}.s AND p = '${selection.getContextIRI()}'$valueFilter$typeCondition${if (!hasMultipleResults) " LIMIT 1" else ""}",
+                            "SELECT DISTINCT o AS s FROM $database WHERE$idFilter s = ${dataAlias}.s AND p = '${selection.getContextIRI()}'$valueFilter$typeCondition${if (!hasMultipleResults) " LIMIT 1" else ""}",
                             effectiveName.plus("_")
                         )
                     }) AS `$effectiveName`"
@@ -105,7 +123,14 @@ class GraphQLToSQL(private val request: QueryRequest) {
                 // Inline fragment, treat included selection set as fields, but with an additional type condition
                 val fqType = selection.getContextIRI()
                 return selection.selectionSet.selections.joinToString(", ") { inlineSelection ->
-                    mapSelection(inlineSelection, scopeId, nestedNonNullFields, dataAlias, fieldJoinClauses, fqType)
+                    mapSelection(
+                        inlineSelection,
+                        scopeId,
+                        nestedNonNullFields,
+                        dataAlias,
+                        fieldJoinClauses,
+                        fqType
+                    )
                 }
             }
 
@@ -118,7 +143,14 @@ class GraphQLToSQL(private val request: QueryRequest) {
                 //... and treat included selection set as fields, but with an additional type condition )
                 val fqType = fragmentDefinition.getContextIRI()
                 return fragmentDefinition.selectionSet.selections.joinToString(", ") { inlineSelection ->
-                    mapSelection(inlineSelection, scopeId, nestedNonNullFields, dataAlias, fieldJoinClauses, fqType)
+                    mapSelection(
+                        inlineSelection,
+                        scopeId,
+                        nestedNonNullFields,
+                        dataAlias,
+                        fieldJoinClauses,
+                        fqType
+                    )
                 }
             }
 
