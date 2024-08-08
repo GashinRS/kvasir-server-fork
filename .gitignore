@@ -33,3 +33,4 @@ load-tests/results
 # Ignore Helmsman temporary directory
 .helmsman-tmp
 *.drawio.bkp
+.kotlin
