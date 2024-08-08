@@ -98,6 +98,15 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
         return TreeTransformerUtil.changeNode(traverserContext, changedFragmentDefinition)
     }
 
+    override fun visitArgument(node: Argument, traverserContext: TraverserContext<Node<*>>): TraversalControl {
+        val changedFragmentDefinition = node.transform {
+            resolveIri(node.name)?.let { iri ->
+                it.additionalData("iri", iri)
+            }
+        }
+        return TreeTransformerUtil.changeNode(traverserContext, changedFragmentDefinition)
+    }
+
     private fun buildContextDirective(iri: String): Directive {
         return Directive.newDirective().name("context")
             .argument(

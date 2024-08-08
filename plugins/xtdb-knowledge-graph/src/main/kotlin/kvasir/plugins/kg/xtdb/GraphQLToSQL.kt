@@ -73,15 +73,9 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     return "$dataAlias.s AS `$effectiveName`" // TODO: cleaner way of shortcutting logic when field is 'id'
                 }
 
-                val valueFilter = selection.arguments.firstOrNull { it.name == "_" }?.value?.let {
-                    when (it) {
-                        is FloatValue -> " AND o = ${it.value}"
-                        is IntValue -> " AND o = ${it.value}"
-                        is BooleanValue -> " AND o = ${it.isValue}"
-                        is StringValue -> " AND o = '${it.value}'"
-                        else -> throw IllegalArgumentException("Unsupported filter value type: $it")
-                    }
-                }.orEmpty()
+                val valueFilter =
+                    selection.arguments.firstOrNull { it.name == "_" }?.value?.let { " AND o = ${toSQLValue(it)}" }
+                        .orEmpty()
                 val joinName = "${scopeId}$effectiveName"
                 val hasMultipleResults = !selection.hasDirective("single")
                 return if (selection.selectionSet != null) {
@@ -97,11 +91,20 @@ class GraphQLToSQL(private val request: QueryRequest) {
 
                     // Check for additional id filter (if an id field is specified further down the path and contains a filter argument)
                     val idFilter = extractIdFilter(selection.selectionSet)?.let { " o = '$it' AND" } ?: ""
+
+                    // Process arguments as additional conditions
+                    val additionalConditions =
+                        selection.arguments.filter { it.name != "_" }.joinToString(" AND ") {
+                            val fqArgName = it.additionalData["iri"] as String
+                            val value = toSQLValue(it.value)
+                            "o IN (SELECT s FROM $database WHERE p = '$fqArgName' AND o = $value)"
+                        }.takeIf { it.isNotEmpty() }?.let { " AND $it" }.orEmpty()
+
                     // Specify a subjectSelection based on the objects matching the specified subject & predicate)
                     "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
                         mapNode(
                             selection,
-                            "SELECT DISTINCT o AS s FROM $database WHERE$idFilter s = ${dataAlias}.s AND p = '${selection.getContextIRI()}'$valueFilter$typeCondition${if (!hasMultipleResults) " LIMIT 1" else ""}",
+                            "SELECT DISTINCT o AS s FROM $database WHERE$idFilter s = ${dataAlias}.s AND p = '${selection.getContextIRI()}'$valueFilter$typeCondition$additionalConditions${if (!hasMultipleResults) " LIMIT 1" else ""}",
                             effectiveName.plus("_")
                         )
                     }) AS `$effectiveName`"
@@ -159,13 +162,23 @@ class GraphQLToSQL(private val request: QueryRequest) {
     }
 
     private fun getTypeWhereCondition(fqTypeBound: String, targetColumn: String): String {
-        return "AND $targetColumn IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$fqTypeBound')"
+        return " AND $targetColumn IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$fqTypeBound')"
     }
 }
 
 private fun <T : DirectivesContainer<T>> DirectivesContainer<T>.getContextIRI(): String {
     return getDirectives("context").firstOrNull()?.getArgument("iri")?.value?.let { (it as StringValue).value }
         ?: throw IllegalArgumentException("Missing semantic context for ${this::class.simpleName} at ${sourceLocation}!")
+}
+
+private fun toSQLValue(value: Value<*>): String {
+    return when (value) {
+        is FloatValue -> value.value.toString()
+        is IntValue -> value.value.toString()
+        is BooleanValue -> value.isValue.toString()
+        is StringValue -> "'${value.value}'"
+        else -> throw IllegalArgumentException("Unsupported value type: $value")
+    }
 }
 
 data class NestedNonNullFieldCheck(val name: String, val hasMultipleResults: Boolean)
