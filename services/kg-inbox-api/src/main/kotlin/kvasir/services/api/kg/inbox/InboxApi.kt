@@ -36,6 +36,7 @@ class InboxApi(
 }
 
 data class ChangeRequestInput(
+    val graph: String = "",
     val inserts: List<Map<String, Any>> = emptyList(),
     val deletes: List<Map<String, Any>> = emptyList(),
     val where: List<Map<String, Any>> = emptyList()
@@ -44,6 +45,7 @@ data class ChangeRequestInput(
     fun toChangeRequest(podId: String): ChangeRequest {
         return ChangeRequest(
             podId = podId,
+            graph =graph,
             inserts = inserts,
             deletes = deletes,
             where = where

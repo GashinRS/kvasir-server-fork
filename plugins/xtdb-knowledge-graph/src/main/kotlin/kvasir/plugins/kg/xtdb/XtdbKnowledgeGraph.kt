@@ -17,12 +17,12 @@ class XtdbKnowledgeGraph(
     override fun process(request: ChangeRequest): Uni<Void> {
         require(request.where.isEmpty()) { "Where clause is currently not supported when processing changes." }
         require(request.deletes.isEmpty()) { "Deletes are currently not supported when processing changes." }
-        val values = toStatements(request.inserts)
-        val database = Hashing.farmHashFingerprint64().hashString(request.podId, Charsets.UTF_8)
+        val values = toStatements(request.graph, request.inserts)
+        val database = dbNameForPod(request.podId)
         return xtdbClient.execute(
             SqlTransaction(
                 SqlOp(
-                    "INSERT INTO $database (_id, s, p, o, t) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO $database (_id, s, p, o, t, g) VALUES (?, ?, ?, ?, ?, ?)",
                     values
                 )
             )
@@ -33,7 +33,7 @@ class XtdbKnowledgeGraph(
         val sql = GraphQLToSQL(request).toSQL()
         Log.debug("Xtdb query: $sql")
         return xtdbClient.query(SqlQuery(sql)).map { results ->
-            QueryResult(data = results.map { fixNullArrays(it) })
+            QueryResult(data = results.map { fixNullArrays(it) as Map<String, Any> })
         }
     }
 
@@ -41,12 +41,12 @@ class XtdbKnowledgeGraph(
         TODO("Not yet implemented")
     }
 
-    private fun toStatements(docs: List<Map<String, Any>>): List<List<Any?>> {
+    private fun toStatements(graph: String, docs: List<Map<String, Any>>): List<List<Any?>> {
         val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
         return dataset.getQuads("@default").map { quad ->
             listOf(
                 "kvasir:" + Hashing.farmHashFingerprint64()
-                    .hashString("${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8),
+                    .hashString("${graph}${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8),
                 quad.subject.value,
                 quad.predicate.value,
                 if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
@@ -60,7 +60,8 @@ class XtdbKnowledgeGraph(
                     "datatype" to quad.`object`.datatype?.toString(),
                     "language" to quad.`object`.language?.toString()
                 ).entries.filter { it.value != null }
-                    .joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "$k:'$v'" }
+                    .joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "$k:'$v'" },
+                graph
             )
         }
     }
@@ -85,4 +86,8 @@ private fun fixNullArrays(result: Any): Any {
         is Map<*, *> -> result.mapValues { fixNullArrays(it.value!!) }
         else -> result
     }
+}
+
+internal fun dbNameForPod(podId: String): String {
+    return "kvasir_" + Hashing.farmHashFingerprint64().hashString(podId, Charsets.UTF_8)
 }

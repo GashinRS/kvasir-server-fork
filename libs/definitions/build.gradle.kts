@@ -3,5 +3,6 @@ plugins {
 }
 
 dependencies {
+    api("com.github.jsonld-java:jsonld-java:0.13.5")
     api("com.graphql-java:graphql-java:22.1")
 }

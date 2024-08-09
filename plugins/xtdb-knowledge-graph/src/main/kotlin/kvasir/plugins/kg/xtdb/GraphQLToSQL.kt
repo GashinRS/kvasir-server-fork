@@ -1,23 +1,28 @@
 package kvasir.plugins.kg.xtdb
 
-import com.google.common.hash.Hashing
 import graphql.language.*
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.rdf.RDFVocab
 
 class GraphQLToSQL(private val request: QueryRequest) {
 
-    private val database = Hashing.farmHashFingerprint64().hashString(request.podId, Charsets.UTF_8).toString()
+    private val targetGraphsClause =
+        request.targetGraphs.takeIf { it.isNotEmpty() }?.joinToString(",", prefix = "g IN (", postfix = ")") { "'$it'" }
+    private val database = dbNameForPod(request.podId)
 
     fun toSQL(): String {
         // Verify that only a single query is specified and assign it (otherwise throw an exception)
         val rootNode = request.graphQL.definitions.filterIsInstance<OperationDefinition>()
             .firstOrNull { it.operation == OperationDefinition.Operation.QUERY }
             ?: throw IllegalArgumentException("Only one query is allowed")
-        val idFilter = extractIdFilter(rootNode.selectionSet)?.let { " WHERE s = '$it'" } ?: ""
+        val idFilter = extractIdFilter(rootNode.selectionSet)?.let { "s = '$it'" }
+        val whereClause = listOfNotNull(
+            targetGraphsClause,
+            idFilter
+        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", prefix = " WHERE ") ?: ""
         return mapNode(
             rootNode,
-            "SELECT DISTINCT s FROM $database$idFilter"
+            "SELECT DISTINCT s FROM $database$whereClause"
         ) // TODO take into account field arguments as conditions
     }
 
@@ -74,8 +79,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
                 }
 
                 val valueFilter =
-                    selection.arguments.firstOrNull { it.name == "_" }?.value?.let { " AND o = ${toSQLValue(it)}" }
-                        .orEmpty()
+                    selection.arguments.firstOrNull { it.name == "_" }?.value?.let { "o = ${toSQLValue(it)}" }
                 val joinName = "${scopeId}$effectiveName"
                 val hasMultipleResults = !selection.hasDirective("single")
                 return if (selection.selectionSet != null) {
@@ -87,10 +91,10 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     }
 
                     // Calculate additional type condition (if any)
-                    val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "o") }.orEmpty()
+                    val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "o") }
 
                     // Check for additional id filter (if an id field is specified further down the path and contains a filter argument)
-                    val idFilter = extractIdFilter(selection.selectionSet)?.let { " o = '$it' AND" } ?: ""
+                    val idFilter = extractIdFilter(selection.selectionSet)?.let { "o = '$it'" }
 
                     // Process arguments as additional conditions
                     val additionalConditions =
@@ -98,13 +102,22 @@ class GraphQLToSQL(private val request: QueryRequest) {
                             val fqArgName = it.additionalData["iri"] as String
                             val value = toSQLValue(it.value)
                             "o IN (SELECT s FROM $database WHERE p = '$fqArgName' AND o = $value)"
-                        }.takeIf { it.isNotEmpty() }?.let { " AND $it" }.orEmpty()
+                        }.takeIf { it.isNotEmpty() }
+
+                    val whereClause = listOfNotNull(
+                        targetGraphsClause,
+                        idFilter,
+                        "s = ${dataAlias}.s AND p = '${selection.getContextIRI()}'",
+                        valueFilter,
+                        typeCondition,
+                        additionalConditions
+                    ).joinToString(" AND ", prefix = "WHERE ")
 
                     // Specify a subjectSelection based on the objects matching the specified subject & predicate)
                     "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
                         mapNode(
                             selection,
-                            "SELECT DISTINCT o AS s FROM $database WHERE$idFilter s = ${dataAlias}.s AND p = '${selection.getContextIRI()}'$valueFilter$typeCondition$additionalConditions${if (!hasMultipleResults) " LIMIT 1" else ""}",
+                            "SELECT DISTINCT o AS s FROM $database $whereClause${if (!hasMultipleResults) " LIMIT 1" else ""}",
                             effectiveName.plus("_")
                         )
                     }) AS `$effectiveName`"
@@ -114,9 +127,15 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     "$joinName.o AS `$effectiveName`"
                 } else {
                     // Field is a leaf node: use join to select objects matching the specified subject & predicate
-                    val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }.orEmpty()
+                    val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
+                    val whereClause = listOfNotNull(
+                        targetGraphsClause,
+                        "p = '${selection.getContextIRI()}'",
+                        valueFilter,
+                        typeCondition
+                    ).joinToString(" AND ", prefix = "WHERE ")
                     val fieldJoinClause =
-                        "JOIN (SELECT s, ARRAY_AGG(o) as o FROM $database WHERE p = '${selection.getContextIRI()}'$valueFilter$typeCondition) $joinName ON $joinName.s = $dataAlias.s"
+                        "JOIN (SELECT s, ARRAY_AGG(o) as o FROM $database $whereClause) $joinName ON $joinName.s = $dataAlias.s"
                     fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
                     "$joinName.o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
                 }

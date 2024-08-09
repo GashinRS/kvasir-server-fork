@@ -21,6 +21,7 @@ class ChangeBodyReader(
 ) : MessageBodyReader<ChangeRequestInput> {
 
     private val defaultContext = mapOf(
+        "graph" to KvasirVocab.graph,
         "inserts" to KvasirVocab.inserts,
         "deletes" to KvasirVocab.deletes,
         "where" to KvasirVocab.where
@@ -54,6 +55,7 @@ class ChangeBodyReader(
             JsonLdOptions()
         )
         return ChangeRequestInput(
+            graph = resolvedJsonLD[KvasirVocab.graph] as? String ?: "",
             inserts = resolvedJsonLD[KvasirVocab.inserts]?.let { inserts ->
                 JsonLdHelper.valueAsJsonArray(inserts).map { assignIds(it) }
             }

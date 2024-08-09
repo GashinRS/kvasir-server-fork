@@ -12,8 +12,10 @@ import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.Produces
+import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryRequest
+import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.rdf.RDFVocab
 
 @Path("{podId}/kg/query")
@@ -22,10 +24,20 @@ class QueryApi(
 ) {
 
     @POST
-    @Produces("application/json")
-    fun query(@PathParam("podId") podId: String, input: QueryInput): Uni<ContextualizedQueryResult> {
+    @Produces(MediaType.APPLICATION_JSON)
+    fun query(@PathParam("podId") podId: String, input: QueryInput): Uni<QueryResult> {
         val req = parseInput(podId, input)
-        return knowledgeGraph.query(req).map { ContextualizedQueryResult(it.data, input.providedContext) }
+        return knowledgeGraph.query(req)
+    }
+
+    @POST
+    @Produces("application/json+ld")
+    fun queryJsonLD(@PathParam("podId") podId: String, input: QueryInput): Uni<Map<String, Any>> {
+        val req = parseInput(podId, input)
+        return knowledgeGraph.query(req).map {
+            // TODO: should we fallback to a default Kvasir context here?
+            it.toJsonLD(input.providedContext!!)
+        }
     }
 
     private fun parseInput(podId: String, input: QueryInput): QueryRequest {
@@ -36,7 +48,8 @@ class QueryApi(
             podId,
             contextualizedDoc as Document,
             input.variables,
-            input.operationName
+            input.operationName,
+            input.targetGraphs
         )
     }
 
@@ -47,14 +60,8 @@ data class QueryInput(
     val providedContext: Map<String, Any>? = null,
     val query: String,
     val operationName: String? = null,
-    val variables: Map<String, Any>? = null
-)
-
-@JsonInclude(JsonInclude.Include.NON_NULL)
-data class ContextualizedQueryResult(
-    val data: Collection<Any>,
-    @JsonProperty("@context")
-    val context: Map<String, Any>? = null
+    val variables: Map<String, Any>? = null,
+    val targetGraphs: Set<String> = emptySet()
 )
 
 class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisitorStub() {

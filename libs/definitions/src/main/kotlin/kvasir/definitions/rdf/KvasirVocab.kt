@@ -7,6 +7,7 @@ object KvasirVocab {
     const val ChangeRequest = "${baseUri}ChangeRequest"
     const val QueryRequest = "${baseUri}QueryRequest"
     const val QueryResult = "${baseUri}QueryResult"
+    const val graph = "${baseUri}graph"
     const val inserts = "${baseUri}inserts"
     const val deletes = "${baseUri}deletes"
     const val select = "${baseUri}select"
