@@ -1,32 +1,54 @@
 package kvasir.plugins.kg.xtdb
 
-import com.github.jsonldjava.core.JsonLdProcessor
-import com.github.jsonldjava.core.RDFDataset
 import com.google.common.hash.Hashing
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
-import kvasir.definitions.rdf.XSDVocab
+import kvasir.definitions.kg.changeops.ChangeAssertionException
+import org.eclipse.microprofile.config.inject.ConfigProperty
 
 @ApplicationScoped
 class XtdbKnowledgeGraph(
-    private val xtdbClient: XtdbClient
+    private val xtdbClient: XtdbClient,
+    @ConfigProperty(name = "kvasir.plugins.kg.xtdb.assertion-checking-parallelism", defaultValue = "4")
+    private val assertionCheckingParallelism: Int
 ) : KnowledgeGraph {
 
     override fun process(request: ChangeRequest): Uni<Void> {
-        require(request.where.isEmpty()) { "Where clause is currently not supported when processing changes." }
-        require(request.deletes.isEmpty()) { "Deletes are currently not supported when processing changes." }
-        val values = toStatements(request.graph, request.inserts)
+        val changeProcessor = ChangeProcessor(request, this)
         val database = dbNameForPod(request.podId)
-        return xtdbClient.execute(
-            SqlTransaction(
-                SqlOp(
-                    "INSERT INTO $database (_id, s, p, o, t, g) VALUES (?, ?, ?, ?, ?, ?)",
-                    values
+        return changeProcessor.executeAssertions(request, assertionCheckingParallelism)
+            .chain { _ ->
+                changeProcessor.getDeleteIds()
+            }
+            .chain { deleteTuples ->
+                xtdbClient.execute(
+                    SqlTransaction(
+                        SqlOp(
+                            "DELETE FROM $database WHERE _id = ?",
+                            deleteTuples
+                        )
+                    )
                 )
-            )
-        )
+            }
+            .chain { _ ->
+                changeProcessor.getInsertTuples()
+            }
+            .chain { insertTuples ->
+                xtdbClient.execute(
+                    SqlTransaction(
+                        SqlOp(
+                            "INSERT INTO $database (_id, s, p, o, t, g) VALUES (?, ?, ?, ?, ?, ?)",
+                            insertTuples
+                        )
+                    )
+                )
+            }
+            .onFailure(ChangeAssertionException::class.java).recoverWithUni { e ->
+                Log.warn("Failed to process change request due to assertion error: $request", e)
+                Uni.createFrom().voidItem()
+            }
     }
 
     override fun query(request: QueryRequest): Uni<QueryResult> {
@@ -39,44 +61,6 @@ class XtdbKnowledgeGraph(
 
     override fun history(request: HistoryRequest): Uni<HistoryResult> {
         TODO("Not yet implemented")
-    }
-
-    private fun toStatements(graph: String, docs: List<Map<String, Any>>): List<List<Any?>> {
-        val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
-        return dataset.getQuads("@default").map { quad ->
-            listOf(
-                "kvasir:" + Hashing.farmHashFingerprint64()
-                    .hashString("${graph}${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8),
-                quad.subject.value,
-                quad.predicate.value,
-                if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
-                mapOf(
-                    "type" to when {
-                        quad.`object`.isIRI -> "IRI"
-                        quad.`object`.isBlankNode -> "BlankNode"
-                        quad.`object`.isLiteral -> "Literal"
-                        else -> "Unknown"
-                    },
-                    "datatype" to quad.`object`.datatype?.toString(),
-                    "language" to quad.`object`.language?.toString()
-                ).entries.filter { it.value != null }
-                    .joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "$k:'$v'" },
-                graph
-            )
-        }
-    }
-
-    /**
-     * Get the value of an RDF Literal as a database compatible primitive (if not supported, the string representation is used).
-     */
-    private fun getCompatibleRawValue(literalNode: RDFDataset.Literal): Any {
-        return when (literalNode.datatype) {
-            XSDVocab.int, XSDVocab.integer -> literalNode.value.toIntOrNull()
-            XSDVocab.double -> literalNode.value.toDoubleOrNull()
-            XSDVocab.long -> literalNode.value.toLongOrNull()
-            XSDVocab.boolean -> literalNode.value.toBooleanStrictOrNull()
-            else -> null
-        } ?: literalNode.value
     }
 }
 

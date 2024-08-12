@@ -1,10 +1,12 @@
 package kvasir.definitions.kg
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 import graphql.language.Document
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.kg.changeops.Assertion
 import java.util.*
 
 interface KnowledgeGraph {
@@ -21,9 +23,11 @@ data class ChangeRequest(
     val id: String = UUID.randomUUID().toString(),
     val podId: String,
     val graph: String = "", // Graph identifier
+    // The Change Request will only be applied if all assertions resolve to true.
+    val assertions: List<Assertion> = emptyList(),
     val inserts: List<Map<String, Any>> = emptyList(),
     val deletes: List<Map<String, Any>> = emptyList(),
-    val where: List<Map<String, Any>> = emptyList(), // How does this where condition look? (since shift to GraphQL)
+    val userProvidedContext: Map<String, Any> = emptyMap()
 )
 
 @GenerateNoArgConstructor
@@ -35,8 +39,10 @@ data class QueryRequest(
     val targetGraphs: Set<String> = emptySet()
 )
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 data class QueryResult(
-    val data: List<Map<String, Any>>
+    val data: List<Map<String, Any>>,
+    val errors: List<Map<String, Any>>? = null
 ) {
 
     fun toJsonLD(context: Map<String, Any>): Map<String, Any> {

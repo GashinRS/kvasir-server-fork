@@ -10,6 +10,7 @@ import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.kg.ChangeRequest
+import kvasir.definitions.kg.changeops.Assertion
 import org.apache.kafka.common.errors.RecordTooLargeException
 import org.eclipse.microprofile.reactive.messaging.Channel
 
@@ -37,18 +38,20 @@ class InboxApi(
 
 data class ChangeRequestInput(
     val graph: String = "",
+    val assertions: List<Assertion> = emptyList(),
     val inserts: List<Map<String, Any>> = emptyList(),
     val deletes: List<Map<String, Any>> = emptyList(),
-    val where: List<Map<String, Any>> = emptyList()
+    val userProvidedContext: Map<String, Any> = emptyMap()
 ) {
 
     fun toChangeRequest(podId: String): ChangeRequest {
         return ChangeRequest(
             podId = podId,
-            graph =graph,
+            graph = graph,
+            assertions = assertions,
             inserts = inserts,
             deletes = deletes,
-            where = where
+            userProvidedContext = userProvidedContext
         )
     }
 
