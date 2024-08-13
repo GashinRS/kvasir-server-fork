@@ -11,91 +11,25 @@ import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.kg.changeops.ChangeAssertionException
-import kvasir.definitions.rdf.JsonLdHelper
-import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.kg.changeops.InvalidTemplateException
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.definitions.reactive.skipToLast
 
-class ChangeProcessor(private val request: ChangeRequest, private val parent: XtdbKnowledgeGraph) {
-
-
-    // TODO: temporary solution, will not scale
-    fun executeOperations(request: ChangeRequest, parallelism: Int): Uni<Void> {
-        val database = dbNameForPod(request.podId)
-        return Multi.createFrom().iterable(request.operations)
-            .onItem()
-            .transformToUni { operation ->
-                when (operation[JsonLdKeywords.type]) {
-                    KvasirVocab.InsertTemplate -> {
-                        materializeTemplate(
-                            operation[KvasirVocab.where]!! as String,
-                            operation[KvasirVocab.inserts] as String?
-                        )
-                            .chain { inserts ->
-                                parent.insertStatements(
-                                    database,
-                                    toStatements(request.graph, inserts)
-                                )
-                            }
-                    }
-
-                    KvasirVocab.DeleteTemplate -> {
-                        materializeTemplate(
-                            operation[KvasirVocab.where]!! as String,
-                            operation[KvasirVocab.deletes] as String?
-                        )
-                            .chain { deletes ->
-                                parent.deleteStatements(
-                                    database,
-                                    getRecordIds(request.graph, deletes)
-                                )
-                            }
-                    }
-
-                    KvasirVocab.DeleteThenInsertTemplate -> {
-                        materializeTemplate(
-                            operation[KvasirVocab.where]!! as String,
-                            operation[KvasirVocab.deletes]!! as String
-                        )
-                            .chain { deletes ->
-                                parent.deleteStatements(
-                                    database,
-                                    getRecordIds(request.graph, deletes)
-                                )
-                            }
-                            .chain { _ ->
-                                materializeTemplate(
-                                    operation[KvasirVocab.where]!! as String,
-                                    operation[KvasirVocab.inserts]!! as String
-                                )
-                            }
-                            .chain { inserts ->
-                                parent.insertStatements(
-                                    database,
-                                    toStatements(request.graph, inserts)
-                                )
-                            }
-                    }
-
-                    else -> {
-                        Uni.createFrom()
-                            .failure(IllegalArgumentException("Unsupported operation type: ${operation[JsonLdKeywords.type]}"))
-                    }
-                }
-            }
-            .merge(parallelism)
-            .skipToLast()
-    }
+class ChangeProcessor(
+    private val request: ChangeRequest,
+    private val parent: XtdbKnowledgeGraph,
+    private val parallelism: Int
+) {
 
     // Test the assertions, throw an exception if one fails
-    fun executeAssertions(request: ChangeRequest, parallelism: Int): Uni<Void> {
-        return Multi.createFrom().iterable(request.assertions)
+    fun executeAssertions(): Uni<Void> {
+        return Multi.createFrom().iterable(request.assert)
             .onItem()
             .transformToUni { assertion ->
                 val q = QueryRequest(
                     podId = request.podId,
-                    graphQL = QueryUtils.parseQueryWithContext(assertion.queryStr, request.userProvidedContext)
+                    graphQL = QueryUtils.parseQueryWithContext(assertion.queryStr, request.context)
                 )
                 parent.query(q)
                     .onFailure().recoverWithItem { err ->
@@ -138,44 +72,51 @@ class ChangeProcessor(private val request: ChangeRequest, private val parent: Xt
             .skipToLast()
     }
 
-    private fun materializeTemplate(query: String, transform: String? = null): Uni<List<Map<String, Any>>> {
-        val q = QueryRequest(
-            podId = request.podId,
-            targetGraphs = setOf(request.graph),
-            graphQL = QueryUtils.parseQueryWithContext(query, request.userProvidedContext)
-        )
-        return parent.query(q)
-            .onFailure().recoverWithItem { err ->
-                QueryResult(
-                    data = emptyList(),
-                    errors = listOf(mapOf("message" to (err.message ?: "")))
-                )
-            }
-            .onItem().transformToUni { result ->
-                val jsonLDResult =
-                    result.toJsonLD(request.userProvidedContext).filterNot { it.key == JsonLdKeywords.context }
-                val transformedResult = transform?.let {
-                    val transformExpr = jsonata(transform)
-                    transformExpr.evaluate(jsonLDResult)
-                } ?: jsonLDResult
-                when {
-                    transformedResult is Map<*, *> && transformedResult.containsKey(JsonLdKeywords.graph) -> Multi.createFrom()
-                        .iterable(transformedResult[JsonLdKeywords.graph] as List<Map<String, Any>>)
-
-                    transformedResult is Map<*, *> -> Multi.createFrom().item(transformedResult as Map<String, Any>)
-                    transformedResult is List<*> -> Multi.createFrom()
-                        .iterable(transformedResult.map { it as Map<String, Any> })
-
-                    else -> Multi.createFrom().empty()
-                }.map { JsonLdHelper.toCompactFQForm(it, request.userProvidedContext) }.collect().asList()
-            }
+    fun bindWhere(): Uni<List<Map<String, Any>>> {
+        return if (request.where == null) {
+            Uni.createFrom().item(emptyList())
+        } else {
+            val q = QueryRequest(
+                podId = request.podId,
+                targetGraphs = setOf(request.graph),
+                graphQL = QueryUtils.parseQueryWithContext(request.where!!, request.context)
+            )
+            parent.query(q)
+                .onFailure().recoverWithItem { err ->
+                    QueryResult(
+                        data = emptyList(),
+                        errors = listOf(mapOf("message" to (err.message ?: "")))
+                    )
+                }
+                .onItem().transform { result ->
+                    result.data
+                }
+        }
     }
 
-    fun toStatements(graph: String, docs: List<Map<String, Any>>): List<List<Any?>> {
+    fun materializeRecords(records: List<Any>, bindings: List<Map<String, Any>>): List<List<Any?>> {
+        return records.flatMap { record ->
+            when (record) {
+                is Map<*, *> -> toStatements(listOf(record as Map<String, Any>))
+                is String -> toStatements(transformTemplate(record, bindings))
+                else -> throw InvalidTemplateException("Unsupported insert type: $record")
+            }
+        }
+    }
+
+    private fun transformTemplate(template: String, bindings: List<Map<String, Any>>): List<Map<String, Any>> {
+        return when (val transformedData = jsonata(template).evaluate(bindings)) {
+            is List<*> -> transformedData.map { it as Map<String, Any> }
+            is Map<*, *> -> listOf(transformedData as Map<String, Any>)
+            else -> throw InvalidTemplateException("Invalid template result: $transformedData")
+        }
+    }
+
+    private fun toStatements(docs: List<Map<String, Any>>): List<List<Any?>> {
         val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
         return dataset.getQuads("@default").map { quad ->
             listOf(
-                getRecordId(graph, quad),
+                getRecordId(quad),
                 quad.subject.value,
                 quad.predicate.value,
                 if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
@@ -190,23 +131,23 @@ class ChangeProcessor(private val request: ChangeRequest, private val parent: Xt
                     "language" to quad.`object`.language?.toString()
                 ).entries.filter { it.value != null }
                     .joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "$k:'$v'" },
-                graph
+                request.graph
             )
         }
     }
 
-    private fun getRecordIds(graph: String, docs: List<Map<String, Any>>): List<List<Any?>> {
+    fun getRecordIds(docs: List<Map<String, Any>>): List<List<Any?>> {
         val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
         return dataset.getQuads("@default").map { quad ->
             listOf(
-                getRecordId(graph, quad)
+                getRecordId(quad)
             )
         }
     }
 
-    private fun getRecordId(graph: String, quad: RDFDataset.Quad) =
+    private fun getRecordId(quad: RDFDataset.Quad) =
         "kvasir:" + Hashing.farmHashFingerprint64()
-            .hashString("${graph}${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8)
+            .hashString("${request.graph}${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8)
 
     /**
      * Get the value of an RDF Literal as a database compatible primitive (if not supported, the string representation is used).

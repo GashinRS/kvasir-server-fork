@@ -135,9 +135,9 @@ class GraphQLToSQL(private val request: QueryRequest) {
                         typeCondition
                     ).joinToString(" AND ", prefix = "WHERE ")
                     val fieldJoinClause =
-                        "JOIN (SELECT s, ARRAY_AGG(o) as o FROM $database $whereClause) $joinName ON $joinName.s = $dataAlias.s"
+                        "JOIN (SELECT s, ARRAY_AGG(o) as ${joinName}_o FROM $database $whereClause) $joinName ON $joinName.s = $dataAlias.s"
                     fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
-                    "$joinName.o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
+                    "${joinName}_o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
                 }
             }
 
@@ -181,7 +181,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
     }
 
     private fun getTypeWhereCondition(fqTypeBound: String, targetColumn: String): String {
-        return " AND $targetColumn IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$fqTypeBound')"
+        return "$targetColumn IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$fqTypeBound')"
     }
 }
 

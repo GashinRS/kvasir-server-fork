@@ -71,7 +71,7 @@ class RDFStorageMutationListener(
         return ChangeRequest(
             podId = podId,
             graph = graphId,
-            inserts = compactFQJsonGraph["@graph"]?.let { graph -> graph as List<Map<String, Any>> } ?: listOf(
+            insert = compactFQJsonGraph["@graph"]?.let { graph -> graph as List<Map<String, Any>> } ?: listOf(
                 compactFQJsonGraph
             ),
             // TODO: include instruction to delete previous content

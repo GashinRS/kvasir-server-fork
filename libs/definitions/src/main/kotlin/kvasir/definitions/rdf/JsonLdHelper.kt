@@ -21,6 +21,7 @@ object JsonLdHelper {
         }
     }
 
+    // TODO: why do we need to supply the context here?
     fun toCompactFQForm(doc: Map<String, Any>, context: Map<String, Any>): Map<String, Any> {
         val docWithContext =
             if (doc.containsKey(JsonLdKeywords.context)) doc else doc + (JsonLdKeywords.context to context)

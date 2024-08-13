@@ -6,6 +6,7 @@ import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changeops.ChangeAssertionException
+import kvasir.definitions.kg.changeops.InvalidTemplateException
 import org.eclipse.microprofile.config.inject.ConfigProperty
 
 @ApplicationScoped
@@ -16,20 +17,24 @@ class XtdbKnowledgeGraph(
 ) : KnowledgeGraph {
 
     override fun process(request: ChangeRequest): Uni<Void> {
-        val changeProcessor = ChangeProcessor(request, this)
+        val changeProcessor = ChangeProcessor(request, this, assertionCheckingParallelism)
         val database = dbNameForPod(request.podId)
-        return changeProcessor.executeAssertions(request, assertionCheckingParallelism)
+        return changeProcessor.executeAssertions()
             .chain { _ ->
-                changeProcessor.executeOperations(request, assertionCheckingParallelism)
+                changeProcessor.bindWhere()
             }
-            .chain { _ ->
-                deleteStatements(database, changeProcessor.toStatements(request.graph, request.deletes))
-            }
-            .chain { _ ->
-                insertStatements(database, changeProcessor.toStatements(request.graph, request.inserts))
+            .chain { bindings ->
+                deleteStatements(database, changeProcessor.materializeRecords(request.delete, bindings))
+                    .chain { _ ->
+                        insertStatements(database, changeProcessor.materializeRecords(request.insert, bindings))
+                    }
             }
             .onFailure(ChangeAssertionException::class.java).recoverWithUni { e ->
                 Log.warn("Failed to process change request due to assertion error: $request", e)
+                Uni.createFrom().voidItem()
+            }
+            .onFailure(InvalidTemplateException::class.java).recoverWithUni { e ->
+                Log.warn("Failed to process change request due to invalid template expression: $request", e)
                 Uni.createFrom().voidItem()
             }
     }

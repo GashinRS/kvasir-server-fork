@@ -1,7 +1,5 @@
 package kvasir.services.api.kg.inbox.impl
 
-import com.github.jsonldjava.core.JsonLdOptions
-import com.github.jsonldjava.core.JsonLdProcessor
 import com.github.jsonldjava.utils.JsonUtils
 import io.vertx.core.json.JsonObject
 import jakarta.ws.rs.core.MediaType
@@ -24,9 +22,9 @@ class ChangeBodyReader(
 
     private val defaultContext = mapOf(
         "graph" to KvasirVocab.graph,
-        "inserts" to KvasirVocab.inserts,
-        "deletes" to KvasirVocab.deletes,
-        "assertions" to KvasirVocab.assertions
+        "inserts" to KvasirVocab.insert,
+        "deletes" to KvasirVocab.delete,
+        "assertions" to KvasirVocab.assert
     )
 
     override fun isReadable(
@@ -52,28 +50,23 @@ class ChangeBodyReader(
             jsonLD["@context"] =
                 defaultContext.plus("@vocab" to uriInfo.requestUri.toASCIIString().removeSuffix("inbox"))
         }
-        val resolvedJsonLD = JsonLdProcessor.compact(
-            JsonLdProcessor.expand(jsonLD),
-            JsonUtils.fromString("{}"),
-            JsonLdOptions()
-        )
+        val resolvedJsonLD = JsonLdHelper.toCompactFQForm(jsonLD, userProvidedContext)
         return ChangeRequestInput(
             graph = resolvedJsonLD[KvasirVocab.graph] as? String ?: "",
-            assertions = resolvedJsonLD[KvasirVocab.assertions]?.let { assertions ->
+            assert = resolvedJsonLD[KvasirVocab.assert]?.let { assertions ->
                 JsonLdHelper.valueAsJsonArray(assertions).map { JsonObject(it).mapTo(Assertion::class.java) }
             }
                 ?: emptyList(),
-            operations = resolvedJsonLD[KvasirVocab.operations]?.let { operations ->
-                JsonLdHelper.valueAsJsonArray(operations)
-            }
-                ?: emptyList(),
-            inserts = resolvedJsonLD[KvasirVocab.inserts]?.let { inserts ->
+            where = resolvedJsonLD[KvasirVocab.where]?.let { where ->
+                where as String
+            },
+            insert = resolvedJsonLD[KvasirVocab.insert]?.let { inserts ->
                 JsonLdHelper.valueAsJsonArray(inserts).map { assignIds(it) }
             }
                 ?: emptyList(),
-            deletes = resolvedJsonLD[KvasirVocab.deletes]?.let { deletes -> JsonLdHelper.valueAsJsonArray(deletes) }
+            delete = resolvedJsonLD[KvasirVocab.delete]?.let { deletes -> JsonLdHelper.valueAsJsonArray(deletes) }
                 ?: emptyList(),
-            userProvidedContext = userProvidedContext
+            context = userProvidedContext
         )
     }
 

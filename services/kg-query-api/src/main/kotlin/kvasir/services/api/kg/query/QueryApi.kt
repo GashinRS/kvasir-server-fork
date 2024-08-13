@@ -25,7 +25,7 @@ class QueryApi(
     }
 
     @POST
-    @Produces("application/json+ld")
+    @Produces("application/ld+json")
     fun queryJsonLD(@PathParam("podId") podId: String, input: QueryInput): Uni<Map<String, Any>> {
         val req = parseInput(podId, input)
         return knowledgeGraph.query(req).map {

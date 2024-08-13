@@ -37,23 +37,23 @@ class InboxApi(
 }
 
 data class ChangeRequestInput(
+    val context: Map<String, Any> = emptyMap(),
     val graph: String = "",
-    val assertions: List<Assertion> = emptyList(),
-    val operations: List<Map<String, Any>> = emptyList(),
-    val inserts: List<Map<String, Any>> = emptyList(),
-    val deletes: List<Map<String, Any>> = emptyList(),
-    val userProvidedContext: Map<String, Any> = emptyMap()
+    val assert: List<Assertion> = emptyList(),
+    val where: String? = null,
+    val insert: List<Any> = emptyList(),
+    val delete: List<Any> = emptyList(),
 ) {
 
     fun toChangeRequest(podId: String): ChangeRequest {
         return ChangeRequest(
+            context = context,
             podId = podId,
             graph = graph,
-            assertions = assertions,
-            operations = operations,
-            inserts = inserts,
-            deletes = deletes,
-            userProvidedContext = userProvidedContext
+            assert = assert,
+            where = where,
+            insert = insert,
+            delete = delete
         )
     }
 

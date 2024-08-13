@@ -21,14 +21,14 @@ interface KnowledgeGraph {
 
 data class ChangeRequest(
     val id: String = UUID.randomUUID().toString(),
+    val context: Map<String, Any> = emptyMap(),
     val podId: String,
     val graph: String = "", // Graph identifier
     // The Change Request will only be applied if all assertions resolve to true.
-    val assertions: List<Assertion> = emptyList(),
-    val operations: List<Map<String, Any>> = emptyList(),
-    val inserts: List<Map<String, Any>> = emptyList(),
-    val deletes: List<Map<String, Any>> = emptyList(),
-    val userProvidedContext: Map<String, Any> = emptyMap()
+    val assert: List<Assertion> = emptyList(),
+    val where: String? = null,
+    val insert: List<Any> = emptyList(),
+    val delete: List<Any> = emptyList()
 )
 
 @GenerateNoArgConstructor
