@@ -19,35 +19,73 @@ import kvasir.definitions.reactive.skipToLast
 
 class ChangeProcessor(private val request: ChangeRequest, private val parent: XtdbKnowledgeGraph) {
 
-    // TODO: rewrite as a streaming implementation (result of InsertTemplate should not be collected in-memory)
-    fun getInsertTuples(): Uni<List<List<Any?>>> {
-        return Multi.createFrom().iterable(request.inserts)
-            .flatMap { doc ->
-                if (KvasirVocab.InsertTemplate == doc[JsonLdKeywords.type]) {
-                    // Materialize template by executing query and performing JSONata transformation
-                    materializeTemplate(doc)
-                } else {
-                    Multi.createFrom().item(doc)
-                }
-            }
-            .collect().asList().map { docs ->
-                toStatements(request.graph, docs)
-            }
-    }
 
-    fun getDeleteIds(): Uni<List<List<Any?>>> {
-        return Multi.createFrom().iterable(request.deletes)
-            .flatMap { doc ->
-                if (KvasirVocab.DeleteTemplate == doc[JsonLdKeywords.type] || KvasirVocab.DeleteByQuery == doc[JsonLdKeywords.type]) {
-                    // Materialize template by executing query and performing JSONata transformation
-                    materializeTemplate(doc)
-                } else {
-                    Multi.createFrom().item(doc)
+    // TODO: temporary solution, will not scale
+    fun executeOperations(request: ChangeRequest, parallelism: Int): Uni<Void> {
+        val database = dbNameForPod(request.podId)
+        return Multi.createFrom().iterable(request.operations)
+            .onItem()
+            .transformToUni { operation ->
+                when (operation[JsonLdKeywords.type]) {
+                    KvasirVocab.InsertTemplate -> {
+                        materializeTemplate(
+                            operation[KvasirVocab.where]!! as String,
+                            operation[KvasirVocab.inserts] as String?
+                        )
+                            .chain { inserts ->
+                                parent.insertStatements(
+                                    database,
+                                    toStatements(request.graph, inserts)
+                                )
+                            }
+                    }
+
+                    KvasirVocab.DeleteTemplate -> {
+                        materializeTemplate(
+                            operation[KvasirVocab.where]!! as String,
+                            operation[KvasirVocab.deletes] as String?
+                        )
+                            .chain { deletes ->
+                                parent.deleteStatements(
+                                    database,
+                                    getRecordIds(request.graph, deletes)
+                                )
+                            }
+                    }
+
+                    KvasirVocab.DeleteThenInsertTemplate -> {
+                        materializeTemplate(
+                            operation[KvasirVocab.where]!! as String,
+                            operation[KvasirVocab.deletes]!! as String
+                        )
+                            .chain { deletes ->
+                                parent.deleteStatements(
+                                    database,
+                                    getRecordIds(request.graph, deletes)
+                                )
+                            }
+                            .chain { _ ->
+                                materializeTemplate(
+                                    operation[KvasirVocab.where]!! as String,
+                                    operation[KvasirVocab.inserts]!! as String
+                                )
+                            }
+                            .chain { inserts ->
+                                parent.insertStatements(
+                                    database,
+                                    toStatements(request.graph, inserts)
+                                )
+                            }
+                    }
+
+                    else -> {
+                        Uni.createFrom()
+                            .failure(IllegalArgumentException("Unsupported operation type: ${operation[JsonLdKeywords.type]}"))
+                    }
                 }
             }
-            .collect().asList().map { docs ->
-                getRecordIds(request.graph, docs)
-            }
+            .merge(parallelism)
+            .skipToLast()
     }
 
     // Test the assertions, throw an exception if one fails
@@ -100,11 +138,11 @@ class ChangeProcessor(private val request: ChangeRequest, private val parent: Xt
             .skipToLast()
     }
 
-    private fun materializeTemplate(doc: Map<String, Any>): Multi<Map<String, Any>> {
+    private fun materializeTemplate(query: String, transform: String? = null): Uni<List<Map<String, Any>>> {
         val q = QueryRequest(
             podId = request.podId,
             targetGraphs = setOf(request.graph),
-            graphQL = QueryUtils.parseQueryWithContext(doc[KvasirVocab.query] as String, request.userProvidedContext)
+            graphQL = QueryUtils.parseQueryWithContext(query, request.userProvidedContext)
         )
         return parent.query(q)
             .onFailure().recoverWithItem { err ->
@@ -113,15 +151,13 @@ class ChangeProcessor(private val request: ChangeRequest, private val parent: Xt
                     errors = listOf(mapOf("message" to (err.message ?: "")))
                 )
             }
-            .onItem().transformToMulti { result ->
+            .onItem().transformToUni { result ->
                 val jsonLDResult =
                     result.toJsonLD(request.userProvidedContext).filterNot { it.key == JsonLdKeywords.context }
-                val transformedResult = if (doc[JsonLdKeywords.type] == KvasirVocab.DeleteByQuery) {
-                    jsonLDResult
-                } else {
-                    val transformExpr = jsonata(doc[KvasirVocab.transform] as String)
+                val transformedResult = transform?.let {
+                    val transformExpr = jsonata(transform)
                     transformExpr.evaluate(jsonLDResult)
-                }
+                } ?: jsonLDResult
                 when {
                     transformedResult is Map<*, *> && transformedResult.containsKey(JsonLdKeywords.graph) -> Multi.createFrom()
                         .iterable(transformedResult[JsonLdKeywords.graph] as List<Map<String, Any>>)
@@ -131,11 +167,11 @@ class ChangeProcessor(private val request: ChangeRequest, private val parent: Xt
                         .iterable(transformedResult.map { it as Map<String, Any> })
 
                     else -> Multi.createFrom().empty()
-                }.map { JsonLdHelper.toCompactFQForm(it, request.userProvidedContext) }
+                }.map { JsonLdHelper.toCompactFQForm(it, request.userProvidedContext) }.collect().asList()
             }
     }
 
-    private fun toStatements(graph: String, docs: List<Map<String, Any>>): List<List<Any?>> {
+    fun toStatements(graph: String, docs: List<Map<String, Any>>): List<List<Any?>> {
         val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
         return dataset.getQuads("@default").map { quad ->
             listOf(

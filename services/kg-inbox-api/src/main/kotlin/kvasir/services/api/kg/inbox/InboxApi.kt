@@ -39,6 +39,7 @@ class InboxApi(
 data class ChangeRequestInput(
     val graph: String = "",
     val assertions: List<Assertion> = emptyList(),
+    val operations: List<Map<String, Any>> = emptyList(),
     val inserts: List<Map<String, Any>> = emptyList(),
     val deletes: List<Map<String, Any>> = emptyList(),
     val userProvidedContext: Map<String, Any> = emptyMap()
@@ -49,6 +50,7 @@ data class ChangeRequestInput(
             podId = podId,
             graph = graph,
             assertions = assertions,
+            operations = operations,
             inserts = inserts,
             deletes = deletes,
             userProvidedContext = userProvidedContext

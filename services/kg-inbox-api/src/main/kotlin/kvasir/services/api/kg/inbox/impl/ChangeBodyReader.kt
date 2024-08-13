@@ -63,6 +63,10 @@ class ChangeBodyReader(
                 JsonLdHelper.valueAsJsonArray(assertions).map { JsonObject(it).mapTo(Assertion::class.java) }
             }
                 ?: emptyList(),
+            operations = resolvedJsonLD[KvasirVocab.operations]?.let { operations ->
+                JsonLdHelper.valueAsJsonArray(operations)
+            }
+                ?: emptyList(),
             inserts = resolvedJsonLD[KvasirVocab.inserts]?.let { inserts ->
                 JsonLdHelper.valueAsJsonArray(inserts).map { assignIds(it) }
             }

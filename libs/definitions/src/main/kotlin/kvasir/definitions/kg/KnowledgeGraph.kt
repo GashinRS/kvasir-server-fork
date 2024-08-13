@@ -25,6 +25,7 @@ data class ChangeRequest(
     val graph: String = "", // Graph identifier
     // The Change Request will only be applied if all assertions resolve to true.
     val assertions: List<Assertion> = emptyList(),
+    val operations: List<Map<String, Any>> = emptyList(),
     val inserts: List<Map<String, Any>> = emptyList(),
     val deletes: List<Map<String, Any>> = emptyList(),
     val userProvidedContext: Map<String, Any> = emptyMap()

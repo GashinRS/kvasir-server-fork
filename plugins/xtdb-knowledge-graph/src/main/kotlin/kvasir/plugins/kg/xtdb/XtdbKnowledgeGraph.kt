@@ -20,35 +20,40 @@ class XtdbKnowledgeGraph(
         val database = dbNameForPod(request.podId)
         return changeProcessor.executeAssertions(request, assertionCheckingParallelism)
             .chain { _ ->
-                changeProcessor.getDeleteIds()
-            }
-            .chain { deleteTuples ->
-                xtdbClient.execute(
-                    SqlTransaction(
-                        SqlOp(
-                            "DELETE FROM $database WHERE _id = ?",
-                            deleteTuples
-                        )
-                    )
-                )
+                changeProcessor.executeOperations(request, assertionCheckingParallelism)
             }
             .chain { _ ->
-                changeProcessor.getInsertTuples()
+                deleteStatements(database, changeProcessor.toStatements(request.graph, request.deletes))
             }
-            .chain { insertTuples ->
-                xtdbClient.execute(
-                    SqlTransaction(
-                        SqlOp(
-                            "INSERT INTO $database (_id, s, p, o, t, g) VALUES (?, ?, ?, ?, ?, ?)",
-                            insertTuples
-                        )
-                    )
-                )
+            .chain { _ ->
+                insertStatements(database, changeProcessor.toStatements(request.graph, request.inserts))
             }
             .onFailure(ChangeAssertionException::class.java).recoverWithUni { e ->
                 Log.warn("Failed to process change request due to assertion error: $request", e)
                 Uni.createFrom().voidItem()
             }
+    }
+
+    fun insertStatements(database: String, insertTuples: List<List<Any?>>): Uni<Void> {
+        return xtdbClient.execute(
+            SqlTransaction(
+                SqlOp(
+                    "INSERT INTO $database (_id, s, p, o, t, g) VALUES (?, ?, ?, ?, ?, ?)",
+                    insertTuples
+                )
+            )
+        )
+    }
+
+    fun deleteStatements(database: String, deleteTuples: List<List<Any?>>): Uni<Void> {
+        return xtdbClient.execute(
+            SqlTransaction(
+                SqlOp(
+                    "DELETE FROM $database WHERE _id = ?",
+                    deleteTuples
+                )
+            )
+        )
     }
 
     override fun query(request: QueryRequest): Uni<QueryResult> {
