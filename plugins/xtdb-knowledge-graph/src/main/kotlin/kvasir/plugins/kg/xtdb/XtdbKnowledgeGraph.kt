@@ -62,10 +62,11 @@ class XtdbKnowledgeGraph(
     }
 
     override fun query(request: QueryRequest): Uni<QueryResult> {
-        val sql = GraphQLToSQL(request).toSQL()
+        val queryMapping = GraphQLToSQL(request)
+        val sql = queryMapping.toSQL()
         Log.debug("Xtdb query: $sql")
         return xtdbClient.query(SqlQuery(sql)).map { results ->
-            QueryResult(data = results.map { fixNullArrays(it) as Map<String, Any> })
+            QueryResult(data = results.map { processOutput(queryMapping, it) as Map<String, Any> })
         }
     }
 
@@ -74,10 +75,19 @@ class XtdbKnowledgeGraph(
     }
 }
 
-private fun fixNullArrays(result: Any): Any {
+// Fixes null array values in the output (Xtdb quirk) and resets the mapped fields to their original names
+private fun processOutput(queryMapping: GraphQLToSQL, result: Any): Any {
     return when (result) {
-        is List<*> -> if (result.size == 1 && result[0] == null) emptyList() else result.map { fixNullArrays(it!!) }
-        is Map<*, *> -> result.mapValues { fixNullArrays(it.value!!) }
+        is List<*> -> if (result.size == 1 && result[0] == null) emptyList() else result.map {
+            processOutput(
+                queryMapping,
+                it!!
+            )
+        }
+
+        is Map<*, *> -> result.mapValues { processOutput(queryMapping, it.value!!) }
+            .mapKeys { queryMapping.fieldMapping[it.key] ?: it.key }
+
         else -> result
     }
 }

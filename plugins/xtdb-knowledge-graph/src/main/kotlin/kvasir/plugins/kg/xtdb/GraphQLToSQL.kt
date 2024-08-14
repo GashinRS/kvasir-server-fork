@@ -10,6 +10,10 @@ class GraphQLToSQL(private val request: QueryRequest) {
         request.targetGraphs.takeIf { it.isNotEmpty() }?.joinToString(",", prefix = "g IN (", postfix = ")") { "'$it'" }
     private val database = dbNameForPod(request.podId)
 
+    // This mapping is required because Xtdb modifies the field names in the query result
+    // So to prevent errors and undertermined behavior, we need to keep track of the original field names
+    val fieldMapping = mutableMapOf<String, String>()
+
     fun toSQL(): String {
         // Verify that only a single query is specified and assign it (otherwise throw an exception)
         val rootNode = request.graphQL.definitions.filterIsInstance<OperationDefinition>()
@@ -38,49 +42,50 @@ class GraphQLToSQL(private val request: QueryRequest) {
     private fun mapNode(
         node: AbstractNode<*>,
         subjectSelection: String,
-        id: String = ""
+        queryScope: QueryScope = QueryScope(0)
     ): String {
-        val dataAlias = "${id}data"
         val selectionSetContainer = node as SelectionSetContainer<*>
         val fieldJoinClauses = mutableListOf<String>()
         val nestedNonNullFields = mutableListOf<NestedNonNullFieldCheck>()
-        val dataSelectClauses = selectionSetContainer.selectionSet.selections.joinToString(", ") { selection ->
+        val dataSelectClauses = selectionSetContainer.selectionSet.selections.mapIndexed { index, selection ->
             mapSelection(
+                index,
                 selection,
-                id,
+                queryScope,
                 nestedNonNullFields,
-                dataAlias,
                 fieldJoinClauses
             )
-        }
+        }.joinToString(", ")
         val dataSelection =
-            "SELECT $dataSelectClauses FROM ($subjectSelection) $dataAlias ${fieldJoinClauses.joinToString(" ")}"
+            "SELECT $dataSelectClauses FROM ($subjectSelection) ${queryScope.dataId()} ${fieldJoinClauses.joinToString(" ")}"
         return nestedNonNullFields.takeIf { it.isNotEmpty() }
             ?.let { fieldsToCheck ->
-                "SELECT * FROM ($dataSelection) ${id}env WHERE ${fieldsToCheck.joinToString(" AND ") { "`${it.name}`${if (it.hasMultipleResults) "[1]" else ""} IS NOT null" }}"
+                "SELECT * FROM ($dataSelection) ${queryScope.envelopeId()} WHERE ${fieldsToCheck.joinToString(" AND ") { "`${it.name}`${if (it.hasMultipleResults) "[1]" else ""} IS NOT null" }}"
             }
             ?: dataSelection
     }
 
     private fun mapSelection(
+        selectionId: Int,
         selection: Selection<*>?,
-        scopeId: String,
+        queryScope: QueryScope,
         nestedNonNullFields: MutableList<NestedNonNullFieldCheck>,
-        dataAlias: String,
         fieldJoinClauses: MutableList<String>,
         fqTypeBound: String? = null
     ): String {
         when (selection) {
             is Field -> {
                 val isOptional = selection.directives.any { it.name == "optional" }
-                val effectiveName = (selection.alias ?: selection.name)
+                val effectiveName = queryScope.fieldNameKey(selectionId)
+                fieldMapping[effectiveName] = selection.alias ?: selection.name
+                val joinId = queryScope.joinId(selectionId)
                 if (selection.name == "id") {
-                    return "$dataAlias.s AS `$effectiveName`" // TODO: cleaner way of shortcutting logic when field is 'id'
+                    return "${queryScope.dataId()}.s AS `$effectiveName`" // TODO: cleaner way of shortcutting logic when field is 'id'
                 }
 
                 val valueFilter =
                     selection.arguments.firstOrNull { it.name == "_" }?.value?.let { "o = ${toSQLValue(it)}" }
-                val joinName = "${scopeId}$effectiveName"
+
                 val hasMultipleResults = !selection.hasDirective("single")
                 return if (selection.selectionSet != null) {
                     // Field has a nested selection set, recurse
@@ -107,7 +112,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     val whereClause = listOfNotNull(
                         targetGraphsClause,
                         idFilter,
-                        "s = ${dataAlias}.s AND p = '${selection.getContextIRI()}'",
+                        "s = ${queryScope.dataId()}.s AND p = '${selection.getContextIRI()}'",
                         valueFilter,
                         typeCondition,
                         additionalConditions
@@ -118,13 +123,13 @@ class GraphQLToSQL(private val request: QueryRequest) {
                         mapNode(
                             selection,
                             "SELECT DISTINCT o AS s FROM $database $whereClause${if (!hasMultipleResults) " LIMIT 1" else ""}",
-                            effectiveName.plus("_")
+                            queryScope.nestedScope(selectionId)
                         )
                     }) AS `$effectiveName`"
                 } else if (selection.name == "__fieldnames") {
                     // Special introspection field to return the field names of the current selection
-                    fieldJoinClauses.add("JOIN (SELECT s, '__fieldnames' as p, ARRAY_AGG(p) as o FROM $database) $joinName ON $joinName.s = $dataAlias.s")
-                    "$joinName.o AS `$effectiveName`"
+                    fieldJoinClauses.add("JOIN (SELECT s, '__fieldnames' as p, ARRAY_AGG(p) as o FROM $database) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
+                    "$joinId.o AS `$effectiveName`"
                 } else {
                     // Field is a leaf node: use join to select objects matching the specified subject & predicate
                     val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
@@ -135,25 +140,25 @@ class GraphQLToSQL(private val request: QueryRequest) {
                         typeCondition
                     ).joinToString(" AND ", prefix = "WHERE ")
                     val fieldJoinClause =
-                        "JOIN (SELECT s, ARRAY_AGG(o) as ${joinName}_o FROM $database $whereClause) $joinName ON $joinName.s = $dataAlias.s"
+                        "JOIN (SELECT s, ARRAY_AGG(o) as ${joinId}_o FROM $database $whereClause) $joinId ON $joinId.s = ${queryScope.dataId()}.s"
                     fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
-                    "${joinName}_o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
+                    "${joinId}_o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
                 }
             }
 
             is InlineFragment -> {
                 // Inline fragment, treat included selection set as fields, but with an additional type condition
                 val fqType = selection.getContextIRI()
-                return selection.selectionSet.selections.joinToString(", ") { inlineSelection ->
+                return selection.selectionSet.selections.mapIndexed { index, inlineSelection ->
                     mapSelection(
+                        index,
                         inlineSelection,
-                        scopeId,
+                        queryScope.nestedScope(index),
                         nestedNonNullFields,
-                        dataAlias,
                         fieldJoinClauses,
                         fqType
                     )
-                }
+                }.joinToString(", ")
             }
 
             is FragmentSpread -> {
@@ -164,16 +169,16 @@ class GraphQLToSQL(private val request: QueryRequest) {
 
                 //... and treat included selection set as fields, but with an additional type condition )
                 val fqType = fragmentDefinition.getContextIRI()
-                return fragmentDefinition.selectionSet.selections.joinToString(", ") { inlineSelection ->
+                return fragmentDefinition.selectionSet.selections.mapIndexed { index, inlineSelection ->
                     mapSelection(
+                        index,
                         inlineSelection,
-                        scopeId,
+                        queryScope.nestedScope(index),
                         nestedNonNullFields,
-                        dataAlias,
                         fieldJoinClauses,
                         fqType
                     )
-                }
+                }.joinToString(", ")
             }
 
             else -> throw IllegalArgumentException("Unsupported selection type: $selection")
@@ -183,6 +188,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
     private fun getTypeWhereCondition(fqTypeBound: String, targetColumn: String): String {
         return "$targetColumn IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$fqTypeBound')"
     }
+
 }
 
 private fun <T : DirectivesContainer<T>> DirectivesContainer<T>.getContextIRI(): String {
@@ -201,3 +207,12 @@ private fun toSQLValue(value: Value<*>): String {
 }
 
 data class NestedNonNullFieldCheck(val name: String, val hasMultipleResults: Boolean)
+
+data class QueryScope(val seqNr: Int, val parent: QueryScope? = null) {
+    fun scopedSeqNr(): String = "${if (parent == null) "s" else ""}${parent?.scopedSeqNr()?.plus("_") ?: ""}$seqNr"
+    fun dataId(): String = "${scopedSeqNr()}_d"
+    fun envelopeId(): String = "${scopedSeqNr()}_e"
+    fun joinId(index: Int): String = "${scopedSeqNr()}_j$index"
+    fun nestedScope(index: Int): QueryScope = QueryScope(index, this)
+    fun fieldNameKey(index: Int): String = "${scopedSeqNr()}_f$index"
+}
