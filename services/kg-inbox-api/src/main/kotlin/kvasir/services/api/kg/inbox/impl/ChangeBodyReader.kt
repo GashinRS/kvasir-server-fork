@@ -2,6 +2,7 @@ package kvasir.services.api.kg.inbox.impl
 
 import com.github.jsonldjava.utils.JsonUtils
 import io.vertx.core.json.JsonObject
+import jakarta.ws.rs.BadRequestException
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.MultivaluedMap
 import jakarta.ws.rs.core.UriInfo
@@ -50,21 +51,24 @@ class ChangeBodyReader(
             jsonLD["@context"] =
                 defaultContext.plus("@vocab" to uriInfo.requestUri.toASCIIString().removeSuffix("inbox"))
         }
-        val resolvedJsonLD = JsonLdHelper.toCompactFQForm(jsonLD, userProvidedContext)
+        val resolvedJsonLD = JsonLdHelper.toCompactFQForm(jsonLD)
         return ChangeRequestInput(
             graph = resolvedJsonLD[KvasirVocab.graph] as? String ?: "",
             assert = resolvedJsonLD[KvasirVocab.assert]?.let { assertions ->
-                JsonLdHelper.valueAsJsonArray(assertions).map { JsonObject(it).mapTo(Assertion::class.java) }
+                valueAsJsonArray(assertions)
+                    .map { JsonObject(it as Map<String, Any>).mapTo(Assertion::class.java) }
             }
                 ?: emptyList(),
             where = resolvedJsonLD[KvasirVocab.where]?.let { where ->
                 where as String
             },
             insert = resolvedJsonLD[KvasirVocab.insert]?.let { inserts ->
-                JsonLdHelper.valueAsJsonArray(inserts).map { assignIds(it) }
+                valueAsJsonArray(inserts).map {
+                    if (it is Map<*, *>) assignIds(it as Map<String, Any>) else it
+                }
             }
                 ?: emptyList(),
-            delete = resolvedJsonLD[KvasirVocab.delete]?.let { deletes -> JsonLdHelper.valueAsJsonArray(deletes) }
+            delete = resolvedJsonLD[KvasirVocab.delete]?.let { deletes -> valueAsJsonArray(deletes) }
                 ?: emptyList(),
             context = userProvidedContext
         )
@@ -79,5 +83,14 @@ class ChangeBodyReader(
                 else -> value
             }
         })
+    }
+
+    private fun valueAsJsonArray(value: Any): List<Any> {
+        return when (value) {
+            is List<*> -> value.mapNotNull { it }
+            is Map<*, *> -> listOf(value)
+            is String -> listOf(value)
+            else -> throw BadRequestException("Expected value to be a JSON array or object")
+        }
     }
 }

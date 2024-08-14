@@ -24,7 +24,15 @@ class XtdbKnowledgeGraph(
                 changeProcessor.bindWhere()
             }
             .chain { bindings ->
-                deleteStatements(database, changeProcessor.materializeRecords(request.delete, bindings))
+                if (request.delete.contains("*") && request.where == null) {
+                    // Delete the entire graph
+                    deleteGraph(database, request.graph)
+                } else {
+                    // Delete the specified records
+                    deleteStatements(
+                        database,
+                        changeProcessor.materializeRecords(request.delete, bindings).map { it.take(1) })
+                }
                     .chain { _ ->
                         insertStatements(database, changeProcessor.materializeRecords(request.insert, bindings))
                     }
@@ -56,6 +64,17 @@ class XtdbKnowledgeGraph(
                 SqlOp(
                     "DELETE FROM $database WHERE _id = ?",
                     deleteTuples
+                )
+            )
+        )
+    }
+
+    fun deleteGraph(database: String, graph: String): Uni<Void> {
+        return xtdbClient.execute(
+            SqlTransaction(
+                SqlOp(
+                    "DELETE FROM $database WHERE g = ?",
+                    listOf(listOf(graph))
                 )
             )
         )

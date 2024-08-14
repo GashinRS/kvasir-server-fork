@@ -64,6 +64,12 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
             resolveIri(node.name)?.let { iri ->
                 it.additionalData("iri", iri)
             }
+            val argVal = node.value
+            if (argVal is StringValue) {
+                resolveIri(argVal.value)?.let { iri ->
+                    it.value(StringValue.of(iri))
+                }
+            }
         }
         return TreeTransformerUtil.changeNode(traverserContext, changedFragmentDefinition)
     }

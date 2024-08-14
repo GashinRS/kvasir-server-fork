@@ -12,6 +12,8 @@ import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
+import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.definitions.reactive.skipToLast
@@ -72,9 +74,9 @@ class ChangeProcessor(
             .skipToLast()
     }
 
-    fun bindWhere(): Uni<List<Map<String, Any>>> {
+    fun bindWhere(): Uni<QueryResult> {
         return if (request.where == null) {
-            Uni.createFrom().item(emptyList())
+            Uni.createFrom().item(QueryResult(data = emptyList()))
         } else {
             val q = QueryRequest(
                 podId = request.podId,
@@ -88,17 +90,25 @@ class ChangeProcessor(
                         errors = listOf(mapOf("message" to (err.message ?: "")))
                     )
                 }
-                .onItem().transform { result ->
-                    result.data
-                }
         }
     }
 
-    fun materializeRecords(records: List<Any>, bindings: List<Map<String, Any>>): List<List<Any?>> {
+    fun materializeRecords(records: List<Any>, bindings: QueryResult): List<List<Any?>> {
         return records.flatMap { record ->
             when (record) {
                 is Map<*, *> -> toStatements(listOf(record as Map<String, Any>))
-                is String -> toStatements(transformTemplate(record, bindings))
+                is String -> {
+                    if (record == "*") {
+                        // Return bindings as is
+                        toStatements(bindings.toJsonLD(request.context))
+                    } else {
+                        toStatements(transformTemplate(
+                            record,
+                            bindings.data
+                        ).map { JsonLdHelper.toCompactFQForm(it.plus(JsonLdKeywords.context to request.context)) })
+                    }
+                }
+
                 else -> throw InvalidTemplateException("Unsupported insert type: $record")
             }
         }
@@ -112,8 +122,8 @@ class ChangeProcessor(
         }
     }
 
-    private fun toStatements(docs: List<Map<String, Any>>): List<List<Any?>> {
-        val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
+    private fun toStatements(graphDoc: Map<String, Any>): List<List<Any?>> {
+        val dataset = JsonLdProcessor.toRDF(graphDoc) as RDFDataset
         return dataset.getQuads("@default").map { quad ->
             listOf(
                 getRecordId(quad),
@@ -135,6 +145,8 @@ class ChangeProcessor(
             )
         }
     }
+
+    private fun toStatements(docs: List<Map<String, Any>>) = toStatements(mapOf(JsonLdKeywords.graph to docs))
 
     fun getRecordIds(docs: List<Map<String, Any>>): List<List<Any?>> {
         val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
