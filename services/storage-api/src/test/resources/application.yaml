@@ -1,0 +1,12 @@
+'%test':
+  kvasir:
+    bootstrap:
+      pods:
+        - name: test
+    services:
+      storage:
+        s3:
+          host: localhost
+          port: ${quarkus.minio.port}
+          access-key: ${quarkus.minio.access-key}
+          secret-key: ${quarkus.minio.secret-key}

@@ -13,12 +13,6 @@ import io.vertx.httpproxy.ProxyInterceptor
 import io.vertx.httpproxy.ProxyResponse
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
-import jakarta.ws.rs.Consumes
-import jakarta.ws.rs.POST
-import jakarta.ws.rs.PUT
-import jakarta.ws.rs.Path
-import jakarta.ws.rs.core.MediaType
-import jakarta.ws.rs.core.Response
 import kvasir.definitions.storage.StorageMutationEvent
 import kvasir.definitions.storage.StorageMutationEventType
 import org.eclipse.microprofile.config.inject.ConfigProperty
@@ -28,6 +22,9 @@ import uk.co.lucasweb.aws.v4.signer.credentials.AwsCredentials
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+
+internal const val HEADER_X_AMZ_CONTENT_SHA256 = "x-amz-content-sha256"
+internal const val HEADER_X_AMZ_DATE = "x-amz-date"
 
 /**
  * Proxy for an S3 backend.
@@ -71,8 +68,6 @@ class S3Interceptor(
     companion object {
 
         private val ISO_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
-        private val AMZ_DATE_HEADER = "x-amz-date"
-        private val AMZ_CONTENT_SHA_HEADER = "x-amz-content-sha256"
         private val EMPTY_PAYLOAD_HASH = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
     }
@@ -123,14 +118,14 @@ class S3Interceptor(
     }
 
     private fun getIsoDateTime(context: ProxyContext): String {
-        return context.request().headers().get(AMZ_DATE_HEADER)
+        return context.request().headers().get(HEADER_X_AMZ_DATE)
             ?: ISO_DATE_FORMATTER.format(ZonedDateTime.now(ZoneOffset.UTC))
     }
 
     private fun getPayloadHash(context: ProxyContext): String {
-        return context.request().headers().get(AMZ_CONTENT_SHA_HEADER)
+        return context.request().headers().get(HEADER_X_AMZ_CONTENT_SHA256)
             ?: if (context.request().method.name() == HttpMethod.GET.name()) EMPTY_PAYLOAD_HASH else throw IllegalArgumentException(
-                "Missing required header: $AMZ_CONTENT_SHA_HEADER"
+                "Missing required header: $HEADER_X_AMZ_CONTENT_SHA256"
             )
     }
 
