@@ -1,6 +1,7 @@
 package kvasir.plugins.kg.xtdb
 
 import graphql.language.*
+import kvasir.definitions.graphql.Constants
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.rdf.RDFVocab
 
@@ -126,23 +127,39 @@ class GraphQLToSQL(private val request: QueryRequest) {
                             queryScope.nestedScope(selectionId)
                         )
                     }) AS `$effectiveName`"
-                } else if (selection.name == "__fieldnames") {
-                    // Special introspection field to return the field names of the current selection
-                    fieldJoinClauses.add("JOIN (SELECT s, '__fieldnames' as p, ARRAY_AGG(p) as o FROM $database) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
-                    "$joinId.o AS `$effectiveName`"
                 } else {
                     // Field is a leaf node: use join to select objects matching the specified subject & predicate
                     val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
                     val whereClause = listOfNotNull(
                         targetGraphsClause,
-                        "p = '${selection.getContextIRI()}'",
                         valueFilter,
                         typeCondition
-                    ).joinToString(" AND ", prefix = "WHERE ")
-                    val fieldJoinClause =
-                        "JOIN (SELECT s, ARRAY_AGG(o) as ${joinId}_o FROM $database $whereClause) $joinId ON $joinId.s = ${queryScope.dataId()}.s"
-                    fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
-                    "${joinId}_o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
+                    )
+                    val whereClauseStr =
+                        whereClause.takeIf { it.isNotEmpty() }?.joinToString(" AND ", prefix = "WHERE ") ?: ""
+                    when (selection.name) {
+                        Constants.FIELD_NAMES -> {
+                            // Special introspection field to return the field names of the current selection
+                            fieldJoinClauses.add("JOIN (SELECT s, '${Constants.FIELD_NAMES}' as p, ARRAY_AGG(p) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
+                            "$joinId.o AS `$effectiveName`"
+                        }
+
+                        Constants.Pagination.TOTAL_COUNT -> {
+                            // Special introspection field to return the total count of the current selection
+                            fieldJoinClauses.add("JOIN (SELECT s, '${Constants.Pagination.TOTAL_COUNT}' as p ,COUNT(DISTINCT s) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
+                            "$joinId.o AS `$effectiveName`"
+                        }
+
+                        else -> {
+                            val whereClauseWithPredicateFilter = whereClause.plus(
+                                "p = '${selection.getContextIRI()}'"
+                            ).joinToString(" AND ", prefix = "WHERE ")
+                            val fieldJoinClause =
+                                "JOIN (SELECT s, ARRAY_AGG(o) as ${joinId}_o FROM $database $whereClauseWithPredicateFilter) $joinId ON $joinId.s = ${queryScope.dataId()}.s"
+                            fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
+                            "${joinId}_o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
+                        }
+                    }
                 }
             }
 
