@@ -29,7 +29,10 @@ class InboxApi(
 
     @POST
     @Consumes("application/ld+json", MediaType.APPLICATION_JSON)
-    @Operation(summary = "Post a change request, containing the requested mutations, to the inbox of the specified pod.")
+    @Operation(
+        summary = "Perform mutations on the KG.",
+        description = "Post a change request, containing the requested mutations, to the inbox of the specified pod.",
+    )
     @APIResponse(responseCode = "202", description = "Change request accepted.")
     fun postJsonLDChangeRequest(
         @PathParam("podId") podId: String,

@@ -20,7 +20,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
         ),
         Tag(
             name = ApiDocTags.STORAGE_API,
-            description = "API for interfacing with low-level storage for a specific pod via S3 operations, modified to be compatible with Solid auth(n/z). For more information, see the [S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations.html)."
+            description = "API for interfacing with low-level storage (large RDF files, unstructured or binary data) for a specific pod via S3 operations, modified to be compatible with Solid auth(n/z). For more information, see the [S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations.html)."
         ),
     ]
 )

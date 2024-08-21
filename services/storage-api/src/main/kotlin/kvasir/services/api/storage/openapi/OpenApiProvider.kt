@@ -37,7 +37,8 @@ class OpenApiProvider : OASFilter {
         )
         openAPI.paths.addPathItem("/{podId}/s3/{objectKey}", PathItemImpl().apply {
             this.setOperation(PathItem.HttpMethod.GET, OperationImpl().apply {
-                this.summary = "Get an object from the specified pod's S3 storage"
+                this.summary = "Download a stored object."
+                this.description = "Get an object from the specified pod's S3 storage."
                 this.addTag(ApiDocTags.STORAGE_API)
                 this.parameters = commonParams
                 this.responses = APIResponsesImpl().addAPIResponse("200", APIResponseImpl().apply {
@@ -45,7 +46,8 @@ class OpenApiProvider : OASFilter {
                 })
             })
             this.setOperation(PathItem.HttpMethod.PUT, OperationImpl().apply {
-                this.summary = "Put an object to the specified pod's S3 storage"
+                this.summary = "Upload an object."
+                this.description = "Put an object to the specified pod's S3 storage"
                 this.addTag(ApiDocTags.STORAGE_API)
                 this.parameters = commonParams.plus(
                     listOf(
@@ -82,7 +84,8 @@ class OpenApiProvider : OASFilter {
                 })
             })
             this.setOperation(PathItem.HttpMethod.DELETE, OperationImpl().apply {
-                this.summary = "Delete an object from the specified pod's S3 storage"
+                this.summary = "Remove a stored object."
+                this.description = "Delete an object from the specified pod's S3 storage"
                 this.addTag(ApiDocTags.STORAGE_API)
                 this.parameters = commonParams
                 this.responses = APIResponsesImpl().addAPIResponse("204", APIResponseImpl().apply {

@@ -29,7 +29,10 @@ class QueryApi(
 
     @POST
     @Produces(MediaType.APPLICATION_JSON)
-    @Operation(summary = "Query the knowledge graph of the specified pod using GraphQL.")
+    @Operation(
+        summary = "Retrieve data from the KG.",
+        description = "Query the knowledge graph of the specified pod using GraphQL."
+    )
     fun query(@PathParam("podId") podId: String, input: QueryInput): Uni<QueryResult> {
         val req = parseInput(podId, input)
         return knowledgeGraph.query(req)
@@ -53,7 +56,10 @@ class QueryApi(
     @POST
     @Path("{virtualKGId}")
     @Produces(MediaType.APPLICATION_JSON)
-    @Operation(summary = "Query a virtual Knowledge Graph of the specified pod using GraphQL.")
+    @Operation(
+        summary = "Retrieve data from a specific subset of the KG.",
+        description = "Query a virtual Knowledge Graph of the specified pod using GraphQL."
+    )
     fun queryVirtual(
         @PathParam("podId") podId: String,
         @PathParam("virtualKGId") @Parameter(description = "Identifier of the virtual Knowledge Graph, representing a subset of the specified pod's Knowledge Graph.") virtualKGId: String,

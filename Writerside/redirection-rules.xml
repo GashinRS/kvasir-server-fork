@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE rules SYSTEM "https://resources.jetbrains.com/writerside/1.0/redirection-rules.dtd">
+<rules>
+    <!-- format is as follows
+    <rule id="<unique id>">
+        <accepts>page.html</accepts>
+    </rule>
+    -->
+    <rule id="955dcdf">
+        <description>Created after removal of "API Reference" from Kvasir Documentation</description>
+        <accepts>API_Reference.html</accepts>
+    </rule>
+    <rule id="12b001a">
+        <description>Created after removal of "Schemas" from Kvasir Documentation</description>
+        <accepts>Schemas.html</accepts>
+    </rule>
+    <rule id="3f9b44cd">
+        <description>Created after removal of "QueryResult" from Kvasir Documentation</description>
+        <accepts>QueryResult.html</accepts>
+    </rule>
+    <rule id="3fea348">
+        <description>Created after removal of "QueryInput" from Kvasir Documentation</description>
+        <accepts>QueryInput.html</accepts>
+    </rule>
+    <rule id="53cf317e">
+        <description>Created after removal of "ChangeRequestInput" from Kvasir Documentation</description>
+        <accepts>ChangeRequestInput.html</accepts>
+    </rule>
+    <rule id="380808c8">
+        <description>Created after removal of "Assertion" from Kvasir Documentation</description>
+        <accepts>Assertion.html</accepts>
+    </rule>
+    <rule id="7a39736f">
+        <description>Created after removal of "Remove a stored object." from Kvasir Documentation</description>
+        <accepts>Remove_a_stored_object_.html</accepts>
+    </rule>
+    <rule id="3dc59c1e">
+        <description>Created after removal of "Upload an object." from Kvasir Documentation</description>
+        <accepts>Upload_an_object_.html</accepts>
+    </rule>
+    <rule id="1b5d1c3a">
+        <description>Created after removal of "Download a stored object." from Kvasir Documentation</description>
+        <accepts>Download_a_stored_object_.html</accepts>
+    </rule>
+    <rule id="4ab1f030">
+        <description>Created after removal of "Retrieve data from a specific subset of the KG." from Kvasir
+            Documentation
+        </description>
+        <accepts>Retrieve_data_from_a_specific_subset_of_the_KG_.html</accepts>
+    </rule>
+    <rule id="308b0b2">
+        <description>Created after removal of "Retrieve data from the KG." from Kvasir Documentation</description>
+        <accepts>Retrieve_data_from_the_KG_.html</accepts>
+    </rule>
+    <rule id="4cd1f8bf">
+        <description>Created after removal of "Perform mutations on the KG." from Kvasir Documentation</description>
+        <accepts>Perform_mutations_on_the_KG_.html</accepts>
+    </rule>
+    <rule id="4de8c625">
+        <description>Created after removal of "API Reference" from Kvasir Documentation</description>
+        <accepts>API_Reference.html</accepts>
+    </rule>
+    <rule id="34c8e6a">
+        <description>Created after removal of "About Kvasir Documentation" from Kvasir Documentation</description>
+        <accepts>starter-topic.html</accepts>
+    </rule>
+</rules>

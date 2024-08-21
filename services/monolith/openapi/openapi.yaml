@@ -16,16 +16,17 @@ tags:
   description: "API for interfacing with the knowledge graph of a specific pod, allows\
     \ storing and retrieving of structured data."
 - name: Storage API
-  description: "API for interfacing with low-level storage for a specific pod via\
-    \ S3 operations, modified to be compatible with Solid auth(n/z). For more information,\
-    \ see the [S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations.html)."
+  description: "API for interfacing with low-level storage (large RDF files, unstructured\
+    \ or binary data) for a specific pod via S3 operations, modified to be compatible\
+    \ with Solid auth(n/z). For more information, see the [S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations.html)."
 paths:
   /{podId}/kg/inbox:
     post:
       tags:
       - Knowledge Graph API
-      summary: "Post a change request, containing the requested mutations, to the\
-        \ inbox of the specified pod."
+      summary: Perform mutations on the KG.
+      description: "Post a change request, containing the requested mutations, to\
+        \ the inbox of the specified pod."
       parameters:
       - name: podId
         in: path
@@ -47,7 +48,8 @@ paths:
     post:
       tags:
       - Knowledge Graph API
-      summary: Query the knowledge graph of the specified pod using GraphQL.
+      summary: Retrieve data from the KG.
+      description: Query the knowledge graph of the specified pod using GraphQL.
       parameters:
       - name: podId
         in: path
@@ -80,7 +82,8 @@ paths:
     post:
       tags:
       - Knowledge Graph API
-      summary: Query a virtual Knowledge Graph of the specified pod using GraphQL.
+      summary: Retrieve data from a specific subset of the KG.
+      description: Query a virtual Knowledge Graph of the specified pod using GraphQL.
       parameters:
       - name: podId
         in: path
@@ -120,7 +123,8 @@ paths:
     get:
       tags:
       - Storage API
-      summary: Get an object from the specified pod's S3 storage
+      summary: Download a stored object.
+      description: Get an object from the specified pod's S3 storage.
       parameters:
       - name: podId
         in: path
@@ -138,7 +142,8 @@ paths:
     put:
       tags:
       - Storage API
-      summary: Put an object to the specified pod's S3 storage
+      summary: Upload an object.
+      description: Put an object to the specified pod's S3 storage
       parameters:
       - name: podId
         in: path
@@ -182,7 +187,8 @@ paths:
     delete:
       tags:
       - Storage API
-      summary: Delete an object from the specified pod's S3 storage
+      summary: Remove a stored object.
+      description: Delete an object from the specified pod's S3 storage
       parameters:
       - name: podId
         in: path
