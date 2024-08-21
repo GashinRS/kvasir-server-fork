@@ -1,8 +1,12 @@
 # Querying
+
 <show-structure depth="2"/>
 
 ## Basic usage
-The standard query mechanism for the Pod KG uses schemaless GraphQL (inspired by Ruben Taelman's [GraphQL to SPARQL library](https://github.com/rubensworks/graphql-to-sparql.js) and the [Stardog GraphQL API](https://docs.stardog.com/query-stardog/graphql)).
+
+The standard query mechanism for the Pod KG uses schemaless GraphQL (inspired by Ruben
+Taelman's [GraphQL to SPARQL library](https://github.com/rubensworks/graphql-to-sparql.js) and
+the [Stardog GraphQL API](https://docs.stardog.com/query-stardog/graphql)).
 
 E.g. the following query retrieves all resources that have a name and an email address:
 
@@ -96,10 +100,18 @@ Returns:
 ```
 
 ## Additional features
-For more advanced querying, the demo already supports some of the features of the GraphQL to SPARQL library, such as filtering by value, aliases, the `__typename` field for introspection, fragments and some directives: `@optional`, `@single` (partially).
+
+For more advanced querying, the current prototype already supports some of the features of the GraphQL to SPARQL
+library, such as filtering by value, aliases, the `__typename` field for introspection, fragments and some
+directives: `@optional`, `@single` (partially).
 
 ### Namespace prefixes
-Up until now, the examples used complete aliases for the fields, declared in the `@context` instance. However, the system also supports namespace prefixes. Typically, prefixes are separated from the field name by a colon, e.g. `ex:name` instead of `http://example.org/name`. However, GraphQL does not support colons in field names. Therefore, Kvasir uses the underscore character `_` as a substitute for the colon. For example, the previous example query can be rewritten as:
+
+Up until now, the examples used complete aliases for the fields, declared in the `@context` instance. However, the
+system also supports namespace prefixes. Typically, prefixes are separated from the field name by a colon,
+e.g. `ex:name` instead of `http://example.org/name`. However, GraphQL does not support colons in field names. Therefore,
+Kvasir uses the underscore character `_` as a substitute for the colon. For example, the previous example query can be
+rewritten as:
 
 ```json
 {
@@ -111,7 +123,9 @@ Up until now, the examples used complete aliases for the fields, declared in the
 ```
 
 ### Single field
-By default, all values will be considered plural, and values will always be emitted in an array. To retrieve a single value, use the `@single` directive:
+
+By default, all values will be considered plural, and values will always be emitted in an array. To retrieve a single
+value, use the `@single` directive:
 
 **POST** `http://localhost:8080/alice/kg/query`
 
@@ -139,6 +153,7 @@ Returns a slightly more compact response:
 ```
 
 ### Fragments (querying by type)
+
 For example, the following query retrieves all resources that are of type `ex:Person`:
 
 **POST** `http://localhost:8080/alice/kg/query`
@@ -184,17 +199,12 @@ Returns:
       "name": "Alice",
       "email": "alice@example.org"
     }
-  ],
-  "@context": {
-    "name": "http://example.org/name",
-    "email": "http://example.org/email",
-    "bestFriend": "http://example.org/bestFriend",
-    "Person": "http://example.org/Person"
-  }
+  ]
 }
 ```
 
-Note the use of the built-in fields `id` and `__typename` for introspection. Additionally, you can use the system field `__fieldnames` to retrieve all possible fields (predicate IRIs) for a selection.
+Note the use of the built-in fields `id` and `__typename` for introspection. Additionally, you can use the system
+field `__fieldnames` to retrieve all possible fields (predicate IRIs) for a selection.
 
 For example:
 
@@ -250,16 +260,61 @@ Returns:
       "id": "http://example.org/bob",
       "name": "Bob"
     }
-  ],
-  "@context": {
-    "name": "http://example.org/name",
-    "Person": "http://example.org/Person"
-  }
+  ]
 }
 ```
 
+## Outputting JSON-LD
+
+By default the query endpoint adheres to the GraphQL specification, which means that the response is a JSON object with
+a `data` key, holding the results as an array of JSON objects. However, the system also supports outputting JSON-LD
+directly, by setting the `Accept` header to `application/ld+json`.
+
+For example:
+
+**POST** `http://localhost:8080/alice/kg/query`
+
+`Accept: application/ld+json`
+
+```json
+{
+  "@context": {
+    "ex": "http://example.org/"
+  },
+  "query": "{ ex_name ex_email ex_bestFriend { ex_name ex_email } }"
+}
+```
+
+Returns:
+
+```json
+    {
+  "@context": {
+    "ex": "http://example.org/"
+  },
+  "@graph": [
+    {
+      "@id": "ex:alice",
+      "ex:name": "Alice",
+      "ex:email": "alice@example.org",
+      "bestFriend": {
+        "@id": "ex:bob",
+        "ex:name": "Bob",
+        "ex:email": "bob@example.org"
+      }
+    }
+  ]
+}
+```
+
+> Note that the `@graph` key is used to hold the results, as the response is a JSON-LD document.
+
+> Beware that the field name used in the query, or possible aliases, no longer have an effect on the output, as this is
+> now purely based on the predicate IRIs and the context supplied in the request.
+{style="warning"}
+
 <seealso>
     <category ref="api-ref">
-            <a href="API_Reference.topic">API Reference</a>
+            <a href="API-Reference.md">API Reference</a>
     </category>
 </seealso>

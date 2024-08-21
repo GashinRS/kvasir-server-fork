@@ -7,4 +7,4 @@ The Knowledge Graph API is designed to separate write and read operations. Write
 
 All mutations are posted as change requests to the [Inbox API](Inbox.md), which processes the requests asynchronously by publishing them to a message queue. The changes are then applied to the Knowledge Graph by a worker process. This makes it easier to handle large volumes of changes, while ensuring consistency.
 
-Finally, this design supports other processes to subscribe to the message queue and react to changes in the Knowledge Graph. This enables real-time processing of data and integration with other systems.
+Finally, this design supports other processes to subscribe to the message queue and react to changes in the Knowledge Graph. This enables real-time processing of data and facilitates the integration with other systems.

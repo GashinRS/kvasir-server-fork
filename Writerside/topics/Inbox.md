@@ -45,6 +45,10 @@ Request body:
 This should immediately return a `202 Accepted` response. The Kvasir Knowledge Graph follows an eventual consistency
 model, so the changes may not be immediately visible in queries.
 
+> The data is stored in the default graph of the Knowledge Graph, unless the change request contains the key `kss:graph`
+> with the desired named graph IRI as value.
+> {style="note"}
+
 ## Delete mutation
 
 Delete mutations work similarly to insert mutations, but with a different keyword. For example, the following operation
@@ -178,6 +182,6 @@ Request body:
 
 <seealso>
     <category ref="api-ref">
-            <a href="API_Reference.topic">API Reference</a>
+            <a href="API-Reference.md">API Reference</a>
     </category>
 </seealso>

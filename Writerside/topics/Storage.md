@@ -35,6 +35,6 @@ Hello World!
 
 <seealso>
     <category ref="api-ref">
-            <a href="API_Reference.topic">API Reference</a>
+            <a href="API-Reference.md">API Reference</a>
     </category>
 </seealso>
