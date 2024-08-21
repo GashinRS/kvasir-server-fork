@@ -124,7 +124,12 @@ class S3Interceptor(
 
     private fun getPayloadHash(context: ProxyContext): String {
         return context.request().headers().get(HEADER_X_AMZ_CONTENT_SHA256)
-            ?: if (context.request().method.name() == HttpMethod.GET.name()) EMPTY_PAYLOAD_HASH else throw IllegalArgumentException(
+            ?: if (context.request().method.name() in setOf(
+                    HttpMethod.HEAD.name(),
+                    HttpMethod.DELETE.name(),
+                    HttpMethod.GET.name()
+                )
+            ) EMPTY_PAYLOAD_HASH else throw IllegalArgumentException(
                 "Missing required header: $HEADER_X_AMZ_CONTENT_SHA256"
             )
     }

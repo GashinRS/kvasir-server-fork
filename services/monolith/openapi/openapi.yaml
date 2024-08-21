@@ -1,0 +1,308 @@
+---
+openapi: 3.0.3
+info:
+  title: Kvasir API
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  version: 0.1.0
+servers:
+- url: http://localhost:8080
+  description: Auto generated value
+- url: http://0.0.0.0:8080
+  description: Auto generated value
+tags:
+- name: Knowledge Graph API
+  description: "API for interfacing with the knowledge graph of a specific pod, allows\
+    \ storing and retrieving of structured data."
+- name: Storage API
+  description: "API for interfacing with low-level storage for a specific pod via\
+    \ S3 operations, modified to be compatible with Solid auth(n/z). For more information,\
+    \ see the [S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations.html)."
+paths:
+  /{podId}/kg/inbox:
+    post:
+      tags:
+      - Knowledge Graph API
+      summary: "Post a change request, containing the requested mutations, to the\
+        \ inbox of the specified pod."
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/ld+json:
+            schema:
+              $ref: "#/components/schemas/ChangeRequestInput"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeRequestInput"
+      responses:
+        "202":
+          description: Change request accepted.
+  /{podId}/kg/query:
+    post:
+      tags:
+      - Knowledge Graph API
+      summary: Query the knowledge graph of the specified pod using GraphQL.
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/ld+json:
+              example:
+                '@context':
+                  ex: http://example.org/
+                '@graph':
+                - '@id': ex:123
+                  ex:givenName: Bob
+                  ex:friends:
+                  - '@id': ex:456
+                    ex:givenName: Alice
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResult"
+  /{podId}/kg/query/{virtualKGId}:
+    post:
+      tags:
+      - Knowledge Graph API
+      summary: Query a virtual Knowledge Graph of the specified pod using GraphQL.
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: virtualKGId
+        in: path
+        description: "Identifier of the virtual Knowledge Graph, representing a subset\
+          \ of the specified pod's Knowledge Graph."
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/ld+json:
+              example:
+                '@context':
+                  ex: http://example.org/
+                '@graph':
+                - '@id': ex:123
+                  ex:givenName: Bob
+                  ex:friends:
+                  - '@id': ex:456
+                    ex:givenName: Alice
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResult"
+  /{podId}/s3/{objectKey}:
+    get:
+      tags:
+      - Storage API
+      summary: Get an object from the specified pod's S3 storage
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectKey
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The object content
+    put:
+      tags:
+      - Storage API
+      summary: Put an object to the specified pod's S3 storage
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: x-amz-content-sha256
+        in: header
+        description: The SHA256 hash of the object content (allows the server to verify
+          the integrity of the content).
+        required: true
+        schema:
+          type: string
+      - name: Content-Type
+        in: header
+        description: The MIME type of the object content.
+        required: true
+        schema:
+          type: string
+      - name: x-amz-date
+        in: header
+        description: "The date and time of the request, in ISO8601 format (offers\
+          \ additional protection against replay attacks)."
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+        required: true
+      responses:
+        "200":
+          description: The object was stored successfully
+    delete:
+      tags:
+      - Storage API
+      summary: Delete an object from the specified pod's S3 storage
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectKey
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: The object was deleted successfully
+components:
+  schemas:
+    Assertion:
+      required:
+      - '@type'
+      - kss:query
+      type: object
+      properties:
+        '@type':
+          description: The type of the assertion.
+          enum:
+          - http://kvasir.discover.ilabt.imec.be/vocab#AssertEmptyResult
+          - http://kvasir.discover.ilabt.imec.be/vocab#AssertNonEmptyResult
+          type: string
+          example: kss:AssertEmptyResult
+        kss:query:
+          description: The GraphQL query string to be executed.
+          type: string
+          example: "{ id ex_givenName(_: \"Bob\") }"
+    ChangeRequestInput:
+      required:
+      - '@context'
+      - kss:graph
+      - kss:assert
+      - kss:insert
+      type: object
+      properties:
+        '@context':
+          description: The JSON-LD context for the change request.
+          type: object
+          additionalProperties: {}
+          example:
+            kss: http://kvasir.discover.ilabt.imec.be/vocab#
+            ex: http://example.org/
+        kss:graph:
+          description: Optional named graph IRI to which the change request applies.
+          type: string
+        kss:assert:
+          description: List of assertions to be checked before applying the change
+            request.
+          type: array
+          items:
+            $ref: "#/components/schemas/Assertion"
+        kss:where:
+          description: Optional GraphQL query where matches are required to be found
+            for the change request to be applied. Results are bound to the field names
+            in the query and can be used in the insert and delete operations (via
+            templates).
+          type: string
+          example: "{ id ex_givenName(_: \"Bob\") }"
+          nullable: true
+        kss:insert:
+          description: "List of triples to be inserted, or a [JSONata](https://jsonata.org)\
+            \ template string to be applied to the results of the where-clause."
+          type: array
+          items: {}
+          example:
+          - '@id': ex:123
+            ex:givenName: Bob
+    QueryInput:
+      required:
+      - query
+      - targetGraphs
+      type: object
+      properties:
+        '@context':
+          description: The JSON-LD context for the query.
+          type: object
+          additionalProperties: {}
+          example:
+            ex: http://example.org/
+          nullable: true
+        query:
+          description: The GraphQL query string to be executed.
+          type: string
+          example: "{ id ex_givenName(_: \"Bob\") ex_friends { id ex_givenName } }"
+        operationName:
+          description: "The name of the operation to be executed (optional, only required\
+            \ if the GraphQL query expresses more than one operation)."
+          type: string
+          nullable: true
+        variables:
+          description: The variables to be used in the query.
+          type: object
+          additionalProperties: {}
+          nullable: true
+        targetGraphs:
+          description: "The named graphs to be targeted by the query. If no graphs\
+            \ are specified, all graphs are targeted."
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+    QueryResult:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          nullable: true

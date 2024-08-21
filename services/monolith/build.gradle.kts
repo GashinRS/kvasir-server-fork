@@ -3,6 +3,7 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":libs:definitions"))
     implementation(project(":services:kg-change-processor"))
     implementation(project(":services:kg-inbox-api"))
     implementation(project(":services:kg-query-api"))

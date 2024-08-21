@@ -3,6 +3,8 @@ package kvasir.definitions.rdf
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 
+const val JSON_LD_MEDIA_TYPE = "application/ld+json"
+
 object JsonLdKeywords {
     const val context = "@context"
     const val id = "@id"

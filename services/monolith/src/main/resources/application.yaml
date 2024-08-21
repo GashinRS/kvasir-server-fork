@@ -12,3 +12,5 @@ kvasir:
 quarkus:
   minio:
     devservices:
+  smallrye-openapi:
+    store-schema-directory: ./openapi
