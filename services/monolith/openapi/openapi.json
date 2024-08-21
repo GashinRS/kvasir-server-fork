@@ -322,14 +322,14 @@
               "$ref" : "#/components/schemas/Assertion"
             }
           },
-          "kss:where" : {
+          "kss:with" : {
             "description" : "Optional GraphQL query where matches are required to be found for the change request to be applied. Results are bound to the field names in the query and can be used in the insert and delete operations (via templates).",
             "type" : "string",
             "example" : "{ id ex_givenName(_: \"Bob\") }",
             "nullable" : true
           },
           "kss:insert" : {
-            "description" : "List of triples to be inserted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the where-clause.",
+            "description" : "List of triples to be inserted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
             "type" : "array",
             "items" : { },
             "example" : [ {

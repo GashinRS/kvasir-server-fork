@@ -64,4 +64,28 @@
         <description>Created after removal of "About Kvasir Documentation" from Kvasir Documentation</description>
         <accepts>starter-topic.html</accepts>
     </rule>
+    <rule id="51e536eb">
+        <description>Created after removal of "Examples" from Kvasir Documentation</description>
+        <accepts>Examples.html</accepts>
+    </rule>
+    <rule id="5aae1f5b">
+        <description>Created after removal of "Reference" from Kvasir Documentation</description>
+        <accepts>Reference.html</accepts>
+    </rule>
+    <rule id="a3adc2b">
+        <description>Created after removal of "Tutorial" from Kvasir Documentation</description>
+        <accepts>Tutorial.html</accepts>
+    </rule>
+    <rule id="3b0c4133">
+        <description>Created after removal of "Tutorial" from Kvasir Documentation</description>
+        <accepts>Tutorial.html</accepts>
+    </rule>
+    <rule id="41804a">
+        <description>Created after removal of "Overview" from Kvasir Documentation</description>
+        <accepts>Overview.html</accepts>
+    </rule>
+    <rule id="3b26a4e5">
+        <description>Created after removal of "Starter" from Kvasir Documentation</description>
+        <accepts>Starter.html</accepts>
+    </rule>
 </rules>

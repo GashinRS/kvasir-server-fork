@@ -20,7 +20,7 @@ object KvasirVocab {
     const val operations = "${baseUri}operations"
     const val results = "${baseUri}results"
     const val nextCursor = "${baseUri}nextCursor"
-    const val where = "${baseUri}where"
+    const val with = "${baseUri}with"
     const val query = "${baseUri}query"
     const val transform = "${baseUri}transform"
     const val outputMediaType = "${baseUri}outputMediaType"

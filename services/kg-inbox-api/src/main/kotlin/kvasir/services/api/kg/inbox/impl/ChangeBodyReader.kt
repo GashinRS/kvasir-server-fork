@@ -23,9 +23,10 @@ class ChangeBodyReader(
 
     private val defaultContext = mapOf(
         "graph" to KvasirVocab.graph,
-        "inserts" to KvasirVocab.insert,
-        "deletes" to KvasirVocab.delete,
-        "assertions" to KvasirVocab.assert
+        "insert" to KvasirVocab.insert,
+        "delete" to KvasirVocab.delete,
+        "assert" to KvasirVocab.assert,
+        "with" to KvasirVocab.with,
     )
 
     override fun isReadable(
@@ -59,7 +60,7 @@ class ChangeBodyReader(
                     .map { JsonObject(it as Map<String, Any>).mapTo(Assertion::class.java) }
             }
                 ?: emptyList(),
-            where = resolvedJsonLD[KvasirVocab.where]?.let { where ->
+            with = resolvedJsonLD[KvasirVocab.with]?.let { where ->
                 where as String
             },
             insert = resolvedJsonLD[KvasirVocab.insert]?.let { inserts ->

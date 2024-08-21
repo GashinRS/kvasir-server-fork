@@ -63,20 +63,20 @@ data class ChangeRequestInput(
     )
     val assert: List<Assertion> = emptyList(),
     @get:Schema(
-        name = "kss:where",
+        name = "kss:with",
         description = "Optional GraphQL query where matches are required to be found for the change request to be applied. Results are bound to the field names in the query and can be used in the insert and delete operations (via templates).",
         example = "{ id ex_givenName(_: \"Bob\") }"
     )
-    val where: String? = null,
+    val with: String? = null,
     @get:Schema(
         name = "kss:insert",
-        description = "List of triples to be inserted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the where-clause.",
+        description = "List of triples to be inserted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
         example = "[ { \"@id\": \"ex:123\", \"ex:givenName\": \"Bob\" } ]"
     )
     val insert: List<Any> = emptyList(),
     @get:Schema(
         name = "kss:insert",
-        description = "List of triples to be deleted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the where-clause.",
+        description = "List of triples to be deleted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
         example = "[ { \"@id\": \"ex:123\", \"ex:givenName\": \"Alice\" } ]"
     )
     val delete: List<Any> = emptyList(),
@@ -88,7 +88,7 @@ data class ChangeRequestInput(
             podId = podId,
             graph = graph,
             assert = assert,
-            where = where,
+            where = with,
             insert = insert,
             delete = delete
         )
