@@ -5,6 +5,9 @@
     <variables></variables>
     <build-profile instance="kd">
         <variables>
+            <algolia-id>23BLLNEZ2S</algolia-id>
+            <algolia-index>prod_KVASIR-NEXT</algolia-index>
+            <algolia-api-key>7541623b6b72d76ea5c425e8d1fa0b1e</algolia-api-key>
             <noindex-content>true</noindex-content>
             <primary-color>emerald</primary-color>
             <color-preset>contrast</color-preset>
