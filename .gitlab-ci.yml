@@ -65,7 +65,7 @@ search:
   image: registry.jetbrains.team/p/writerside/builder/algolia-publisher:2.0.32-3
   script:
     - unzip -O UTF-8 public/$ALGOLIA_ARTIFACT -d algolia-indexes
-    - env "algolia-key=$ALGOLIA_KEY" java -jar /opt/builder/help-publication-agent.jar update-index --application-name '$ALGOLIA_APP_NAME' --index-name '$ALGOLIA_INDEX_NAME' --product '$CONFIG_JSON_PRODUCT' --version '$CONFIG_JSON_VERSION' --index-directory algolia-indexes/ 2>&1 | tee algolia-update-index-log.txt
+    - env "algolia-key=$ALGOLIA_KEY" java -jar /opt/builder/help-publication-agent.jar update-index --application-name "$ALGOLIA_APP_NAME" --index-name "$ALGOLIA_INDEX_NAME" --product "$CONFIG_JSON_PRODUCT" --version "$CONFIG_JSON_VERSION" --index-directory algolia-indexes/ 2>&1 | tee algolia-update-index-log.txt
   artifacts:
     paths:
       - algolia-update-index-log.txt
