@@ -6,7 +6,10 @@
     <build-profile instance="kd">
         <variables>
             <noindex-content>true</noindex-content>
+            <primary-color>emerald</primary-color>
+            <color-preset>contrast</color-preset>
         </variables>
     </build-profile>
+
 
 </buildprofiles>
