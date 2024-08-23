@@ -12,4 +12,5 @@ The platform is being developed at [IDLab](https://idlab.technology) in the cont
 * **Extensible**: allow user-supplied transformations and other functions to be executed on the platform infrastructure, allowing direct tie-ins with the server-side data flow.
 * **Interoperable**: the flexible architecture facilitates integration with a wide range of applications and technologies.
 
-![](idlab.png) ![](imec_ugent.png)
+
+![](idlab.png){style="block"} ![](imec_ugent.png){style="block"}
