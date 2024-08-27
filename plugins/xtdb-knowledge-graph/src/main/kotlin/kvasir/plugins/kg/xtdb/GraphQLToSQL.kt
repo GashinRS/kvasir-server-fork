@@ -25,10 +25,18 @@ class GraphQLToSQL(private val request: QueryRequest) {
             targetGraphsClause,
             idFilter
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", prefix = " WHERE ") ?: ""
-        return mapNode(
-            rootNode,
-            "SELECT DISTINCT s FROM $database$whereClause"
-        ) // TODO take into account field arguments as conditions
+
+        val fieldJoinClauses = mutableListOf<String>()
+        val nestedNonNullFields = mutableListOf<NestedNonNullFieldCheck>()
+
+        return rootNode.selectionSet.selections.mapIndexed { index, selection ->
+            mapSelection(index, selection, QueryScope(0), nestedNonNullFields, fieldJoinClauses)
+        }.joinToString(", ", "SELECT ", ";") { it }
+
+//        return mapNode(
+//            rootNode,
+//            "SELECT DISTINCT s FROM $database$whereClause"
+//        ) // TODO take into account field arguments as conditions
     }
 
     // When the node contains an id field, check if a filter is specified and return it, otherwise null
@@ -76,7 +84,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
     ): String {
         when (selection) {
             is Field -> {
-                val isOptional = selection.directives.any { it.name == "optional" }
                 val effectiveName = queryScope.fieldNameKey(selectionId)
                 fieldMapping[effectiveName] = selection.alias ?: selection.name
                 val joinId = queryScope.joinId(selectionId)
@@ -89,77 +96,27 @@ class GraphQLToSQL(private val request: QueryRequest) {
 
                 val hasMultipleResults = !selection.hasDirective("single")
                 return if (selection.selectionSet != null) {
-                    // Field has a nested selection set, recurse
-
-                    // Workaround to make sure that null results are filtered out when the field is not optional.
-                    if (!isOptional) {
-                        nestedNonNullFields.add(NestedNonNullFieldCheck(effectiveName, hasMultipleResults))
-                    }
-
-                    // Calculate additional type condition (if any)
-                    val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "o") }
-
-                    // Check for additional id filter (if an id field is specified further down the path and contains a filter argument)
-                    val idFilter = extractIdFilter(selection.selectionSet)?.let { "o = '$it'" }
-
-                    // Process arguments as additional conditions
-                    val additionalConditions =
-                        selection.arguments.filter { it.name != "_" }.joinToString(" AND ") {
-                            val fqArgName = it.additionalData["iri"] as String
-                            val value = toSQLValue(it.value)
-                            "o IN (SELECT s FROM $database WHERE p = '$fqArgName' AND o = $value)"
-                        }.takeIf { it.isNotEmpty() }
-
-                    val whereClause = listOfNotNull(
-                        targetGraphsClause,
-                        idFilter,
-                        "s = ${queryScope.dataId()}.s AND p = '${selection.getContextIRI()}'",
+                    processNestedNode(
+                        nestedNonNullFields,
+                        effectiveName,
+                        hasMultipleResults,
+                        fqTypeBound,
+                        selection,
+                        queryScope,
                         valueFilter,
-                        typeCondition,
-                        additionalConditions
-                    ).joinToString(" AND ", prefix = "WHERE ")
-
-                    // Specify a subjectSelection based on the objects matching the specified subject & predicate)
-                    "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
-                        mapNode(
-                            selection,
-                            "SELECT DISTINCT o AS s FROM $database $whereClause${if (!hasMultipleResults) " LIMIT 1" else ""}",
-                            queryScope.nestedScope(selectionId)
-                        )
-                    }) AS `$effectiveName`"
-                } else {
-                    // Field is a leaf node: use join to select objects matching the specified subject & predicate
-                    val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
-                    val whereClause = listOfNotNull(
-                        targetGraphsClause,
-                        valueFilter,
-                        typeCondition
+                        selectionId
                     )
-                    val whereClauseStr =
-                        whereClause.takeIf { it.isNotEmpty() }?.joinToString(" AND ", prefix = "WHERE ") ?: ""
-                    when (selection.name) {
-                        Constants.FIELD_NAMES -> {
-                            // Special introspection field to return the field names of the current selection
-                            fieldJoinClauses.add("JOIN (SELECT s, '${Constants.FIELD_NAMES}' as p, ARRAY_AGG(p) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
-                            "$joinId.o AS `$effectiveName`"
-                        }
-
-                        Constants.Pagination.TOTAL_COUNT -> {
-                            // Special introspection field to return the total count of the current selection
-                            fieldJoinClauses.add("JOIN (SELECT s, '${Constants.Pagination.TOTAL_COUNT}' as p ,COUNT(DISTINCT s) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
-                            "$joinId.o AS `$effectiveName`"
-                        }
-
-                        else -> {
-                            val whereClauseWithPredicateFilter = whereClause.plus(
-                                "p = '${selection.getContextIRI()}'"
-                            ).joinToString(" AND ", prefix = "WHERE ")
-                            val fieldJoinClause =
-                                "JOIN (SELECT s, ARRAY_AGG(o) as ${joinId}_o FROM $database $whereClauseWithPredicateFilter) $joinId ON $joinId.s = ${queryScope.dataId()}.s"
-                            fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
-                            "${joinId}_o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
-                        }
-                    }
+                } else {
+                    processLeafNode(
+                        fqTypeBound,
+                        valueFilter,
+                        selection,
+                        fieldJoinClauses,
+                        joinId,
+                        queryScope,
+                        effectiveName,
+                        hasMultipleResults
+                    )
                 }
             }
 
@@ -199,6 +156,120 @@ class GraphQLToSQL(private val request: QueryRequest) {
             }
 
             else -> throw IllegalArgumentException("Unsupported selection type: $selection")
+        }
+    }
+
+    private fun processLeafNode(
+        fqTypeBound: String?,
+        valueFilter: String?,
+        selection: Field,
+        fieldJoinClauses: MutableList<String>,
+        joinId: String,
+        queryScope: QueryScope,
+        effectiveName: String,
+        hasMultipleResults: Boolean
+    ): String {
+        // Field is a leaf node: use join to select objects matching the specified subject & predicate
+        val isOptional = selection.directives.any { it.name == "optional" }
+        val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
+        val whereClause = listOfNotNull(
+            targetGraphsClause,
+            valueFilter,
+            typeCondition
+        )
+        val whereClauseStr =
+            whereClause.takeIf { it.isNotEmpty() }?.joinToString(" AND ", prefix = "WHERE ") ?: ""
+        return when (selection.name) {
+            Constants.FIELD_NAMES -> {
+                // Special introspection field to return the field names of the current selection
+                fieldJoinClauses.add("JOIN (SELECT s, '${Constants.FIELD_NAMES}' as p, ARRAY_AGG(p) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
+                "$joinId.o AS `$effectiveName`"
+            }
+
+            Constants.Pagination.TOTAL_COUNT -> {
+                // Special introspection field to return the total count of the current selection
+                fieldJoinClauses.add("JOIN (SELECT s, '${Constants.Pagination.TOTAL_COUNT}' as p ,COUNT(DISTINCT s) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
+                "$joinId.o AS `$effectiveName`"
+            }
+
+            else -> {
+                val whereClauseWithPredicateFilter = whereClause.plus(
+                    "p = '${selection.getContextIRI()}'"
+                ).joinToString(" AND ", prefix = "WHERE ")
+                val fieldJoinClause =
+                    "JOIN (SELECT s, ARRAY_AGG(o) as ${joinId}_o FROM $database $whereClauseWithPredicateFilter) $joinId ON $joinId.s = ${queryScope.dataId()}.s"
+                fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
+                "${joinId}_o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
+            }
+        }
+    }
+
+    private fun processNestedNode(
+        nestedNonNullFields: MutableList<NestedNonNullFieldCheck>,
+        effectiveName: String,
+        hasMultipleResults: Boolean,
+        fqTypeBound: String?,
+        selection: Field,
+        queryScope: QueryScope,
+        valueFilter: String?,
+        selectionId: Int
+    ): String {
+        // Field has a nested selection set, recurse
+        val isOptional = selection.directives.any { it.name == "optional" }
+
+        // Workaround to make sure that null results are filtered out when the field is not optional.
+        if (!isOptional) {
+            nestedNonNullFields.add(NestedNonNullFieldCheck(effectiveName, hasMultipleResults))
+        }
+
+        // Calculate additional type condition (if any)
+        val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "o") }
+
+        // Check for additional id filter (if an id field is specified further down the path and contains a filter argument)
+        val idFilter = extractIdFilter(selection.selectionSet)?.let { "o = '$it'" }
+
+        // Process arguments as additional conditions
+        val additionalConditions =
+            selection.arguments.filter { it.name != "_" }.joinToString(" AND ") {
+                val fqArgName = it.additionalData["iri"] as String
+                val value = toSQLValue(it.value)
+                "o IN (SELECT s FROM $database WHERE p = '$fqArgName' AND o = $value)"
+            }.takeIf { it.isNotEmpty() }
+
+        // For top-level fields, subjectSelection is based on type matches (unless a directive specifies otherwise, TODO)
+        return if (queryScope.parent == null) {
+            val whereClause = listOfNotNull(
+                targetGraphsClause,
+                idFilter,
+                "s IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '${selection.getContextIRI()}')",
+                valueFilter,
+                additionalConditions
+            ).joinToString(" AND ", prefix = "WHERE ")
+            "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
+                mapNode(
+                    selection,
+                    "SELECT DISTINCT s AS s FROM $database $whereClause${if (!hasMultipleResults) " LIMIT 1" else ""}",
+                    queryScope.nestedScope(selectionId)
+                )
+            }) AS `$effectiveName`"
+        } else {
+            // When not top-level: specify a subjectSelection based on the objects matching the specified subject & predicate)
+
+            val whereClause = listOfNotNull(
+                targetGraphsClause,
+                idFilter,
+                "s = ${queryScope.dataId()}.s AND p = '${selection.getContextIRI()}'",
+                valueFilter,
+                typeCondition,
+                additionalConditions
+            ).joinToString(" AND ", prefix = "WHERE ")
+            "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
+                mapNode(
+                    selection,
+                    "SELECT DISTINCT o AS s FROM $database $whereClause${if (!hasMultipleResults) " LIMIT 1" else ""}",
+                    queryScope.nestedScope(selectionId)
+                )
+            }) AS `$effectiveName`"
         }
     }
 
