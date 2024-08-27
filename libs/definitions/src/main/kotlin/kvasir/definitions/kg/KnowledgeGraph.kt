@@ -6,6 +6,7 @@ import com.github.jsonldjava.core.JsonLdProcessor
 import graphql.language.Document
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.changeops.Assertion
 import java.util.*
 
@@ -17,6 +18,17 @@ interface KnowledgeGraph {
 
     fun history(request: HistoryRequest): Uni<HistoryResult>
 
+}
+
+interface SliceStore {
+
+    fun persist(segment: Slice): Uni<Void>
+
+    fun list(podId: String): Uni<List<SliceSummary>>
+
+    fun getById(segmentId: String): Uni<Slice>
+
+    fun deleteById(segmentId: String): Uni<Void>
 }
 
 data class ChangeRequest(
@@ -84,4 +96,20 @@ data class HistoryRequest(
 data class HistoryResult(
     val results: List<Map<String, Any>>,
     val nextCursor: String? = null
+)
+
+data class Slice(
+    val id: String,
+    val context: Map<String, Any>,
+    val podId: String,
+    val name: String,
+    val description: String,
+    val spec: String,
+    val targetGraphs: Set<String> = emptySet()
+)
+
+data class SliceSummary(
+    val id: String,
+    val name: String,
+    val description: String
 )

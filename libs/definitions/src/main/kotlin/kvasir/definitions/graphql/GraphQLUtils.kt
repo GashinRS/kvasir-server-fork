@@ -2,18 +2,27 @@ package kvasir.definitions.graphql
 
 import graphql.language.*
 import graphql.parser.Parser
+import graphql.schema.idl.SchemaPrinter
 import graphql.util.TraversalControl
 import graphql.util.TraverserContext
 import graphql.util.TreeTransformerUtil
 import kvasir.definitions.rdf.RDFVocab
 
-object QueryUtils {
+object GraphQLUtils {
 
-    fun parseQueryWithContext(queryStr: String, context: Map<String, Any>): Document {
+    fun parseDocumentWithContext(queryStr: String, context: Map<String, Any>): Document {
         val queryDoc = Parser.parse(queryStr)
         val contextualizedDoc =
             AstTransformer().transform(queryDoc, ContextualizingQueryVisitor(context))
         return contextualizedDoc as Document
+    }
+
+    fun parseDocument(queryStr: String): Document {
+        return Parser.parse(queryStr)
+    }
+
+    fun schemaToSDL(schema: Document): String {
+        return SchemaPrinter().print(schema)
     }
 
 }

@@ -13,6 +13,7 @@
         <toc-element topic="Knowledge-Graph.md">
             <toc-element topic="Inbox.md"/>
             <toc-element topic="Querying.md"/>
+            <toc-element topic="Slices.md"/>
         </toc-element>
         <toc-element topic="Storage.md"/>
     </toc-element>

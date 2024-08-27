@@ -6,6 +6,7 @@ pluginManagement {
 }
 rootProject.name = "kvasir"
 include("libs:definitions")
+include("libs:utils")
 include("plugins:kafka-channel-initializer")
 include("plugins:xtdb-knowledge-graph")
 include("services:kg-change-processor")

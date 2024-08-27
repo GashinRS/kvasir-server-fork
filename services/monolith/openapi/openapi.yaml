@@ -60,7 +60,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/QueryInput"
+              $ref: "#/components/schemas/QueryInputWithContext"
       responses:
         "200":
           description: OK
@@ -78,21 +78,110 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QueryResult"
-  /{podId}/kg/query/{virtualKGId}:
-    post:
+  /{podId}/kg/slices:
+    get:
       tags:
       - Knowledge Graph API
-      summary: Retrieve data from a specific subset of the KG.
-      description: Query a virtual Knowledge Graph of the specified pod using GraphQL.
+      summary: List slices of the specified pod.
+      description: List slices of the specified pod's Knowledge Graph.
       parameters:
       - name: podId
         in: path
         required: true
         schema:
           type: string
-      - name: virtualKGId
+      responses:
+        "200":
+          description: OK
+          content:
+            application/ld+json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SliceSummary"
+    post:
+      tags:
+      - Knowledge Graph API
+      summary: Define a new slice of the KG.
+      description: "Define a new slice (subset) of the specified pod's Knowledge Graph,\
+        \ based on a GraphQL-LD schema."
+      parameters:
+      - name: podId
         in: path
-        description: "Identifier of the virtual Knowledge Graph, representing a subset\
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/ld+json:
+            schema:
+              $ref: "#/components/schemas/SliceInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json: {}
+  /{podId}/kg/slices/{sliceId}:
+    get:
+      tags:
+      - Knowledge Graph API
+      summary: Retrieve a specific slice definition..
+      description: Retrieve a specific slice definition details.
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sliceId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/ld+json:
+              schema:
+                $ref: "#/components/schemas/Slice"
+    delete:
+      tags:
+      - Knowledge Graph API
+      summary: Delete a specific slice.
+      description: Delete a specific slice of the specified pod's Knowledge Graph.
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sliceId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json: {}
+  /{podId}/kg/slices/{sliceId}/query:
+    post:
+      tags:
+      - Knowledge Graph API
+      summary: Retrieve data from a specific subset of the KG.
+      description: Query a predefined slice of the specified pod's Knowledge Graph
+        using GraphQL.
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sliceId
+        in: path
+        description: "Identifier of the Knowledge Graph slice, representing a subset\
           \ of the specified pod's Knowledge Graph."
         required: true
         schema:
@@ -101,7 +190,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/QueryInput"
+              $ref: "#/components/schemas/QueryInputImpl"
       responses:
         "200":
           description: OK
@@ -262,19 +351,12 @@ components:
           example:
           - '@id': ex:123
             ex:givenName: Bob
-    QueryInput:
+    QueryInputImpl:
       required:
       - query
       - targetGraphs
       type: object
       properties:
-        '@context':
-          description: The JSON-LD context for the query.
-          type: object
-          additionalProperties: {}
-          example:
-            ex: http://example.org/
-          nullable: true
         query:
           description: The GraphQL query string to be executed.
           type: string
@@ -296,6 +378,40 @@ components:
           type: array
           items:
             type: string
+    QueryInputWithContext:
+      required:
+      - query
+      - targetGraphs
+      type: object
+      properties:
+        query:
+          description: The GraphQL query string to be executed.
+          type: string
+          example: "{ id ex_givenName(_: \"Bob\") ex_friends { id ex_givenName } }"
+        operationName:
+          description: "The name of the operation to be executed (optional, only required\
+            \ if the GraphQL query expresses more than one operation)."
+          type: string
+          nullable: true
+        variables:
+          description: The variables to be used in the query.
+          type: object
+          additionalProperties: {}
+          nullable: true
+        targetGraphs:
+          description: "The named graphs to be targeted by the query. If no graphs\
+            \ are specified, all graphs are targeted."
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        '@context':
+          description: The JSON-LD context for the query.
+          type: object
+          additionalProperties: {}
+          example:
+            ex: http://example.org/
+          nullable: true
     QueryResult:
       required:
       - data
@@ -312,3 +428,68 @@ components:
             type: object
             additionalProperties: {}
           nullable: true
+    Slice:
+      required:
+      - id
+      - context
+      - podId
+      - name
+      - description
+      - spec
+      - targetGraphs
+      type: object
+      properties:
+        id:
+          type: string
+        context:
+          type: object
+          additionalProperties: {}
+        podId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        spec:
+          type: string
+        targetGraphs:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+    SliceInput:
+      required:
+      - context
+      - name
+      - schema
+      - description
+      - targetGraphs
+      type: object
+      properties:
+        context:
+          type: object
+          additionalProperties: {}
+        name:
+          type: string
+        schema:
+          type: string
+        description:
+          type: string
+        targetGraphs:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+    SliceSummary:
+      required:
+      - id
+      - name
+      - description
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string

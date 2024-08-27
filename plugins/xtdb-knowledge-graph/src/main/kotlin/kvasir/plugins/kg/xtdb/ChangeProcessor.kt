@@ -6,7 +6,7 @@ import com.github.jsonldjava.core.RDFDataset
 import com.google.common.hash.Hashing
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
-import kvasir.definitions.graphql.QueryUtils
+import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
@@ -31,7 +31,7 @@ class ChangeProcessor(
             .transformToUni { assertion ->
                 val q = QueryRequest(
                     podId = request.podId,
-                    graphQL = QueryUtils.parseQueryWithContext(assertion.queryStr, request.context)
+                    graphQL = GraphQLUtils.parseDocumentWithContext(assertion.queryStr, request.context)
                 )
                 parent.query(q)
                     .onFailure().recoverWithItem { err ->
@@ -81,7 +81,7 @@ class ChangeProcessor(
             val q = QueryRequest(
                 podId = request.podId,
                 targetGraphs = setOf(request.graph),
-                graphQL = QueryUtils.parseQueryWithContext(request.where!!, request.context)
+                graphQL = GraphQLUtils.parseDocumentWithContext(request.where!!, request.context)
             )
             parent.query(q)
                 .onFailure().recoverWithItem { err ->
