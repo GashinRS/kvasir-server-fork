@@ -30,14 +30,15 @@ object GraphQLUtils {
 class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisitorStub() {
 
     companion object {
-        private const val PREFIX_SEPARATOR = "_"
+        private const val GRAPHQL_NAME_PREFIX_SEPARATOR = "_"
+        private const val RDF_PREFIX_SEPARATOR = ":"
     }
 
     private val fullContext = providedContext.plus("__typename" to RDFVocab.type)
 
     override fun visitField(node: Field, traverserContext: TraverserContext<Node<*>>): TraversalControl {
         val changedField = node.transform {
-            resolveIri(node.name)?.let { iri ->
+            resolveNameAsIri(node.name)?.let { iri ->
                 it.directive(buildContextDirective(iri))
             }
         }
@@ -49,7 +50,7 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
         traverserContext: TraverserContext<Node<*>>
     ): TraversalControl {
         val changedFragment = node.transform {
-            resolveIri(node.typeCondition.name)?.let { iri ->
+            resolveNameAsIri(node.typeCondition.name)?.let { iri ->
                 it.directive(buildContextDirective(iri))
             }
         }
@@ -61,7 +62,7 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
         traverserContext: TraverserContext<Node<*>>
     ): TraversalControl {
         val changedFragmentDefinition = node.transform {
-            resolveIri(node.typeCondition.name)?.let { iri ->
+            resolveNameAsIri(node.typeCondition.name)?.let { iri ->
                 it.directive(buildContextDirective(iri))
             }
         }
@@ -70,12 +71,12 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
 
     override fun visitArgument(node: Argument, traverserContext: TraverserContext<Node<*>>): TraversalControl {
         val changedFragmentDefinition = node.transform {
-            resolveIri(node.name)?.let { iri ->
+            resolveNameAsIri(node.name)?.let { iri ->
                 it.additionalData("iri", iri)
             }
             val argVal = node.value
             if (argVal is StringValue) {
-                resolveIri(argVal.value)?.let { iri ->
+                resolveNameAsIri(argVal.value, RDF_PREFIX_SEPARATOR)?.let { iri ->
                     it.value(StringValue.of(iri))
                 }
             }
@@ -94,9 +95,9 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
             .build()
     }
 
-    private fun resolveIri(name: String): String? {
-        return fullContext[name]?.toString() ?: name.takeIf { it.contains(PREFIX_SEPARATOR) }?.let { prefixedName ->
-            val (prefix, localName) = prefixedName.split(PREFIX_SEPARATOR)
+    private fun resolveNameAsIri(name: String, separator: String = GRAPHQL_NAME_PREFIX_SEPARATOR): String? {
+        return fullContext[name]?.toString() ?: name.takeIf { it.contains(separator) }?.let { prefixedName ->
+            val (prefix, localName) = prefixedName.split(separator)
             fullContext[prefix]?.let { prefixIri ->
                 "$prefixIri$localName"
             }

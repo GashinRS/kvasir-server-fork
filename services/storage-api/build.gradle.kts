@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     implementation(project(":libs:definitions"))
+    implementation(project(":libs:utils"))
     implementation(project(":plugins:kafka-channel-initializer"))
     implementation("io.quarkus:quarkus-reactive-routes")
     implementation("io.smallrye.reactive:smallrye-mutiny-vertx-http-proxy")

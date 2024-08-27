@@ -1,8 +1,10 @@
 package kvasir.plugins.kg.xtdb
 
 import graphql.language.*
+import jakarta.ws.rs.BadRequestException
 import kvasir.definitions.graphql.Constants
 import kvasir.definitions.kg.QueryRequest
+import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 
 class GraphQLToSQL(private val request: QueryRequest) {
@@ -169,6 +171,11 @@ class GraphQLToSQL(private val request: QueryRequest) {
         effectiveName: String,
         hasMultipleResults: Boolean
     ): String {
+        // Throw exception if top-level leaf nodes are encountered, and a directive specifying different handling is missing, TODO
+        if (queryScope.parent == null) {
+            throw BadRequestException("Field '${selection.name}' must have a selection of subfields.")
+        }
+
         // Field is a leaf node: use join to select objects matching the specified subject & predicate
         val isOptional = selection.directives.any { it.name == "optional" }
         val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
@@ -226,25 +233,22 @@ class GraphQLToSQL(private val request: QueryRequest) {
         val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "o") }
 
         // Check for additional id filter (if an id field is specified further down the path and contains a filter argument)
-        val idFilter = extractIdFilter(selection.selectionSet)?.let { "o = '$it'" }
-
-        // Process arguments as additional conditions
-        val additionalConditions =
-            selection.arguments.filter { it.name != "_" }.joinToString(" AND ") {
-                val fqArgName = it.additionalData["iri"] as String
-                val value = toSQLValue(it.value)
-                "o IN (SELECT s FROM $database WHERE p = '$fqArgName' AND o = $value)"
-            }.takeIf { it.isNotEmpty() }
+        val idFilter = extractIdFilter(selection.selectionSet)
 
         // For top-level fields, subjectSelection is based on type matches (unless a directive specifies otherwise, TODO)
         return if (queryScope.parent == null) {
+            // Process arguments as additional conditions
+            val additionalConditions =
+                getAdditionalConditions(selection, "s")
+            val typeFilter = selection.getContextIRI().takeIf { it != RDFSVocab.Resource }
+                ?.let { "s IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$it')" }
             val whereClause = listOfNotNull(
                 targetGraphsClause,
-                idFilter,
-                "s IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '${selection.getContextIRI()}')",
+                idFilter?.let { "s = '$it'" },
+                typeFilter,
                 valueFilter,
                 additionalConditions
-            ).joinToString(" AND ", prefix = "WHERE ")
+            ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", prefix = "WHERE ") ?: ""
             "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
                 mapNode(
                     selection,
@@ -254,10 +258,12 @@ class GraphQLToSQL(private val request: QueryRequest) {
             }) AS `$effectiveName`"
         } else {
             // When not top-level: specify a subjectSelection based on the objects matching the specified subject & predicate)
-
+            // Process arguments as additional conditions
+            val additionalConditions =
+                getAdditionalConditions(selection, "o")
             val whereClause = listOfNotNull(
                 targetGraphsClause,
-                idFilter,
+                idFilter?.let { "o = '$it'" },
                 "s = ${queryScope.dataId()}.s AND p = '${selection.getContextIRI()}'",
                 valueFilter,
                 typeCondition,
@@ -273,7 +279,23 @@ class GraphQLToSQL(private val request: QueryRequest) {
         }
     }
 
-    private fun getTypeWhereCondition(fqTypeBound: String, targetColumn: String): String {
+    private fun getAdditionalConditions(selection: Field, targetColumn: String): String? {
+        return selection.arguments.filter { it.name != "_" }.joinToString(" AND ") {
+            if (it.name == "id") {
+                "$targetColumn = ${toSQLValue(it.value)}"
+            } else {
+                val fqArgName = it.additionalData["iri"] as String
+                val value = toSQLValue(it.value)
+                "$targetColumn IN (SELECT s FROM $database WHERE p = '$fqArgName' AND o = $value)"
+            }
+        }.takeIf { it.isNotEmpty() }
+    }
+
+    private fun getTypeWhereCondition(fqTypeBound: String, targetColumn: String): String? {
+        if (fqTypeBound == RDFSVocab.Resource) {
+            // No need to filter on type if the type is Resource (matches all RDF classes)
+            return null
+        }
         return "$targetColumn IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$fqTypeBound')"
     }
 
