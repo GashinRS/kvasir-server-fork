@@ -188,7 +188,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
 
         // Field is a leaf node: use join to select objects matching the specified subject & predicate
         val dataId = dataIdOverride ?: queryScope.dataId()
-        val isOptional = optionalOverride?:selection.directives.any { it.name == "optional" }
+        val isOptional = optionalOverride ?: selection.directives.any { it.name == "optional" }
         val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
         val whereClause = listOfNotNull(
             targetGraphsClause,
@@ -236,7 +236,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
     ): String {
         // Field has a nested selection set, recurse
         val dataId = dataIdOverride ?: queryScope.dataId()
-        val isOptional = optionalOverride?:selection.directives.any { it.name == "optional" }
+        val isOptional = optionalOverride ?: selection.directives.any { it.name == "optional" }
 
         // Workaround to make sure that null results are filtered out when the field is not optional.
         if (!isOptional) {
@@ -296,11 +296,20 @@ class GraphQLToSQL(private val request: QueryRequest) {
     private fun getAdditionalConditions(selection: Field, targetColumn: String): String? {
         return selection.arguments.filter { it.name != "_" }.joinToString(" AND ") {
             if (it.name == "id") {
-                "$targetColumn = ${toSQLValue(it.value)}"
+                if (it.value is ArrayValue) {
+                    val ids = (it.value as ArrayValue).values.map { arrayItem -> toSQLValue(arrayItem) }
+                    "$targetColumn IN (${ids.joinToString(",")})"
+                } else {
+                    "$targetColumn = ${toSQLValue(it.value)}"
+                }
             } else {
                 val fqArgName = it.additionalData["iri"] as String
-                val value = toSQLValue(it.value)
-                "$targetColumn IN (SELECT s FROM $database WHERE p = '$fqArgName' AND o = $value)"
+                val objectFilter = if (it.value is ArrayValue) {
+                    "o IN (${(it.value as ArrayValue).values.joinToString(",") { arrayItem -> toSQLValue(arrayItem) }})"
+                } else {
+                    "o = ${toSQLValue(it.value)}"
+                }
+                "$targetColumn IN (SELECT s FROM $database WHERE p = '$fqArgName' AND $objectFilter)"
             }
         }.takeIf { it.isNotEmpty() }
     }
