@@ -7,6 +7,7 @@ import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 
+// TODO: rework/refactor. Split state and logic into smaller class instances (integrate with QueryScope concept)
 class GraphQLToSQL(private val request: QueryRequest) {
 
     private val targetGraphsClause =
@@ -22,23 +23,17 @@ class GraphQLToSQL(private val request: QueryRequest) {
         val rootNode = request.graphQL.definitions.filterIsInstance<OperationDefinition>()
             .firstOrNull { it.operation == OperationDefinition.Operation.QUERY }
             ?: throw IllegalArgumentException("Only one query is allowed")
-        val idFilter = extractIdFilter(rootNode.selectionSet)?.let { "s = '$it'" }
-        val whereClause = listOfNotNull(
-            targetGraphsClause,
-            idFilter
-        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", prefix = " WHERE ") ?: ""
 
         val fieldJoinClauses = mutableListOf<String>()
         val nestedNonNullFields = mutableListOf<NestedNonNullFieldCheck>()
 
-        return rootNode.selectionSet.selections.mapIndexed { index, selection ->
-            mapSelection(index, selection, QueryScope(0), nestedNonNullFields, fieldJoinClauses)
+        return rootNode.selectionSet.selections.filterIsInstance<Field>().mapIndexed { index, selection ->
+            when (selection.name) {
+                "__schema" -> handleIntrospectionSchema(selection)
+                "__type" -> handleIntrospectionType(selection)
+                else -> mapSelection(index, selection, QueryScope(0), nestedNonNullFields, fieldJoinClauses)
+            }
         }.joinToString(", ", "SELECT ", ";") { it }
-
-//        return mapNode(
-//            rootNode,
-//            "SELECT DISTINCT s FROM $database$whereClause"
-//        ) // TODO take into account field arguments as conditions
     }
 
     // When the node contains an id field, check if a filter is specified and return it, otherwise null
@@ -82,7 +77,9 @@ class GraphQLToSQL(private val request: QueryRequest) {
         queryScope: QueryScope,
         nestedNonNullFields: MutableList<NestedNonNullFieldCheck>,
         fieldJoinClauses: MutableList<String>,
-        fqTypeBound: String? = null
+        fqTypeBound: String? = null,
+        optionalOverride: Boolean? = null,
+        dataIdOverride: String? = null
     ): String {
         when (selection) {
             is Field -> {
@@ -90,6 +87,9 @@ class GraphQLToSQL(private val request: QueryRequest) {
                 fieldMapping[effectiveName] = selection.alias ?: selection.name
                 val joinId = queryScope.joinId(selectionId)
                 if (selection.name == "id") {
+                    if (queryScope.parent == null) {
+                        throw BadRequestException("Field 'id' cannot be used at the top-level. Specify a type as entry-point.")
+                    }
                     return "${queryScope.dataId()}.s AS `$effectiveName`" // TODO: cleaner way of shortcutting logic when field is 'id'
                 }
 
@@ -106,7 +106,9 @@ class GraphQLToSQL(private val request: QueryRequest) {
                         selection,
                         queryScope,
                         valueFilter,
-                        selectionId
+                        selectionId,
+                        optionalOverride,
+                        dataIdOverride
                     )
                 } else {
                     processLeafNode(
@@ -117,7 +119,9 @@ class GraphQLToSQL(private val request: QueryRequest) {
                         joinId,
                         queryScope,
                         effectiveName,
-                        hasMultipleResults
+                        hasMultipleResults,
+                        optionalOverride,
+                        dataIdOverride
                     )
                 }
             }
@@ -129,10 +133,12 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     mapSelection(
                         index,
                         inlineSelection,
-                        queryScope.nestedScope(index),
+                        queryScope.copy(seqNr = queryScope.seqNr + index + 1),
                         nestedNonNullFields,
                         fieldJoinClauses,
-                        fqType
+                        fqType,
+                        optionalOverride = true,
+                        dataIdOverride = queryScope.dataId()
                     )
                 }.joinToString(", ")
             }
@@ -149,10 +155,12 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     mapSelection(
                         index,
                         inlineSelection,
-                        queryScope.nestedScope(index),
+                        queryScope.copy(seqNr = queryScope.seqNr + index + 1),
                         nestedNonNullFields,
                         fieldJoinClauses,
-                        fqType
+                        fqType,
+                        optionalOverride = true,
+                        dataIdOverride = queryScope.dataId()
                     )
                 }.joinToString(", ")
             }
@@ -169,7 +177,9 @@ class GraphQLToSQL(private val request: QueryRequest) {
         joinId: String,
         queryScope: QueryScope,
         effectiveName: String,
-        hasMultipleResults: Boolean
+        hasMultipleResults: Boolean,
+        optionalOverride: Boolean? = null,
+        dataIdOverride: String? = null
     ): String {
         // Throw exception if top-level leaf nodes are encountered, and a directive specifying different handling is missing, TODO
         if (queryScope.parent == null) {
@@ -177,7 +187,8 @@ class GraphQLToSQL(private val request: QueryRequest) {
         }
 
         // Field is a leaf node: use join to select objects matching the specified subject & predicate
-        val isOptional = selection.directives.any { it.name == "optional" }
+        val dataId = dataIdOverride ?: queryScope.dataId()
+        val isOptional = optionalOverride?:selection.directives.any { it.name == "optional" }
         val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
         val whereClause = listOfNotNull(
             targetGraphsClause,
@@ -189,13 +200,13 @@ class GraphQLToSQL(private val request: QueryRequest) {
         return when (selection.name) {
             Constants.FIELD_NAMES -> {
                 // Special introspection field to return the field names of the current selection
-                fieldJoinClauses.add("JOIN (SELECT s, '${Constants.FIELD_NAMES}' as p, ARRAY_AGG(p) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
+                fieldJoinClauses.add("JOIN (SELECT s, '${Constants.FIELD_NAMES}' as p, ARRAY_AGG(p) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${dataId}.s")
                 "$joinId.o AS `$effectiveName`"
             }
 
             Constants.Pagination.TOTAL_COUNT -> {
                 // Special introspection field to return the total count of the current selection
-                fieldJoinClauses.add("JOIN (SELECT s, '${Constants.Pagination.TOTAL_COUNT}' as p ,COUNT(DISTINCT s) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${queryScope.dataId()}.s")
+                fieldJoinClauses.add("JOIN (SELECT s, '${Constants.Pagination.TOTAL_COUNT}' as p ,COUNT(DISTINCT s) as o FROM $database $whereClauseStr) $joinId ON $joinId.s = ${dataId}.s")
                 "$joinId.o AS `$effectiveName`"
             }
 
@@ -204,7 +215,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     "p = '${selection.getContextIRI()}'"
                 ).joinToString(" AND ", prefix = "WHERE ")
                 val fieldJoinClause =
-                    "JOIN (SELECT s, ARRAY_AGG(o) as ${joinId}_o FROM $database $whereClauseWithPredicateFilter) $joinId ON $joinId.s = ${queryScope.dataId()}.s"
+                    "JOIN (SELECT s, ARRAY_AGG(o) as ${joinId}_o FROM $database $whereClauseWithPredicateFilter) $joinId ON $joinId.s = ${dataId}.s"
                 fieldJoinClauses.add(if (isOptional) "LEFT ".plus(fieldJoinClause) else fieldJoinClause)
                 "${joinId}_o${if (!hasMultipleResults) "[1]" else ""} AS `$effectiveName`"
             }
@@ -219,10 +230,13 @@ class GraphQLToSQL(private val request: QueryRequest) {
         selection: Field,
         queryScope: QueryScope,
         valueFilter: String?,
-        selectionId: Int
+        selectionId: Int,
+        optionalOverride: Boolean? = null,
+        dataIdOverride: String? = null
     ): String {
         // Field has a nested selection set, recurse
-        val isOptional = selection.directives.any { it.name == "optional" }
+        val dataId = dataIdOverride ?: queryScope.dataId()
+        val isOptional = optionalOverride?:selection.directives.any { it.name == "optional" }
 
         // Workaround to make sure that null results are filtered out when the field is not optional.
         if (!isOptional) {
@@ -264,7 +278,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
             val whereClause = listOfNotNull(
                 targetGraphsClause,
                 idFilter?.let { "o = '$it'" },
-                "s = ${queryScope.dataId()}.s AND p = '${selection.getContextIRI()}'",
+                "s = ${dataId}.s AND p = '${selection.getContextIRI()}'",
                 valueFilter,
                 typeCondition,
                 additionalConditions
@@ -297,6 +311,60 @@ class GraphQLToSQL(private val request: QueryRequest) {
             return null
         }
         return "$targetColumn IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$fqTypeBound')"
+    }
+
+    private fun handleIntrospectionSchema(selection: Field): String {
+        return selection.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }?.joinToString(
+            ", ",
+            "NEST_MANY(SELECT ",
+            " FROM $database t WHERE t.p = '${RDFVocab.type}' ORDER BY t.o) AS ${selection.alias ?: selection.name}"
+        ) { schemaField ->
+            when (schemaField.name) {
+                "types" -> {
+                    schemaField.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
+                        ?.joinToString { typesField ->
+                            when (typesField.name) {
+                                "name" -> "DISTINCT t.o AS name"
+                                "fields" -> {
+                                    val fieldsSubFields =
+                                        typesField.selectionSet?.selections?.filterIsInstance<Field>() ?: emptyList()
+                                    if (fieldsSubFields.size == 1 && fieldsSubFields.first().name == "name") {
+                                        "NEST_MANY(SELECT DISTINCT p AS name FROM $database WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = t.o)) AS fields"
+                                    } else {
+                                        throw IllegalArgumentException("Currently only 'name' field is supported on 'fields' field of __schema")
+                                    }
+                                }
+
+                                else -> throw IllegalArgumentException("Currently only 'name' and 'fields' fields are supported on 'types' field of __schema")
+                            }
+                        } ?: throw IllegalArgumentException("No fields specified on 'types' field of __schema")
+                }
+
+                else -> throw IllegalArgumentException("Unsupported introspection field on __schema: ${schemaField.name}")
+            }
+        } ?: throw IllegalArgumentException("No fields specified on __schema")
+    }
+
+    private fun handleIntrospectionType(selection: Field): String {
+        val requestedTypeFQId = selection.arguments.find { it.name == "name" }?.let {
+            (it.value as StringValue).value
+        } ?: throw IllegalArgumentException("Missing 'name' argument on __type field")
+        return selection.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
+            ?.joinToString(", ", "NEST_MANY(SELECT ", ") AS ${selection.alias ?: selection.name}") {
+                when (it.name) {
+                    "name" -> "'$requestedTypeFQId' AS name"
+                    "fields" -> {
+                        val fieldsSubFields = it.selectionSet?.selections?.filterIsInstance<Field>() ?: emptyList()
+                        if (fieldsSubFields.size == 1 && fieldsSubFields.first().name == "name") {
+                            "NEST_MANY(SELECT DISTINCT p AS name  FROM $database WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT DISTINCT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$requestedTypeFQId') ORDER BY name) AS fields"
+                        } else {
+                            throw IllegalArgumentException("Currently only 'name' field is supported on 'fields' field of __type")
+                        }
+                    }
+
+                    else -> throw IllegalArgumentException("Unsupported introspection field on __type: ${it.name}")
+                }
+            } ?: throw IllegalArgumentException("No fields specified on __type")
     }
 
 }
