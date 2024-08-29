@@ -1,11 +1,13 @@
-package kvasir.plugins.kg.xtdb
+package kvasir.plugins.kg.xtdb.query
 
+import cz.jirutka.rsql.parser.RSQLParser
 import graphql.language.*
 import jakarta.ws.rs.BadRequestException
 import kvasir.definitions.graphql.Constants
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
+import kvasir.plugins.kg.xtdb.dbNameForPod
 
 // TODO: rework/refactor. Split state and logic into smaller class instances (integrate with QueryScope concept)
 class GraphQLToSQL(private val request: QueryRequest) {
@@ -34,15 +36,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
                 else -> mapSelection(index, selection, QueryScope(0), nestedNonNullFields, fieldJoinClauses)
             }
         }.joinToString(", ", "SELECT ", ";") { it }
-    }
-
-    // When the node contains an id field, check if a filter is specified and return it, otherwise null
-    private fun extractIdFilter(selectionSet: SelectionSet): String? {
-        val idField = selectionSet.selections.firstOrNull { it is Field && it.name == "id" } as Field?
-        return idField?.arguments?.firstOrNull { it.name == "_" }?.value?.let {
-            it as StringValue
-            it.value
-        }
     }
 
     private fun mapNode(
@@ -93,9 +86,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     return "${queryScope.dataId()}.s AS `$effectiveName`" // TODO: cleaner way of shortcutting logic when field is 'id'
                 }
 
-                val valueFilter =
-                    selection.arguments.firstOrNull { it.name == "_" }?.value?.let { "o = ${toSQLValue(it)}" }
-
                 val hasMultipleResults = !selection.hasDirective("single")
                 return if (selection.selectionSet != null) {
                     processNestedNode(
@@ -105,7 +95,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
                         fqTypeBound,
                         selection,
                         queryScope,
-                        valueFilter,
                         selectionId,
                         optionalOverride,
                         dataIdOverride
@@ -113,7 +102,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
                 } else {
                     processLeafNode(
                         fqTypeBound,
-                        valueFilter,
                         selection,
                         fieldJoinClauses,
                         joinId,
@@ -171,7 +159,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
 
     private fun processLeafNode(
         fqTypeBound: String?,
-        valueFilter: String?,
         selection: Field,
         fieldJoinClauses: MutableList<String>,
         joinId: String,
@@ -192,7 +179,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
         val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "s") }
         val whereClause = listOfNotNull(
             targetGraphsClause,
-            valueFilter,
             typeCondition
         )
         val whereClauseStr =
@@ -229,7 +215,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
         fqTypeBound: String?,
         selection: Field,
         queryScope: QueryScope,
-        valueFilter: String?,
         selectionId: Int,
         optionalOverride: Boolean? = null,
         dataIdOverride: String? = null
@@ -246,22 +231,14 @@ class GraphQLToSQL(private val request: QueryRequest) {
         // Calculate additional type condition (if any)
         val typeCondition = fqTypeBound?.let { getTypeWhereCondition(it, "o") }
 
-        // Check for additional id filter (if an id field is specified further down the path and contains a filter argument)
-        val idFilter = extractIdFilter(selection.selectionSet)
-
         // For top-level fields, subjectSelection is based on type matches (unless a directive specifies otherwise, TODO)
         return if (queryScope.parent == null) {
-            // Process arguments as additional conditions
-            val additionalConditions =
-                getAdditionalConditions(selection, "s")
             val typeFilter = selection.getContextIRI().takeIf { it != RDFSVocab.Resource }
                 ?.let { "s IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$it')" }
             val whereClause = listOfNotNull(
                 targetGraphsClause,
-                idFilter?.let { "s = '$it'" },
                 typeFilter,
-                valueFilter,
-                additionalConditions
+                getAdditionalConditions(selection, "s"),
             ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", prefix = "WHERE ") ?: ""
             "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
                 mapNode(
@@ -272,16 +249,11 @@ class GraphQLToSQL(private val request: QueryRequest) {
             }) AS `$effectiveName`"
         } else {
             // When not top-level: specify a subjectSelection based on the objects matching the specified subject & predicate)
-            // Process arguments as additional conditions
-            val additionalConditions =
-                getAdditionalConditions(selection, "o")
             val whereClause = listOfNotNull(
                 targetGraphsClause,
-                idFilter?.let { "o = '$it'" },
                 "s = ${dataId}.s AND p = '${selection.getContextIRI()}'",
-                valueFilter,
                 typeCondition,
-                additionalConditions
+                getAdditionalConditions(selection, "o"),
             ).joinToString(" AND ", prefix = "WHERE ")
             "${if (hasMultipleResults) "NEST_MANY" else "NEST_ONE"}(${
                 mapNode(
@@ -291,27 +263,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
                 )
             }) AS `$effectiveName`"
         }
-    }
-
-    private fun getAdditionalConditions(selection: Field, targetColumn: String): String? {
-        return selection.arguments.filter { it.name != "_" }.joinToString(" AND ") {
-            if (it.name == "id") {
-                if (it.value is ArrayValue) {
-                    val ids = (it.value as ArrayValue).values.map { arrayItem -> toSQLValue(arrayItem) }
-                    "$targetColumn IN (${ids.joinToString(",")})"
-                } else {
-                    "$targetColumn = ${toSQLValue(it.value)}"
-                }
-            } else {
-                val fqArgName = it.additionalData["iri"] as String
-                val objectFilter = if (it.value is ArrayValue) {
-                    "o IN (${(it.value as ArrayValue).values.joinToString(",") { arrayItem -> toSQLValue(arrayItem) }})"
-                } else {
-                    "o = ${toSQLValue(it.value)}"
-                }
-                "$targetColumn IN (SELECT s FROM $database WHERE p = '$fqArgName' AND $objectFilter)"
-            }
-        }.takeIf { it.isNotEmpty() }
     }
 
     private fun getTypeWhereCondition(fqTypeBound: String, targetColumn: String): String? {
@@ -329,6 +280,16 @@ class GraphQLToSQL(private val request: QueryRequest) {
             " FROM $database t WHERE t.p = '${RDFVocab.type}' ORDER BY t.o) AS ${selection.alias ?: selection.name}"
         ) { schemaField ->
             when (schemaField.name) {
+                "queryType" -> {
+                    schemaField.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
+                        ?.joinToString { queryTypeField ->
+                            when (queryTypeField.name) {
+                                "name" -> "Query AS name"
+                                else -> throw IllegalArgumentException("Currently only 'name' field is supported on 'queryType' field of __schema")
+                            }
+                        } ?: throw IllegalArgumentException("No fields specified on 'queryType' field of __schema")
+                }
+
                 "types" -> {
                     schemaField.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
                         ?.joinToString { typesField ->
@@ -348,7 +309,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
                             }
                         } ?: throw IllegalArgumentException("No fields specified on 'types' field of __schema")
                 }
-
+                "mutationType", "subscriptionType" -> "NULL AS ${schemaField.name}"
                 else -> throw IllegalArgumentException("Unsupported introspection field on __schema: ${schemaField.name}")
             }
         } ?: throw IllegalArgumentException("No fields specified on __schema")
@@ -374,6 +335,51 @@ class GraphQLToSQL(private val request: QueryRequest) {
                     else -> throw IllegalArgumentException("Unsupported introspection field on __type: ${it.name}")
                 }
             } ?: throw IllegalArgumentException("No fields specified on __type")
+    }
+
+    private fun getAdditionalConditions(selection: Field, targetColumn: String): String? {
+        // Process id argument separately, as it is a special case
+        val idCondition = selection.arguments.find { it.name == "id" }?.let {
+            if (it.value is ArrayValue) {
+                val ids = (it.value as ArrayValue).values.map { arrayItem -> toSQLValue(arrayItem) }
+                "$targetColumn IN (${ids.joinToString(",")}) "
+            } else {
+                "$targetColumn = ${toSQLValue(it.value)} "
+            }
+        }
+
+        // Then process other arguments, plus conditions coming from @filter directives
+        val conditions = selection.arguments.filterNot { it.name == "id" }.map {
+            val fqArgName = it.additionalData["iri"] as String
+            val objectFilter = if (it.value is ArrayValue) {
+                "o IN (${(it.value as ArrayValue).values.joinToString(",") { arrayItem -> toSQLValue(arrayItem) }})"
+            } else {
+                "o = ${toSQLValue(it.value)}"
+            }
+            "p = '$fqArgName' AND $objectFilter"
+        }.plus(getNodeFilter(selection))
+            .joinToString(" AND ")
+
+        return listOfNotNull(
+            idCondition, conditions
+        ).joinToString(" AND ", "$targetColumn IN (SELECT s FROM $database WHERE ", ")")
+    }
+
+    private fun getNodeFilter(field: Field): List<String> {
+        val subFields = field.selectionSet?.selections?.filterIsInstance<Field>()
+        val predicateMapping = (subFields?.associate { it.name to it.getContextIRI() } ?: emptyMap())
+        val filters = subFields?.mapNotNull { subField ->
+            subField.directives.firstOrNull { it.name == "filter" }?.let { directive ->
+                val rsqlExpr = directive.getArgument("if")?.value?.let { (it as StringValue).value }
+                    ?: throw IllegalArgumentException("Missing 'if' argument containing RSQL expression on filter directive")
+                val rsqlParser = RSQLParser()
+                val rsqlNode = rsqlParser.parse(rsqlExpr)
+                rsqlNode.accept(
+                    GraphQLFilterVisitor(rsqlExpr, predicateMapping.plus("it" to subField.getContextIRI()))
+                )
+            }
+        }
+        return filters ?: emptyList()
     }
 
 }

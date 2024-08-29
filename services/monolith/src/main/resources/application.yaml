@@ -10,7 +10,16 @@ kvasir:
         access-key: ${quarkus.minio.access-key}
         secret-key: ${quarkus.minio.secret-key}
 quarkus:
+  http:
+    cors:
+      ~: true
   minio:
     devservices:
   smallrye-openapi:
     store-schema-directory: ./openapi
+
+"%dev":
+  quarkus:
+    http:
+      cors:
+        origins: /.*/

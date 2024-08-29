@@ -7,6 +7,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
+import kvasir.plugins.kg.xtdb.query.GraphQLToSQL
 import org.eclipse.microprofile.config.inject.ConfigProperty
 
 @ApplicationScoped
