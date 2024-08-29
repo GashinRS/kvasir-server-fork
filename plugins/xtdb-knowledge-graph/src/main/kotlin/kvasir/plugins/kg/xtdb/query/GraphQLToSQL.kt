@@ -28,11 +28,12 @@ class GraphQLToSQL(private val request: QueryRequest) {
 
         val fieldJoinClauses = mutableListOf<String>()
         val nestedNonNullFields = mutableListOf<NestedNonNullFieldCheck>()
+        val introspection = GraphQLIntrospection(request)
 
         return rootNode.selectionSet.selections.filterIsInstance<Field>().mapIndexed { index, selection ->
             when (selection.name) {
-                "__schema" -> handleIntrospectionSchema(selection)
-                "__type" -> handleIntrospectionType(selection)
+                "__schema" -> introspection.schema(selection)
+                "__type" -> introspection.type(selection)
                 else -> mapSelection(index, selection, QueryScope(0), nestedNonNullFields, fieldJoinClauses)
             }
         }.joinToString(", ", "SELECT ", ";") { it }
@@ -271,70 +272,6 @@ class GraphQLToSQL(private val request: QueryRequest) {
             return null
         }
         return "$targetColumn IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$fqTypeBound')"
-    }
-
-    private fun handleIntrospectionSchema(selection: Field): String {
-        return selection.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }?.joinToString(
-            ", ",
-            "NEST_MANY(SELECT ",
-            " FROM $database t WHERE t.p = '${RDFVocab.type}' ORDER BY t.o) AS ${selection.alias ?: selection.name}"
-        ) { schemaField ->
-            when (schemaField.name) {
-                "queryType" -> {
-                    schemaField.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
-                        ?.joinToString { queryTypeField ->
-                            when (queryTypeField.name) {
-                                "name" -> "Query AS name"
-                                else -> throw IllegalArgumentException("Currently only 'name' field is supported on 'queryType' field of __schema")
-                            }
-                        } ?: throw IllegalArgumentException("No fields specified on 'queryType' field of __schema")
-                }
-
-                "types" -> {
-                    schemaField.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
-                        ?.joinToString { typesField ->
-                            when (typesField.name) {
-                                "name" -> "DISTINCT t.o AS name"
-                                "fields" -> {
-                                    val fieldsSubFields =
-                                        typesField.selectionSet?.selections?.filterIsInstance<Field>() ?: emptyList()
-                                    if (fieldsSubFields.size == 1 && fieldsSubFields.first().name == "name") {
-                                        "NEST_MANY(SELECT DISTINCT p AS name FROM $database WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = t.o)) AS fields"
-                                    } else {
-                                        throw IllegalArgumentException("Currently only 'name' field is supported on 'fields' field of __schema")
-                                    }
-                                }
-
-                                else -> throw IllegalArgumentException("Currently only 'name' and 'fields' fields are supported on 'types' field of __schema")
-                            }
-                        } ?: throw IllegalArgumentException("No fields specified on 'types' field of __schema")
-                }
-                "mutationType", "subscriptionType" -> "NULL AS ${schemaField.name}"
-                else -> throw IllegalArgumentException("Unsupported introspection field on __schema: ${schemaField.name}")
-            }
-        } ?: throw IllegalArgumentException("No fields specified on __schema")
-    }
-
-    private fun handleIntrospectionType(selection: Field): String {
-        val requestedTypeFQId = selection.arguments.find { it.name == "name" }?.let {
-            (it.value as StringValue).value
-        } ?: throw IllegalArgumentException("Missing 'name' argument on __type field")
-        return selection.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
-            ?.joinToString(", ", "NEST_MANY(SELECT ", ") AS ${selection.alias ?: selection.name}") {
-                when (it.name) {
-                    "name" -> "'$requestedTypeFQId' AS name"
-                    "fields" -> {
-                        val fieldsSubFields = it.selectionSet?.selections?.filterIsInstance<Field>() ?: emptyList()
-                        if (fieldsSubFields.size == 1 && fieldsSubFields.first().name == "name") {
-                            "NEST_MANY(SELECT DISTINCT p AS name  FROM $database WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT DISTINCT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$requestedTypeFQId') ORDER BY name) AS fields"
-                        } else {
-                            throw IllegalArgumentException("Currently only 'name' field is supported on 'fields' field of __type")
-                        }
-                    }
-
-                    else -> throw IllegalArgumentException("Unsupported introspection field on __type: ${it.name}")
-                }
-            } ?: throw IllegalArgumentException("No fields specified on __type")
     }
 
     private fun getAdditionalConditions(selection: Field, targetColumn: String): String? {

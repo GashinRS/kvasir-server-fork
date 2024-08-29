@@ -86,7 +86,46 @@ class XtdbKnowledgeGraph(
         val sql = queryMapping.toSQL()
         Log.debug("Xtdb query: $sql")
         return xtdbClient.query(SqlQuery(sql)).map { results ->
-            QueryResult(data = results.map { processOutput(queryMapping, it) as Map<String, Any> })
+            QueryResult(data = results.map {
+                if (it.containsKey("__schema")) {
+                    // Augment types with Scalars
+                    val schema = it["__schema"] as Map<String, Any>
+                    if (schema.containsKey("types")) {
+                        val types = schema["types"] as List<Map<String, Any>>
+                        val scalars = listOf(
+                            mapOf(
+                                "name" to "String",
+                                "kind" to "SCALAR",
+                                "fields" to emptyList<Map<String, Any>>()
+                            ),
+                            mapOf(
+                                "name" to "Int",
+                                "kind" to "SCALAR",
+                                "fields" to emptyList<Map<String, Any>>()
+                            ),
+                            mapOf(
+                                "name" to "Float",
+                                "kind" to "SCALAR",
+                                "fields" to emptyList<Map<String, Any>>()
+                            ),
+                            mapOf(
+                                "name" to "Boolean",
+                                "kind" to "SCALAR",
+                                "fields" to emptyList<Map<String, Any>>()
+                            )
+                        )
+                        it.filterNot { it.key == "__schema" } + mapOf(
+                            "__schema" to schema + mapOf(
+                                "types" to types + scalars
+                            )
+                        )
+                    } else {
+                        it
+                    }
+                } else {
+                    processOutput(queryMapping, it) as Map<String, Any>
+                }
+            })
         }
     }
 
