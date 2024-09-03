@@ -7,8 +7,18 @@ import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
+import kvasir.definitions.rdf.RDFSVocab
 import kvasir.plugins.kg.xtdb.query.GraphQLToSQL
 import org.eclipse.microprofile.config.inject.ConfigProperty
+
+private val SCALAR_TYPE_TEMPLATE = mapOf(
+    "interfaces" to emptyList<Map<String, Any>>(),
+    "inputFields" to null,
+    "enumValues" to null,
+    "possibleTypes" to null,
+    "kind" to "SCALAR",
+    "fields" to emptyList<Map<String, Any>>()
+)
 
 @ApplicationScoped
 class XtdbKnowledgeGraph(
@@ -16,6 +26,9 @@ class XtdbKnowledgeGraph(
     @ConfigProperty(name = "kvasir.plugins.kg.xtdb.assertion-checking-parallelism", defaultValue = "4")
     private val assertionCheckingParallelism: Int
 ) : KnowledgeGraph {
+
+    // TODO: this feature need a proper implementation
+    private val namespaces: Map<String, String> = mutableMapOf()
 
     override fun process(request: ChangeRequest): Uni<Void> {
         val changeProcessor = ChangeProcessor(request, this, assertionCheckingParallelism)
@@ -35,7 +48,8 @@ class XtdbKnowledgeGraph(
                         changeProcessor.materializeRecords(request.delete, bindings).map { it.take(1) })
                 }
                     .chain { _ ->
-                        insertStatements(database, changeProcessor.materializeRecords(request.insert, bindings))
+                        val insertTuples = changeProcessor.materializeRecords(request.insert, bindings)
+                        insertStatements(database, insertTuples)
                     }
             }
             .onFailure(ChangeAssertionException::class.java).recoverWithUni { e ->
@@ -87,45 +101,8 @@ class XtdbKnowledgeGraph(
         Log.debug("Xtdb query: $sql")
         return xtdbClient.query(SqlQuery(sql)).map { results ->
             QueryResult(data = results.map {
-                if (it.containsKey("__schema")) {
-                    // Augment types with Scalars
-                    val schema = it["__schema"] as Map<String, Any>
-                    if (schema.containsKey("types")) {
-                        val types = schema["types"] as List<Map<String, Any>>
-                        val scalars = listOf(
-                            mapOf(
-                                "name" to "String",
-                                "kind" to "SCALAR",
-                                "fields" to emptyList<Map<String, Any>>()
-                            ),
-                            mapOf(
-                                "name" to "Int",
-                                "kind" to "SCALAR",
-                                "fields" to emptyList<Map<String, Any>>()
-                            ),
-                            mapOf(
-                                "name" to "Float",
-                                "kind" to "SCALAR",
-                                "fields" to emptyList<Map<String, Any>>()
-                            ),
-                            mapOf(
-                                "name" to "Boolean",
-                                "kind" to "SCALAR",
-                                "fields" to emptyList<Map<String, Any>>()
-                            )
-                        )
-                        it.filterNot { it.key == "__schema" } + mapOf(
-                            "__schema" to schema + mapOf(
-                                "types" to types + scalars
-                            )
-                        )
-                    } else {
-                        it
-                    }
-                } else {
-                    processOutput(queryMapping, it) as Map<String, Any>
-                }
-            })
+                postProcessIntrospectionResults(it, queryMapping, request)
+            }.firstOrNull() ?: emptyMap())
         }
     }
 
@@ -144,10 +121,50 @@ private fun processOutput(queryMapping: GraphQLToSQL, result: Any): Any {
             )
         }
 
-        is Map<*, *> -> result.mapValues { processOutput(queryMapping, it.value!!) }
+        is Map<*, *> -> result.mapValues { value ->
+            value.value?.let { processOutput(queryMapping, it) }
+        }
             .mapKeys { queryMapping.fieldMapping[it.key] ?: it.key }
 
         else -> result
+    }
+}
+
+private fun postProcessIntrospectionResults(
+    result: Map<String, Any>,
+    queryMapping: GraphQLToSQL,
+    request: QueryRequest
+): Map<String, Any> {
+    return if (result.containsKey("__schema")) {
+        // Augment types with Scalars
+        val schema = result["__schema"] as Map<String, Any>
+        if (schema.containsKey("types")) {
+            val types = (schema["types"] as List<Map<String, Any>>)
+            val scalars = listOf(
+                SCALAR_TYPE_TEMPLATE.plus("name" to "http://www.w3.org/2001/XMLSchema#string"),
+                SCALAR_TYPE_TEMPLATE.plus("name" to "http://www.w3.org/2001/XMLSchema#integer"),
+                SCALAR_TYPE_TEMPLATE.plus("name" to "http://www.w3.org/2001/XMLSchema#float"),
+                SCALAR_TYPE_TEMPLATE.plus("name" to "http://www.w3.org/2001/XMLSchema#boolean"),
+                mapOf(
+                    "name" to RDFSVocab.Resource,
+                    "kind" to "OBJECT",
+                    "interfaces" to emptyList<Map<String, Any>>(),
+                    "inputFields" to null,
+                    "enumValues" to null,
+                    "possibleTypes" to null,
+                    "fields" to types.flatMap { (it["fields"] as List<Map<String, Any>>?)?: emptyList() }.distinctBy { it["name"] }
+                )
+            )
+            processOutput(queryMapping, result.filterNot { it.key == "__schema" } + mapOf(
+                "__schema" to schema + mapOf(
+                    "types" to types + scalars
+                )
+            )) as Map<String, Any>
+        } else {
+            processOutput(queryMapping, result) as Map<String, Any>
+        }
+    } else {
+        processOutput(queryMapping, result) as Map<String, Any>
     }
 }
 

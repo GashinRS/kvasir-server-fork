@@ -71,13 +71,19 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
 
     override fun visitArgument(node: Argument, traverserContext: TraverserContext<Node<*>>): TraversalControl {
         val changedFragmentDefinition = node.transform {
-            resolveNameAsIri(node.name)?.let { iri ->
-                it.additionalData("iri", iri)
-            }
-            val argVal = node.value
-            if (argVal is StringValue) {
-                resolveNameAsIri(argVal.value, RDF_PREFIX_SEPARATOR)?.let { iri ->
-                    it.value(StringValue.of(iri))
+            val isContextArg = traverserContext.parentNode.takeIf { it is Directive }?.let {
+                it as Directive
+                it.name == "context"
+            } ?: false
+            if (!isContextArg) {
+                resolveNameAsIri(node.name)?.let { iri ->
+                    it.additionalData("iri", iri)
+                }
+                val argVal = node.value
+                if (argVal is StringValue) {
+                    resolveNameAsIri(argVal.value, RDF_PREFIX_SEPARATOR)?.let { iri ->
+                        it.value(StringValue.of(iri))
+                    }
                 }
             }
         }

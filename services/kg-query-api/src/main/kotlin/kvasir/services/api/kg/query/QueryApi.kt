@@ -1,6 +1,8 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.github.jsonldjava.core.JsonLdOptions
+import com.github.jsonldjava.core.JsonLdProcessor
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
@@ -9,6 +11,7 @@ import jakarta.ws.rs.Produces
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.NamespacePrefixRegistry
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.openapi.ApiDocConstants
@@ -23,7 +26,8 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
 @Path("{podId}/kg/query")
 class QueryApi(
-    private val knowledgeGraph: KnowledgeGraph
+    private val knowledgeGraph: KnowledgeGraph,
+    private val namespacePrefixRegistry: NamespacePrefixRegistry
 ) {
 
     @POST
@@ -34,7 +38,25 @@ class QueryApi(
     )
     fun query(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<QueryResult> {
         val req = parseInput(podId, input)
-        return knowledgeGraph.query(req)
+        return knowledgeGraph.query(req).map { resp ->
+            if (resp.data.containsKey("__schema")) {
+                resp.copy(data = resp.data + mapOf("__schema" to resp.data["__schema"]!!.let { schema ->
+                    schema as Map<String, Any>
+                    schema + listOfNotNull(
+                        schema["types"]?.let { types ->
+                            "types" to prefixTypeNames(
+                                types as List<Map<String, Any>>,
+                                input.providedContext ?: namespacePrefixRegistry.getAll(),
+                                types.flatMap { (it["fields"] as List<Map<String, Any>>?) ?: emptyList() }
+                                    .flatMap { it.keys }.toSet()
+                            )
+                        }
+                    ).toMap()
+                }))
+            } else {
+                resp
+            }
+        }
     }
 
     @POST
@@ -55,11 +77,64 @@ class QueryApi(
     private fun parseInput(podId: String, input: QueryInputWithContext): QueryRequest {
         return QueryRequest(
             podId,
-            GraphQLUtils.parseDocumentWithContext(input.query, input.providedContext ?: emptyMap()),
+            GraphQLUtils.parseDocumentWithContext(
+                input.query,
+                input.providedContext ?: namespacePrefixRegistry.getAll()
+            ),
             input.variables,
             input.operationName,
             input.targetGraphs
         )
+    }
+
+    private fun prefixTypeNames(
+        types: List<Map<String, Any>>,
+        context: Map<String, Any>,
+        fieldKeyProjection: Set<String>
+    ): List<Map<String, Any?>> {
+        val processedTypes = types.map { type ->
+            val fields = (type["fields"] as List<Map<String, Any>>)
+            val newFields = fields.map { field ->
+                val name = field["name"] as String
+                val (prefix, rest) = JsonLdProcessor.compact(mapOf(name to name), context, JsonLdOptions())
+                    .filter { it.key != "@context" }.keys.first().split(":")
+                field + mapOf("name" to "${prefix}_$rest", "description" to name)
+            }
+            val name = type["name"] as String
+            val (prefix, rest) = JsonLdProcessor.compact(mapOf(name to name), context, JsonLdOptions())
+                .filter { it.key != "@context" }.keys.first().split(":")
+            type + mapOf(
+                "fields" to newFields,
+                "name" to "${prefix}_$rest",
+                "description" to name
+            )
+        }
+        // Add Query type
+        val queryType = mapOf(
+            "name" to "Query",
+            "kind" to "OBJECT",
+            "description" to "Query type",
+            "interfaces" to emptyList<Map<String, Any>>(),
+            "inputFields" to null,
+            "enumValues" to null,
+            "possibleTypes" to null,
+            "fields" to processedTypes.filter { type -> type["kind"] == "OBJECT" }.map { type ->
+                mapOf(
+                    "name" to type["name"],
+                    "description" to type["description"],
+                    "args" to emptyList<Map<String, Any>>(),
+                    "type" to mapOf(
+                        "kind" to "LIST",
+                        "name" to null,
+                        "ofType" to mapOf("kind" to "OBJECT", "name" to type["name"])
+                    ),
+                    "isDeprecated" to false,
+                    "deprecationReason" to null
+                )//.filterKeys { fieldKeyProjection.contains(it) }
+
+            }
+        )
+        return processedTypes + queryType
     }
 
 }

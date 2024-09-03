@@ -1,29 +1,73 @@
 package kvasir.plugins.kg.xtdb.query
 
+import com.google.common.base.CaseFormat
 import graphql.language.*
-import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.rdf.RDFVocab
-import kvasir.plugins.kg.xtdb.dbNameForPod
 
 /**
  * Utility class that converts GraphQL introspection queries into XTDB SQL.
  */
-class GraphQLIntrospection(private val request: QueryRequest) {
+class GraphQLIntrospection(private val parent: GraphQLToSQL) {
 
-    private val database = dbNameForPod(request.podId)
+    companion object {
+
+        const val SCHEMA_FIELD = "__schema"
+        const val SCHEMA_QUERY_TYPE_FIELD = "queryType"
+        const val SCHEMA_TYPES_FIELD = "types"
+        const val SCHEMA_MUTATION_TYPE_FIELD = "mutationType"
+        const val SCHEMA_SUBSCRIPTION_TYPE_FIELD = "subscriptionType"
+        const val SCHEMA_DIRECTIVES_FIELD = "directives"
+
+        const val TYPE_FIELD = "__type"
+        const val TYPE_NAME_FIELD = "name"
+        const val TYPE_KIND_FIELD = "kind"
+        const val TYPE_FIELDS_FIELD = "fields"
+        const val TYPE_DESCRIPTION_FIELD = "description"
+        const val TYPE_INPUT_FIELDS_FIELD = "inputFields"
+        const val TYPE_ENUM_VALUES_FIELD = "enumValues"
+        const val TYPE_INTERFACES_FIELD = "interfaces"
+        const val TYPE_POSSIBLE_TYPES_FIELD = "possibleTypes"
+
+        const val FIELD_NAME_FIELD = "name"
+        const val FIELD_DESCRIPTION_FIELD = "description"
+        const val FIELD_ARGS_FIELD = "args"
+        const val FIELD_TYPE_FIELD = "type"
+        const val FIELD_IS_DEPRECATED_FIELD = "isDeprecated"
+        const val FIELD_DEPRECATION_REASON_FIELD = "deprecationReason"
+
+        const val QUERY_TYPE_NAME_FIELD = "name"
+
+    }
+
+    private fun initFieldMapping() {
+        listOf(
+            SCHEMA_QUERY_TYPE_FIELD,
+            SCHEMA_MUTATION_TYPE_FIELD,
+            SCHEMA_SUBSCRIPTION_TYPE_FIELD,
+            TYPE_INPUT_FIELDS_FIELD,
+            TYPE_ENUM_VALUES_FIELD,
+            TYPE_POSSIBLE_TYPES_FIELD,
+            FIELD_IS_DEPRECATED_FIELD,
+            FIELD_DEPRECATION_REASON_FIELD
+        ).forEach {
+            val snakeCaseKey: String = CaseFormat.LOWER_CAMEL.converterTo(CaseFormat.LOWER_UNDERSCORE).convert(it)!!
+            parent.fieldMapping[snakeCaseKey] = it
+        }
+    }
 
     fun schema(selection: Field): String {
+        initFieldMapping()
         return selection.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }?.joinToString(
             ", ",
             "NEST_ONE(SELECT DISTINCT ",
             ") AS ${selection.alias ?: selection.name}"
         ) { schemaField ->
             when (schemaField.name) {
-                "queryType" -> queryType(schemaField)
-                "types" -> types(schemaField)
+                SCHEMA_QUERY_TYPE_FIELD -> queryType(schemaField)
+                SCHEMA_TYPES_FIELD -> types(schemaField)
                 // Unused fields
-                "mutationType", "subscriptionType" -> "NULL AS ${schemaField.name}"
-                "directives" -> "[] AS ${schemaField.name}"
+                SCHEMA_MUTATION_TYPE_FIELD, SCHEMA_SUBSCRIPTION_TYPE_FIELD -> "NULL AS ${schemaField.name}"
+                SCHEMA_DIRECTIVES_FIELD -> "[] AS ${schemaField.name}"
                 // Unsupported fields
                 else -> throw IllegalArgumentException("Unsupported introspection field on __schema: ${schemaField.name}")
             }
@@ -31,17 +75,18 @@ class GraphQLIntrospection(private val request: QueryRequest) {
     }
 
     fun type(selection: Field): String {
+        initFieldMapping()
         val requestedTypeFQId = selection.arguments.find { it.name == "name" }?.let {
             (it.value as StringValue).value
         } ?: throw IllegalArgumentException("Missing 'name' argument on __type field")
         return selection.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
             ?.joinToString(", ", "NEST_ONE(SELECT DISTINCT", ") AS ${selection.alias ?: selection.name}") {
                 when (it.name) {
-                    "name" -> "'$requestedTypeFQId' AS name"
-                    "fields" -> {
+                    TYPE_NAME_FIELD -> "'$requestedTypeFQId' AS name"
+                    TYPE_FIELDS_FIELD -> {
                         val fieldsSubFields = it.selectionSet?.selections?.filterIsInstance<Field>() ?: emptyList()
                         if (fieldsSubFields.size == 1 && fieldsSubFields.first().name == "name") {
-                            "NEST_MANY(SELECT DISTINCT p AS name  FROM $database WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT DISTINCT s FROM $database WHERE p = '${RDFVocab.type}' AND o = '$requestedTypeFQId') ORDER BY name) AS fields"
+                            "NEST_MANY(SELECT DISTINCT p AS name  FROM ${parent.database} WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT DISTINCT s FROM ${parent.database} WHERE p = '${RDFVocab.type}' AND o = '$requestedTypeFQId') ORDER BY name) AS fields"
                         } else {
                             throw IllegalArgumentException("Currently only 'name' field is supported on 'fields' field of __type")
                         }
@@ -60,15 +105,15 @@ class GraphQLIntrospection(private val request: QueryRequest) {
             ?.joinToString(
                 ", ",
                 "NEST_MANY(SELECT DISTINCT ",
-                " FROM $database t WHERE t.p = '${RDFVocab.type}' ORDER BY t.o) AS types"
+                " FROM ${parent.database} t WHERE t.p = '${RDFVocab.type}' ORDER BY t.o) AS types"
             ) { typesField ->
                 when (typesField.name) {
-                    "name" -> "t.o AS name"
-                    "kind" -> "'OBJECT' AS kind"
-                    "fields" -> fields(typesField)
+                    TYPE_NAME_FIELD -> "t.o AS name"
+                    TYPE_KIND_FIELD -> "'OBJECT' AS kind"
+                    TYPE_FIELDS_FIELD -> fields(typesField)
                     // Unused fields
-                    "description", "inputFields", "enumValues", "possibleTypes" -> "NULL AS ${typesField.name}"
-                    "interfaces" -> "[] AS ${typesField.name}"
+                    TYPE_DESCRIPTION_FIELD, TYPE_INPUT_FIELDS_FIELD, TYPE_ENUM_VALUES_FIELD, TYPE_POSSIBLE_TYPES_FIELD -> "NULL AS ${typesField.name}"
+                    TYPE_INTERFACES_FIELD -> "[] AS ${typesField.name}"
                     // Unsupported fields
                     else -> throw IllegalArgumentException("Currently only 'name' and 'fields' fields are supported on 'types' field of __schema")
                 }
@@ -83,16 +128,16 @@ class GraphQLIntrospection(private val request: QueryRequest) {
             ?.joinToString(
                 ", ",
                 "NEST_MANY(SELECT DISTINCT ",
-                " FROM $database WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT s FROM $database WHERE p = '${RDFVocab.type}' AND o = t.o)) AS fields"
+                " FROM ${parent.database} WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT s FROM ${parent.database} WHERE p = '${RDFVocab.type}' AND o = t.o)) AS fields"
             ) { fieldsField ->
                 when (fieldsField.name) {
-                    "name" -> "p AS name"
-                    "type" -> "{ kind: 'SCALAR', name: 'String', ofType: null } AS type"
-                    "description" -> "NULL AS description"
-                    "args" -> "[] AS args"
+                    FIELD_NAME_FIELD -> "p AS name"
+                    FIELD_TYPE_FIELD -> "{ kind: 'SCALAR', name: 'xs_string', ofType: null } AS type"
+                    FIELD_DESCRIPTION_FIELD -> "NULL AS description"
+                    FIELD_ARGS_FIELD -> "[] AS args"
                     // Unused fields
-                    "isDeprecated" -> "false AS isDeprecated"
-                    "deprecationReason" -> "NULL AS ${fieldsField.name}"
+                    FIELD_IS_DEPRECATED_FIELD -> "false AS isDeprecated"
+                    FIELD_DEPRECATION_REASON_FIELD -> "NULL AS ${fieldsField.name}"
                     // Unsupported fields
                     else -> throw IllegalArgumentException("Unsupported introspection field on __field: ${fieldsField.name}")
                 }
@@ -101,9 +146,9 @@ class GraphQLIntrospection(private val request: QueryRequest) {
 
     fun queryType(selection: Field): String {
         return selection.selectionSet?.selections?.filterIsInstance<Field>()?.takeIf { it.isNotEmpty() }
-            ?.joinToString(", ", "NEST_ONE(SELECT DISTINCT ", ")") { queryTypeField ->
+            ?.joinToString(", ", "NEST_ONE(SELECT DISTINCT ", ") AS queryType") { queryTypeField ->
                 when (queryTypeField.name) {
-                    "name" -> "Query AS name"
+                    QUERY_TYPE_NAME_FIELD -> "'Query' AS name"
                     else -> throw IllegalArgumentException("Currently only 'name' field is supported on 'queryType' field of __schema")
                 }
             } ?: throw IllegalArgumentException("No fields specified on 'queryType' field of __schema")
@@ -112,7 +157,7 @@ class GraphQLIntrospection(private val request: QueryRequest) {
     private fun resolveFragment(selection: Selection<*>): List<Selection<*>> {
         return when (selection) {
             is FragmentSpread -> {
-                request.graphQL.getDefinitionsOfType(FragmentDefinition::class.java)
+                parent.request.graphQL.getDefinitionsOfType(FragmentDefinition::class.java)
                     .find { it.name == selection.name }?.selectionSet?.selections
                     ?: throw IllegalArgumentException("Cannot find referenced fragment: ${selection.name}")
             }

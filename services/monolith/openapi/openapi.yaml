@@ -303,8 +303,8 @@ components:
         '@type':
           description: The type of the assertion.
           enum:
-          - http://kvasir.discover.ilabt.imec.be/vocab#AssertEmptyResult
-          - http://kvasir.discover.ilabt.imec.be/vocab#AssertNonEmptyResult
+          - https://kvasir.discover.ilabt.imec.be/vocab#AssertEmptyResult
+          - https://kvasir.discover.ilabt.imec.be/vocab#AssertNonEmptyResult
           type: string
           example: kss:AssertEmptyResult
         kss:query:
@@ -418,10 +418,8 @@ components:
       type: object
       properties:
         data:
-          type: array
-          items:
-            type: object
-            additionalProperties: {}
+          type: object
+          additionalProperties: {}
         errors:
           type: array
           items:

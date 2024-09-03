@@ -36,7 +36,7 @@ class ChangeProcessor(
                 parent.query(q)
                     .onFailure().recoverWithItem { err ->
                         QueryResult(
-                            data = emptyList(),
+                            data = emptyMap(),
                             errors = listOf(mapOf("message" to (err.message ?: "")))
                         )
                     }
@@ -76,7 +76,7 @@ class ChangeProcessor(
 
     fun bindWhere(): Uni<QueryResult> {
         return if (request.where == null) {
-            Uni.createFrom().item(QueryResult(data = emptyList()))
+            Uni.createFrom().item(QueryResult(data = emptyMap()))
         } else {
             val q = QueryRequest(
                 podId = request.podId,
@@ -86,7 +86,7 @@ class ChangeProcessor(
             parent.query(q)
                 .onFailure().recoverWithItem { err ->
                     QueryResult(
-                        data = emptyList(),
+                        data = emptyMap(),
                         errors = listOf(mapOf("message" to (err.message ?: "")))
                     )
                 }
@@ -114,7 +114,7 @@ class ChangeProcessor(
         }
     }
 
-    private fun transformTemplate(template: String, bindings: List<Map<String, Any>>): List<Map<String, Any>> {
+    private fun transformTemplate(template: String, bindings: Map<String, Any>): List<Map<String, Any>> {
         return when (val transformedData = jsonata(template).evaluate(bindings)) {
             is List<*> -> transformedData.map { it as Map<String, Any> }
             is Map<*, *> -> listOf(transformedData as Map<String, Any>)

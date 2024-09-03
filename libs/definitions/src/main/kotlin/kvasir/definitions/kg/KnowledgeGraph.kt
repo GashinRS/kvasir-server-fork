@@ -20,6 +20,14 @@ interface KnowledgeGraph {
 
 }
 
+interface NamespacePrefixRegistry {
+
+    fun getAll(): Map<String, String>
+
+    fun get(prefix: String): String?
+
+}
+
 interface SliceStore {
 
     fun persist(segment: Slice): Uni<Void>
@@ -54,7 +62,7 @@ data class QueryRequest(
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class QueryResult(
-    val data: List<Map<String, Any>>,
+    val data: Map<String, Any>,
     val errors: List<Map<String, Any>>? = null
 ) {
 

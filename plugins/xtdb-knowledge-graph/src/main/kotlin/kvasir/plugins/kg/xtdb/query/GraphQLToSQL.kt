@@ -10,11 +10,11 @@ import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.xtdb.dbNameForPod
 
 // TODO: rework/refactor. Split state and logic into smaller class instances (integrate with QueryScope concept)
-class GraphQLToSQL(private val request: QueryRequest) {
+class GraphQLToSQL(val request: QueryRequest) {
 
-    private val targetGraphsClause =
+    val targetGraphsClause =
         request.targetGraphs.takeIf { it.isNotEmpty() }?.joinToString(",", prefix = "g IN (", postfix = ")") { "'$it'" }
-    private val database = dbNameForPod(request.podId)
+    val database = dbNameForPod(request.podId)
 
     // This mapping is required because Xtdb modifies the field names in the query result
     // So to prevent errors and undertermined behavior, we need to keep track of the original field names
@@ -28,7 +28,7 @@ class GraphQLToSQL(private val request: QueryRequest) {
 
         val fieldJoinClauses = mutableListOf<String>()
         val nestedNonNullFields = mutableListOf<NestedNonNullFieldCheck>()
-        val introspection = GraphQLIntrospection(request)
+        val introspection = GraphQLIntrospection(this)
 
         return rootNode.selectionSet.selections.filterIsInstance<Field>().mapIndexed { index, selection ->
             when (selection.name) {
@@ -294,12 +294,12 @@ class GraphQLToSQL(private val request: QueryRequest) {
                 "o = ${toSQLValue(it.value)}"
             }
             "p = '$fqArgName' AND $objectFilter"
-        }.plus(getNodeFilter(selection))
-            .joinToString(" AND ")
+        }.plus(getNodeFilter(selection)).takeIf { it.isNotEmpty() }
+            ?.joinToString(" AND ")
 
         return listOfNotNull(
             idCondition, conditions
-        ).joinToString(" AND ", "$targetColumn IN (SELECT s FROM $database WHERE ", ")")
+        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "$targetColumn IN (SELECT s FROM $database WHERE ", ")")
     }
 
     private fun getNodeFilter(field: Field): List<String> {

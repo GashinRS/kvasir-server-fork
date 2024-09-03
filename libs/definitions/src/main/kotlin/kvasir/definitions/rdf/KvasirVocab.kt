@@ -2,7 +2,7 @@ package kvasir.definitions.rdf
 
 object KvasirVocab {
 
-    const val baseUri = "http://kvasir.discover.ilabt.imec.be/vocab#"
+    const val baseUri = "https://kvasir.discover.ilabt.imec.be/vocab#"
 
     const val ChangeRequest = "${baseUri}ChangeRequest"
     const val QueryRequest = "${baseUri}QueryRequest"
