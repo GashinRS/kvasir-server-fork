@@ -1,8 +1,6 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.github.jsonldjava.core.JsonLdOptions
-import com.github.jsonldjava.core.JsonLdProcessor
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
@@ -17,6 +15,8 @@ import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.XSDVocab
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.media.Schema
@@ -92,22 +92,73 @@ class QueryApi(
         context: Map<String, Any>,
         fieldKeyProjection: Set<String>
     ): List<Map<String, Any?>> {
+        val unionTypes = mutableMapOf<String, Map<String, Any?>>()
         val processedTypes = types.map { type ->
             val fields = (type["fields"] as List<Map<String, Any>>)
-            val newFields = fields.map { field ->
+            val newFields = listOf(
+                mapOf(
+                    "name" to "id",
+                    "description" to "Resource identifier",
+                    "args" to emptyList<Map<String, Any>>(),
+                    "isDeprecated" to false,
+                    "type" to mapOf(
+                        "kind" to "SCALAR",
+                        "name" to "ID",
+                        "ofType" to null
+                    ),
+                    "deprecationReason" to null
+                )
+            ).plus(fields.map { field ->
                 val name = field["name"] as String
-                val (prefix, rest) = JsonLdProcessor.compact(mapOf(name to name), context, JsonLdOptions())
-                    .filter { it.key != "@context" }.keys.first().split(":")
-                field + mapOf("name" to "${prefix}_$rest", "description" to name)
-            }
+                val fieldTypes = field["type"]?.let { if (it is List<*>) it as List<String> else listOf(it as String) }
+                    ?: emptyList()
+                // Create GraphQL union type if necessary
+                val typeRef = if (fieldTypes.size > 1) {
+                    val unionName = fieldTypes.map { JsonLdHelper.compactUri(it, context, "_") }.sorted()
+                        .joinToString("And", "UnionOf")
+                    unionTypes[unionName] = mapOf(
+                        "name" to unionName,
+                        "kind" to "UNION",
+                        "description" to "Union type of ${fieldTypes.joinToString(", ")}",
+                        "interfaces" to emptyList<Map<String, Any>>(),
+                        "inputFields" to null,
+                        "enumValues" to null,
+                        "possibleTypes" to fieldTypes.map {
+                            val shortenedType = JsonLdHelper.compactUri(it, context, "_")
+                            mapOf(
+                                "kind" to if (it.startsWith(XSDVocab.baseUri)) "SCALAR" else "OBJECT",
+                                "name" to shortenedType,
+                                "ofType" to null
+                            )
+                        }
+                    )
+                    mapOf("kind" to "UNION", "name" to unionName, "ofType" to null)
+                } else {
+                    val typeName = fieldTypes[0]
+                    val shortenedType = JsonLdHelper.compactUri(typeName, context, "_")
+                    mapOf(
+                        "kind" to if (typeName.startsWith(XSDVocab.baseUri)) "SCALAR" else "OBJECT",
+                        "name" to shortenedType,
+                        "ofType" to null
+                    )
+                }
+
+                field + mapOf(
+                    "name" to JsonLdHelper.compactUri(name, context, "_"),
+                    "description" to name,
+                    "type" to typeRef
+                )
+            })
             val name = type["name"] as String
-            val (prefix, rest) = JsonLdProcessor.compact(mapOf(name to name), context, JsonLdOptions())
-                .filter { it.key != "@context" }.keys.first().split(":")
-            type + mapOf(
-                "fields" to newFields,
-                "name" to "${prefix}_$rest",
-                "description" to name
-            )
+            if (name != "ID") {
+                type + mapOf(
+                    "fields" to newFields,
+                    "name" to JsonLdHelper.compactUri(name, context, "_"),
+                    "description" to name
+                )
+            } else {
+                type
+            }
         }
         // Add Query type
         val queryType = mapOf(
@@ -134,7 +185,7 @@ class QueryApi(
 
             }
         )
-        return processedTypes + queryType
+        return processedTypes + queryType + unionTypes.values
     }
 
 }

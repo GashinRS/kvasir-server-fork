@@ -130,17 +130,16 @@ class ChangeProcessor(
                 quad.subject.value,
                 quad.predicate.value,
                 if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
-                mapOf(
-                    "type" to when {
+                listOf(
+                    when {
                         quad.`object`.isIRI -> "IRI"
                         quad.`object`.isBlankNode -> "BlankNode"
                         quad.`object`.isLiteral -> "Literal"
                         else -> "Unknown"
                     },
-                    "datatype" to quad.`object`.datatype?.toString(),
-                    "language" to quad.`object`.language?.toString()
-                ).entries.filter { it.value != null }
-                    .joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "$k:'$v'" },
+                    quad.`object`.datatype?.toString() ?: "n/a",
+                    quad.`object`.language?.toString() ?: "n/a"
+                ),
                 request.graph
             )
         }

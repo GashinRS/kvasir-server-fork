@@ -128,11 +128,11 @@ class GraphQLIntrospection(private val parent: GraphQLToSQL) {
             ?.joinToString(
                 ", ",
                 "NEST_MANY(SELECT DISTINCT ",
-                " FROM ${parent.database} WHERE NOT p = '${RDFVocab.type}' AND s IN (SELECT s FROM ${parent.database} WHERE p = '${RDFVocab.type}' AND o = t.o)) AS fields"
+                " FROM ${parent.database} f WHERE NOT f.p = '${RDFVocab.type}' AND f.s IN (SELECT s FROM ${parent.database} WHERE p = '${RDFVocab.type}' AND o = t.o)) AS fields"
             ) { fieldsField ->
                 when (fieldsField.name) {
-                    FIELD_NAME_FIELD -> "p AS name"
-                    FIELD_TYPE_FIELD -> "{ kind: 'SCALAR', name: 'xs_string', ofType: null } AS type"
+                    FIELD_NAME_FIELD -> "f.p AS name"
+                    FIELD_TYPE_FIELD -> "CASE WHEN f.t[1] = 'Literal' THEN t[2] ELSE (SELECT DISTINCT ARRAY_AGG(o) FROM kvasir_05a9d0ff1d81848c WHERE p = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type' AND s IN (SELECT o FROM kvasir_05a9d0ff1d81848c WHERE p = f.p) GROUP BY p) END AS type"
                     FIELD_DESCRIPTION_FIELD -> "NULL AS description"
                     FIELD_ARGS_FIELD -> "[] AS args"
                     // Unused fields

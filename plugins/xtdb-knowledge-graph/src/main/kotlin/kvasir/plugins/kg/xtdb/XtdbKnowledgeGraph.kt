@@ -141,6 +141,7 @@ private fun postProcessIntrospectionResults(
         if (schema.containsKey("types")) {
             val types = (schema["types"] as List<Map<String, Any>>)
             val scalars = listOf(
+                SCALAR_TYPE_TEMPLATE.plus("name" to "ID"),
                 SCALAR_TYPE_TEMPLATE.plus("name" to "http://www.w3.org/2001/XMLSchema#string"),
                 SCALAR_TYPE_TEMPLATE.plus("name" to "http://www.w3.org/2001/XMLSchema#integer"),
                 SCALAR_TYPE_TEMPLATE.plus("name" to "http://www.w3.org/2001/XMLSchema#float"),
