@@ -1,6 +1,5 @@
 package kvasir.services.api.storage
 
-import com.google.common.hash.Hashing
 import io.minio.MakeBucketArgs
 import io.minio.MinioClient
 import io.quarkus.test.junit.QuarkusTest
@@ -26,7 +25,6 @@ class StorageApiTest {
         given()
             .body(content)
             .contentType(ContentType.TEXT)
-            .header(HEADER_X_AMZ_CONTENT_SHA256, Hashing.sha256().hashString(content, Charsets.UTF_8).toString())
             .`when`().put("/test/s3/test.txt")
             .then().statusCode(200)
 

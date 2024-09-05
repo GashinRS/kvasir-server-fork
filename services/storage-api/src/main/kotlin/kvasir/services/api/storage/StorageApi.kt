@@ -1,16 +1,14 @@
 package kvasir.services.api.storage
 
+import com.google.common.hash.Hashing
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.vertx.UniHelper
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.Future
 import io.vertx.core.Vertx
-import io.vertx.core.http.HttpMethod
+import io.vertx.core.buffer.Buffer
 import io.vertx.ext.web.Router
-import io.vertx.httpproxy.HttpProxy
-import io.vertx.httpproxy.ProxyContext
-import io.vertx.httpproxy.ProxyInterceptor
-import io.vertx.httpproxy.ProxyResponse
+import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import kvasir.definitions.config.StaticBootstrapConfig
@@ -23,6 +21,7 @@ import uk.co.lucasweb.aws.v4.signer.credentials.AwsCredentials
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.stream.Collector
 
 internal const val HEADER_X_AMZ_CONTENT_SHA256 = "x-amz-content-sha256"
 internal const val HEADER_X_AMZ_DATE = "x-amz-date"
@@ -76,28 +75,33 @@ class S3Interceptor(
         private val ISO_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
         private val EMPTY_PAYLOAD_HASH = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
+        private val bufferCollector = Collector.of(Buffer::buffer, Buffer::appendBuffer, Buffer::appendBuffer)
+
     }
 
     override fun handleProxyRequest(context: ProxyContext): Future<ProxyResponse> {
-        val podId = context.request().proxiedRequest().getParam("podId")
-        val target = replacePath(context.request().uri, podId)
-        context.request().setURI(target)
-        val isoDateTime = getIsoDateTime(context)
-        val payloadHash = getPayloadHash(context)
-        val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), target)
-        val sig = Signer.builder()
-            .awsCredentials(AwsCredentials(s3AccessKey, s3SecretKey))
-            .header("host", "$s3Host:$s3Port")
-            .header("x-amz-date", isoDateTime)
-            .header("x-amz-content-sha256", payloadHash)
-            .region("us-east-1") // TODO: Make configurable
-            .buildS3(signUri, payloadHash)
-            .signature
-        context.request().putHeader("Authorization", sig)
-        context.request().putHeader("x-amz-date", isoDateTime)
-        context.request().putHeader("x-amz-content-sha256", payloadHash)
-        context.request().putHeader("Host", "$s3Host:$s3Port")
-        return context.sendRequest()
+        return context.request().proxiedRequest().resume().body().compose { buffer ->
+            context.request().body = Body.body(buffer)
+            val podId = context.request().proxiedRequest().getParam("podId")
+            val target = replacePath(context.request().uri, podId)
+            context.request().setURI(target)
+            val isoDateTime = getIsoDateTime(context)
+            val payloadHash = getPayloadHash(context, buffer)
+            val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), target)
+            val sig = Signer.builder()
+                .awsCredentials(AwsCredentials(s3AccessKey, s3SecretKey))
+                .header("host", "$s3Host:$s3Port")
+                .header("x-amz-date", isoDateTime)
+                .header("x-amz-content-sha256", payloadHash)
+                .region("us-east-1") // TODO: Make configurable
+                .buildS3(signUri, payloadHash)
+                .signature
+            context.request().putHeader("Authorization", sig)
+            context.request().putHeader("x-amz-date", isoDateTime)
+            context.request().putHeader("x-amz-content-sha256", payloadHash)
+            context.request().putHeader("Host", "$s3Host:$s3Port")
+            context.sendRequest()
+        }
     }
 
     override fun handleProxyResponse(context: ProxyContext): Future<Void> {
@@ -128,16 +132,9 @@ class S3Interceptor(
             ?: ISO_DATE_FORMATTER.format(ZonedDateTime.now(ZoneOffset.UTC))
     }
 
-    private fun getPayloadHash(context: ProxyContext): String {
+    private fun getPayloadHash(context: ProxyContext, body: Buffer): String {
         return context.request().headers().get(HEADER_X_AMZ_CONTENT_SHA256)
-            ?: if (context.request().method.name() in setOf(
-                    HttpMethod.HEAD.name(),
-                    HttpMethod.DELETE.name(),
-                    HttpMethod.GET.name()
-                )
-            ) EMPTY_PAYLOAD_HASH else throw IllegalArgumentException(
-                "Missing required header: $HEADER_X_AMZ_CONTENT_SHA256"
-            )
+            ?: Hashing.sha256().hashBytes(body.bytes).toString()
     }
 
     // TODO: take into account potential API prefixes

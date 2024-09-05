@@ -3,6 +3,7 @@ package kvasir.services.api.storage.openapi
 import io.quarkus.smallrye.openapi.OpenApiFilter
 import io.smallrye.openapi.api.models.OperationImpl
 import io.smallrye.openapi.api.models.PathItemImpl
+import io.smallrye.openapi.api.models.PathsImpl
 import io.smallrye.openapi.api.models.media.ContentImpl
 import io.smallrye.openapi.api.models.media.MediaTypeImpl
 import io.smallrye.openapi.api.models.media.SchemaImpl
@@ -35,6 +36,9 @@ class OpenApiProvider : OASFilter {
                 .required(true)
                 .schema(SchemaImpl().type(Schema.SchemaType.STRING))
         )
+        if (openAPI.paths == null) {
+            openAPI.paths = PathsImpl()
+        }
         openAPI.paths.addPathItem("/{podId}/s3/{objectKey}", PathItemImpl().apply {
             this.setOperation(PathItem.HttpMethod.GET, OperationImpl().apply {
                 this.summary = "Download a stored object."
