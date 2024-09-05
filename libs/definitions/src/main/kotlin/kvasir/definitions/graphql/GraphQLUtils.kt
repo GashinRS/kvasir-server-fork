@@ -79,10 +79,22 @@ class ContextualizingQueryVisitor(providedContext: Map<String, Any>) : NodeVisit
                 resolveNameAsIri(node.name)?.let { iri ->
                     it.additionalData("iri", iri)
                 }
-                val argVal = node.value
-                if (argVal is StringValue) {
-                    resolveNameAsIri(argVal.value, RDF_PREFIX_SEPARATOR)?.let { iri ->
+                when (val argVal = node.value) {
+                    is StringValue -> resolveNameAsIri(argVal.value, RDF_PREFIX_SEPARATOR)?.let { iri ->
                         it.value(StringValue.of(iri))
+                    }
+
+                    is ArrayValue -> {
+                        val iriValues = argVal.values.map { arrVal ->
+                            if (arrVal is StringValue) {
+                                resolveNameAsIri(arrVal.value, RDF_PREFIX_SEPARATOR)?.let { iri ->
+                                    StringValue.of(iri)
+                                }?: arrVal
+                            } else {
+                                arrVal
+                            }
+                        }
+                        it.value(ArrayValue.newArrayValue().values(iriValues).build())
                     }
                 }
             }

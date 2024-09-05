@@ -8,7 +8,7 @@ The following example uploads a text-file to the S3 API of the pod of Alice:
 
 **PUT** `http://localhost:8080/alice/s3/test.txt`
 
-Request headers must include a sha256 hash of the file content for verification:
+Request headers may include a sha256 hash of the file content for verification:
 
 ```
 X-Amz-Content-Sha256: beaead3198f7da1e70d03ab969765e0821b24fc913697e929e726aeaebf0eba3

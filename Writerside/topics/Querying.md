@@ -2,13 +2,14 @@
 
 <show-structure depth="2"/>
 
-## Basic usage
-
 The standard query mechanism for the Pod KG uses schemaless GraphQL (inspired by Ruben
 Taelman's [GraphQL to SPARQL library](https://github.com/rubensworks/graphql-to-sparql.js) and
 the [Stardog GraphQL API](https://docs.stardog.com/query-stardog/graphql)).
 
-E.g. the following query retrieves all resources that have a name and an email address:
+The query endpoint is available at `/{podId}/kg/query` and accepts POST requests with a JSON body, which should conform to the [GraphQL specification](https://graphql.org/learn/serving-over-http/#post-request). The request body may contain a `@context` object, to provide aliases for the predicate IRIs used in the query. If no content is explicitly provided, the system will fall back to the default mapping that is configured for the pod (TODO: see Pod config).
+
+## Basic usage
+The top-level field in the query represents the type of resource you want to retrieve. E.g. The following query retrieves all resources of the type `http://example.org/Person` that have a name and an email address:
 
 **POST** `http://localhost:8080/alice/kg/query`
 
@@ -17,10 +18,11 @@ Request body:
 ```json
 {
   "@context": {
-    "name": "http://example.org/name",
-    "email": "http://example.org/email"
+    "Person": "http://example.org/Person",
+    "name": "http://schema.org/givenName",
+    "email": "http://schema.org/email"
   },
-  "query": "{ name email }"
+  "query": "{ Person { name email } }"
 }
 ```
 
@@ -28,32 +30,41 @@ Response body:
 
 ```json
 {
-  "data": [
-    {
-      "name": [
-        "Alice"
-      ],
-      "email": [
-        "alice@example.org"
-      ]
-    },
-    {
-      "name": [
-        "John"
-      ],
-      "email": [
-        "jdoe@example.org"
-      ]
-    },
-    {
-      "name": [
-        "Bob"
-      ],
-      "email": [
-        "bob@example.org"
-      ]
-    }
-  ]
+  "data": {
+    "Person": [
+      {
+        "email": [
+          "alice@example.org"
+        ],
+        "name": [
+          "Alice"
+        ]
+      },
+      {
+        "email": [
+          "bob@example.org"
+        ],
+        "name": [
+          "Bob"
+        ]
+      }
+    ]
+  }
+}
+```
+
+Use the RDF parent class `rdfs:Resource` to retrieve all resources, regardless of their type. This is useful if you don't know the type of the resources, but you know which specific properties you are looking for. For example, the following query retrieves all resources that have a name and an email address:
+
+**POST** `http://localhost:8080/alice/kg/query`
+
+```json
+{
+  "@context": {
+    "Resource": "http://www.w3.org/2000/01/rdf-schema#Resource",
+    "name": "http://schema.org/givenName",
+    "email": "http://schema.org/email"
+  },
+  "query": "{ Resource { name email } }"
 }
 ```
 
@@ -64,11 +75,12 @@ Nested queries are also supported:
 ```json
 {
   "@context": {
-    "name": "http://example.org/name",
-    "email": "http://example.org/email",
-    "bestFriend": "http://example.org/bestFriend"
+    "Person": "http://example.org/Person",
+    "name": "http://schema.org/givenName",
+    "email": "http://schema.org/email",
+    "knows": "http://example.org/knows"
   },
-  "query": "{ name email bestFriend { name email } }"
+  "query": "{ Person { name email knows { name email } } }"
 }
 ```
 
@@ -76,34 +88,34 @@ Returns:
 
 ```json
 {
-  "data": [
-    {
-      "name": [
-        "Alice"
-      ],
-      "email": [
-        "alice@example.org"
-      ],
-      "bestFriend": [
-        {
-          "name": [
-            "Bob"
-          ],
-          "email": [
-            "bob@example.org"
-          ]
-        }
-      ]
-    }
-  ]
+  "data": {
+    "Person": [
+      {
+        "email": [
+          "alice@example.org"
+        ],
+        "name": [
+          "Alice"
+        ],
+        "knows": [
+          {
+            "email": [
+              "bob@example.org"
+            ],
+            "name": [
+              "Bob"
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
 ## Additional features
 
-For more advanced querying, the current prototype already supports some of the features of the GraphQL to SPARQL
-library, such as filtering by value, aliases, the `__typename` field for introspection, fragments and some
-directives: `@optional`, `@single` (partially).
+For more advanced querying, the current prototype already supports some useful features:
 
 ### Namespace prefixes
 
@@ -116,9 +128,10 @@ rewritten as:
 ```json
 {
   "@context": {
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
-  "query": "{ ex_name ex_email ex_bestFriend { ex_name ex_email } }"
+  "query": "{ ex_Person { so_givenName so_email ex_knows { so_givenName so_email } } }"
 }
 ```
 
@@ -132,9 +145,10 @@ value, use the `@single` directive:
 ```json
 {
   "@context": {
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
-  "query": "{ ex_name @single ex_email @single ex_bestFriend @single} "
+  "query": "{ ex_Person { so_givenName @single so_email @single ex_knows @single } }"
 }
 ```
 
@@ -142,100 +156,69 @@ Returns a slightly more compact response:
 
 ```json
 {
-  "data": [
-    {
-      "ex_name": "Alice",
-      "ex_email": "alice@example.org",
-      "ex_bestFriend": "http://example.org/bob"
-    }
-  ]
+  "data": {
+    "ex_Person": [
+      {
+        "ex_knows": "http://example.org/bob",
+        "so_email": "alice@example.org",
+        "so_givenName": "Alice"
+      }
+    ]
+  }
 }
 ```
 
-### Fragments (querying by type)
-
-For example, the following query retrieves all resources that are of type `ex:Person`:
+### Arguments
+You can use GraphQL arguments to impose additional conditions on resources or linked resources. For example, the following query retrieves the Person resource with a specific id:
 
 **POST** `http://localhost:8080/alice/kg/query`
 
 ```json
 {
   "@context": {
-    "name": "http://example.org/name",
-    "email": "http://example.org/email",
-    "bestFriend": "http://example.org/bestFriend",
-    "Person": "http://example.org/Person"
+    "so": "http://schema.org/",
+    "ex": "http://example.org/"
   },
-  "query": "{ ... on Person { id __typename name @single email @single }}"
+  "query": "{ ex_Person(id: \"ex:bob\") { id so_givenName so_email } }"
 }
 ```
 
-Returns:
+This returns:
 
 ```json
 {
-  "data": [
-    {
-      "id": "http://example.org/bob",
-      "__typename": [
-        "http://example.org/Person"
-      ],
-      "name": "Bob",
-      "email": "bob@example.org"
-    },
-    {
-      "id": "http://example.org/john",
-      "__typename": [
-        "http://example.org/Person"
-      ],
-      "name": "John",
-      "email": "jdoe@example.org"
-    },
-    {
-      "id": "http://example.org/alice",
-      "__typename": [
-        "http://example.org/Person"
-      ],
-      "name": "Alice",
-      "email": "alice@example.org"
-    }
-  ]
+  "data": {
+    "ex_Person": [
+      {
+        "so_email": [
+          "bob@example.org"
+        ],
+        "so_givenName": [
+          "Bob"
+        ],
+        "id": "http://example.org/bob"
+      }
+    ]
+  }
 }
 ```
 
-Note the use of the built-in fields `id` and `__typename` for introspection. Additionally, you can use the system
-field `__fieldnames` to retrieve all possible fields (predicate IRIs) for a selection.
-
-For example:
+You can use an array to match multiple values:
 
 **POST** `http://localhost:8080/alice/kg/query`
 
 ```json
 {
   "@context": {
-    "Person": "http://example.org/Person"
+    "so": "http://schema.org/",
+    "ex": "http://example.org/"
   },
-  "query": "{ ... on Person { __fieldnames }}"
+  "query": "{ ex_Person(id: [\"ex:bob\", \"ex:alice\"]) { id so_givenName so_email } }"
 }
 ```
 
-Returns:
-
-```json
-{
-  "data": [
-    {
-      "__fieldnames": [
-        "http://example.org/bestFriend",
-        "http://example.org/email",
-        "http://example.org/name"
-      ]
-    }
-  ]
-}
-```
-
-### Filtering by value
+### Filters
+You can use filter directives to further restrict the results. The filter expressions are written in a simple expression language ([RSQL](https://github.com/nstdio/rsql-parser)) that allows you to compare values and combine checks using logical operators.
 
 For example, the following query retrieves the person with the name 'Bob':
 
@@ -244,10 +227,10 @@ For example, the following query retrieves the person with the name 'Bob':
 ```json
 {
   "@context": {
-    "name": "http://example.org/name",
-    "Person": "http://example.org/Person"
+    "ex": "http://example.org/",
+    "schema": "http://schema.org/"
   },
-  "query": "{ ... on Person { id name(_: \"Bob\") @single }}"
+  "query": "{ ex_Person { schema_givenName @filter(if: \"schema_givenName==Bob\") } }"
 }
 ```
 
@@ -255,14 +238,29 @@ Returns:
 
 ```json
 {
-  "data": [
-    {
-      "id": "http://example.org/bob",
-      "name": "Bob"
-    }
-  ]
+  "data": {
+    "ex_Person": [
+      {
+        "schema_givenName": [
+          "Bob"
+        ]
+      }
+    ]
+  }
 }
 ```
+
+> **Tip**: you can refer to the annotated field using `it` in the filter directive. The filter expression in the previous example can thus be abbreviated to `@filter(if: "it==Bob")`.
+
+## Introspection
+The Query endpoint implements the standard [GraphQL introspection mechanism](https://graphql.org/learn/introspection/). This allows clients to discover the schema of the Knowledge Graph, including the types and fields that are available for querying.
+
+This means that you can run [GraphiQL](https://github.com/graphql/graphiql/) or other GraphQL tools against the Query endpoint to explore the schema and run queries interactively, with support for auto-completion, etc.
+
+![](graphiql.png)
+
+> Note that GraphiQL will not work out-of-the-box once the endpoints are protected by authentication. Our goal is to provide a GraphiQL build that includes an extension that allows you to authenticate in a Solid-compatible way.
+> {style="note"}
 
 ## Outputting JSON-LD
 
@@ -279,38 +277,37 @@ For example:
 ```json
 {
   "@context": {
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
-  "query": "{ ex_name ex_email ex_bestFriend { ex_name ex_email } }"
+  "query": "{ ex_Person { so_givenName so_email ex_knows { so_givenName so_email } } }"
 }
 ```
 
 Returns:
 
 ```json
-    {
+{
   "@context": {
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
-  "@graph": [
-    {
-      "@id": "ex:alice",
-      "ex:name": "Alice",
-      "ex:email": "alice@example.org",
-      "bestFriend": {
-        "@id": "ex:bob",
-        "ex:name": "Bob",
-        "ex:email": "bob@example.org"
-      }
-    }
-  ]
+  "ex:Person": {
+    "ex:knows": {
+      "so:email": "bob@example.org",
+      "so:givenName": "Bob"
+    },
+    "so:email": "alice@example.org",
+    "so:givenName": "Alice"
+  }
 }
 ```
 
-> Note that the `@graph` key is used to hold the results, as the response is a JSON-LD document.
-
 > Beware that the field name used in the query, or possible aliases, no longer have an effect on the output, as this is
 > now purely based on the predicate IRIs and the context supplied in the request.
+{style="warning"}
+
+> This feature cannot be used with introspection queries, as the introspection mechanism does not return Linked-Data. Our aim is to support this with a feature update, while still adhering to the GraphQL specification.
 {style="warning"}
 
 <seealso>
