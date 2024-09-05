@@ -5,6 +5,7 @@ import io.minio.MakeBucketArgs
 import io.minio.MinioClient
 import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.event.Observes
+import kvasir.definitions.config.StaticBootstrapConfig
 
 class Initializer {
 

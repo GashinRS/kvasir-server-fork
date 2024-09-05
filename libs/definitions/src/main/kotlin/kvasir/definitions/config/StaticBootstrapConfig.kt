@@ -1,4 +1,4 @@
-package kvasir.services.monolith.bootstrap
+package kvasir.definitions.config
 
 import io.smallrye.config.ConfigMapping
 
@@ -11,4 +11,6 @@ interface StaticBootstrapConfig {
 
 interface StaticPodConfig {
     fun name(): String
+
+    fun defaultPrefixes(): Map<String, String>
 }

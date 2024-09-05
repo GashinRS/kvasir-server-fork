@@ -303,7 +303,7 @@ class GraphQLToSQL(val request: QueryRequest) {
     }
 
     private fun getNodeFilter(field: Field): List<String> {
-        val subFields = field.selectionSet?.selections?.filterIsInstance<Field>()
+        val subFields = field.selectionSet?.selections?.filterIsInstance<Field>()?.filterNot { it.name == "id" }
         val predicateMapping = (subFields?.associate { it.name to it.getContextIRI() } ?: emptyMap())
         val filters = subFields?.mapNotNull { subField ->
             subField.directives.firstOrNull { it.name == "filter" }?.let { directive ->

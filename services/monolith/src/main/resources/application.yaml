@@ -1,7 +1,4 @@
 kvasir:
-  bootstrap:
-    pods:
-      - name: test
   services:
     storage:
       s3:
@@ -23,3 +20,18 @@ quarkus:
     http:
       cors:
         origins: /.*/
+  kvasir:
+    bootstrap:
+      pods:
+        - name: alice
+          default-prefixes:
+            rdfs: http://www.w3.org/2000/01/rdf-schema#
+            xsd: http://www.w3.org/2001/XMLSchema#
+            schema: http://schema.org/
+            ex: http://example.org/
+        - name: bob
+          default-prefixes:
+            rdfs: http://www.w3.org/2000/01/rdf-schema#
+            xsd: http://www.w3.org/2001/XMLSchema#
+            schema: http://schema.org/
+            ex: http://example.org/

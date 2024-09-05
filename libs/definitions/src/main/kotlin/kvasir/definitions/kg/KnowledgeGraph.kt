@@ -6,7 +6,6 @@ import com.github.jsonldjava.core.JsonLdProcessor
 import graphql.language.Document
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
-import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.changeops.Assertion
 import java.util.*
 
@@ -17,14 +16,6 @@ interface KnowledgeGraph {
     fun query(request: QueryRequest): Uni<QueryResult>
 
     fun history(request: HistoryRequest): Uni<HistoryResult>
-
-}
-
-interface NamespacePrefixRegistry {
-
-    fun getAll(): Map<String, String>
-
-    fun get(prefix: String): String?
 
 }
 

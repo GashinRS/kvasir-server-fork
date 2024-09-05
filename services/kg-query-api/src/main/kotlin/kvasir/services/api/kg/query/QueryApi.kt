@@ -2,14 +2,15 @@ package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
+import jakarta.ws.rs.NotFoundException
 import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.Produces
 import jakarta.ws.rs.core.MediaType
+import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.KnowledgeGraph
-import kvasir.definitions.kg.NamespacePrefixRegistry
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.openapi.ApiDocConstants
@@ -27,7 +28,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 @Path("{podId}/kg/query")
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
-    private val namespacePrefixRegistry: NamespacePrefixRegistry
+    private val podsConfig: StaticBootstrapConfig
 ) {
 
     @POST
@@ -37,6 +38,7 @@ class QueryApi(
         description = "Query the knowledge graph of the specified pod using GraphQL."
     )
     fun query(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<QueryResult> {
+        throw404IfPodNotFound(podsConfig, podId)
         val req = parseInput(podId, input)
         return knowledgeGraph.query(req).map { resp ->
             if (resp.data.containsKey("__schema")) {
@@ -46,7 +48,7 @@ class QueryApi(
                         schema["types"]?.let { types ->
                             "types" to prefixTypeNames(
                                 types as List<Map<String, Any>>,
-                                input.providedContext ?: namespacePrefixRegistry.getAll(),
+                                input.providedContext ?: getDefaultContextFor(podId),
                                 types.flatMap { (it["fields"] as List<Map<String, Any>>?) ?: emptyList() }
                                     .flatMap { it.keys }.toSet()
                             )
@@ -67,6 +69,7 @@ class QueryApi(
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
     fun queryJsonLD(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<Map<String, Any>> {
+        throw404IfPodNotFound(podsConfig, podId)
         val req = parseInput(podId, input)
         return knowledgeGraph.query(req).map {
             // TODO: should we fallback to a default Kvasir context here?
@@ -79,7 +82,7 @@ class QueryApi(
             podId,
             GraphQLUtils.parseDocumentWithContext(
                 input.query,
-                input.providedContext ?: namespacePrefixRegistry.getAll()
+                input.providedContext ?: getDefaultContextFor(podId)
             ),
             input.variables,
             input.operationName,
@@ -114,7 +117,7 @@ class QueryApi(
                     ?: emptyList()
                 // Create GraphQL union type if necessary
                 val typeRef = if (fieldTypes.size > 1) {
-                    val unionName = fieldTypes.map { JsonLdHelper.compactUri(it, context, "_") }.sorted()
+                    val unionName = fieldTypes.map { JsonLdHelper.compactUri(it, context, "_") }.distinct().sorted()
                         .joinToString("And", "UnionOf")
                     unionTypes[unionName] = mapOf(
                         "name" to unionName,
@@ -188,6 +191,10 @@ class QueryApi(
         return processedTypes + queryType + unionTypes.values
     }
 
+    private fun getDefaultContextFor(podId: String): Map<String, Any> {
+        val pod = podsConfig.pods().first { it.name() == podId }
+        return pod.defaultPrefixes()
+    }
 }
 
 interface QueryInput {
@@ -235,3 +242,9 @@ data class QueryInputWithContext(
     )
     val providedContext: Map<String, Any>? = null
 ) : QueryInput
+
+internal fun throw404IfPodNotFound(podConfig: StaticBootstrapConfig, podId: String) {
+    if (podConfig.pods().none { it.name() == podId }) {
+        throw NotFoundException("Pod not found: $podId")
+    }
+}

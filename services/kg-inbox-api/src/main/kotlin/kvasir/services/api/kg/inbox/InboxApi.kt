@@ -9,6 +9,7 @@ import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
+import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.changeops.Assertion
 import kvasir.definitions.openapi.ApiDocConstants
@@ -24,7 +25,8 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 @Path("{podId}/kg/inbox")
 class InboxApi(
     @Channel("change_requests_publish")
-    private val changeEmitter: MutinyEmitter<ChangeRequest>
+    private val changeEmitter: MutinyEmitter<ChangeRequest>,
+    private val podConfig: StaticBootstrapConfig
 ) {
 
     @POST
@@ -38,6 +40,9 @@ class InboxApi(
         @PathParam("podId") podId: String,
         input: ChangeRequestInput
     ): Uni<Response> {
+        if(podConfig.pods().none { it.name() == podId }) {
+            return Uni.createFrom().item { Response.status(Response.Status.NOT_FOUND).build() }
+        }
         val changeCommand = input.toChangeRequest(podId)
         println(changeCommand)
         return changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
