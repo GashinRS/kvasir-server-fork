@@ -14,29 +14,30 @@ Request body:
 {
   "@context": {
     "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
   "kss:insert": [
     {
       "@id": "ex:alice",
       "@type": "ex:Person",
-      "ex:bestFriend": {
+      "ex:knows": {
         "@id": "ex:bob"
       },
-      "ex:name": "Alice",
-      "ex:email": "alice@example.org"
+      "so:givenName": "Alice",
+      "so:email": "alice@example.org"
     },
     {
       "@id": "ex:bob",
       "@type": "ex:Person",
-      "ex:name": "Bob",
-      "ex:email": "bob@example.org"
+      "so:givenName": "Bob",
+      "so:email": "bob@example.org"
     },
     {
       "@id": "ex:john",
       "@type": "ex:Person",
-      "ex:name": "John",
-      "ex:email": "jdoe@example.org"
+      "so:givenName": "John",
+      "so:email": "jdoe@example.org"
     }
   ]
 }
@@ -62,12 +63,13 @@ Request body:
 {
   "@context": {
     "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
   "kss:delete": [
     {
       "@id": "ex:john",
-      "ex:email": "jdoe@example.org"
+      "so:email": "jdoe@example.org"
     }
   ]
 }
@@ -86,18 +88,19 @@ Request body:
 {
   "@context": {
     "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
   "kss:assert": [
     {
       "@type": "kss:AssertEmptyResult",
-      "kss:query": "{ id(_:\"ex:alice\") ex_email }"
+      "kss:query": "{ ex_Person(id:\"ex:alice\") { so_email } }"
     }
   ],
   "kss:insert": [
     {
       "@id": "ex:alice",
-      "ex:email": "alice@example.org"
+      "so:email": "alice@example.org"
     }
   ]
 }
@@ -123,11 +126,12 @@ Request body:
 {
   "@context": {
     "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
-  "kss:with": "{ ... on ex_Person { id ex_givenName(_:\"Alice\") } }",
+  "kss:with": "{ ex_Person { id so_givenName @filter(if:\"it==Alice\") } }",
   "kss:insert": [
-    "{ \"@id\": id, \"ex:knows\": { \"@id\": \"ex:jdoe\" } }"
+    "{ \"@id\": ex_Person.id, \"ex:knows\": { \"@id\": \"ex:jdoe\" } }"
   ]
 }
 ```
@@ -138,17 +142,19 @@ and transformation language (inspired by XPath for XML) which allows the user to
 deleted or inserted in a flexible way.
 
 The expression in the example above operates on the result-set of the with-query at the time the change request is
-processed. Conceptually you could think of this being the following JSON array:
+processed. Conceptually you could think of this being the following JSON object:
 
 ```json
-[
-  {
-    "id": "http://example.org/alice",
-    "ex_givenName": [
-      "Alice"
-    ]
-  }
-]
+{
+  "ex_Person": [
+    {
+      "so_givenName": [
+        "Alice"
+      ],
+      "id": "http://example.org/alice"
+    }
+  ]
+}
 ```
 
 You can then write a JSONata expression that extracts the `id` from the first element of the array and uses it in the
@@ -171,9 +177,10 @@ Request body:
 {
   "@context": {
     "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
-  "kss:with": "{ ... on ex_Person { id ex_givenName(_:\"Alice\") ex_familyName ex_bestFriend ex_knows } }",
+  "kss:with": "{ ex_Person { so_givenName @filter(if:\"it==Alice\") } }",
   "kss:delete": [
     "*"
   ]
