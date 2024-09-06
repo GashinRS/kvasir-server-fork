@@ -130,6 +130,7 @@ private fun processOutput(queryMapping: GraphQLToSQL, result: Any): Any {
     }
 }
 
+// TODO: look for a way to split introspection handling from the main query handling (then we also wouldn't need further postprocessing in the Query API).
 private fun postProcessIntrospectionResults(
     result: Map<String, Any>,
     queryMapping: GraphQLToSQL,

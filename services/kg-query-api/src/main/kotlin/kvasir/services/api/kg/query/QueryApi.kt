@@ -90,6 +90,7 @@ class QueryApi(
         )
     }
 
+    // TODO: Prefixing introspection results should not be the responsibility of the Query API
     private fun prefixTypeNames(
         types: List<Map<String, Any>>,
         context: Map<String, Any>,
