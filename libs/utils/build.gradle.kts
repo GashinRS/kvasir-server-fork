@@ -3,5 +3,5 @@ plugins {
 }
 
 dependencies {
-
+    api("com.dashjoin:jsonata:0.9.7")
 }

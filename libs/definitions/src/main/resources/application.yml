@@ -35,3 +35,12 @@ mp:
          "kvasir":
            level: DEBUG
            min-level: DEBUG
+
+"%test":
+  quarkus:
+    log:
+      level: INFO
+      category:
+        "kvasir":
+          level: DEBUG
+          min-level: DEBUG
