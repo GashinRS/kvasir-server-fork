@@ -38,7 +38,7 @@ class XtdbKnowledgeGraph(
                 changeProcessor.bindWhere()
             }
             .chain { bindings ->
-                if (request.delete.contains("*") && request.where == null) {
+                if (request.delete.contains("*") && request.with == null) {
                     // Delete the entire graph
                     deleteGraph(database, request.graph)
                 } else {

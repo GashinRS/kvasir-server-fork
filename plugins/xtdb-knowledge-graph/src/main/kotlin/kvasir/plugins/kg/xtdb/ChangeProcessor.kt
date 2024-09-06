@@ -3,7 +3,6 @@ package kvasir.plugins.kg.xtdb
 import com.dashjoin.jsonata.Jsonata.jsonata
 import com.github.jsonldjava.core.JsonLdProcessor
 import com.github.jsonldjava.core.RDFDataset
-import com.github.jsonldjava.core.RDFDataset.IRI
 import com.google.common.hash.Hashing
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
@@ -76,13 +75,13 @@ class ChangeProcessor(
     }
 
     fun bindWhere(): Uni<QueryResult> {
-        return if (request.where == null) {
+        return if (request.with == null) {
             Uni.createFrom().item(QueryResult(data = emptyMap()))
         } else {
             val q = QueryRequest(
                 podId = request.podId,
                 targetGraphs = setOf(request.graph),
-                graphQL = GraphQLUtils.parseDocumentWithContext(request.where!!, request.context)
+                graphQL = GraphQLUtils.parseDocumentWithContext(request.with!!, request.context)
             )
             parent.query(q)
                 .onFailure().recoverWithItem { err ->

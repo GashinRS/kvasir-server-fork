@@ -37,8 +37,24 @@ data class ChangeRequest(
     val graph: String = "", // Graph identifier
     // The Change Request will only be applied if all assertions resolve to true.
     val assert: List<Assertion> = emptyList(),
-    val where: String? = null,
+    /**
+     * The with-clause value is a GraphQL query expression.
+     * The results of this query can be referenced in the insert and delete operations using JSONata template strings.
+     */
+    val with: String? = null,
+    /**
+     * Insert instructions as a List of:
+     * - A Map<String, Any> with a property "@type" set to "kss:S3Reference" representing a reference to an S3 object
+     * - Any other Map<String, Any> instance, representing actual JSON-LD data to be inserted
+     * - A String representing a JSONata template to be resolved
+     */
     val insert: List<Any> = emptyList(),
+    /**
+     * Insert instructions as a List of:
+     * - A Map<String, Any> with a property "@type" set to "kss:S3Reference" representing a reference to an S3 object
+     * - Any other Map<String, Any> instance, representing actual JSON-LD data to be inserted
+     * - A String representing a JSONata template to be resolved
+     */
     val delete: List<Any> = emptyList()
 )
 
