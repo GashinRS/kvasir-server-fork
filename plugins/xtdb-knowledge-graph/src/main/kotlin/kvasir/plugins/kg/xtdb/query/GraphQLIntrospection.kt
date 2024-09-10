@@ -132,7 +132,7 @@ class GraphQLIntrospection(private val parent: GraphQLToSQL) {
             ) { fieldsField ->
                 when (fieldsField.name) {
                     FIELD_NAME_FIELD -> "f.p AS name"
-                    FIELD_TYPE_FIELD -> "CASE WHEN f.t[1] = 'Literal' THEN t[2] ELSE (SELECT DISTINCT ARRAY_AGG(o) FROM kvasir_05a9d0ff1d81848c WHERE p = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type' AND s IN (SELECT o FROM kvasir_05a9d0ff1d81848c WHERE p = f.p) GROUP BY p) END AS type"
+                    FIELD_TYPE_FIELD -> "CASE WHEN f.t[1] = 'Literal' THEN t[2] ELSE (SELECT DISTINCT ARRAY_AGG(o) FROM ${parent.database} WHERE p = '${RDFVocab.type}' AND s IN (SELECT o FROM ${parent.database} WHERE p = f.p) GROUP BY p) END AS type"
                     FIELD_DESCRIPTION_FIELD -> "NULL AS description"
                     FIELD_ARGS_FIELD -> "[] AS args"
                     // Unused fields

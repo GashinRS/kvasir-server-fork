@@ -29,9 +29,31 @@ quarkus:
             xsd: http://www.w3.org/2001/XMLSchema#
             schema: http://schema.org/
             ex: http://example.org/
+          auto-ingest-rdf: true
         - name: bob
           default-prefixes:
             rdfs: http://www.w3.org/2000/01/rdf-schema#
             xsd: http://www.w3.org/2001/XMLSchema#
             schema: http://schema.org/
             ex: http://example.org/
+          auto-ingest-rdf: false
+        - name: swdemo
+          default-prefixes:
+            voc: https://swapi.co/vocabulary/
+            commons: https://commons.wikimedia.org/wiki/Special:FilePath/
+            dc: http://purl.org/dc/elements/1.1/
+            dct: http://purl.org/dc/terms/
+            owl: http://www.w3.org/2002/07/owl#
+            p: http://www.wikidata.org/prop/
+            pq: http://www.wikidata.org/prop/qualifier/
+            ps: http://www.wikidata.org/prop/statement/
+            rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+            rdfs: http://www.w3.org/2000/01/rdf-schema#
+            wd: http://www.wikidata.org/entity/
+            wds: http://www.wikidata.org/entity/statement/
+            wdt: http://www.wikidata.org/prop/direct/
+            wgs: http://www.w3.org/2003/01/geo/wgs84_pos#
+            wikibase: http://wikiba.se/ontology#
+            xml: http://www.w3.org/XML/1998/namespace
+            xsd: http://www.w3.org/2001/XMLSchema#
+          auto-ingest-rdf: true

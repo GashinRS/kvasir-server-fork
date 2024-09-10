@@ -1,4 +1,4 @@
-package kvasir.plugins.kg.xtdb
+package kvasir.plugins.kg.xtdb.changes
 
 import com.dashjoin.jsonata.Jsonata.jsonata
 import com.github.jsonldjava.core.JsonLdProcessor
@@ -17,6 +17,7 @@ import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.definitions.reactive.skipToLast
+import kvasir.plugins.kg.xtdb.XtdbKnowledgeGraph
 
 class ChangeProcessor(
     private val request: ChangeRequest,
@@ -160,6 +161,7 @@ class ChangeProcessor(
         "kvasir:" + Hashing.farmHashFingerprint64()
             .hashString("${request.graph}${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8)
 
+
     /**
      * Get the value of an RDF Literal as a database compatible primitive (if not supported, the string representation is used).
      */
@@ -172,5 +174,4 @@ class ChangeProcessor(
             else -> null
         } ?: literalNode.value
     }
-
 }

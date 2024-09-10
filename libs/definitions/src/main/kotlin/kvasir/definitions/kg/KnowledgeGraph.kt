@@ -44,19 +44,44 @@ data class ChangeRequest(
     val with: String? = null,
     /**
      * Insert instructions as a List of:
-     * - A Map<String, Any> with a property "@type" set to "kss:S3Reference" representing a reference to an S3 object
-     * - Any other Map<String, Any> instance, representing actual JSON-LD data to be inserted
+     * - Any Map<String, Any> instance, representing actual JSON-LD data to be inserted
      * - A String representing a JSONata template to be resolved
      */
     val insert: List<Any> = emptyList(),
     /**
      * Insert instructions as a List of:
-     * - A Map<String, Any> with a property "@type" set to "kss:S3Reference" representing a reference to an S3 object
-     * - Any other Map<String, Any> instance, representing actual JSON-LD data to be inserted
+     * - Any Map<String, Any> instance, representing actual JSON-LD data to be inserted
      * - A String representing a JSONata template to be resolved
      */
-    val delete: List<Any> = emptyList()
-)
+    val delete: List<Any> = emptyList(),
+    /**
+     * Insert instruction to ingest data from an external source. At the moment, only the internal Pod S3 is supported.
+     * An S3 reference is modeled as a JSON-LD object with a property "@type" set to "kss:S3Reference".
+     *
+     * Cannot be combined with insert or delete.
+     */
+    val insertFromRefs: List<Map<String, Any>> = emptyList(),
+    /**
+     * Delete instruction to ingest data from an external source. At the moment, only the internal Pod S3 is supported.
+     * An S3 reference is modeled as a JSON-LD object with a property "@type" set to "kss:S3Reference".
+     *
+     * Cannot be combined with insert or delete.
+     */
+    val deleteFromRefs: List<Map<String, Any>> = emptyList()
+) {
+
+    init {
+        require(insert.isNotEmpty() || delete.isNotEmpty() || insertFromRefs.isNotEmpty() || deleteFromRefs.isNotEmpty()) {
+            "At least one of insert, delete, insertFromRefs or deleteFromRefs must be provided"
+        }
+        require(insertFromRefs.isEmpty() || (insert.isEmpty() && delete.isEmpty())) {
+            "insertFromRefs cannot be combined with regular insert or delete"
+        }
+        require(deleteFromRefs.isEmpty() || (insert.isEmpty() && delete.isEmpty())) {
+            "deleteFromRefs cannot be combined with regular insert or delete"
+        }
+    }
+}
 
 @GenerateNoArgConstructor
 data class QueryRequest(
