@@ -106,6 +106,8 @@ class S3Interceptor(
 
     override fun handleProxyResponse(context: ProxyContext): Future<Void> {
         val resp = context.response()
+        // Hack to remove access-control-allow-origin header that Minio handler internally puts here
+        resp.headers().remove("access-control-allow-origin")
         val mutationType = determineMutationType(context)
         return context.sendResponse().compose {
             UniHelper.toFuture(
