@@ -2,14 +2,9 @@ package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
-import jakarta.ws.rs.NotFoundException
-import jakarta.ws.rs.POST
-import jakarta.ws.rs.Path
-import jakarta.ws.rs.PathParam
-import jakarta.ws.rs.Produces
+import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.config.StaticBootstrapConfig
-import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
@@ -40,7 +35,7 @@ class QueryApi(
     fun query(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<QueryResult> {
         throw404IfPodNotFound(podsConfig, podId)
         val req = parseInput(podId, input)
-        return knowledgeGraph.query(req).map { resp ->
+        return knowledgeGraph.query(req)/*.map { resp ->
             if (resp.data.containsKey("__schema")) {
                 resp.copy(data = resp.data + mapOf("__schema" to resp.data["__schema"]!!.let { schema ->
                     schema as Map<String, Any>
@@ -58,7 +53,7 @@ class QueryApi(
             } else {
                 resp
             }
-        }
+        }*/
     }
 
     @POST
@@ -79,11 +74,9 @@ class QueryApi(
 
     private fun parseInput(podId: String, input: QueryInputWithContext): QueryRequest {
         return QueryRequest(
+            getDefaultContextFor(podId),
             podId,
-            GraphQLUtils.parseDocumentWithContext(
-                input.query,
-                input.providedContext ?: getDefaultContextFor(podId)
-            ),
+            input.query,
             input.variables,
             input.operationName,
             input.targetGraphs

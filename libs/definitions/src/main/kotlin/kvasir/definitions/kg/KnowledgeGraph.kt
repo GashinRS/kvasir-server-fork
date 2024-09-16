@@ -85,8 +85,9 @@ data class ChangeRequest(
 
 @GenerateNoArgConstructor
 data class QueryRequest(
+    val context : Map<String, Any> = emptyMap(),
     val podId: String,
-    val graphQL: Document,
+    val query: String,
     val variables: Map<String, Any>? = null,
     val operationName: String? = null,
     val targetGraphs: Set<String> = emptySet()

@@ -4,6 +4,7 @@ import cz.jirutka.rsql.parser.RSQLParser
 import graphql.language.*
 import jakarta.ws.rs.BadRequestException
 import kvasir.definitions.graphql.Constants
+import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
@@ -20,9 +21,11 @@ class GraphQLToSQL(val request: QueryRequest) {
     // So to prevent errors and undertermined behavior, we need to keep track of the original field names
     val fieldMapping = mutableMapOf<String, String>()
 
+    val graphQL = GraphQLUtils.parseDocumentWithContext(request.query, request.context)
+
     fun toSQL(): String {
         // Verify that only a single query is specified and assign it (otherwise throw an exception)
-        val rootNode = request.graphQL.definitions.filterIsInstance<OperationDefinition>()
+        val rootNode = graphQL.definitions.filterIsInstance<OperationDefinition>()
             .firstOrNull { it.operation == OperationDefinition.Operation.QUERY }
             ?: throw IllegalArgumentException("Only one query is allowed")
 
@@ -134,7 +137,7 @@ class GraphQLToSQL(val request: QueryRequest) {
 
             is FragmentSpread -> {
                 // Fragment spread, lookup FragmentDefinition...
-                val fragmentDefinition = request.graphQL.getDefinitionsOfType(FragmentDefinition::class.java)
+                val fragmentDefinition = graphQL.getDefinitionsOfType(FragmentDefinition::class.java)
                     .firstOrNull { it.name == selection.name }
                     ?: throw IllegalArgumentException("Fragment definition for '${selection.name}' not found")
 

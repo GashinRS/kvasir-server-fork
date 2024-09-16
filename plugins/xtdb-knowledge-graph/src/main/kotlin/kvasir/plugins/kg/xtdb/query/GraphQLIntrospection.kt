@@ -156,11 +156,11 @@ class GraphQLIntrospection(private val parent: GraphQLToSQL) {
 
     private fun resolveFragment(selection: Selection<*>): List<Selection<*>> {
         return when (selection) {
-            is FragmentSpread -> {
-                parent.request.graphQL.getDefinitionsOfType(FragmentDefinition::class.java)
-                    .find { it.name == selection.name }?.selectionSet?.selections
-                    ?: throw IllegalArgumentException("Cannot find referenced fragment: ${selection.name}")
-            }
+//            is FragmentSpread -> {
+//                parent.request.query.getDefinitionsOfType(FragmentDefinition::class.java)
+//                    .find { it.name == selection.name }?.selectionSet?.selections
+//                    ?: throw IllegalArgumentException("Cannot find referenced fragment: ${selection.name}")
+//            }
 
             else -> listOf(selection)
         }

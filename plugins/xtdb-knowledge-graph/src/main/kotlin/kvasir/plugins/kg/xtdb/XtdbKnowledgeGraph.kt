@@ -1,6 +1,5 @@
 package kvasir.plugins.kg.xtdb
 
-import com.google.common.hash.Hashing
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
@@ -10,7 +9,9 @@ import kvasir.definitions.kg.changeops.InvalidTemplateException
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.kg.xtdb.changes.ChangeProcessor
+import kvasir.plugins.kg.xtdb.changes.MetaStore
 import kvasir.plugins.kg.xtdb.changes.ReferenceHandler
+import kvasir.plugins.kg.xtdb.query.GraphQLResolver
 import kvasir.plugins.kg.xtdb.query.GraphQLToSQL
 import org.eclipse.microprofile.config.inject.ConfigProperty
 
@@ -27,9 +28,11 @@ private val SCALAR_TYPE_TEMPLATE = mapOf(
 class XtdbKnowledgeGraph(
     private val xtdbClient: XtdbClient,
     private val referenceHandler: ReferenceHandler,
+    private val graphQLResolver: GraphQLResolver,
+    private val metaStore: MetaStore,
     @ConfigProperty(name = "kvasir.plugins.kg.xtdb.assertion-checking-parallelism", defaultValue = "4")
     private val assertionCheckingParallelism: Int,
-    @ConfigProperty(name = "kvasir.plugins.kg.xtdb.ref-handling-buffer", defaultValue = "5000")
+    @ConfigProperty(name = "kvasir.plugins.kg.xtdb.ref-handling-buffer", defaultValue = "50000")
     private val refHandlingBuffer: Int
 ) : KnowledgeGraph {
 
@@ -37,6 +40,7 @@ class XtdbKnowledgeGraph(
     private val namespaces: Map<String, String> = mutableMapOf()
 
     override fun process(request: ChangeRequest): Uni<Void> {
+        val start = System.currentTimeMillis()
         val changeProcessor = ChangeProcessor(request, this, assertionCheckingParallelism)
         val database = dbNameForPod(request.podId)
         return changeProcessor.executeAssertions()
@@ -55,7 +59,10 @@ class XtdbKnowledgeGraph(
                             referenceHandler.handleReferences(request.insertFromRefs, request.podId, request.graph)
                                 .group().intoLists().of(refHandlingBuffer)
                                 .onItem().transformToUni { insertTuples ->
-                                    insertStatements(database, insertTuples)
+                                    insertStatements(
+                                        database,
+                                        insertTuples
+                                    ).chain { _ -> metaStore.syncMetaInfo(request.podId, insertTuples) }
                                 }
                                 .concatenate()
                                 .skipToLast()
@@ -75,11 +82,16 @@ class XtdbKnowledgeGraph(
                             }
                                 .chain { _ ->
                                     val insertTuples = changeProcessor.materializeRecords(request.insert, bindings)
-                                    insertStatements(database, insertTuples)
+                                    insertStatements(
+                                        database,
+                                        insertTuples
+                                    ).chain { _ -> metaStore.syncMetaInfo(request.podId, insertTuples) }
                                 }
                         }
                 }
             }
+            .onItem()
+            .invoke { _ -> Log.debug("Processed change request with id '${request.id}' in ${System.currentTimeMillis() - start} ms.") }
             .onFailure(ChangeAssertionException::class.java).recoverWithUni { e ->
                 Log.warn("Failed to process change request due to assertion error: $request", e)
                 Uni.createFrom().voidItem()
@@ -124,14 +136,15 @@ class XtdbKnowledgeGraph(
     }
 
     override fun query(request: QueryRequest): Uni<QueryResult> {
-        val queryMapping = GraphQLToSQL(request)
-        val sql = queryMapping.toSQL()
-        Log.debug("Xtdb query: $sql")
-        return xtdbClient.query(SqlQuery(sql)).map { results ->
-            QueryResult(data = results.map {
-                postProcessIntrospectionResults(it, queryMapping, request)
-            }.firstOrNull() ?: emptyMap())
-        }
+//        val queryMapping = GraphQLToSQL(request)
+//        val sql = queryMapping.toSQL()
+//        Log.debug("Xtdb query: $sql")
+//        return xtdbClient.query(SqlQuery(sql)).map { results ->
+//            QueryResult(data = results.map {
+//                postProcessIntrospectionResults(it, queryMapping, request)
+//            }.firstOrNull() ?: emptyMap())
+//        }
+        return graphQLResolver.resolve(request)
     }
 
     override fun history(request: HistoryRequest): Uni<HistoryResult> {
@@ -140,7 +153,7 @@ class XtdbKnowledgeGraph(
 }
 
 // Fixes null array values in the output (Xtdb quirk) and resets the mapped fields to their original names
-private fun processOutput(queryMapping: GraphQLToSQL, result: Any): Any {
+internal fun processOutput(queryMapping: GraphQLToSQL, result: Any): Any {
     return when (result) {
         is List<*> -> if (result.size == 1 && result[0] == null) emptyList() else result.map {
             processOutput(
@@ -200,5 +213,10 @@ private fun postProcessIntrospectionResults(
 }
 
 internal fun dbNameForPod(podId: String): String {
-    return "kvasir_" + Hashing.farmHashFingerprint64().hashString(podId, Charsets.UTF_8)
+    return podId
+    //return "kvasir_" + Hashing.farmHashFingerprint64().hashString(podId, Charsets.UTF_8)
+}
+
+internal fun metaDbNameForPod(podId: String): String {
+    return dbNameForPod(podId) + "_meta"
 }

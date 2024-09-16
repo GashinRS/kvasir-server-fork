@@ -6,7 +6,6 @@ import com.github.jsonldjava.core.RDFDataset
 import com.google.common.hash.Hashing
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
-import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
@@ -31,8 +30,9 @@ class ChangeProcessor(
             .onItem()
             .transformToUni { assertion ->
                 val q = QueryRequest(
+                    context = request.context,
                     podId = request.podId,
-                    graphQL = GraphQLUtils.parseDocumentWithContext(assertion.queryStr, request.context)
+                    query = assertion.queryStr
                 )
                 parent.query(q)
                     .onFailure().recoverWithItem { err ->
@@ -80,9 +80,10 @@ class ChangeProcessor(
             Uni.createFrom().item(QueryResult(data = emptyMap()))
         } else {
             val q = QueryRequest(
+                context = request.context,
                 podId = request.podId,
                 targetGraphs = setOf(request.graph),
-                graphQL = GraphQLUtils.parseDocumentWithContext(request.with!!, request.context)
+                query = request.with!!
             )
             parent.query(q)
                 .onFailure().recoverWithItem { err ->
@@ -94,7 +95,7 @@ class ChangeProcessor(
         }
     }
 
-    fun materializeRecords(records: List<Any>, bindings: QueryResult): List<List<Any?>> {
+    fun materializeRecords(records: List<Any>, bindings: QueryResult): List<Statement> {
         return records.flatMap { record ->
             when (record) {
                 is Map<*, *> -> toStatements(listOf(record as Map<String, Any>))
@@ -123,24 +124,23 @@ class ChangeProcessor(
         }
     }
 
-    private fun toStatements(graphDoc: Map<String, Any>): List<List<Any?>> {
+    private fun toStatements(graphDoc: Map<String, Any>): List<Statement> {
         val dataset = JsonLdProcessor.toRDF(graphDoc) as RDFDataset
         return dataset.getQuads("@default").map { quad ->
-            listOf(
+            Statement(
                 getRecordId(quad),
                 quad.subject.value,
                 quad.predicate.value,
                 if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
-                listOf(
-                    when {
-                        quad.`object`.isIRI -> "IRI"
-                        quad.`object`.isBlankNode -> "BlankNode"
-                        quad.`object`.isLiteral -> "Literal"
-                        else -> "Unknown"
-                    },
-                    quad.`object`.datatype?.toString() ?: "n/a",
-                    quad.`object`.language?.toString() ?: "n/a"
-                ),
+
+                when {
+                    quad.`object`.isIRI -> KGPropertyKind.IRI
+                    quad.`object`.isBlankNode -> KGPropertyKind.BlankNode
+                    quad.`object`.isLiteral -> KGPropertyKind.Literal
+                    else -> KGPropertyKind.Unknown
+                },
+                quad.`object`.datatype?.toString() ?: "n/a",
+                quad.`object`.language?.toString() ?: "n/a",
                 request.graph
             )
         }
@@ -175,3 +175,22 @@ class ChangeProcessor(
         } ?: literalNode.value
     }
 }
+
+// TODO: now that we have a metadata table, do we still need to store typeInfo per record?
+data class Statement(
+    val id: String,
+    val subject: String,
+    val predicate: String,
+    val `object`: Any,
+    val objectKind: KGPropertyKind,
+    val datatype: String?,
+    val language: String?,
+    val graph: String
+) : List<Any?> by listOf(
+    id,
+    subject,
+    predicate,
+    `object`,
+    listOf(objectKind, datatype ?: "n/a", language ?: "n/a"),
+    graph
+)
