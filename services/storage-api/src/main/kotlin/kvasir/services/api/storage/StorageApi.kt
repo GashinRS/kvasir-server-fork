@@ -18,6 +18,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
 import uk.co.lucasweb.aws.v4.signer.Signer
 import uk.co.lucasweb.aws.v4.signer.credentials.AwsCredentials
+import java.net.URI
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -87,7 +88,9 @@ class S3Interceptor(
             context.request().setURI(target)
             val isoDateTime = getIsoDateTime(context)
             val payloadHash = getPayloadHash(context, buffer)
-            val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), target)
+            val targetUri = URI.create(target);
+            val targetDecoded = arrayOf(targetUri.path,targetUri.query).joinToString("?");
+            val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
             val sig = Signer.builder()
                 .awsCredentials(AwsCredentials(s3AccessKey, s3SecretKey))
                 .header("host", "$s3Host:$s3Port")
