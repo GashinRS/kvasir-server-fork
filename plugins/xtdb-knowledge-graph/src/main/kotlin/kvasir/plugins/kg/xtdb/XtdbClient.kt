@@ -1,5 +1,6 @@
 package kvasir.plugins.kg.xtdb
 
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import io.vertx.mutiny.core.Vertx
@@ -28,6 +29,7 @@ class XtdbClient(
     }
 
     fun query(query: SqlQuery): Uni<List<Map<String, Any>>> {
+        Log.debug("Querying xtdb with query: ${query.sql}")
         return webClient.postAbs("$uri/query").sendJson(query)
             .chain { resp ->
                 if (resp.statusCode() in 200..399) {

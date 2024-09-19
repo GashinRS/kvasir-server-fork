@@ -23,7 +23,11 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
 @Path("{podId}/kg/slices")
-class GraphSlicesApi(private val sliceStore: SliceStore, private val knowledgeGraph: KnowledgeGraph, private val podConfig: StaticBootstrapConfig) {
+class GraphSlicesApi(
+    private val sliceStore: SliceStore,
+    private val knowledgeGraph: KnowledgeGraph,
+    private val podConfig: StaticBootstrapConfig
+) {
 
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
@@ -130,8 +134,9 @@ class GraphSlicesApi(private val sliceStore: SliceStore, private val knowledgeGr
             // Execute the query
             knowledgeGraph.query(
                 QueryRequest(
+                    slice.context,
                     podId,
-                    GraphQLUtils.parseDocumentWithContext(input.query, slice.context),
+                    input.query,
                     input.variables,
                     input.operationName,
                     slice.targetGraphs

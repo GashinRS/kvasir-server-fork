@@ -85,8 +85,9 @@ data class ChangeRequest(
 
 @GenerateNoArgConstructor
 data class QueryRequest(
+    val context : Map<String, Any> = emptyMap(),
     val podId: String,
-    val graphQL: Document,
+    val query: String,
     val variables: Map<String, Any>? = null,
     val operationName: String? = null,
     val targetGraphs: Set<String> = emptySet()
@@ -94,18 +95,20 @@ data class QueryRequest(
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class QueryResult(
-    val data: Map<String, Any>,
+    val data: Map<String, Any>? = null,
     val errors: List<Map<String, Any>>? = null
 ) {
 
     fun toJsonLD(context: Map<String, Any>): Map<String, Any> {
-        val graph = transformKeys(data, context)
-        // Compact data coming from GraphQL using context
-        return JsonLdProcessor.compact(JsonLdProcessor.expand(graph), context, JsonLdOptions())
+        return transformKeys(data, context)?.let { nonNullGraph ->
+            // Compact data coming from GraphQL using context
+            JsonLdProcessor.compact(JsonLdProcessor.expand(nonNullGraph), context, JsonLdOptions())
+        }?: emptyMap()
     }
 
-    private fun transformKeys(graphQLData: Any, context: Map<String, Any>): Any {
+    private fun transformKeys(graphQLData: Any?, context: Map<String, Any>): Any? {
         return when (graphQLData) {
+            null -> null
             is List<*> -> graphQLData.map { transformKeys(it!!, context) }
             is Map<*, *> -> graphQLData.mapKeys { e ->
                 val key = e.key as String

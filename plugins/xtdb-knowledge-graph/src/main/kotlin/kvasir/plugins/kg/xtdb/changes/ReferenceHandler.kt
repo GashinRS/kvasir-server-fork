@@ -22,7 +22,11 @@ class ReferenceHandler(
     private val minioClient: MinioAsyncClient
 ) {
 
-    fun handleReferences(refs: List<Map<String, Any>>, podId: String, targetGraph: String): Multi<List<Any?>> {
+    fun handleReferences(
+        refs: List<Map<String, Any>>,
+        podId: String,
+        targetGraph: String
+    ): Multi<kvasir.plugins.kg.xtdb.changes.Statement> {
         return Multi.createFrom().iterable(refs)
             .onItem().transformToMulti { referenceInstance ->
                 when (referenceInstance[JsonLdKeywords.type]) {
@@ -41,7 +45,11 @@ class ReferenceHandler(
     /**
      * Stream S3 ref containing linked-data as a Multi of Xtdb tuples.
      */
-    fun handleS3Reference(key: String, podId: String, targetGraph: String): Multi<List<Any?>> {
+    fun handleS3Reference(
+        key: String,
+        podId: String,
+        targetGraph: String
+    ): Multi<kvasir.plugins.kg.xtdb.changes.Statement> {
         return Uni.createFrom()
             .future(minioClient.getObject(GetObjectArgs.builder().bucket(podId).`object`(key).build()))
             .onItem().transformToMulti { resp ->
@@ -49,33 +57,34 @@ class ReferenceHandler(
                 Multi.createFrom().iterable(QueryResults.parseGraphBackground(resp, null, parseLang(resp)))
             }
             .map { statement ->
-                listOf(
+                kvasir.plugins.kg.xtdb.changes.Statement(
                     getRecordId(statement, targetGraph),
                     statement.subject.stringValue(),
                     statement.predicate.stringValue(),
                     if (statement.`object`.isLiteral) getCompatibleRawValue(statement.`object` as Literal) else statement.`object`.stringValue(),
-                    listOf(
-                        when {
-                            statement.`object`.isIRI -> "IRI"
-                            statement.`object`.isBNode -> "BlankNode"
-                            statement.`object`.isLiteral -> "Literal"
-                            else -> "Unknown"
-                        },
-                        statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.datatype?.stringValue()
-                            ?: "n/a",
-                        statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.language?.getOrNull()
-                            ?: "n/a"
-                    ),
+                    when {
+                        statement.`object`.isIRI -> KGPropertyKind.IRI
+                        statement.`object`.isBNode -> KGPropertyKind.BlankNode
+                        statement.`object`.isLiteral -> KGPropertyKind.Literal
+                        else -> KGPropertyKind.Unknown
+                    },
+                    statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.datatype?.stringValue(),
+                    statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.language?.getOrNull(),
                     targetGraph
                 )
             }
     }
 
-    private fun getRecordId(statement: Statement, targetGraph: String) =
-        "kvasir:" + Hashing.farmHashFingerprint64().hashString(
-            "${targetGraph}${statement.subject.stringValue()}${statement.predicate.stringValue()}${statement.`object`.stringValue()}",
+    private fun getRecordId(statement: Statement, targetGraph: String): String {
+        val (datatype, lang) = statement.`object`.takeIf { it.isLiteral }?.let {
+            it as Literal
+            it.datatype.stringValue() to (it.language.getOrNull() ?: "")
+        } ?: ("" to "")
+        return "kvasir:" + Hashing.farmHashFingerprint64().hashString(
+            "${targetGraph}${statement.subject.stringValue()}${statement.predicate.stringValue()}${statement.`object`.stringValue()}$datatype$lang",
             Charsets.UTF_8
         )
+    }
 
     private fun parseLang(resp: GetObjectResponse): RDFFormat {
         return when (val contentType = resp.headers()[HttpHeaders.CONTENT_TYPE]) {

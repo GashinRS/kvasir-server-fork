@@ -1,11 +1,13 @@
 package kvasir.plugins.kg.xtdb.query
 
 import cz.jirutka.rsql.parser.ast.*
+import graphql.language.Field
+import kvasir.definitions.rdf.JsonLdHelper
 
 /**
  * Converts the RSQL expression of a GraphQL filter directive into SQL.
  */
-class GraphQLFilterVisitor(private val rsqlExpr: String, private val predicateMapping: Map<String, String>) :
+class GraphQLFilterVisitor(private val context: Map<String, Any>) :
     NoArgRSQLVisitorAdapter<String>() {
     override fun visit(and: AndNode): String {
         return and.joinToString(" AND ", "(", ")") { visitNode(it) }
@@ -20,8 +22,7 @@ class GraphQLFilterVisitor(private val rsqlExpr: String, private val predicateMa
         val fieldPart = when (cmp.selector) {
             "id" -> "s"
             else -> {
-                val predicate = predicateMapping[cmp.selector]
-                    ?: throw IllegalArgumentException("Unknown field in filter directive with expression '$rsqlExpr': ${cmp.selector}")
+                val predicate = JsonLdHelper.getFQName(cmp.selector, context, "_")
                 "p = '$predicate' AND o"
             }
         }
@@ -38,7 +39,7 @@ class GraphQLFilterVisitor(private val rsqlExpr: String, private val predicateMa
         }
     }
 
-    private fun visitNode(node: Node): String {
+    fun visitNode(node: Node): String {
         return when (node) {
             is AndNode -> visit(node)
             is OrNode -> visit(node)
@@ -53,6 +54,35 @@ class GraphQLFilterVisitor(private val rsqlExpr: String, private val predicateMa
             value.toLongOrNull() != null -> value
             value.toDoubleOrNull() != null -> value
             else -> "'$value'"
+        }
+    }
+}
+
+class FieldRefFilterVisitor(private val field: Field) : NoArgRSQLVisitorAdapter<Node>() {
+
+    companion object {
+        private const val SELF_REF = "it"
+    }
+
+    override fun visit(node: AndNode): Node {
+        return AndNode(node.children.map { visitNode(it) })
+    }
+
+    override fun visit(node: OrNode): Node {
+        return OrNode(node.children.map { visitNode(it) })
+    }
+
+    override fun visit(node: ComparisonNode): Node {
+        val selector = if (node.selector == SELF_REF) field.name else node.selector
+        return ComparisonNode(node.operator, selector, node.arguments)
+    }
+
+    private fun visitNode(node: Node): Node {
+        return when (node) {
+            is AndNode -> visit(node)
+            is OrNode -> visit(node)
+            is ComparisonNode -> visit(node)
+            else -> throw IllegalArgumentException("Unknown node type: $node")
         }
     }
 }

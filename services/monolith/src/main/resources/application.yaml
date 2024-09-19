@@ -39,6 +39,7 @@ quarkus:
           auto-ingest-rdf: false
         - name: swdemo
           default-prefixes:
+            "@language": en
             voc: https://swapi.co/vocabulary/
             commons: https://commons.wikimedia.org/wiki/Special:FilePath/
             dc: http://purl.org/dc/elements/1.1/

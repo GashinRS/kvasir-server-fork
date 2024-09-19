@@ -413,13 +413,12 @@ components:
             ex: http://example.org/
           nullable: true
     QueryResult:
-      required:
-      - data
       type: object
       properties:
         data:
           type: object
           additionalProperties: {}
+          nullable: true
         errors:
           type: array
           items:
