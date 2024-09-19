@@ -118,7 +118,7 @@ class S3Interceptor(
                     val podId = context.request().proxiedRequest().getParam("podId")
                     val event = StorageMutationEvent(
                         podId = podId,
-                        objectId = context.request().uri.substringAfter("/$podId/"),
+                        objectId = context.request().uri.substringAfter("/$podId/").substringBefore("?"),
                         externalObjectUri = context.request().proxiedRequest().absoluteURI(),
                         internalStorageUri = "http://$s3Host:$s3Port${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),
