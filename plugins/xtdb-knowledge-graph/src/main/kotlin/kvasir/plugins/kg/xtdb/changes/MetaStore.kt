@@ -43,7 +43,7 @@ class MetaStore(private val xtdbClient: XtdbClient) {
                                         KGProperty(
                                             uri = statement.predicate,
                                             kind = statement.objectKind,
-                                            typeRef = typeRef
+                                            typeRefs = setOf(typeRef)
                                         )
                             }
                     }
@@ -58,11 +58,14 @@ class MetaStore(private val xtdbClient: XtdbClient) {
                             argRows = inserts.map { (typeUri, property) ->
                                 listOf(
                                     Hashing.farmHashFingerprint64()
-                                        .hashString("$typeUri-${property.uri}", Charsets.UTF_8).toString(),
+                                        .hashString(
+                                            "$typeUri-${property.uri}-${property.typeRefs.first()}",
+                                            Charsets.UTF_8
+                                        ).toString(),
                                     typeUri,
                                     property.uri,
                                     property.kind.name,
-                                    property.typeRef
+                                    property.typeRefs.first()
                                 )
                             }
                         )
@@ -74,7 +77,7 @@ class MetaStore(private val xtdbClient: XtdbClient) {
     fun listTypes(podId: String): Uni<List<KGType>> {
         return xtdbClient.query(
             SqlQuery(
-                "SELECT type_uri, ARRAY_AGG([property_uri, property_kind, property_ref]) FROM ${
+                "SELECT type_uri, ARRAY_AGG([property_uri, property_kind, property_ref]) AS properties FROM ${
                     metaDbNameForPod(
                         podId
                     )
@@ -85,57 +88,20 @@ class MetaStore(private val xtdbClient: XtdbClient) {
                 Uni.createFrom().item(
                     results.map { result ->
                         KGType(
-                            uri = result["uri"] as String,
-                            properties = (result["properties"] as List<List<String>>).map { (propertyUri, propertyKind, propertyRef) ->
-                                KGProperty(
-                                    uri = propertyUri,
-                                    kind = KGPropertyKind.valueOf(propertyKind),
-                                    typeRef = propertyRef
-                                )
-                            }
+                            uri = result["type_uri"] as String,
+                            properties = (result["properties"] as List<List<String>>).groupBy { (propertyUri, propertyKind, _) -> propertyUri to propertyKind }
+                                .map { groupedByProperty ->
+                                    KGProperty(
+                                        uri = groupedByProperty.key.first,
+                                        kind = KGPropertyKind.valueOf(groupedByProperty.key.second),
+                                        typeRefs = groupedByProperty.value.map { (_, _, propertyRef) -> propertyRef }
+                                            .toSet()
+                                    )
+                                }
                         )
                     }
                 )
             }
-    }
-
-    fun getType(podId: String, uri: String): Uni<KGType> {
-        return xtdbClient.query(
-            SqlQuery(
-                "SELECT type_uri, ARRAY_AGG([property_uri, property_kind, property_ref]) AS properties FROM ${
-                    metaDbNameForPod(
-                        podId
-                    )
-                } WHERE type_uri = '$uri' GROUP BY type_uri"
-            )
-        ).onItem().transformToUni { results ->
-            if (results.isEmpty()) {
-                Uni.createFrom().failure { RuntimeException("Type not found: $uri") }
-            } else {
-                val result = results.first()
-                val properties =
-                    (result["properties"] as List<List<String>>).map { (propertyUri, propertyKind, propertyRef) ->
-                        KGProperty(
-                            uri = propertyUri,
-                            kind = KGPropertyKind.valueOf(propertyKind),
-                            typeRef = propertyRef
-                        )
-                    }
-                Uni.createFrom().item(
-                    KGType(
-                        uri = result["type_uri"] as String,
-                        properties = properties
-                    )
-                )
-            }
-        }
-    }
-
-    private fun lookupIRIPropertyTypeRefs(database: String, predicate: String): Multi<String> {
-        val q = "SELECT DISTINCT o AS type FROM $database WHERE p = '$predicate'"
-        return xtdbClient.query(SqlQuery(q)).onItem().transformToMulti { results ->
-            Multi.createFrom().iterable(results.map { it["type"] as String }.toSet())
-        }
     }
 
 }
@@ -148,7 +114,7 @@ data class KGType(
 data class KGProperty(
     val uri: String,
     val kind: KGPropertyKind,
-    val typeRef: String
+    val typeRefs: Set<String>
 )
 
 enum class KGPropertyKind {

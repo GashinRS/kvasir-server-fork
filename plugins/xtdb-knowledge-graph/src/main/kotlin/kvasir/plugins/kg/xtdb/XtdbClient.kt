@@ -29,7 +29,7 @@ class XtdbClient(
     }
 
     fun query(query: SqlQuery): Uni<List<Map<String, Any>>> {
-        println("Querying xtdb with query: $query")
+        Log.debug("Querying xtdb with query: ${query.sql}")
         return webClient.postAbs("$uri/query").sendJson(query)
             .chain { resp ->
                 if (resp.statusCode() in 200..399) {

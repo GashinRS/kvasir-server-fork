@@ -10,6 +10,7 @@ object JsonLdKeywords {
     const val id = "@id"
     const val type = "@type"
     const val graph = "@graph"
+    const val language = "@language"
 }
 
 object JsonLdHelper {
@@ -22,6 +23,16 @@ object JsonLdHelper {
         val (prefix, rest) = JsonLdProcessor.compact(mapOf(uri to uri), context, JsonLdOptions())
             .filter { it.key != "@context" }.keys.first().split(":")
         return "${prefix}${separator}${rest}"
+    }
+
+    fun getFQName(prefixedName: String, context: Map<String, Any>, separator: String = ":"): String {
+        return if (!prefixedName.contains(separator)) {
+            prefixedName
+        } else {
+            val (prefix, localName) = prefixedName.split(separator, limit = 2)
+            val ns = (context[prefix] ?: throw IllegalArgumentException("Unknown namespace prefix: $prefix")) as String
+            "$ns$localName"
+        }
     }
 
 }

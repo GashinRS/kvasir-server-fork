@@ -531,12 +531,12 @@
         }
       },
       "QueryResult" : {
-        "required" : [ "data" ],
         "type" : "object",
         "properties" : {
           "data" : {
             "type" : "object",
-            "additionalProperties" : { }
+            "additionalProperties" : { },
+            "nullable" : true
           },
           "errors" : {
             "type" : "array",

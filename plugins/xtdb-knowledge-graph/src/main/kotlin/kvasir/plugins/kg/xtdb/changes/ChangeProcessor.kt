@@ -48,20 +48,26 @@ class ChangeProcessor(
                         } else {
                             when (assertion.type) {
                                 KvasirVocab.AssertEmptyResult -> {
-                                    if (result.data.isNotEmpty()) {
-                                        Uni.createFrom()
+                                    when {
+                                        result.data == null -> Uni.createFrom()
+                                            .failure(IllegalArgumentException("Invalid assertion query: ${assertion.queryStr}"))
+
+                                        result.data!!.isNotEmpty() -> Uni.createFrom()
                                             .failure(ChangeAssertionException("Assertion failed: results exists for '${assertion.queryStr}'"))
-                                    } else {
-                                        Uni.createFrom().voidItem()
+
+                                        else -> Uni.createFrom().voidItem()
                                     }
                                 }
 
                                 KvasirVocab.AssertNonEmptyResult -> {
-                                    if (result.data.isEmpty()) {
-                                        Uni.createFrom()
+                                    when {
+                                        result.data == null -> Uni.createFrom()
+                                            .failure(IllegalArgumentException("Invalid assertion query: ${assertion.queryStr}"))
+
+                                        result.data!!.isEmpty() -> Uni.createFrom()
                                             .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.queryStr}'"))
-                                    } else {
-                                        Uni.createFrom().voidItem()
+
+                                        else -> Uni.createFrom().voidItem()
                                     }
                                 }
 
@@ -106,7 +112,7 @@ class ChangeProcessor(
                     } else {
                         toStatements(transformTemplate(
                             record,
-                            bindings.data
+                            bindings.data ?: emptyMap()
                         ).map { JsonLdHelper.toCompactFQForm(it.plus(JsonLdKeywords.context to request.context)) })
                     }
                 }
@@ -159,7 +165,10 @@ class ChangeProcessor(
 
     private fun getRecordId(quad: RDFDataset.Quad) =
         "kvasir:" + Hashing.farmHashFingerprint64()
-            .hashString("${request.graph}${quad.subject.value}${quad.predicate.value}${quad.`object`}", Charsets.UTF_8)
+            .hashString(
+                "${request.graph}${quad.subject.value}${quad.predicate.value}${quad.`object`}${quad.`object`.datatype ?: ""}${quad.`object`.language ?: ""}",
+                Charsets.UTF_8
+            )
 
 
     /**

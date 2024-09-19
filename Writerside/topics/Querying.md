@@ -6,10 +6,15 @@ The standard query mechanism for the Pod KG uses schemaless GraphQL (inspired by
 Taelman's [GraphQL to SPARQL library](https://github.com/rubensworks/graphql-to-sparql.js) and
 the [Stardog GraphQL API](https://docs.stardog.com/query-stardog/graphql)).
 
-The query endpoint is available at `/{podId}/kg/query` and accepts POST requests with a JSON body, which should conform to the [GraphQL specification](https://graphql.org/learn/serving-over-http/#post-request). The request body may contain a `@context` object, to provide aliases for the predicate IRIs used in the query. If no content is explicitly provided, the system will fall back to the default mapping that is configured for the pod (TODO: see Pod config).
+The query endpoint is available at `/{podId}/kg/query` and accepts POST requests with a JSON body, which should conform
+to the [GraphQL specification](https://graphql.org/learn/serving-over-http/#post-request). The request body may contain
+a `@context` object, to provide aliases for the predicate IRIs used in the query. If no content is explicitly provided,
+the system will fall back to the default mapping that is configured for the pod (TODO: see Pod config).
 
 ## Basic usage
-The top-level field in the query represents the type of resource you want to retrieve. E.g. The following query retrieves all resources of the type `http://example.org/Person` that have a name and an email address:
+
+The top-level field in the query represents the type of resource you want to retrieve. E.g. The following query
+retrieves all resources of the type `http://example.org/Person` that have a name and an email address:
 
 **POST** `http://localhost:8080/alice/kg/query`
 
@@ -53,7 +58,9 @@ Response body:
 }
 ```
 
-Use the RDF parent class `rdfs:Resource` to retrieve all resources, regardless of their type. This is useful if you don't know the type of the resources, but you know which specific properties you are looking for. For example, the following query retrieves all resources that have a name and an email address:
+Use the RDF parent class `rdfs:Resource` to retrieve all resources, regardless of their type. This is useful if you
+don't know the type of the resources, but you know which specific properties you are looking for. For example, the
+following query retrieves all resources that have a name and an email address:
 
 **POST** `http://localhost:8080/alice/kg/query`
 
@@ -135,41 +142,10 @@ rewritten as:
 }
 ```
 
-### Single field
-
-By default, all values will be considered plural, and values will always be emitted in an array. To retrieve a single
-value, use the `@single` directive:
-
-**POST** `http://localhost:8080/alice/kg/query`
-
-```json
-{
-  "@context": {
-    "so": "http://schema.org/",
-    "ex": "http://example.org/"
-  },
-  "query": "{ ex_Person { so_givenName @single so_email @single ex_knows @single } }"
-}
-```
-
-Returns a slightly more compact response:
-
-```json
-{
-  "data": {
-    "ex_Person": [
-      {
-        "ex_knows": "http://example.org/bob",
-        "so_email": "alice@example.org",
-        "so_givenName": "Alice"
-      }
-    ]
-  }
-}
-```
-
 ### Arguments
-You can use GraphQL arguments to impose additional conditions on resources or linked resources. For example, the following query retrieves the Person resource with a specific id:
+
+You can use GraphQL arguments to impose additional conditions on resources or linked resources. For example, the
+following query retrieves the Person resource with a specific id:
 
 **POST** `http://localhost:8080/alice/kg/query`
 
@@ -217,8 +193,15 @@ You can use an array to match multiple values:
 }
 ```
 
+> At this time, only the `id` field supports this feature. We aim to extend this to other fields in the future. For
+> filtering on other fields, see the next section (filters).
+> {style="note"}
+
 ### Filters
-You can use filter directives to further restrict the results. The filter expressions are written in a simple expression language ([RSQL](https://github.com/nstdio/rsql-parser)) that allows you to compare values and combine checks using logical operators.
+
+You can use filter directives to further restrict the results. The filter expressions are written in a simple expression
+language ([RSQL](https://github.com/nstdio/rsql-parser)) that allows you to compare values and combine checks using
+logical operators.
 
 For example, the following query retrieves the person with the name 'Bob':
 
@@ -250,16 +233,22 @@ Returns:
 }
 ```
 
-> **Tip**: you can refer to the annotated field using `it` in the filter directive. The filter expression in the previous example can thus be abbreviated to `@filter(if: "it==Bob")`.
+> **Tip**: you can refer to the annotated field using `it` in the filter directive. The filter expression in the
+> previous example can thus be abbreviated to `@filter(if: "it==Bob")`.
 
 ## Introspection
-The Query endpoint implements the standard [GraphQL introspection mechanism](https://graphql.org/learn/introspection/). This allows clients to discover the schema of the Knowledge Graph, including the types and fields that are available for querying.
 
-This means that you can run [GraphiQL](https://github.com/graphql/graphiql/) or other GraphQL tools against the Query endpoint to explore the schema and run queries interactively, with support for auto-completion, etc.
+The Query endpoint implements the standard [GraphQL introspection mechanism](https://graphql.org/learn/introspection/).
+This allows clients to discover the schema of the Knowledge Graph, including the types and fields that are available for
+querying.
+
+This means that you can run [GraphiQL](https://github.com/graphql/graphiql/) or other GraphQL tools against the Query
+endpoint to explore the schema and run queries interactively, with support for auto-completion, etc.
 
 ![](graphiql.png)
 
-> Note that GraphiQL will not work out-of-the-box once the endpoints are protected by authentication. Our goal is to provide a GraphiQL build that includes an extension that allows you to authenticate in a Solid-compatible way.
+> Note that GraphiQL will not work out-of-the-box once the endpoints are protected by authentication. Our goal is to
+> provide a GraphiQL build that includes an extension that allows you to authenticate in a Solid-compatible way.
 > {style="note"}
 
 ## Outputting JSON-LD
@@ -305,10 +294,11 @@ Returns:
 
 > Beware that the field name used in the query, or possible aliases, no longer have an effect on the output, as this is
 > now purely based on the predicate IRIs and the context supplied in the request.
-{style="warning"}
+> {style="warning"}
 
-> This feature cannot be used with introspection queries, as the introspection mechanism does not return Linked-Data. Our aim is to support this with a feature update, while still adhering to the GraphQL specification.
-{style="warning"}
+> This feature cannot be used with introspection queries, as the introspection mechanism does not return Linked-Data.
+> Our aim is to support this with a feature update, while still adhering to the GraphQL specification.
+> {style="warning"}
 
 <seealso>
     <category ref="api-ref">

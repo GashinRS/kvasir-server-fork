@@ -307,7 +307,6 @@ class GraphQLToSQL(val request: QueryRequest) {
 
     private fun getNodeFilter(field: Field): List<String> {
         val subFields = field.selectionSet?.selections?.filterIsInstance<Field>()?.filterNot { it.name == "id" }
-        val predicateMapping = (subFields?.associate { it.name to it.getContextIRI() } ?: emptyMap())
         val filters = subFields?.mapNotNull { subField ->
             subField.directives.firstOrNull { it.name == "filter" }?.let { directive ->
                 val rsqlExpr = directive.getArgument("if")?.value?.let { (it as StringValue).value }
@@ -315,7 +314,7 @@ class GraphQLToSQL(val request: QueryRequest) {
                 val rsqlParser = RSQLParser()
                 val rsqlNode = rsqlParser.parse(rsqlExpr)
                 rsqlNode.accept(
-                    GraphQLFilterVisitor(rsqlExpr, predicateMapping.plus("it" to subField.getContextIRI()))
+                    GraphQLFilterVisitor(request.context)
                 )
             }
         }

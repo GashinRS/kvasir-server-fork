@@ -75,11 +75,16 @@ class ReferenceHandler(
             }
     }
 
-    private fun getRecordId(statement: Statement, targetGraph: String) =
-        "kvasir:" + Hashing.farmHashFingerprint64().hashString(
-            "${targetGraph}${statement.subject.stringValue()}${statement.predicate.stringValue()}${statement.`object`.stringValue()}",
+    private fun getRecordId(statement: Statement, targetGraph: String): String {
+        val (datatype, lang) = statement.`object`.takeIf { it.isLiteral }?.let {
+            it as Literal
+            it.datatype.stringValue() to (it.language.getOrNull() ?: "")
+        } ?: ("" to "")
+        return "kvasir:" + Hashing.farmHashFingerprint64().hashString(
+            "${targetGraph}${statement.subject.stringValue()}${statement.predicate.stringValue()}${statement.`object`.stringValue()}$datatype$lang",
             Charsets.UTF_8
         )
+    }
 
     private fun parseLang(resp: GetObjectResponse): RDFFormat {
         return when (val contentType = resp.headers()[HttpHeaders.CONTENT_TYPE]) {
