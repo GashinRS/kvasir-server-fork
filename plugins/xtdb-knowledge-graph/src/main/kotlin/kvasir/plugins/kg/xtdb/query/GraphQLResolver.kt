@@ -35,7 +35,6 @@ import kvasir.plugins.kg.xtdb.changes.KGProperty
 import kvasir.plugins.kg.xtdb.changes.KGPropertyKind
 import kvasir.plugins.kg.xtdb.changes.MetaStore
 import kvasir.plugins.kg.xtdb.dbNameForPod
-import kvasir.plugins.kg.xtdb.processOutput
 import org.dataloader.BatchLoader
 import org.dataloader.DataLoaderFactory
 import org.dataloader.DataLoaderRegistry
@@ -58,10 +57,7 @@ private val defaultRelationArguments = listOf(
 @ApplicationScoped
 class GraphQLResolver(
     private val xtdbClient: XtdbClient,
-    private val metaStore: MetaStore,
-    // Options: graphql2sql, graphql-java
-    @ConfigProperty(name = "kvasir.plugins.kg.xtdb.resolver", defaultValue = "graphql-java")
-    private val resolver: String
+    private val metaStore: MetaStore
 ) {
 
     fun resolve(request: QueryRequest): Uni<QueryResult> {
@@ -96,26 +92,6 @@ class GraphQLResolver(
                             )
                         )
                     )
-                val runtimeWiring = when (resolver) {
-                    "graphql2sql" -> RuntimeWiring.newRuntimeWiring().type("Query") { builder ->
-                        builder.defaultDataFetcher { env ->
-                            val queryMapping = GraphQLToSQL(request)
-                            xtdbClient.query(SqlQuery(queryMapping.toSQL())).map { results ->
-                                val qr = results.firstOrNull()
-                                    ?.let { processOutput(queryMapping, it) as Map<String, Any> }
-                                    ?: emptyMap()
-                                qr[env.fieldDefinition.name]
-                            }.convert().toCompletableFuture()
-                        }
-                    }.build()
-
-                    "graphql-java" -> customRuntimeWiring(
-                        XtdbDataFetchingHandler(request.context),
-                        request.context
-                    )
-
-                    else -> throw IllegalArgumentException("Unknown resolver: $resolver")
-                }
 
                 val fetchingHandler = XtdbDataFetchingHandler(request.context)
                 val defaultTypeResolver = RDFClassTypeResolver(request.context)

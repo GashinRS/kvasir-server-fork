@@ -35,25 +35,7 @@ class QueryApi(
     fun query(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<QueryResult> {
         throw404IfPodNotFound(podsConfig, podId)
         val req = parseInput(podId, input)
-        return knowledgeGraph.query(req)/*.map { resp ->
-            if (resp.data.containsKey("__schema")) {
-                resp.copy(data = resp.data + mapOf("__schema" to resp.data["__schema"]!!.let { schema ->
-                    schema as Map<String, Any>
-                    schema + listOfNotNull(
-                        schema["types"]?.let { types ->
-                            "types" to prefixTypeNames(
-                                types as List<Map<String, Any>>,
-                                input.providedContext ?: getDefaultContextFor(podId),
-                                types.flatMap { (it["fields"] as List<Map<String, Any>>?) ?: emptyList() }
-                                    .flatMap { it.keys }.toSet()
-                            )
-                        }
-                    ).toMap()
-                }))
-            } else {
-                resp
-            }
-        }*/
+        return knowledgeGraph.query(req)
     }
 
     @POST
@@ -68,7 +50,7 @@ class QueryApi(
         val req = parseInput(podId, input)
         return knowledgeGraph.query(req).map {
             // TODO: should we fallback to a default Kvasir context here?
-            it.toJsonLD(input.providedContext!!)
+            it.toJsonLD(req.context)
         }
     }
 
