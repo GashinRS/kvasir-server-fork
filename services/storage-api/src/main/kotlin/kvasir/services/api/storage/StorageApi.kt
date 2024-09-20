@@ -89,7 +89,7 @@ class S3Interceptor(
             val isoDateTime = getIsoDateTime(context)
             val payloadHash = getPayloadHash(context, buffer)
             val targetUri = URI.create(target);
-            val targetDecoded = arrayOf(targetUri.path,targetUri.query).joinToString("?");
+            val targetDecoded = arrayOf(targetUri.path,targetUri.query ?: "").joinToString("?");
             val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
             val sig = Signer.builder()
                 .awsCredentials(AwsCredentials(s3AccessKey, s3SecretKey))
