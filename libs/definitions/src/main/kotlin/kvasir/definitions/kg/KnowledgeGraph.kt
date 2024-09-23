@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 import graphql.language.Document
+import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.changeops.Assertion
@@ -28,6 +29,13 @@ interface SliceStore {
     fun getById(segmentId: String): Uni<Slice>
 
     fun deleteById(segmentId: String): Uni<Void>
+}
+
+interface ReferenceLoader {
+
+    fun isSupported(reference: Map<String, Any>): Boolean
+
+    fun loadReference(podId: String, targetGraph: String, reference: Map<String, Any>): Multi<RDFStatement>
 }
 
 data class ChangeRequest(
@@ -155,4 +163,13 @@ data class SliceSummary(
     val id: String,
     val name: String,
     val description: String
+)
+
+data class RDFStatement(
+    val subject: String,
+    val predicate: String,
+    val `object`: Any,
+    val graph: String = "",
+    val dataType: String? = null,
+    val language: String? = null
 )

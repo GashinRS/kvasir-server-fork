@@ -4,16 +4,20 @@ import com.github.jsonldjava.shaded.com.google.common.hash.Hashing
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
+import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.xtdb.*
+import kvasir.utils.kg.KGProperty
+import kvasir.utils.kg.KGPropertyKind
+import kvasir.utils.kg.KGType
 
 private const val CONCURRENCY = 32
 
 @ApplicationScoped
 class MetaStore(private val xtdbClient: XtdbClient) {
 
-    fun syncMetaInfo(podId: String, statements: List<Statement>): Uni<Void> {
+    fun syncMetaInfo(podId: String, statements: List<RDFStatement>): Uni<Void> {
         // Transform
         val typeUrisToSubjects = statements.filter { it.predicate == RDFVocab.type }.groupBy { it.`object` as String }
             .mapValues { statementsByType ->
@@ -30,8 +34,8 @@ class MetaStore(private val xtdbClient: XtdbClient) {
                 Multi.createFrom()
                     .iterable(statements.filter { it.subject in subjects && it.predicate != RDFVocab.type }.distinct())
                     .onItem().transformToMulti { statement ->
-                        if (statement.objectKind == KGPropertyKind.Literal) {
-                            Multi.createFrom().item(statement.datatype!!)
+                        if (statement.dataType != null) {
+                            Multi.createFrom().item(statement.dataType!!)
                         } else {
                             // First try to find local typeRefs
                             subjectsToTypeUris[statement.`object` as String]?.let { typeRefs ->
@@ -42,7 +46,7 @@ class MetaStore(private val xtdbClient: XtdbClient) {
                                 typeUri to
                                         KGProperty(
                                             uri = statement.predicate,
-                                            kind = statement.objectKind,
+                                            kind = statement.dataType?.let { KGPropertyKind.Literal } ?: KGPropertyKind.IRI,
                                             typeRefs = setOf(typeRef)
                                         )
                             }
@@ -104,19 +108,4 @@ class MetaStore(private val xtdbClient: XtdbClient) {
             }
     }
 
-}
-
-data class KGType(
-    val uri: String,
-    val properties: List<KGProperty>
-)
-
-data class KGProperty(
-    val uri: String,
-    val kind: KGPropertyKind,
-    val typeRefs: Set<String>
-)
-
-enum class KGPropertyKind {
-    Literal, IRI, BlankNode, Unknown
 }

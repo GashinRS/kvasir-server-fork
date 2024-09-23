@@ -1,13 +1,10 @@
-package kvasir.plugins.kg.xtdb
+package kvasir.plugins.kg.clickhouse.graphql
 
-import com.google.common.hash.Hashing
 import cz.jirutka.rsql.parser.RSQLParser
 import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
-import graphql.ExceptionWhileDataFetching
-import graphql.ExecutionResult
 import graphql.TypeResolutionEnvironment
 import graphql.language.Field
 import graphql.language.InlineFragment
@@ -19,108 +16,36 @@ import graphql.schema.GraphQLNamedOutputType
 import graphql.schema.GraphQLObjectType
 import graphql.schema.GraphQLType
 import graphql.schema.GraphQLTypeUtil
-import graphql.schema.GraphQLUnionType
 import graphql.schema.TypeResolver
-import io.quarkus.arc.All
-import io.smallrye.mutiny.Uni
-import io.vertx.core.json.JsonObject
-import jakarta.enterprise.context.ApplicationScoped
-import jakarta.inject.Singleton
-import kvasir.definitions.kg.HistoryRequest
-import kvasir.definitions.kg.HistoryResult
-import kvasir.definitions.kg.QueryRequest
-import kvasir.definitions.kg.QueryResult
-import kvasir.definitions.kg.RDFStatement
-import kvasir.definitions.kg.ReferenceLoader
+import io.vertx.core.json.JsonArray
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFVocab
-import kvasir.plugins.kg.xtdb.changes.MetaStore
-import kvasir.plugins.kg.xtdb.query.FieldRefFilterVisitor
-import kvasir.plugins.kg.xtdb.query.GraphQLFilterVisitor
+import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
+import kvasir.plugins.kg.clickhouse.databaseFromPodId
+import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
+import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.utils.kg.AbstractKnowledgeGraph
-import kvasir.utils.kg.KGType
 import org.dataloader.BatchLoader
 import org.dataloader.DataLoaderFactory
 import org.dataloader.DataLoaderRegistry
-import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 
-@Singleton
-class XtdbKnowledgeGraph(
-    @All
-    private val referenceLoaders: MutableList<ReferenceLoader>,
-    private val metaStore: MetaStore,
-    private val xtdbClient: XtdbClient,
-    @ConfigProperty(name = "kvasir.plugins.kg.xtdb.assertion-checking-parallelism", defaultValue = "4")
-    private val assertionCheckingParallelism: Int,
-    @ConfigProperty(name = "kvasir.plugins.kg.xtdb.ref-handling-buffer", defaultValue = "50000")
-    private val refHandlingBuffer: Int
-) : AbstractKnowledgeGraph(referenceLoaders, assertionCheckingParallelism, refHandlingBuffer) {
-    override fun insertStatements(
+object SubOptimalResolver {
+
+    fun getDataLoaderRegistry(
         podId: String,
-        statements: List<RDFStatement>
-    ): Uni<Void> {
-        val database = dbNameForPod(podId)
-        return xtdbClient.execute(
-            SqlTransaction(
-                SqlOp(
-                    "INSERT INTO $database (_id, s, p, o, t, g) VALUES (?, ?, ?, ?, ?, ?)",
-                    statements.map { statement ->
-                        listOf(
-                            getRecordId(statement),
-                            statement.subject,
-                            statement.predicate,
-                            statement.`object`,
-                            listOf(
-                                statement.dataType?.let { "Literal" } ?: "IRI",
-                                statement.dataType ?: "n/a",
-                                statement.language ?: "n/a"
-                            ),
-                            statement.graph
-                        )
-                    }
-                )
-            )
-        ).chain { _ -> metaStore.syncMetaInfo(podId, statements) }
-    }
-
-    override fun deleteStatements(
-        podId: String,
-        statements: List<RDFStatement>
-    ): Uni<Void> {
-        val database = dbNameForPod(podId)
-        return xtdbClient.execute(
-            SqlTransaction(
-                SqlOp(
-                    "DELETE FROM $database WHERE _id = ?",
-                    statements.map { statement -> listOf(getRecordId(statement)) }
-                )
-            )
-        )
-    }
-
-    override fun deleteGraph(podId: String, graph: String): Uni<Void> {
-        val database = dbNameForPod(podId)
-        return xtdbClient.execute(
-            SqlTransaction(
-                SqlOp(
-                    "DELETE FROM $database WHERE g = ?",
-                    listOf(listOf(graph))
-                )
-            )
-        )
-    }
-
-    override fun buildDataLoaderRegistry(podId: String, context: Map<String, Any>): DataLoaderRegistry {
+        clickhouseClient: ClickhouseClient,
+        context: Map<String, Any>
+    ): DataLoaderRegistry {
         return DataLoaderRegistry()
             .register(
                 "entrypoints",
                 DataLoaderFactory.newDataLoader(
                     EntrypointTargetSelectionLoader(
-                        xtdbClient,
-                        dbNameForPod(podId)
+                        clickhouseClient,
+                        databaseFromPodId(podId)
                     )
                 )
             )
@@ -128,8 +53,8 @@ class XtdbKnowledgeGraph(
                 "targets",
                 DataLoaderFactory.newDataLoader(
                     PredicateTargetSelectionLoader(
-                        xtdbClient,
-                        dbNameForPod(podId)
+                        clickhouseClient,
+                        databaseFromPodId(podId)
                     )
                 )
             )
@@ -137,20 +62,20 @@ class XtdbKnowledgeGraph(
                 "predicateValues",
                 DataLoaderFactory.newDataLoader(
                     PredicateValueLoader(
-                        xtdbClient,
-                        dbNameForPod(podId),
+                        clickhouseClient,
+                        databaseFromPodId(podId),
                         context
                     )
                 )
             )
     }
 
-    override fun buildDatafetcher(
+    fun getDatafetcher(
         podId: String,
         context: Map<String, Any>,
         env: DataFetcherFactoryEnvironment
     ): DataFetcher<Any> {
-        val fetchingHandler = XtdbDataFetchingHandler(context)
+        val fetchingHandler = ClickhouseDataFetchingHandler(context)
         return object : DataFetcher<Any> {
             override fun get(env: DataFetchingEnvironment): Any {
                 if (env.executionStepInfo.path.parent.isRootPath) {
@@ -167,59 +92,9 @@ class XtdbKnowledgeGraph(
         }
     }
 
-    override fun buildUnionTypeResolver(
-        podId: String,
-        unionType: GraphQLUnionType,
-        context: Map<String, Any>
-    ): TypeResolver {
-        return RDFClassTypeResolver(context)
-    }
-
-    override fun getTypeInfo(podId: String): Uni<List<KGType>> {
-        return metaStore.listTypes(podId)
-    }
-
-    override fun history(request: HistoryRequest): Uni<HistoryResult> {
-        TODO("Not yet implemented")
-    }
-
-    override fun mapExecutionResult(request: QueryRequest, result: ExecutionResult): QueryResult {
-        // Use NonNullableValueCoercedAsNullException to filter out paths that have no results
-        val skipPositions = result.errors
-            .filter { it is ExceptionWhileDataFetching && it.exception is NoResultsException }
-            .groupBy { it.path.first() }
-            .mapValues { err -> err.value.map { it.path.drop(1).first() }.toSet() }
-        val filteredData = result?.getData<Map<String, Any>>()?.mapValues { entryPoint ->
-            skipPositions[entryPoint.key]?.let { positions ->
-                val values = entryPoint.value as List<Any>
-                values.mapIndexed { index, any -> if (index in positions) null else any }
-                    .filterNotNull()
-            } ?: entryPoint.value
-        }
-        return QueryResult(
-            data = filteredData,
-            errors = result.errors.filterNot { it is ExceptionWhileDataFetching && it.exception is NoResultsException }
-                .map { JsonObject.mapFrom(it).map })
-    }
-
-    private fun getRecordId(statement: RDFStatement) =
-        "kvasir:" + Hashing.farmHashFingerprint64()
-            .hashString(
-                "${statement.graph}${statement.subject}${statement.predicate}${statement.`object`}${statement.dataType ?: ""}${statement.language ?: ""}",
-                Charsets.UTF_8
-            )
 }
 
-internal fun dbNameForPod(podId: String): String {
-    return podId
-    //return "kvasir_" + Hashing.farmHashFingerprint64().hashString(podId, Charsets.UTF_8)
-}
-
-internal fun metaDbNameForPod(podId: String): String {
-    return dbNameForPod(podId) + "_meta"
-}
-
-class XtdbDataFetchingHandler(
+class ClickhouseDataFetchingHandler(
     private val context: Map<String, Any>
 ) {
 
@@ -326,41 +201,60 @@ private fun nodeToFilter(filter: Node, context: Map<String, Any>): String {
 
 data class PredicateValueKey(val subject: String, val predicate: String)
 
-class EntrypointTargetSelectionLoader(private val xtdbClient: XtdbClient, private val database: String) :
+class EntrypointTargetSelectionLoader(private val clickhouse: ClickhouseClient, private val database: String) :
     BatchLoader<EntryPointKey, List<Target>> {
     override fun load(keys: List<EntryPointKey>): CompletionStage<List<List<Target>>> {
         val q = keys.mapIndexed { index, key ->
             val optionalFilter =
-                key.filter?.let { " AND s IN (SELECT s FROM $database WHERE ${nodeToFilter(it, key.context)})" } ?: ""
-            "SELECT $index AS index, ARRAY_AGG(s) AS targets FROM $database WHERE p = '${RDFVocab.type}' AND o = '${key.typeUri}'$optionalFilter"
-        }.joinToString(" UNION ")
-        return xtdbClient.query(SqlQuery(q)).map { results ->
+                key.filter?.let {
+                    " AND subject IN (SELECT subject FROM $database.$DATA_TABLE WHERE ${
+                        nodeToFilter(
+                            it,
+                            key.context
+                        )
+                    })"
+                } ?: ""
+            "SELECT $index AS index, ARRAY_AGG(subject) AS targets FROM $database.$DATA_TABLE WHERE predicate = '${RDFVocab.type}' AND object = '${key.typeUri}'$optionalFilter"
+        }.joinToString(" UNION ALL ")
+        return clickhouse.query(GenericQuerySpec(database, DATA_TABLE, listOf("index", "targets")), q).map { results ->
             val resultMap = results.groupBy { it["index"] as Int }
             keys.mapIndexed { index, key ->
                 resultMap[index]?.firstOrNull()
-                    ?.let { (it["targets"] as List<String>).map { Target(it, listOf(key.typeUri)) } } ?: emptyList()
+                    ?.let { (it["targets"] as JsonArray).map { Target(it as String, listOf(key.typeUri)) } }
+                    ?: emptyList()
             }
         }.convert().toCompletableFuture()
     }
 }
 
-class PredicateTargetSelectionLoader(private val xtdbClient: XtdbClient, private val database: String) :
+class PredicateTargetSelectionLoader(private val clickhouse: ClickhouseClient, private val database: String) :
     BatchLoader<PredicateTargetSelectionKey, List<Target>> {
 
     override fun load(keys: List<PredicateTargetSelectionKey>): CompletionStage<List<List<Target>>> {
         val q =
             keys.mapIndexed { index, key ->
                 val optionalFilter =
-                    key.filter?.let { " AND s IN (SELECT s FROM $database WHERE ${nodeToFilter(it, key.context)})" }
+                    key.filter?.let {
+                        " AND subject IN (SELECT subject FROM $database.$DATA_TABLE WHERE ${
+                            nodeToFilter(
+                                it,
+                                key.context
+                            )
+                        })"
+                    }
                         ?: ""
-                "SELECT $index AS index, ARRAY_AGG([o, types]) AS targets FROM $database JOIN (SELECT s AS subject, ARRAY_AGG(o) as types FROM $database WHERE p = '${RDFVocab.type}'$optionalFilter) type ON o = subject WHERE p = '${key.predicate}' AND s = '${key.subject}'"
-            }.joinToString(" UNION ")
-        return xtdbClient.query(SqlQuery(q)).map { results ->
+                "SELECT $index AS index, ARRAY_AGG([object, types]) AS targets FROM $database.$DATA_TABLE JOIN (SELECT subject AS targetSubject, ARRAY_AGG(object) as types FROM $database.$DATA_TABLE WHERE predicate = '${RDFVocab.type}'$optionalFilter GROUP BY subject) type ON object = targetSubject WHERE predicate = '${key.predicate}' AND subject = '${key.subject}'"
+            }.joinToString(" UNION ALL ")
+        return clickhouse.query(GenericQuerySpec(database, DATA_TABLE, listOf("index", "targets")), q).map { results ->
             val resultMap = results.groupBy { it["index"] as Int }
             keys.mapIndexed { index, key ->
                 resultMap[index]?.firstOrNull()?.let {
-                    val targets = it["targets"] as List<List<Any>>
-                    targets.map { (id, types) -> Target(id as String, types as List<String>) }
+                    val targets = it["targets"] as JsonArray
+                    targets.map {
+                        it as JsonArray
+                        val (id, types) = it.getString(0) to it.getJsonArray(1).map { it as String }
+                        Target(id as String, types)
+                    }
                 } ?: emptyList()
             }
         }.convert().toCompletableFuture()
@@ -369,7 +263,7 @@ class PredicateTargetSelectionLoader(private val xtdbClient: XtdbClient, private
 }
 
 class PredicateValueLoader(
-    private val xtdbClient: XtdbClient,
+    private val clickhouse: ClickhouseClient,
     private val database: String,
     context: Map<String, Any>
 ) :
@@ -382,17 +276,19 @@ class PredicateValueLoader(
             " OR ",
             " WHERE "
         ) { (predicate, keys) ->
-            val optionalLangFilter = language?.let { " AND t[3] IN ('n/a', '$it')" } ?: ""
-            "p = '$predicate' AND s IN (${keys.joinToString { "'${it.subject}'" }})$optionalLangFilter"
+            val optionalLangFilter = language?.let { " AND language IN ('', '$it')" } ?: ""
+            "predicate = '$predicate' AND subject IN (${keys.joinToString { "'${it.subject}'" }})$optionalLangFilter"
         }
-        val q = "SELECT s, p, o FROM $database $filter"
-        return xtdbClient.query(SqlQuery(q)).map { results ->
-            val resultMap = results.groupBy { PredicateValueKey(it["s"] as String, it["p"] as String) }
-            val output = keys.map { key ->
-                resultMap[key]?.map { it["o"]!! } ?: emptyList()
-            }
-            output
-        }.convert().toCompletableFuture()
+        val q = "SELECT subject, predicate, object FROM $database.$DATA_TABLE $filter"
+        return clickhouse.query(GenericQuerySpec(database, DATA_TABLE, listOf("subject", "predicate", "object")), q)
+            .map { results ->
+                val resultMap =
+                    results.groupBy { PredicateValueKey(it["subject"] as String, it["predicate"] as String) }
+                val output = keys.map { key ->
+                    resultMap[key]?.map { it["object"]!! } ?: emptyList()
+                }
+                output
+            }.convert().toCompletableFuture()
     }
 }
 

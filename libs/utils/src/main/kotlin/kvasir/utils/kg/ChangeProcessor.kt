@@ -1,14 +1,14 @@
-package kvasir.plugins.kg.xtdb.changes
+package kvasir.utils.kg
 
 import com.dashjoin.jsonata.Jsonata.jsonata
 import com.github.jsonldjava.core.JsonLdProcessor
 import com.github.jsonldjava.core.RDFDataset
-import com.google.common.hash.Hashing
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
+import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
 import kvasir.definitions.rdf.JsonLdHelper
@@ -16,13 +16,13 @@ import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.definitions.reactive.skipToLast
-import kvasir.plugins.kg.xtdb.XtdbKnowledgeGraph
 
 class ChangeProcessor(
     private val request: ChangeRequest,
-    private val parent: XtdbKnowledgeGraph,
+    private val parent: AbstractKnowledgeGraph,
     private val parallelism: Int
 ) {
+
 
     // Test the assertions, throw an exception if one fails
     fun executeAssertions(): Uni<Void> {
@@ -101,7 +101,7 @@ class ChangeProcessor(
         }
     }
 
-    fun materializeRecords(records: List<Any>, bindings: QueryResult): List<Statement> {
+    fun materializeRecords(records: List<Any>, bindings: QueryResult): List<RDFStatement> {
         return records.flatMap { record ->
             when (record) {
                 is Map<*, *> -> toStatements(listOf(record as Map<String, Any>))
@@ -130,49 +130,25 @@ class ChangeProcessor(
         }
     }
 
-    private fun toStatements(graphDoc: Map<String, Any>): List<Statement> {
+    private fun toStatements(graphDoc: Map<String, Any>): List<RDFStatement> {
         val dataset = JsonLdProcessor.toRDF(graphDoc) as RDFDataset
         return dataset.getQuads("@default").map { quad ->
-            Statement(
-                getRecordId(quad),
-                quad.subject.value,
-                quad.predicate.value,
-                if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
-
-                when {
-                    quad.`object`.isIRI -> KGPropertyKind.IRI
-                    quad.`object`.isBlankNode -> KGPropertyKind.BlankNode
-                    quad.`object`.isLiteral -> KGPropertyKind.Literal
-                    else -> KGPropertyKind.Unknown
-                },
-                quad.`object`.datatype?.toString() ?: "n/a",
-                quad.`object`.language?.toString() ?: "n/a",
-                request.graph
+            RDFStatement(
+                subject = quad.subject.value,
+                predicate = quad.predicate.value,
+                `object` = if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
+                graph = request.graph,
+                dataType = quad.`object`.datatype?.toString(),
+                language = quad.`object`.language?.toString()
             )
         }
     }
 
     private fun toStatements(docs: List<Map<String, Any>>) = toStatements(mapOf(JsonLdKeywords.graph to docs))
 
-    fun getRecordIds(docs: List<Map<String, Any>>): List<List<Any?>> {
-        val dataset = JsonLdProcessor.toRDF(mapOf("@graph" to docs)) as RDFDataset
-        return dataset.getQuads("@default").map { quad ->
-            listOf(
-                getRecordId(quad)
-            )
-        }
-    }
-
-    private fun getRecordId(quad: RDFDataset.Quad) =
-        "kvasir:" + Hashing.farmHashFingerprint64()
-            .hashString(
-                "${request.graph}${quad.subject.value}${quad.predicate.value}${quad.`object`}${quad.`object`.datatype ?: ""}${quad.`object`.language ?: ""}",
-                Charsets.UTF_8
-            )
-
 
     /**
-     * Get the value of an RDF Literal as a database compatible primitive (if not supported, the string representation is used).
+     * Get the value of an RDF Literal as a Java compatible primitive (if not supported, the string representation is used).
      */
     private fun getCompatibleRawValue(literalNode: RDFDataset.Literal): Any {
         return when (literalNode.datatype) {
@@ -184,22 +160,3 @@ class ChangeProcessor(
         } ?: literalNode.value
     }
 }
-
-// TODO: now that we have a metadata table, do we still need to store typeInfo per record?
-data class Statement(
-    val id: String,
-    val subject: String,
-    val predicate: String,
-    val `object`: Any,
-    val objectKind: KGPropertyKind,
-    val datatype: String?,
-    val language: String?,
-    val graph: String
-) : List<Any?> by listOf(
-    id,
-    subject,
-    predicate,
-    `object`,
-    listOf(objectKind, datatype ?: "n/a", language ?: "n/a"),
-    graph
-)
