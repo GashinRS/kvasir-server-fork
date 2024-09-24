@@ -1,7 +1,9 @@
 package kvasir.plugins.kg.clickhouse.specs
 
+import io.vertx.core.json.Json
 import io.vertx.core.json.JsonArray
 import kvasir.definitions.kg.RDFStatement
+import kvasir.definitions.kg.Slice
 import kvasir.plugins.kg.clickhouse.client.ClickhouseRecord
 import kvasir.plugins.kg.clickhouse.client.InsertRecordSpec
 import kvasir.plugins.kg.clickhouse.client.QuerySpec
@@ -12,8 +14,10 @@ import kvasir.utils.kg.MetadataEntry
 
 const val DATA_TABLE = "data"
 const val META_DATA_TABLE = "metadata"
+const val SLICE_TABLE = "slices"
 val DATA_COLUMNS = listOf("subject", "predicate", "object", "datatype", "language", "graph", "sign")
 val META_DATA_COLUMNS = listOf("type_uri", "property_uri", "property_kind", "property_ref")
+val SLICE_COLUMNS = listOf("id", "json")
 
 private fun statementToBaseRecord(t: RDFStatement): ClickhouseRecord {
     return ClickhouseRecord()
@@ -51,6 +55,14 @@ class MetadataInsertRecordSpec(database: String) :
     }
 }
 
+class SliceInsertRecordSpec(database: String) : InsertRecordSpec<Slice>(database, SLICE_TABLE, SLICE_COLUMNS) {
+    override fun toRecord(t: Slice): ClickhouseRecord {
+        return ClickhouseRecord()
+            .add(t.id)
+            .add(t)
+    }
+}
+
 class KGTypeQuerySpec(database: String) :
     QuerySpec<KGType, String>(database, META_DATA_TABLE, listOf("type_uri", "properties")) {
     override fun fromRecord(record: ClickhouseRecord): KGType {
@@ -76,4 +88,10 @@ class GenericQuerySpec(database: String, table: String, private val columns: Lis
         }.toMap()
     }
 
+}
+
+class SliceQuerySpec(database: String) : QuerySpec<Slice, String>(database, SLICE_TABLE, SLICE_COLUMNS) {
+    override fun fromRecord(record: ClickhouseRecord): Slice {
+        return Json.decodeValue(record.getString(1), Slice::class.java)
+    }
 }

@@ -19,6 +19,7 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
                 createDatabase(database)
                     .chain { _ -> createDataSchema(database) }
                     .chain { _ -> createMetadataSchema(database) }
+                    .chain { _ -> createSliceSchema(database) }
             }
             .skipToLast()
             .await().indefinitely()
@@ -57,6 +58,18 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
                 property_ref LowCardinality(String)
             ) ENGINE = ReplacingMergeTree()
                 ORDER BY (type_uri, property_uri, property_ref, property_kind);
+        """.trimIndent()
+        )
+    }
+
+    private fun createSliceSchema(database: String): Uni<Void> {
+        return clickhouseClient.execute(
+            """
+            CREATE TABLE IF NOT EXISTS $database.slices (
+                id String,
+                json String
+            ) ENGINE = ReplacingMergeTree()
+                ORDER BY (id);
         """.trimIndent()
         )
     }
