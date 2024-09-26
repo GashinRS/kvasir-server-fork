@@ -20,6 +20,12 @@ services:
     volumes:
       - "xtdb-data:/var/lib/xtdb"
 
+  kvasir-ui:
+    build: https://bot:sufPJVx5suVPs3W9kqxy@gitlab.ilabt.imec.be/ibcndevs/solid/kvasir-ui.git#s3
+    ports:
+      - "8081:4200"
+    pull_policy: build
+
 volumes:
   xtdb-data:
     driver: local
