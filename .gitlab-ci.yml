@@ -8,6 +8,16 @@ variables:
   ALGOLIA_KEY: '$ALGOLIA_KEY'
   CONFIG_JSON_PRODUCT: 'kd'
   CONFIG_JSON_VERSION: 'master'
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Dorg.gradle.caching=true"
+  GRADLE_USER_HOME: cache/
+  QUARKUS_JIB_BASE_JVM_IMAGE: "eclipse-temurin:21"
+
+.gradleChanges: &gradleChanges
+  - "buildSrc/**/*"
+  - "gradle.properties"
+  - "gradlew"
+  - "gradle/**/*"
+  - "settings.gradle.kts"
 
 stages:
   - build
@@ -15,7 +25,74 @@ stages:
   - deploy
   - search
 
-build:
+build:gradle:
+  stage: build
+  image: eclipse-temurin:21
+  tags: [ "cache", "docker" ]
+  cache:
+    key:
+      files:
+        - gradle/wrapper/gradle-wrapper.properties
+    paths:
+      - cache/caches/
+      - cache/notifications/
+      - cache/wrapper/
+    policy: pull-push
+  services:
+    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
+      alias: docker
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      variables: &commitTagVersions
+        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_TAG"
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "latest"
+    - when: on_success
+#      changes: *gradleChanges
+      variables: &commitBranchVersions
+        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    QUARKUS_CONTAINER_IMAGE_REGISTRY: $CI_REGISTRY
+    QUARKUS_CONTAINER_IMAGE_GROUP: $CI_PROJECT_PATH
+    QUARKUS_CONTAINER_IMAGE_USERNAME: $CI_REGISTRY_USER
+    QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
+    QUARKUS_CONTAINER_IMAGE_PUSH: "true"
+  script:
+    - ./gradlew --build-cache build -x test
+#  after_script:
+#    - awk -F,
+#      '{ instructions += $4 + $5; covered += $5 } END
+#      { print covered, "/", instructions, "instructions covered";
+#      print 100*covered/instructions, "% covered" }'
+#      build/jacoco-report/jacoco.csv
+#  coverage: '/(\d+\.\d+) % covered/'
+#  artifacts:
+#    paths:
+#      - build/jacoco-report/jacoco.xml
+#    reports:
+#      junit: "**/TEST-*.xml"
+#    when: always
+
+deploy-cnl:
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      variables: *commitTagVersions
+      when: manual
+    - variables: *commitBranchVersions
+      when: manual
+  cache: []
+  stage: deploy
+  image: dtzar/helm-kubectl:3.15.4
+  before_script:
+    - kubectl config view
+  script:
+    - kubectl config use-context ibcndevs/clusters:kvasir-cnl
+#    - helm upgrade --install obelisk helm/obelisk --namespace obelisk -f helm/cnl-values.yaml --set global.tag=$CI_COMMIT_REF_SLUG%
+
+
+build:writerside:
   stage: build
   image: registry.jetbrains.team/p/writerside/builder/writerside-builder:$DOCKER_VERSION
   script:
@@ -32,7 +109,7 @@ build:
       - public/$ALGOLIA_ARTIFACT
     expire_in: 1 week
 
-test:
+test:writerside:
   stage: test
   image: openjdk:18-jdk-alpine
   before_script:
@@ -44,7 +121,7 @@ test:
 
 pages:
   stage: deploy
-  needs: [build, test]
+  needs: [build:writerside, test:writerside]
   image: ubuntu:latest
   before_script:
     - apt-get update -y && apt-get install unzip -y
@@ -61,7 +138,7 @@ pages:
 
 search:
   stage: search
-  needs: [build, test, pages]
+  needs: [build:writerside, test:writerside, pages]
   image: registry.jetbrains.team/p/writerside/builder/algolia-publisher:2.0.32-3
   script:
     - unzip -O UTF-8 public/$ALGOLIA_ARTIFACT -d algolia-indexes
