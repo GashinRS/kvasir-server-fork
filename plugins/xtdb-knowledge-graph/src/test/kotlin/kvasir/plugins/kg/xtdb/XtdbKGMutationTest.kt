@@ -2,7 +2,6 @@ package kvasir.plugins.kg.xtdb
 
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
-import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.changeops.Assertion
@@ -36,15 +35,16 @@ class XtdbKGMutationTest {
         val result =
             kg.query(
                 QueryRequest(
+                    context = testContext,
                     podId = testId,
-                    graphQL = GraphQLUtils.parseDocumentWithContext(QUERY_ALICE_BASIC, testContext)
+                    query = QUERY_ALICE_BASIC
                 )
             )
                 .await().indefinitely()
 
         // Check the result
-        assertEquals(RESOURCE_ALICE_BASIC.givenName, result.data.transform("ex_Person.so_givenName[0]"))
-        assertEquals(RESOURCE_ALICE_BASIC.familyName, result.data.transform("ex_Person.so_familyName[0]"))
+        assertEquals(RESOURCE_ALICE_BASIC.givenName, result.data?.transform("ex_Person.so_givenName[0]"))
+        assertEquals(RESOURCE_ALICE_BASIC.familyName, result.data?.transform("ex_Person.so_familyName[0]"))
     }
 
     @Test
@@ -71,14 +71,15 @@ class XtdbKGMutationTest {
         val result =
             kg.query(
                 QueryRequest(
+                    context = testContext,
                     podId = testId,
-                    graphQL = GraphQLUtils.parseDocumentWithContext(QUERY_ALICE_BASIC, testContext)
+                    query = QUERY_ALICE_BASIC
                 )
             )
                 .await().indefinitely()
 
         // Check the result
-        assertEquals(0, result.data.size)
+        assertEquals(0, result.data?.size)
     }
 
     @Test
@@ -124,15 +125,13 @@ class XtdbKGMutationTest {
         val result =
             kg.query(
                 QueryRequest(
+                    context = testContext,
                     podId = testId,
-                    graphQL = GraphQLUtils.parseDocumentWithContext(
-                        "{ ex_Person(id: \"ex:alice\") { so_email } }",
-                        testContext
-                    )
+                    query = "{ ex_Person(id: \"ex:alice\") { so_email } }"
                 )
             )
                 .await().indefinitely()
-        assertEquals(0, result.data.size)
+        assertEquals(0, result.data?.size)
     }
 
     @Test
@@ -162,16 +161,14 @@ class XtdbKGMutationTest {
         val result =
             kg.query(
                 QueryRequest(
+                    context = testContext,
                     podId = testId,
-                    graphQL = GraphQLUtils.parseDocumentWithContext(
-                        "{ ex_Person(id: \"ex:alice\") { so_email } }",
-                        testContext
-                    )
+                    query = "{ ex_Person(id: \"ex:alice\") { so_email } }"
                 )
             )
                 .await().indefinitely()
 
         // Check the result
-        assertEquals("alice@example.org", result.data.transform("ex_Person.so_email[0]"))
+        assertEquals("alice@example.org", result.data?.transform("ex_Person.so_email[0]"))
     }
 }

@@ -1,4 +1,17 @@
 services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8.4.13
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - 'clickhouse_data:/var/lib/clickhouse'
+      - './plugins/clickhouse-knowledge-graph/initdb:/docker-entrypoint-initdb.d'
+      - './plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d'
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
   xtdb:
     # @sha256:735f69a0a361e1e1e0ac2c1c43b76f5301ddd41808022e0bbfbcdc1b0cd4d7d2
     image: ghcr.io/xtdb/xtdb-standalone-ea
@@ -7,6 +20,14 @@ services:
     volumes:
       - "xtdb-data:/var/lib/xtdb"
 
+  kvasir-ui:
+    build: https://bot:sufPJVx5suVPs3W9kqxy@gitlab.ilabt.imec.be/ibcndevs/solid/kvasir-ui.git#s3
+    ports:
+      - "8081:4200"
+    pull_policy: build
+
 volumes:
   xtdb-data:
+    driver: local
+  clickhouse_data:
     driver: local

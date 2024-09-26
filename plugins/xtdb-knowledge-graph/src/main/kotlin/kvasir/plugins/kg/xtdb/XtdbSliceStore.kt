@@ -53,7 +53,7 @@ class XtdbSliceStore(
         }
     }
 
-    override fun getById(segmentId: String): Uni<Slice> {
+    override fun getById(podId: String, segmentId: String): Uni<Slice> {
         val sql = "SELECT * FROM $segmentDatabase WHERE _id = '$segmentId';"
         Log.debug("Xtdb query: $sql")
         return xtdbClient.query(SqlQuery(sql)).chain { results ->
@@ -73,7 +73,7 @@ class XtdbSliceStore(
         }
     }
 
-    override fun deleteById(segmentId: String): Uni<Void> {
+    override fun deleteById(podId: String, segmentId: String): Uni<Void> {
         return xtdbClient.execute(
             SqlTransaction(
                 SqlOp(

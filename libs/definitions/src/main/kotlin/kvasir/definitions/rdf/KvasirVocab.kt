@@ -14,4 +14,8 @@ object KvasirVocab {
     const val with = "${baseUri}with"
     const val query = "${baseUri}query"
     const val Key = "${baseUri}Key"
+    const val name = "${baseUri}name"
+    const val schema = "${baseUri}schema"
+    const val description = "${baseUri}description"
+    const val targetGraphs = "${baseUri}targetGraphs"
 }

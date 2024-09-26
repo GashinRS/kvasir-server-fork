@@ -1,20 +1,16 @@
 package kvasir.services.api.kg.query
 
 import com.google.common.hash.Hashing
-import graphql.ExecutionInput
-import graphql.ParseAndValidate
-import graphql.schema.idl.SchemaParser
-import graphql.schema.idl.UnExecutableSchemaGenerator
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.config.StaticBootstrapConfig
-import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.*
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.utils.kg.SchemaValidator
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
@@ -50,9 +46,13 @@ class GraphSlicesApi(
         throw404IfPodNotFound(podConfig, podId)
         val slice = input.toSlice(podId)
         // Validate the schema
-        GraphQLUtils.parseDocumentWithContext(slice.spec, emptyMap())
-        return sliceStore.persist(slice).map {
-            Response.status(Response.Status.CREATED).entity(slice).build()
+        return try {
+            SchemaValidator.validateSchema(slice.spec, slice.context)
+            sliceStore.persist(slice).map {
+                Response.status(Response.Status.CREATED).entity(slice).build()
+            }
+        } catch (e: Throwable) {
+            Uni.createFrom().failure(e)
         }
     }
 
@@ -68,7 +68,7 @@ class GraphSlicesApi(
         @PathParam("sliceId") sliceId: String
     ): Uni<Slice> {
         throw404IfPodNotFound(podConfig, podId)
-        return sliceStore.getById(sliceId)
+        return sliceStore.getById(podId, sliceId)
     }
 
     @Path("{sliceId}")
@@ -79,7 +79,7 @@ class GraphSlicesApi(
     )
     fun deleteSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Uni<Response> {
         throw404IfPodNotFound(podConfig, podId)
-        return sliceStore.deleteById(sliceId).map { Response.noContent().build() }
+        return sliceStore.deleteById(podId, sliceId).map { Response.noContent().build() }
     }
 
     @POST
@@ -96,7 +96,7 @@ class GraphSlicesApi(
         input: QueryInputImpl
     ): Uni<QueryResult> {
         throw404IfPodNotFound(podConfig, podId)
-        return sliceStore.getById(sliceId).chain { slice ->
+        return sliceStore.getById(podId, sliceId).chain { slice ->
             executeQuery(podId, slice, input)
         }
     }
@@ -116,7 +116,7 @@ class GraphSlicesApi(
         input: QueryInputImpl
     ): Uni<Map<String, Any>> {
         throw404IfPodNotFound(podConfig, podId)
-        return sliceStore.getById(sliceId).chain { slice ->
+        return sliceStore.getById(podId, sliceId).chain { slice ->
             executeQuery(podId, slice, input).map {
                 it.toJsonLD(slice.context)
             }
@@ -124,27 +124,19 @@ class GraphSlicesApi(
     }
 
     private fun executeQuery(podId: String, slice: Slice, input: QueryInputImpl): Uni<QueryResult> {
-        val typeDefRegistry = SchemaParser().parse(slice.spec)
-        val schema = UnExecutableSchemaGenerator.makeUnExecutableSchema(typeDefRegistry)
-        val queryInput = ExecutionInput.newExecutionInput(input.query).build()
-        val validationResult = ParseAndValidate.parseAndValidate(schema, queryInput)
-        return if (validationResult.isFailure) {
-            throw BadRequestException("Invalid query: ${validationResult.errors}")
-        } else {
-            // Execute the query
-            knowledgeGraph.query(
-                QueryRequest(
-                    slice.context,
-                    podId,
-                    input.query,
-                    input.variables,
-                    input.operationName,
-                    slice.targetGraphs
-                )
+        // Execute the query
+        return knowledgeGraph.query(
+            QueryRequest(
+                slice.context,
+                podId,
+                input.query,
+                input.variables,
+                input.operationName,
+                slice.targetGraphs,
+                slice.spec
             )
-        }
+        )
     }
-
 }
 
 data class SliceInput(

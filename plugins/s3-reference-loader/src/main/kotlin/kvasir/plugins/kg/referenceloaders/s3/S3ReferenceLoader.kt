@@ -1,6 +1,5 @@
-package kvasir.plugins.kg.xtdb.changes
+package kvasir.plugins.kg.referenceloaders.s3
 
-import com.google.common.hash.Hashing
 import io.minio.GetObjectArgs
 import io.minio.GetObjectResponse
 import io.minio.MinioAsyncClient
@@ -8,48 +7,25 @@ import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
+import kvasir.definitions.kg.RDFStatement
+import kvasir.definitions.kg.ReferenceLoader
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
 import org.eclipse.rdf4j.model.Literal
-import org.eclipse.rdf4j.model.Statement
 import org.eclipse.rdf4j.query.QueryResults
 import org.eclipse.rdf4j.rio.RDFFormat
 import kotlin.jvm.optionals.getOrNull
 
 @ApplicationScoped
-class ReferenceHandler(
-    private val minioClient: MinioAsyncClient
-) {
+class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLoader {
 
-    fun handleReferences(
-        refs: List<Map<String, Any>>,
-        podId: String,
-        targetGraph: String
-    ): Multi<kvasir.plugins.kg.xtdb.changes.Statement> {
-        return Multi.createFrom().iterable(refs)
-            .onItem().transformToMulti { referenceInstance ->
-                when (referenceInstance[JsonLdKeywords.type]) {
-                    KvasirVocab.S3Reference -> handleS3Reference(
-                        referenceInstance[KvasirVocab.Key] as String,
-                        podId,
-                        targetGraph
-                    )
-
-                    else -> Multi.createFrom().failure(IllegalArgumentException("Unsupported reference type"))
-                }
-            }
-            .concatenate()
+    override fun isSupported(reference: Map<String, Any>): Boolean {
+        return reference[JsonLdKeywords.type] == KvasirVocab.S3Reference
     }
 
-    /**
-     * Stream S3 ref containing linked-data as a Multi of Xtdb tuples.
-     */
-    fun handleS3Reference(
-        key: String,
-        podId: String,
-        targetGraph: String
-    ): Multi<kvasir.plugins.kg.xtdb.changes.Statement> {
+    override fun loadReference(podId: String, targetGraph: String, reference: Map<String, Any>): Multi<RDFStatement> {
+        val key = reference[KvasirVocab.Key] as String
         return Uni.createFrom()
             .future(minioClient.getObject(GetObjectArgs.builder().bucket(podId).`object`(key).build()))
             .onItem().transformToMulti { resp ->
@@ -57,33 +33,15 @@ class ReferenceHandler(
                 Multi.createFrom().iterable(QueryResults.parseGraphBackground(resp, null, parseLang(resp)))
             }
             .map { statement ->
-                kvasir.plugins.kg.xtdb.changes.Statement(
-                    getRecordId(statement, targetGraph),
+                RDFStatement(
                     statement.subject.stringValue(),
                     statement.predicate.stringValue(),
                     if (statement.`object`.isLiteral) getCompatibleRawValue(statement.`object` as Literal) else statement.`object`.stringValue(),
-                    when {
-                        statement.`object`.isIRI -> KGPropertyKind.IRI
-                        statement.`object`.isBNode -> KGPropertyKind.BlankNode
-                        statement.`object`.isLiteral -> KGPropertyKind.Literal
-                        else -> KGPropertyKind.Unknown
-                    },
+                    targetGraph,
                     statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.datatype?.stringValue(),
                     statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.language?.getOrNull(),
-                    targetGraph
                 )
             }
-    }
-
-    private fun getRecordId(statement: Statement, targetGraph: String): String {
-        val (datatype, lang) = statement.`object`.takeIf { it.isLiteral }?.let {
-            it as Literal
-            it.datatype.stringValue() to (it.language.getOrNull() ?: "")
-        } ?: ("" to "")
-        return "kvasir:" + Hashing.farmHashFingerprint64().hashString(
-            "${targetGraph}${statement.subject.stringValue()}${statement.predicate.stringValue()}${statement.`object`.stringValue()}$datatype$lang",
-            Charsets.UTF_8
-        )
     }
 
     private fun parseLang(resp: GetObjectResponse): RDFFormat {
@@ -105,5 +63,4 @@ class ReferenceHandler(
             else -> literal.stringValue()
         }
     }
-
 }
