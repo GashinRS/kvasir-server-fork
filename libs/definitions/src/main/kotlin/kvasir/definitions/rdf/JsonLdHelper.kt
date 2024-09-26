@@ -20,18 +20,26 @@ object JsonLdHelper {
     }
 
     fun compactUri(uri: String, context: Map<String, Any>, separator: String = ":"): String {
-        val (prefix, rest) = JsonLdProcessor.compact(mapOf(uri to uri), context, JsonLdOptions())
-            .filter { it.key != "@context" }.keys.first().split(":")
-        return "${prefix}${separator}${rest}"
+        val compactedString = JsonLdProcessor.compact(mapOf(uri to uri), context, JsonLdOptions())
+            .filter { it.key != "@context" }.keys.first()
+        return if (compactedString == uri) {
+            // Nothing to compact given the context
+            uri
+        } else {
+            val (prefix, rest) = compactedString.split(":", limit = 2)
+            "${prefix}${separator}${rest}"
+        }
     }
 
-    fun getFQName(prefixedName: String, context: Map<String, Any>, separator: String = ":"): String {
-        return if (!prefixedName.contains(separator)) {
-            prefixedName
+    /**
+     * Returns the fully qualified name of a prefixed name. Or null if the name is prefixed but the prefix is unknown.
+     */
+    fun getFQName(name: String, context: Map<String, Any>, separator: String = ":"): String? {
+        return if (!name.contains(separator)) {
+            name
         } else {
-            val (prefix, localName) = prefixedName.split(separator, limit = 2)
-            val ns = (context[prefix] ?: throw IllegalArgumentException("Unknown namespace prefix: $prefix")) as String
-            "$ns$localName"
+            val (prefix, localName) = name.split(separator, limit = 2)
+            context[prefix]?.let { ns -> "$ns$localName" }
         }
     }
 

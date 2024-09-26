@@ -26,9 +26,9 @@ interface SliceStore {
 
     fun list(podId: String): Uni<List<SliceSummary>>
 
-    fun getById(segmentId: String): Uni<Slice>
+    fun getById(podId: String, segmentId: String): Uni<Slice>
 
-    fun deleteById(segmentId: String): Uni<Void>
+    fun deleteById(podId: String, segmentId: String): Uni<Void>
 }
 
 interface ReferenceLoader {
@@ -98,7 +98,8 @@ data class QueryRequest(
     val query: String,
     val variables: Map<String, Any>? = null,
     val operationName: String? = null,
-    val targetGraphs: Set<String> = emptySet()
+    val targetGraphs: Set<String> = emptySet(),
+    val predefinedSchema: String? = null
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)

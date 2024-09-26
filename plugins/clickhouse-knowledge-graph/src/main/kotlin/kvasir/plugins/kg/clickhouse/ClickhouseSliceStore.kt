@@ -18,7 +18,7 @@ class ClickhouseSliceStore(private val clickhouseClient: ClickhouseClient) : Sli
     }
 
     override fun list(podId: String): Uni<List<SliceSummary>> {
-        return clickhouseClient.query(SliceQuerySpec(databaseFromPodId(podId)), "SELECT id, json FROM slices")
+        return clickhouseClient.query(SliceQuerySpec(databaseFromPodId(podId)), "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE GROUP BY id")
             .map { results ->
                 results.map { result ->
                     SliceSummary(
@@ -30,17 +30,17 @@ class ClickhouseSliceStore(private val clickhouseClient: ClickhouseClient) : Sli
             }
     }
 
-    override fun getById(segmentId: String): Uni<Slice> {
+    override fun getById(podId: String, segmentId: String): Uni<Slice> {
         return clickhouseClient.query(
-            SliceQuerySpec(databaseFromPodId(segmentId)),
-            "SELECT id, json FROM slices WHERE id = '$segmentId'"
+            SliceQuerySpec(databaseFromPodId(podId)),
+            "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE WHERE id = '$segmentId' GROUP BY id"
         )
             .map { results ->
                 results.firstOrNull() ?: throw NotFoundException("No slice found with id $segmentId")
             }
     }
 
-    override fun deleteById(segmentId: String): Uni<Void> {
-        return clickhouseClient.execute("ALTER TABLE ${databaseFromPodId(segmentId)}.$SLICE_TABLE DELETE WHERE id = '$segmentId'")
+    override fun deleteById(podId: String, segmentId: String): Uni<Void> {
+        return clickhouseClient.execute("ALTER TABLE ${databaseFromPodId(podId)}.$SLICE_TABLE DELETE WHERE id = '$segmentId'")
     }
 }

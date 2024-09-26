@@ -147,8 +147,7 @@ class XtdbKnowledgeGraph(
 
     override fun buildDatafetcher(
         podId: String,
-        context: Map<String, Any>,
-        env: DataFetcherFactoryEnvironment
+        context: Map<String, Any>
     ): DataFetcher<Any> {
         val fetchingHandler = XtdbDataFetchingHandler(context)
         return object : DataFetcher<Any> {
@@ -233,7 +232,7 @@ class XtdbDataFetchingHandler(
         return targetSelectionLoader.load(
             EntryPointKey(
                 context,
-                JsonLdHelper.getFQName(outputType.name, context, "_"),
+                JsonLdHelper.getFQName(outputType.name, context, "_")!!,
                 filter
             )
         )
@@ -244,7 +243,7 @@ class XtdbDataFetchingHandler(
         return if (env.field.name == "id") {
             return parentSubject.id
         } else {
-            val predicate = JsonLdHelper.getFQName(env.field.name, context, "_")
+            val predicate = JsonLdHelper.getFQName(env.field.name, context, "_")!!
             val predicateValueLoader = env.getDataLoader<PredicateValueKey, List<Any>>("predicateValues")!!
             predicateValueLoader.load(PredicateValueKey(parentSubject.id, predicate))
         }.thenCompose { values ->
@@ -267,7 +266,7 @@ class XtdbDataFetchingHandler(
             PredicateTargetSelectionKey(
                 context,
                 parentSubject.id,
-                JsonLdHelper.getFQName(env.field.name, context, "_"),
+                JsonLdHelper.getFQName(env.field.name, context, "_")!!,
                 filter
             )
         ).thenCompose { targets ->

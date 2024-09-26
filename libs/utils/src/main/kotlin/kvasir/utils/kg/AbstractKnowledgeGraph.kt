@@ -3,18 +3,25 @@ package kvasir.utils.kg
 import graphql.ExecutionInput
 import graphql.ExecutionResult
 import graphql.GraphQL
+import graphql.Scalars.GraphQLBoolean
 import graphql.Scalars.GraphQLID
 import graphql.Scalars.GraphQLInt
 import graphql.Scalars.GraphQLString
 import graphql.introspection.Introspection
+import graphql.language.AstTransformer
+import graphql.parser.Parser
 import graphql.schema.DataFetcher
-import graphql.schema.DataFetcherFactoryEnvironment
 import graphql.schema.GraphQLArgument
 import graphql.schema.GraphQLCodeRegistry
 import graphql.schema.GraphQLDirective
 import graphql.schema.GraphQLList
+import graphql.schema.GraphQLSchema
 import graphql.schema.GraphQLUnionType
 import graphql.schema.TypeResolver
+import graphql.schema.idl.FieldWiringEnvironment
+import graphql.schema.idl.RuntimeWiring
+import graphql.schema.idl.SchemaParser
+import graphql.schema.idl.WiringFactory
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
@@ -42,6 +49,15 @@ abstract class AbstractKnowledgeGraph(
 ) : KnowledgeGraph {
 
     companion object {
+        val typeDirective = GraphQLDirective.newDirective().name("type").validLocations(
+            Introspection.DirectiveLocation.INTERFACE,
+            Introspection.DirectiveLocation.OBJECT
+        )
+            .argument(GraphQLArgument.newArgument().name("iri").type(GraphQLString).build()).build()
+        val predicateDirective =
+            GraphQLDirective.newDirective().name("predicate").validLocation(Introspection.DirectiveLocation.FIELD)
+                .argument(GraphQLArgument.newArgument().name("iri").type(GraphQLString).build())
+                .argument(GraphQLArgument.newArgument().name("reverse").type(GraphQLBoolean).build()).build()
         val optionalDirective =
             GraphQLDirective.newDirective().name("optional").validLocation(Introspection.DirectiveLocation.FIELD)
                 .build()
@@ -126,29 +142,53 @@ abstract class AbstractKnowledgeGraph(
     }
 
     override fun query(request: QueryRequest): Uni<QueryResult> {
-        return buildSchema(request.podId, request.context)
-            .chain { generatedSchema ->
-                val codeRegistry =
-                    GraphQLCodeRegistry.newCodeRegistry()
-                        .defaultDataFetcher { env -> buildDatafetcher(request.podId, request.context, env) }
-                generatedSchema.unionTypes.forEach { unionType ->
-                    codeRegistry.typeResolver(
-                        unionType,
-                        buildUnionTypeResolver(request.podId, unionType, request.context)
-                    )
+        val subscribeToExecutableSchema = if (request.predefinedSchema != null) {
+            Uni.createFrom().item(setupPredefinedSchema(request))
+        } else {
+            buildSchema(request.podId, request.context)
+                .map { generatedSchema ->
+                    val codeRegistry =
+                        GraphQLCodeRegistry.newCodeRegistry()
+                            .defaultDataFetcher { _ -> buildDatafetcher(request.podId, request.context) }
+                    generatedSchema.unionTypes.forEach { unionType ->
+                        codeRegistry.typeResolver(
+                            unionType,
+                            buildUnionTypeResolver(request.podId, unionType, request.context)
+                        )
+                    }
+                    generatedSchema.schemaBuilder.codeRegistry(codeRegistry.build()).build()
                 }
-                val executableSchema = generatedSchema.schemaBuilder.codeRegistry(codeRegistry.build()).build()
-                val build = GraphQL.newGraphQL(executableSchema).build()
-                Uni.createFrom().future(
-                    build.executeAsync(
-                        ExecutionInput.newExecutionInput()
-                            .dataLoaderRegistry(buildDataLoaderRegistry(request.podId, request.context))
-                            .query(request.query)
-                            .build()
-                    )
+        }
+        return subscribeToExecutableSchema.chain { executableSchema ->
+            val build = GraphQL.newGraphQL(executableSchema).build()
+            Uni.createFrom().future(
+                build.executeAsync(
+                    ExecutionInput.newExecutionInput()
+                        .dataLoaderRegistry(buildDataLoaderRegistry(request.podId, request.context))
+                        .query(request.query)
+                        .build()
                 )
-                    .map { result -> mapExecutionResult(request, result) }
+            )
+                .map { result -> mapExecutionResult(request, result) }
+        }
+    }
+
+    protected open fun setupPredefinedSchema(request: QueryRequest): GraphQLSchema {
+        val typeDefinitionRegistry = SchemaParser().parse(request.predefinedSchema)
+        typeDefinitionRegistry.addKvasirDirectives()
+        val dynamicWiringFactory = object : WiringFactory {
+
+            override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
+                return buildDatafetcher(request.podId, request.context)
             }
+
+            // TODO: provide type resolvers for union and interface types
+
+        }
+        val runtimeWiring = RuntimeWiring.newRuntimeWiring().wiringFactory(dynamicWiringFactory).build()
+        val executableSchema =
+            graphql.schema.idl.SchemaGenerator().makeExecutableSchema(typeDefinitionRegistry, runtimeWiring)
+        return executableSchema
     }
 
     open fun buildSchema(podId: String, context: Map<String, Any>): Uni<SchemaGeneratorResult> {
@@ -204,8 +244,7 @@ abstract class AbstractKnowledgeGraph(
      */
     abstract fun buildDatafetcher(
         podId: String,
-        context: Map<String, Any>,
-        env: DataFetcherFactoryEnvironment
+        context: Map<String, Any>
     ): DataFetcher<Any>
 
     abstract fun buildUnionTypeResolver(

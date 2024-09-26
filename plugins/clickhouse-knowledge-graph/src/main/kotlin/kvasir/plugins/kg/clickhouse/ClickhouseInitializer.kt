@@ -67,6 +67,7 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
             """
             CREATE TABLE IF NOT EXISTS $database.slices (
                 id String,
+                timestamp DateTime64(3),
                 json String
             ) ENGINE = ReplacingMergeTree()
                 ORDER BY (id);

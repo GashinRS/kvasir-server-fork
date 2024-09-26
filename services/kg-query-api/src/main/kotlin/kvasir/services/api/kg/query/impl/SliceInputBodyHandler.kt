@@ -1,12 +1,13 @@
 package kvasir.services.api.kg.query.impl
 
 import com.github.jsonldjava.utils.JsonUtils
-import io.vertx.core.json.JsonObject
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.MultivaluedMap
 import jakarta.ws.rs.ext.MessageBodyReader
 import jakarta.ws.rs.ext.Provider
 import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.KvasirVocab
 import kvasir.services.api.kg.query.SliceInput
 import java.io.InputStream
 import java.lang.reflect.Type
@@ -32,6 +33,12 @@ class SliceInputBodyHandler : MessageBodyReader<SliceInput> {
     ): SliceInput {
         val jsonLD = JsonUtils.fromInputStream(inputStream) as MutableMap<String, Any>
         val compactedFQJsonLD = JsonLdHelper.toCompactFQForm(jsonLD)
-        return JsonObject(compactedFQJsonLD).mapTo(SliceInput::class.java)
+        return SliceInput(
+            context = jsonLD[JsonLdKeywords.context] as Map<String, Any>,
+            name = compactedFQJsonLD[KvasirVocab.name] as String,
+            schema = compactedFQJsonLD[KvasirVocab.schema] as String,
+            description = compactedFQJsonLD[KvasirVocab.description] as String? ?: "",
+            targetGraphs = compactedFQJsonLD[KvasirVocab.targetGraphs] as Set<String>? ?: emptySet()
+        )
     }
 }

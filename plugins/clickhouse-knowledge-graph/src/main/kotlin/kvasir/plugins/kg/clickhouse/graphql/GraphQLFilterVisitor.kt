@@ -53,7 +53,10 @@ class GraphQLFilterVisitor(private val context: Map<String, Any>) :
             value.toBooleanStrictOrNull() != null -> value
             value.toLongOrNull() != null -> value
             value.toDoubleOrNull() != null -> value
-            else -> "'$value'"
+            else -> {
+                val fqValue = JsonLdHelper.getFQName(value, context, ":")
+                "'$fqValue'"
+            }
         }
     }
 }

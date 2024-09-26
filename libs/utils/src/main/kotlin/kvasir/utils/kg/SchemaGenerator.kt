@@ -1,10 +1,16 @@
 package kvasir.utils.kg
 
+import com.google.common.hash.Hashing
 import graphql.Scalars.GraphQLBoolean
 import graphql.Scalars.GraphQLFloat
 import graphql.Scalars.GraphQLID
 import graphql.Scalars.GraphQLInt
 import graphql.Scalars.GraphQLString
+import graphql.language.DirectiveDefinition
+import graphql.language.DirectiveLocation
+import graphql.language.InputValueDefinition
+import graphql.language.StringValue
+import graphql.language.TypeName
 import graphql.scalars.ExtendedScalars
 import graphql.schema.GraphQLFieldDefinition
 import graphql.schema.GraphQLList
@@ -14,6 +20,7 @@ import graphql.schema.GraphQLScalarType
 import graphql.schema.GraphQLSchema
 import graphql.schema.GraphQLTypeReference
 import graphql.schema.GraphQLUnionType
+import graphql.schema.idl.TypeDefinitionRegistry
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.definitions.rdf.XSDVocab
@@ -23,23 +30,47 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
     fun process(): SchemaGeneratorResult {
         val unionTypes = mutableSetOf<GraphQLUnionType>()
         val graphQLObjects = types.map { type ->
-            val prefixedTypeName = JsonLdHelper.compactUri(type.uri, context, "_")
+            val prefixedTypeName = graphqLCompatibleName(type.uri, context)
             val idField = GraphQLFieldDefinition.newFieldDefinition().name("id").type(GraphQLID).build()
-            GraphQLObjectType.newObject().name(prefixedTypeName).description(type.uri).fields(
-                listOf(idField) + type.properties.map { property ->
-                    val prefixedProperty = JsonLdHelper.compactUri(property.uri, context, "_")
-                    val propertyType = getGraphQLPropertyType(property, unionTypes, context)
-                    val propertyBuilder = GraphQLFieldDefinition.newFieldDefinition()
-                        .arguments(if (KGPropertyKind.IRI == property.kind) AbstractKnowledgeGraph.defaultRelationArguments else emptyList())
-                        .name(prefixedProperty)
-                        .description(property.uri)
-                        .type(GraphQLList.list(propertyType))
-                    propertyBuilder.build()
+            val typeDirective = AbstractKnowledgeGraph.typeDirective.toAppliedDirective()
+            GraphQLObjectType.newObject().name(prefixedTypeName).description(type.uri)
+                .withAppliedDirective(typeDirective.transform { directiveBuilder ->
+                    directiveBuilder.argument(typeDirective.getArgument("iri").transform { argBuilder ->
+                        argBuilder.valueLiteral(
+                            StringValue.of(type.uri)
+                        )
+                    })
                 }
-            ).build()
+                )
+                .fields(
+                    listOf(idField) + type.properties.map { property ->
+                        val prefixedProperty = graphqLCompatibleName(property.uri, context)
+                        val propertyType = getGraphQLPropertyType(property, unionTypes, context)
+                        val predicateDirective = AbstractKnowledgeGraph.predicateDirective.toAppliedDirective()
+                        val propertyBuilder = GraphQLFieldDefinition.newFieldDefinition()
+                            .withAppliedDirective(
+                                predicateDirective.transform { directiveBuilder ->
+                                    directiveBuilder.argument(
+                                        predicateDirective.getArgument("iri").transform { argBuilder ->
+                                            argBuilder.valueLiteral(
+                                                StringValue.of(property.uri)
+                                            )
+                                        })
+                                }
+                            )
+                            .arguments(if (KGPropertyKind.IRI == property.kind) AbstractKnowledgeGraph.defaultRelationArguments else emptyList())
+                            .name(prefixedProperty)
+                            .description(property.uri)
+                            .type(GraphQLList.list(propertyType))
+                        propertyBuilder.build()
+                    }
+                ).build()
         }
         val rdfsResourceEntryPoint = GraphQLObjectType.newObject().name("rdfs_Resource")
-            .fields(graphQLObjects.flatMap { it.fields }.distinctBy { it.name }).build()
+            .fields(
+                (listOf(GraphQLFieldDefinition.newFieldDefinition().name("id").type(GraphQLID).build())
+                        + graphQLObjects.flatMap { it.fields })
+                    .distinctBy { it.name }).build()
         val schema = GraphQLSchema.newSchema()
             .query(
                 GraphQLObjectType.newObject().name("Query")
@@ -51,6 +82,8 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
             )
             .additionalDirective(AbstractKnowledgeGraph.optionalDirective)
             .additionalDirective(AbstractKnowledgeGraph.filterDirective)
+            .additionalDirective(AbstractKnowledgeGraph.typeDirective)
+            .additionalDirective(AbstractKnowledgeGraph.predicateDirective)
         return SchemaGeneratorResult(schema, unionTypes)
     }
 
@@ -70,7 +103,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                 } as GraphQLOutputType
 
                 KGPropertyKind.IRI -> {
-                    val propertyTypeName = JsonLdHelper.compactUri(typeRef, context, "_")
+                    val propertyTypeName = graphqLCompatibleName(typeRef, context)
                     GraphQLTypeReference.typeRef(propertyTypeName)
                 }
 
@@ -100,6 +133,61 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         }
     }
 
+    private fun graphqLCompatibleName(name: String, context: Map<String, Any>): String {
+        return JsonLdHelper.compactUri(name, context, "_").takeIf { it != name } ?: run {
+            val (ns, localName) = when {
+                name.contains("#") -> {
+                    val hashIndex = name.lastIndexOf("#")
+                    name.substring(0, hashIndex) to name.substring(hashIndex + 1)
+                }
+
+                name.contains("/") -> {
+                    val slashIndex = name.lastIndexOf("/")
+                    name.substring(0, slashIndex) to name.substring(slashIndex + 1)
+                }
+
+                else -> throw IllegalArgumentException("Invalid URI: $name")
+            }
+            val encodedPrefix = Hashing.farmHashFingerprint64().hashString(ns, Charsets.UTF_8).toString()
+            "ns${encodedPrefix}_$localName"
+        }
+    }
+
 }
 
 data class SchemaGeneratorResult(val schemaBuilder: GraphQLSchema.Builder, val unionTypes: Set<GraphQLUnionType>)
+
+internal fun TypeDefinitionRegistry.addKvasirDirectives() {
+    // TODO: avoid duplication with directives added to the GraphQLSchema
+    this
+        .addAll(
+            listOf(
+                DirectiveDefinition.newDirectiveDefinition().name("predicate").inputValueDefinitions(
+                    listOf(
+                        InputValueDefinition.newInputValueDefinition().name("iri").type(
+                            TypeName.newTypeName("String").build()
+                        ).build(),
+                        InputValueDefinition.newInputValueDefinition().name("reverse").type(
+                            TypeName.newTypeName("Boolean").build()
+                        ).build()
+                    )
+                )
+                    .directiveLocation(DirectiveLocation.newDirectiveLocation().name("FIELD_DEFINITION").build())
+                    .build(),
+                DirectiveDefinition.newDirectiveDefinition().name("type").inputValueDefinitions(
+                    listOf(
+                        InputValueDefinition.newInputValueDefinition().name("iri").type(
+                            TypeName.newTypeName("String").build()
+                        ).build()
+                    )
+                )
+                    .directiveLocations(
+                        listOf(
+                            DirectiveLocation.newDirectiveLocation().name("OBJECT").build(),
+                            DirectiveLocation.newDirectiveLocation().name("INTERFACE").build()
+                        )
+                    )
+                    .build()
+            )
+        )
+}

@@ -6,13 +6,15 @@ import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
 import graphql.TypeResolutionEnvironment
+import graphql.language.BooleanValue
 import graphql.language.Field
+import graphql.language.FloatValue
 import graphql.language.InlineFragment
+import graphql.language.ScalarValue
 import graphql.language.StringValue
 import graphql.schema.DataFetcher
-import graphql.schema.DataFetcherFactoryEnvironment
 import graphql.schema.DataFetchingEnvironment
-import graphql.schema.GraphQLNamedOutputType
+import graphql.schema.GraphQLDirectiveContainer
 import graphql.schema.GraphQLObjectType
 import graphql.schema.GraphQLType
 import graphql.schema.GraphQLTypeUtil
@@ -72,8 +74,7 @@ object SubOptimalResolver {
 
     fun getDatafetcher(
         podId: String,
-        context: Map<String, Any>,
-        env: DataFetcherFactoryEnvironment
+        context: Map<String, Any>
     ): DataFetcher<Any> {
         val fetchingHandler = ClickhouseDataFetchingHandler(context)
         return object : DataFetcher<Any> {
@@ -99,19 +100,19 @@ class ClickhouseDataFetchingHandler(
 ) {
 
     fun handleEntrypoint(env: DataFetchingEnvironment): Any {
-        val targetSelectionLoader = env.getDataLoader<EntryPointKey, List<String>>("entrypoints")!!
-        val outputType = GraphQLTypeUtil.unwrapOne(env.fieldDefinition.type) as GraphQLNamedOutputType
+        val targetSelectionLoader = env.getDataLoader<EntryPointKey, List<Target>>("entrypoints")!!
+        val outputType = GraphQLTypeUtil.unwrapAll(env.fieldDefinition.type) as GraphQLDirectiveContainer
         val filter = listOfNotNull(
             getNodeFilter(env.field),
-            env.getArgument<List<String>>("id")?.let { idFilter -> ComparisonNode(RSQLOperators.IN, "id", idFilter) }
+            getArgsFilter(env.field)
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
         return targetSelectionLoader.load(
             EntryPointKey(
                 context,
-                JsonLdHelper.getFQName(outputType.name, context, "_"),
+                getFQName(outputType),
                 filter
             )
-        )
+        ).thenApply{ values -> handleFieldMultiplicity(env, values) }
     }
 
     fun handleScalar(env: DataFetchingEnvironment): Any {
@@ -119,7 +120,7 @@ class ClickhouseDataFetchingHandler(
         return if (env.field.name == "id") {
             return parentSubject.id
         } else {
-            val predicate = JsonLdHelper.getFQName(env.field.name, context, "_")
+            val predicate = getFQName(env.fieldDefinition)
             val predicateValueLoader = env.getDataLoader<PredicateValueKey, List<Any>>("predicateValues")!!
             predicateValueLoader.load(PredicateValueKey(parentSubject.id, predicate))
         }.thenCompose { values ->
@@ -128,21 +129,21 @@ class ClickhouseDataFetchingHandler(
             } else {
                 CompletableFuture.failedFuture(NoResultsException())
             }
-        }
+        }.thenApply{ values -> handleFieldMultiplicity(env, values) }
     }
 
     fun handleRelation(env: DataFetchingEnvironment): Any {
         val parentSubject = env.getSource<Target>()!!
-        val targetSelectionLoader = env.getDataLoader<PredicateTargetSelectionKey, List<String>>("targets")!!
+        val targetSelectionLoader = env.getDataLoader<PredicateTargetSelectionKey, List<Target>>("targets")!!
         val filter = listOfNotNull(
             getNodeFilter(env.field),
-            env.getArgument<List<String>>("id")?.let { idFilter -> ComparisonNode(RSQLOperators.IN, "id", idFilter) }
+            getArgsFilter(env.field)
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
         return targetSelectionLoader.load(
             PredicateTargetSelectionKey(
                 context,
                 parentSubject.id,
-                JsonLdHelper.getFQName(env.field.name, context, "_"),
+                getFQName(env.fieldDefinition),
                 filter
             )
         ).thenCompose { targets ->
@@ -151,6 +152,37 @@ class ClickhouseDataFetchingHandler(
             } else {
                 CompletableFuture.failedFuture(NoResultsException())
             }
+        }.thenApply{ values -> handleFieldMultiplicity(env, values) }
+    }
+
+    private fun getArgsFilter(field: Field): Node? {
+        val argFilters =
+            field.arguments.filter { it.name !in AbstractKnowledgeGraph.defaultRelationArguments.map { it.name } || it.name == "id" }
+                .map { argument ->
+                    when (argument.value) {
+                        is List<*> -> ComparisonNode(
+                            RSQLOperators.IN,
+                            argument.name,
+                            (argument.value as List<Any>).filterIsInstance<ScalarValue<*>>().map { unboxScalar(it) })
+
+                        else -> ComparisonNode(
+                            RSQLOperators.EQUAL,
+                            argument.name,
+                            listOf(unboxScalar(argument.value as ScalarValue<*>))
+                        )
+                    }
+                }
+        return argFilters.takeIf { it.isNotEmpty() }?.let {
+            if (it.size == 1) it.first() else AndNode(it)
+        }
+    }
+
+    private fun unboxScalar(scalar: ScalarValue<*>): String {
+        return when (scalar) {
+            is StringValue -> scalar.value.toString()
+            is BooleanValue -> scalar.isValue.toString()
+            is FloatValue -> scalar.value.toString()
+            else -> throw IllegalArgumentException("Scalar type '${scalar::class.simpleName}' is not supported as argument")
         }
     }
 
@@ -170,6 +202,28 @@ class ClickhouseDataFetchingHandler(
         return filters?.takeIf { it.isNotEmpty() }?.let {
             if (it.size == 1) it.first() else AndNode(it)
         }
+    }
+
+    private fun handleFieldMultiplicity(env: DataFetchingEnvironment, values: List<Any>): Any? {
+        return if (GraphQLTypeUtil.isList(env.fieldDefinition.type) || GraphQLTypeUtil.isList(
+                GraphQLTypeUtil.unwrapOne(
+                    env.fieldDefinition.type
+                )
+            )
+        ) {
+            values
+        } else {
+            values.firstOrNull()
+        }
+    }
+
+    private fun getFQName(node: GraphQLDirectiveContainer): String {
+        return JsonLdHelper.getFQName(node.name, context, "_")?.takeIf { it != node.name }
+            ?: run {
+                node.getAppliedDirective("predicate")?.getArgument("iri")?.getValue<String>()
+                    ?: node.getAppliedDirective("type")?.getArgument("iri")?.getValue<String>()
+
+            } ?: throw IllegalArgumentException("No semantic context found for ${node.name}")
     }
 
 }

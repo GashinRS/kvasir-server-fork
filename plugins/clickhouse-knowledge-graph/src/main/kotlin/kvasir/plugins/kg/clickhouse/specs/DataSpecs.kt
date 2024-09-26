@@ -17,7 +17,7 @@ const val META_DATA_TABLE = "metadata"
 const val SLICE_TABLE = "slices"
 val DATA_COLUMNS = listOf("subject", "predicate", "object", "datatype", "language", "graph", "sign")
 val META_DATA_COLUMNS = listOf("type_uri", "property_uri", "property_kind", "property_ref")
-val SLICE_COLUMNS = listOf("id", "json")
+val SLICE_COLUMNS = listOf("id", "timestamp", "json")
 
 private fun statementToBaseRecord(t: RDFStatement): ClickhouseRecord {
     return ClickhouseRecord()
@@ -59,6 +59,7 @@ class SliceInsertRecordSpec(database: String) : InsertRecordSpec<Slice>(database
     override fun toRecord(t: Slice): ClickhouseRecord {
         return ClickhouseRecord()
             .add(t.id)
+            .add(System.currentTimeMillis())
             .add(t)
     }
 }

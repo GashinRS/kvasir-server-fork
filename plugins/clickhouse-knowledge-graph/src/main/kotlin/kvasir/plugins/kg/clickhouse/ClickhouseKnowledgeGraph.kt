@@ -74,10 +74,9 @@ class ClickhouseKnowledgeGraph(
 
     override fun buildDatafetcher(
         podId: String,
-        context: Map<String, Any>,
-        env: DataFetcherFactoryEnvironment
+        context: Map<String, Any>
     ): DataFetcher<Any> {
-        return SubOptimalResolver.getDatafetcher(podId, context, env)
+        return SubOptimalResolver.getDatafetcher(podId, context)
     }
 
     override fun buildUnionTypeResolver(
