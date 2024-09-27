@@ -11,6 +11,24 @@ to the [GraphQL specification](https://graphql.org/learn/serving-over-http/#post
 a `@context` object, to provide aliases for the predicate IRIs used in the query. If no content is explicitly provided,
 the system will fall back to the default mapping that is configured for the pod (TODO: see Pod config).
 
+## Why GraphQL?
+
+When choosing a query language for the Knowledge Graph, we considered several options, including SPARQL, GraphQL,
+RESTful APIs (centered around collections of specific RDF classes), or a proprietary query language (e.g. similar to
+what [Fluree](https://developers.flur.ee/docs/learn/foundations/querying/) is doing). In the end we chose GraphQL
+as the main querying mechanism[^1] for the following reasons:
+
+* GraphQL is a widely adopted query language that is easy to learn and use. It is especially popular in the context of
+  modern web applications and APIs. By using GraphQL, we aim to make the Knowledge Graph accessible to a broad audience.
+* GraphQL is technology-agnostic, meaning that it can be used with any backend system. This allows us to experiment with
+  different
+  storage solutions for the Knowledge Graph. Whereas with SPARQL, the query language is tightly coupled to the RDF data
+  model and storage technologies that exist within the Semantic Web ecosystem.
+* GraphQL strikes a nice balance between expressiveness and simplicity. It allows for complex queries, while still being
+  easy to understand and use. This is important for users who are not familiar with RDF or SPARQL. More importantly, it
+  limits the implementation scope, enhancing performance and simplifying the process for third parties to develop a
+  Kvasir-compatible API.
+
 ## Basic usage
 
 The top-level field in the query represents the type of resource you want to retrieve. E.g. The following query
@@ -305,3 +323,6 @@ Returns:
             <a href="API-Reference.md">API Reference</a>
     </category>
 </seealso>
+
+[^1]: The architecture of Kvasir is designed to be modular and flexible, so it is possible to add additional query
+mechanisms in the future, if needed.
