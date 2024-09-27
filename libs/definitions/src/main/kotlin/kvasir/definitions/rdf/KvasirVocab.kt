@@ -18,4 +18,5 @@ object KvasirVocab {
     const val schema = "${baseUri}schema"
     const val description = "${baseUri}description"
     const val targetGraphs = "${baseUri}targetGraphs"
+    const val podId = "${baseUri}podId"
 }

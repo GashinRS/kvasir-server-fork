@@ -1,13 +1,15 @@
 package kvasir.definitions.kg
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
-import graphql.language.Document
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.changeops.Assertion
+import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.KvasirVocab
 import java.util.*
 
 interface KnowledgeGraph {
@@ -151,18 +153,28 @@ data class HistoryResult(
 )
 
 data class Slice(
+    @JsonProperty(JsonLdKeywords.id)
     val id: String,
+    @JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
+    @JsonProperty(KvasirVocab.podId)
     val podId: String,
+    @JsonProperty(KvasirVocab.name)
     val name: String,
+    @JsonProperty(KvasirVocab.description)
     val description: String,
-    val spec: String,
+    @JsonProperty(KvasirVocab.schema)
+    val schema: String,
+    @JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 )
 
 data class SliceSummary(
+    @JsonProperty(JsonLdKeywords.id)
     val id: String,
+    @JsonProperty(KvasirVocab.name)
     val name: String,
+    @JsonProperty(KvasirVocab.description)
     val description: String
 )
 

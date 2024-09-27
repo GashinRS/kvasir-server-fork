@@ -38,9 +38,6 @@ paths:
           application/ld+json:
             schema:
               $ref: "#/components/schemas/ChangeRequestInput"
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ChangeRequestInput"
       responses:
         "202":
           description: Change request accepted.
@@ -432,7 +429,7 @@ components:
       - podId
       - name
       - description
-      - spec
+      - schema
       - targetGraphs
       type: object
       properties:
@@ -447,7 +444,7 @@ components:
           type: string
         description:
           type: string
-        spec:
+        schema:
           type: string
         targetGraphs:
           uniqueItems: true

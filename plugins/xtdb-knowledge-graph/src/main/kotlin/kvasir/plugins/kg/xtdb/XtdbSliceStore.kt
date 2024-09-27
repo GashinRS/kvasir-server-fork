@@ -4,7 +4,6 @@ import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.NotFoundException
-import kvasir.definitions.graphql.GraphQLUtils
 import kvasir.definitions.kg.Slice
 import kvasir.definitions.kg.SliceSummary
 import kvasir.definitions.kg.SliceStore
@@ -30,7 +29,7 @@ class XtdbSliceStore(
                             segment.podId,
                             segment.name,
                             segment.description,
-                            segment.spec,
+                            segment.schema,
                             segment.targetGraphs
                         )
                     )
@@ -65,7 +64,7 @@ class XtdbSliceStore(
                         podId = result["podId"] as String,
                         name = result["name"] as String,
                         description = result["description"] as String,
-                        spec = result["spec"] as String,
+                        schema = result["spec"] as String,
                         targetGraphs = result["targetGraphs"] as Set<String>
                     )
                 )

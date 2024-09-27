@@ -1,15 +1,19 @@
 package kvasir.services.api.kg.query
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.common.hash.Hashing
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
+import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.kg.*
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.KvasirVocab
 import kvasir.utils.kg.SchemaValidator
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
@@ -22,7 +26,8 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 class GraphSlicesApi(
     private val sliceStore: SliceStore,
     private val knowledgeGraph: KnowledgeGraph,
-    private val podConfig: StaticBootstrapConfig
+    private val podConfig: StaticBootstrapConfig,
+    private val uriInfo: UriInfo
 ) {
 
     @GET
@@ -34,6 +39,13 @@ class GraphSlicesApi(
     fun listSlices(@PathParam("podId") podId: String): Uni<List<SliceSummary>> {
         throw404IfPodNotFound(podConfig, podId)
         return sliceStore.list(podId)
+            .map { slices ->
+                slices.map { slice ->
+                    slice.copy(
+                        id = uriInfo.absolutePathBuilder.path(slice.id).build().toString()
+                    )
+                }
+            }
     }
 
     @POST
@@ -47,9 +59,9 @@ class GraphSlicesApi(
         val slice = input.toSlice(podId)
         // Validate the schema
         return try {
-            SchemaValidator.validateSchema(slice.spec, slice.context)
+            SchemaValidator.validateSchema(slice.schema, slice.context)
             sliceStore.persist(slice).map {
-                Response.status(Response.Status.CREATED).entity(slice).build()
+                Response.created(uriInfo.absolutePathBuilder.path(slice.id).build()).build()
             }
         } catch (e: Throwable) {
             Uni.createFrom().failure(e)
@@ -68,7 +80,7 @@ class GraphSlicesApi(
         @PathParam("sliceId") sliceId: String
     ): Uni<Slice> {
         throw404IfPodNotFound(podConfig, podId)
-        return sliceStore.getById(podId, sliceId)
+        return sliceStore.getById(podId, sliceId).map { result -> result.copy(id = uriInfo.absolutePath.toString()) }
     }
 
     @Path("{sliceId}")
@@ -133,17 +145,22 @@ class GraphSlicesApi(
                 input.variables,
                 input.operationName,
                 slice.targetGraphs,
-                slice.spec
+                slice.schema
             )
         )
     }
 }
 
 data class SliceInput(
+    @JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
+    @JsonProperty(KvasirVocab.name)
     val name: String,
+    @JsonProperty(KvasirVocab.schema)
     val schema: String,
+    @JsonProperty(KvasirVocab.description)
     val description: String = "",
+    @JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 ) {
     fun toSlice(podId: String): Slice {
@@ -153,7 +170,7 @@ data class SliceInput(
             podId = podId,
             name = name,
             description = description,
-            spec = schema,
+            schema = schema,
             targetGraphs = targetGraphs
         )
     }

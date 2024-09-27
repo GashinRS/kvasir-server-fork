@@ -15,8 +15,8 @@ object JsonLdKeywords {
 
 object JsonLdHelper {
 
-    fun toCompactFQForm(doc: Map<String, Any>): Map<String, Any> {
-        return JsonLdProcessor.compact(JsonLdProcessor.expand(doc), emptyMap<String, Any>(), JsonLdOptions())
+    fun toCompactFQForm(doc: Map<String, Any>, options: JsonLdOptions = JsonLdOptions()): Map<String, Any> {
+        return JsonLdProcessor.compact(JsonLdProcessor.expand(doc), emptyMap<String, Any>(), options)
     }
 
     fun compactUri(uri: String, context: Map<String, Any>, separator: String = ":"): String {

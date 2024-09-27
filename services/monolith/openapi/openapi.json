@@ -42,11 +42,6 @@
               "schema" : {
                 "$ref" : "#/components/schemas/ChangeRequestInput"
               }
-            },
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/ChangeRequestInput"
-              }
             }
           }
         },
@@ -549,7 +544,7 @@
         }
       },
       "Slice" : {
-        "required" : [ "id", "context", "podId", "name", "description", "spec", "targetGraphs" ],
+        "required" : [ "id", "context", "podId", "name", "description", "schema", "targetGraphs" ],
         "type" : "object",
         "properties" : {
           "id" : {
@@ -568,7 +563,7 @@
           "description" : {
             "type" : "string"
           },
-          "spec" : {
+          "schema" : {
             "type" : "string"
           },
           "targetGraphs" : {
