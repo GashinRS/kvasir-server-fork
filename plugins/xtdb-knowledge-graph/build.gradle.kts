@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":libs:definitions"))
     implementation(project(":libs:utils"))
     implementation("com.graphql-java:graphql-java-extended-scalars:22.0")
+    implementation("org.apache.jena:jena-shacl:5.1.0")
     implementation("org.eclipse.rdf4j:rdf4j-query:5.0.2")
     implementation("org.eclipse.rdf4j:rdf4j-rio-turtle:5.0.2")
     implementation("org.eclipse.rdf4j:rdf4j-rio-jsonld:5.0.2")

@@ -9,6 +9,8 @@ import graphql.Scalars.GraphQLString
 import graphql.language.DirectiveDefinition
 import graphql.language.DirectiveLocation
 import graphql.language.InputValueDefinition
+import graphql.language.ListType
+import graphql.language.ScalarTypeDefinition
 import graphql.language.StringValue
 import graphql.language.TypeName
 import graphql.scalars.ExtendedScalars
@@ -174,7 +176,7 @@ internal fun TypeDefinitionRegistry.addKvasirDirectives() {
                 )
                     .directiveLocation(DirectiveLocation.newDirectiveLocation().name("FIELD_DEFINITION").build())
                     .build(),
-                DirectiveDefinition.newDirectiveDefinition().name("type").inputValueDefinitions(
+                DirectiveDefinition.newDirectiveDefinition().name("class").inputValueDefinitions(
                     listOf(
                         InputValueDefinition.newInputValueDefinition().name("iri").type(
                             TypeName.newTypeName("String").build()
@@ -187,7 +189,37 @@ internal fun TypeDefinitionRegistry.addKvasirDirectives() {
                             DirectiveLocation.newDirectiveLocation().name("INTERFACE").build()
                         )
                     )
-                    .build()
+                    .build(),
+                DirectiveDefinition.newDirectiveDefinition().name("shape").inputValueDefinitions(
+                    listOf(
+                        InputValueDefinition.newInputValueDefinition().name("minCount")
+                            .type(TypeName.newTypeName("Int").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("maxCount")
+                            .type(TypeName.newTypeName("Int").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("minExclusive")
+                            .type(TypeName.newTypeName("String").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("maxExclusive")
+                            .type(TypeName.newTypeName("String").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("minInclusive")
+                            .type(TypeName.newTypeName("String").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("maxInclusive")
+                            .type(TypeName.newTypeName("String").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("minLength")
+                            .type(TypeName.newTypeName("Int").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("maxLength")
+                            .type(TypeName.newTypeName("Int").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("pattern")
+                            .type(TypeName.newTypeName("String").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("flags")
+                            .type(TypeName.newTypeName("String").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("hasValue")
+                            .type(TypeName.newTypeName("String").build()).build(),
+                        InputValueDefinition.newInputValueDefinition().name("in")
+                            .type(ListType(TypeName.newTypeName("String").build())).build(),
+                    )
+                )
+                    .directiveLocation(DirectiveLocation.newDirectiveLocation().name("FIELD_DEFINITION").build())
+                    .build(),
             )
         )
 }

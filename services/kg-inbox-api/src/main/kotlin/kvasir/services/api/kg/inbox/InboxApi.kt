@@ -14,6 +14,7 @@ import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.kg.ChangeRequest
+import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.changeops.Assertion
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
@@ -29,13 +30,14 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 import java.util.UUID
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
-@Path("{podId}/kg/inbox")
 class InboxApi(
     @Channel("change_requests_publish")
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
+    private val knowledgeGraph: KnowledgeGraph,
     private val podConfig: StaticBootstrapConfig
 ) {
 
+    @Path("{podId}/kg/inbox")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -59,6 +61,24 @@ class InboxApi(
             .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
     }
 
+    @Path("{podId}/kg/slices/{sliceId}/inbox")
+    @POST
+    @Consumes(JSON_LD_MEDIA_TYPE)
+    @Operation(
+        summary = "Perform mutations on a specific slice of the KG.",
+        description = "Post a change request, containing the requested mutations, to a slice inbox of the specified pod.",
+    )
+    @APIResponse(responseCode = "202", description = "Change request accepted.")
+    fun processSliceChangeRequest(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") sliceId: String,
+        @Context
+        uriInfo: UriInfo,
+        input: ChangeRequestInput
+    ): Uni<Response> {
+        TODO()
+    }
+
 }
 
 data class ChangeRequestInput(
@@ -69,9 +89,6 @@ data class ChangeRequestInput(
     )
     @JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any> = emptyMap(),
-    @get:Schema(name = "kss:graph", description = "Optional named graph IRI to which the change request applies.")
-    @JsonProperty(KvasirVocab.graph)
-    val graph: String = "",
     @get:Schema(
         name = "kss:assert",
         description = "List of assertions to be checked before applying the change request."
@@ -104,11 +121,22 @@ data class ChangeRequestInput(
     val delete: List<Any> = emptyList(),
 ) {
 
+    init {
+        require(insert.isNotEmpty() || delete.isNotEmpty()) {
+            "At least one of insert or delete properties must be provided"
+        }
+        require(insert.filterIsInstance<String>().isNotEmpty() && with == null) {
+            "Insert templates require a with-clause"
+        }
+        require(delete.filterIsInstance<String>().isNotEmpty() && with == null) {
+            "Delete templates require a with-clause"
+        }
+    }
+
     fun toChangeRequest(podId: String, uriInfo: UriInfo): ChangeRequest {
         return ChangeRequest(
             context = context,
             podId = podId,
-            graph = graph,
             assert = assert,
             with = with,
             insert = insert.map {
