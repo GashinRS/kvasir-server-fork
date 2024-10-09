@@ -41,11 +41,39 @@ interface ReferenceLoader {
 }
 
 data class ChangeRequest(
+    /**
+     * The unique identifier of the Change Request.
+     */
     val id: String = UUID.randomUUID().toString(),
+    /**
+     * A Change Request can be chunked when it is too large to transfer as single message.
+     * The hasNextChunk flag indicates whether there are more chunks to follow.
+     */
+    val hasNextChunk: Boolean = false,
+    /**
+     * A Change Request can be chunked when it is too large to transfer as single message.
+     * The seqNr is used to identify the chunks.
+     */
+    val seqNr: Long = 0,
+    /**
+     * The context used to produce the Change Request.
+     */
     val context: Map<String, Any> = emptyMap(),
+    /**
+     * The unique identifier of the Pod where the Change Request should be applied.
+     */
     val podId: String,
-    val graph: String = "", // Graph identifier
-    // The Change Request will only be applied if all assertions resolve to true.
+    /**
+     * The unique identifier of the Slide where the Change Request should be applied.
+     */
+    val sliceId: String? = null,
+    /**
+     * Indicates whether the Change Request has been validated.
+     */
+    val validated: Boolean = false,
+    /**
+     * The Change Request will only be applied if all assertions resolve to true.
+     */
     val assert: List<Assertion> = emptyList(),
     /**
      * The with-clause value is a GraphQL query expression.
@@ -90,12 +118,18 @@ data class ChangeRequest(
         require(deleteFromRefs.isEmpty() || (insert.isEmpty() && delete.isEmpty())) {
             "deleteFromRefs cannot be combined with regular insert or delete"
         }
+        require(insert.filterIsInstance<String>().isNotEmpty() && with == null) {
+            "Insert templates require a with-clause"
+        }
+        require(delete.filterIsInstance<String>().isNotEmpty() && with == null) {
+            "Delete templates require a with-clause"
+        }
     }
 }
 
 @GenerateNoArgConstructor
 data class QueryRequest(
-    val context : Map<String, Any> = emptyMap(),
+    val context: Map<String, Any> = emptyMap(),
     val podId: String,
     val query: String,
     val variables: Map<String, Any>? = null,
@@ -114,7 +148,7 @@ data class QueryResult(
         return transformKeys(data, context)?.let { nonNullGraph ->
             // Compact data coming from GraphQL using context
             JsonLdProcessor.compact(JsonLdProcessor.expand(nonNullGraph), context, JsonLdOptions())
-        }?: emptyMap()
+        } ?: emptyMap()
     }
 
     private fun transformKeys(graphQLData: Any?, context: Map<String, Any>): Any? {

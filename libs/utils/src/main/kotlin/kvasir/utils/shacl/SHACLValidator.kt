@@ -1,0 +1,84 @@
+package kvasir.utils.shacl
+
+import com.github.jsonldjava.utils.JsonUtils
+import org.eclipse.rdf4j.common.exception.ValidationException
+import org.eclipse.rdf4j.model.Model
+import org.eclipse.rdf4j.model.vocabulary.RDF4J
+import org.eclipse.rdf4j.repository.RepositoryException
+import org.eclipse.rdf4j.repository.sail.SailRepository
+import org.eclipse.rdf4j.rio.RDFFormat
+import org.eclipse.rdf4j.rio.Rio
+import org.eclipse.rdf4j.sail.memory.MemoryStore
+import org.eclipse.rdf4j.sail.shacl.ShaclSail
+import java.io.StringReader
+import kotlin.use
+
+interface SHACLValidator {
+
+    /**
+     * Validate the given JSON-LD instance against this validator instance.
+     * @param jsonLdInstance the JSON-LD instance to validate
+     * @throws SHACLValidationFailure if the instance does not conform to the SHACL shapes
+     */
+    fun validate(jsonLdInstance: Map<String, Any>)
+
+    /**
+     * Filter the given JSON-LD instance against this validator instance.
+     * @param jsonLdInstance the JSON-LD instance to filter
+     * @param validationFailureConsumer an optional consumer for the validation failure report
+     * @return true if the instance conforms to the SHACL shapes, false otherwise
+     */
+    fun filter(
+        jsonLdInstance: Map<String, Any>,
+        validationFailureConsumer: (SHACLValidationFailure) -> Unit = {}
+    ): Boolean
+
+}
+
+class SHACLValidationFailure(val report: String, val contentType: String = "text/turtle") :
+    IllegalArgumentException("The data does not conform to the supplied SHACL shapes")
+
+class RDF4JSHACLValidator(private val shapeModel: Model) : SHACLValidator {
+
+    companion object {
+
+        fun fromTurtleString(shapes: String): SHACLValidator {
+            val model = Rio.parse(StringReader(shapes), "", RDFFormat.TURTLE)
+            return RDF4JSHACLValidator(model)
+        }
+
+    }
+
+    override fun validate(jsonLdInstance: Map<String, Any>) {
+        val shaclSail = ShaclSail(MemoryStore())
+        SailRepository(shaclSail).connection.use { connection ->
+            // add shape model
+            connection.begin()
+            connection.add(shapeModel, RDF4J.SHACL_SHAPE_GRAPH)
+
+            try {
+                // add JSON-LD instance
+                connection.add(StringReader(JsonUtils.toString(jsonLdInstance)), "", RDFFormat.JSONLD)
+                // commit transaction to trigger validation
+                connection.commit()
+            } catch (e: RepositoryException) {
+                if (e.cause is ValidationException) {
+                    throw IllegalArgumentException("Validation failed", e.cause)
+                }
+            }
+        }
+    }
+
+    override fun filter(
+        jsonLdInstance: Map<String, Any>,
+        validationFailureConsumer: (SHACLValidationFailure) -> Unit
+    ): Boolean {
+        try {
+            validate(jsonLdInstance)
+            return true
+        } catch (e: IllegalArgumentException) {
+            return false
+        }
+    }
+
+}
