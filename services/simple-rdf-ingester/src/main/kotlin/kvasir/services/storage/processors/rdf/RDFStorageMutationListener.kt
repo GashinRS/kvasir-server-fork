@@ -52,7 +52,6 @@ class RDFStorageMutationListener(
                 when (event.mutationType) {
                     StorageMutationEventType.PUT_OBJECT, StorageMutationEventType.COMPLETE_MULTIPART_UPLOAD, StorageMutationEventType.RESTORE_OBJECT -> ChangeRequest(
                         podId = event.podId,
-                        graph = event.externalObjectUri,
                         insertFromRefs = listOf(
                             mapOf(
                                 JsonLdKeywords.type to KvasirVocab.S3Reference,
@@ -64,7 +63,6 @@ class RDFStorageMutationListener(
 
                     StorageMutationEventType.DELETE_OBJECT -> ChangeRequest(
                         podId = event.podId,
-                        graph = event.externalObjectUri,
                         insertFromRefs = emptyList(),
                         deleteFromRefs = listOf(
                             mapOf(

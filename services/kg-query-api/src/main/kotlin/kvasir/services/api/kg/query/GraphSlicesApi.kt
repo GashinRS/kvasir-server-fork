@@ -14,6 +14,8 @@ import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.definitions.rdf.RDFMediaTypes
+import kvasir.utils.graphql2shacl.GraphQL2SHACL
 import kvasir.utils.kg.SchemaValidator
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
@@ -56,7 +58,9 @@ class GraphSlicesApi(
     )
     fun createSlice(@PathParam("podId") podId: String, input: SliceInput): Uni<Response> {
         throw404IfPodNotFound(podConfig, podId)
-        val slice = input.toSlice(podId)
+        // Generate shapes
+        val shacl = GraphQL2SHACL(input.schema, input.context).toSHACL()
+        val slice = input.toSlice(podId, shacl)
         // Validate the schema
         return try {
             SchemaValidator.validateSchema(slice.schema, slice.context)
@@ -135,6 +139,17 @@ class GraphSlicesApi(
         }
     }
 
+    @GET
+    @Path("{sliceId}/shacl")
+    @Produces(RDFMediaTypes.TURTLE)
+    fun getSHACL(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") sliceId: String
+    ): Uni<String> {
+        throw404IfPodNotFound(podConfig, podId)
+        return sliceStore.getById(podId, sliceId).map { slice -> slice.shacl }
+    }
+
     private fun executeQuery(podId: String, slice: Slice, input: QueryInputImpl): Uni<QueryResult> {
         // Execute the query
         return knowledgeGraph.query(
@@ -163,7 +178,7 @@ data class SliceInput(
     @JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 ) {
-    fun toSlice(podId: String): Slice {
+    fun toSlice(podId: String, shacl: String): Slice {
         return Slice(
             id = Hashing.farmHashFingerprint64().hashString("$podId:$name", Charsets.UTF_8).toString(),
             context = context,
@@ -171,6 +186,7 @@ data class SliceInput(
             name = name,
             description = description,
             schema = schema,
+            shacl = shacl,
             targetGraphs = targetGraphs
         )
     }

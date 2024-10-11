@@ -88,7 +88,7 @@ class ChangeProcessor(
             val q = QueryRequest(
                 context = request.context,
                 podId = request.podId,
-                targetGraphs = setOf(request.graph),
+                targetGraphs = setOf(),
                 query = request.with!!
             )
             parent.query(q)
@@ -132,15 +132,17 @@ class ChangeProcessor(
 
     private fun toStatements(graphDoc: Map<String, Any>): List<RDFStatement> {
         val dataset = JsonLdProcessor.toRDF(graphDoc) as RDFDataset
-        return dataset.getQuads("@default").map { quad ->
-            RDFStatement(
-                subject = quad.subject.value,
-                predicate = quad.predicate.value,
-                `object` = if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
-                graph = request.graph,
-                dataType = quad.`object`.datatype?.toString(),
-                language = quad.`object`.language?.toString()
-            )
+        return dataset.graphNames().flatMap { graph ->
+            dataset.getQuads(graph).map { quad ->
+                RDFStatement(
+                    subject = quad.subject.value,
+                    predicate = quad.predicate.value,
+                    `object` = if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
+                    graph = quad.graph.value,
+                    dataType = quad.`object`.datatype?.toString(),
+                    language = quad.`object`.language?.toString()
+                )
+            }
         }
     }
 

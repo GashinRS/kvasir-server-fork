@@ -10,17 +10,21 @@ import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.core.Context
+import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.SliceStore
 import kvasir.definitions.kg.changeops.Assertion
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.utils.shacl.RDF4JSHACLValidator
+import kvasir.utils.shacl.SHACLValidationFailure
 import org.apache.kafka.common.errors.RecordTooLargeException
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Schema
@@ -30,14 +34,16 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 import java.util.UUID
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
+@Path("/{podId}/kg")
 class InboxApi(
     @Channel("change_requests_publish")
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
     private val knowledgeGraph: KnowledgeGraph,
+    private val sliceStore: SliceStore,
     private val podConfig: StaticBootstrapConfig
 ) {
 
-    @Path("{podId}/kg/inbox")
+    @Path("inbox")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -61,7 +67,7 @@ class InboxApi(
             .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
     }
 
-    @Path("{podId}/kg/slices/{sliceId}/inbox")
+    @Path("slices/{sliceId}/inbox")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -76,7 +82,31 @@ class InboxApi(
         uriInfo: UriInfo,
         input: ChangeRequestInput
     ): Uni<Response> {
-        TODO()
+        if (podConfig.pods().none { it.name() == podId }) {
+            return Uni.createFrom().item { Response.status(Response.Status.NOT_FOUND).build() }
+        }
+        return sliceStore.getById(podId, sliceId).chain { slice ->
+            val changeCommand = input.toChangeRequest(podId, uriInfo, sliceId)
+            val validator = RDF4JSHACLValidator.fromTurtleString(slice.shacl)
+            try {
+                // Validate plain inserts
+                changeCommand.insert.filterIsInstance<Map<String, Any>>()
+                    .forEach { jsonLdInstance -> validator.validate(jsonLdInstance) }
+                // Validate plain deletes
+                changeCommand.delete.filterIsInstance<Map<String, Any>>()
+                    .forEach { jsonLdInstance -> validator.validate(jsonLdInstance) }
+                // Publish the change request
+                changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
+                    .map { _ -> Response.accepted().build() }
+                    .onFailure(RecordTooLargeException::class.java)
+                    .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
+            } catch (e: SHACLValidationFailure) {
+                Uni.createFrom().item(
+                    Response.status(Response.Status.BAD_REQUEST).entity(e.report)
+                        .header(HttpHeaders.CONTENT_TYPE, e.contentType).build()
+                )
+            }
+        }
     }
 
 }
@@ -125,18 +155,19 @@ data class ChangeRequestInput(
         require(insert.isNotEmpty() || delete.isNotEmpty()) {
             "At least one of insert or delete properties must be provided"
         }
-        require(insert.filterIsInstance<String>().isNotEmpty() && with == null) {
+        require(insert.filterIsInstance<String>().isEmpty() || with != null) {
             "Insert templates require a with-clause"
         }
-        require(delete.filterIsInstance<String>().isNotEmpty() && with == null) {
+        require(delete.filterIsInstance<String>().isEmpty() || with != null) {
             "Delete templates require a with-clause"
         }
     }
 
-    fun toChangeRequest(podId: String, uriInfo: UriInfo): ChangeRequest {
+    fun toChangeRequest(podId: String, uriInfo: UriInfo, sliceId: String? = null): ChangeRequest {
         return ChangeRequest(
             context = context,
             podId = podId,
+            sliceId = sliceId,
             assert = assert,
             with = with,
             insert = insert.map {

@@ -163,6 +163,32 @@ paths:
           description: OK
           content:
             application/json: {}
+  /{podId}/kg/slices/{sliceId}/inbox:
+    post:
+      tags:
+      - Knowledge Graph API
+      summary: Perform mutations on a specific slice of the KG.
+      description: "Post a change request, containing the requested mutations, to\
+        \ a slice inbox of the specified pod."
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sliceId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/ld+json:
+            schema:
+              $ref: "#/components/schemas/ChangeRequestInput"
+      responses:
+        "202":
+          description: Change request accepted.
   /{podId}/kg/slices/{sliceId}/query:
     post:
       tags:
@@ -205,6 +231,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QueryResult"
+  /{podId}/kg/slices/{sliceId}/shacl:
+    get:
+      tags:
+      - Knowledge Graph API
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sliceId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            text/turtle:
+              schema:
+                type: string
   /{podId}/s3/{objectKey}:
     get:
       tags:
@@ -311,7 +359,6 @@ components:
     ChangeRequestInput:
       required:
       - '@context'
-      - kss:graph
       - kss:assert
       - kss:insert
       type: object
@@ -323,9 +370,6 @@ components:
           example:
             kss: http://kvasir.discover.ilabt.imec.be/vocab#
             ex: http://example.org/
-        kss:graph:
-          description: Optional named graph IRI to which the change request applies.
-          type: string
         kss:assert:
           description: List of assertions to be checked before applying the change
             request.
@@ -430,6 +474,7 @@ components:
       - name
       - description
       - schema
+      - shacl
       - targetGraphs
       type: object
       properties:
@@ -445,6 +490,8 @@ components:
         description:
           type: string
         schema:
+          type: string
+        shacl:
           type: string
         targetGraphs:
           uniqueItems: true

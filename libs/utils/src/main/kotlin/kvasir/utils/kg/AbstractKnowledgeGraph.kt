@@ -79,7 +79,7 @@ abstract class AbstractKnowledgeGraph(
                     // Delete from external sources
                     Multi.createFrom().iterable(request.deleteFromRefs)
                         .onItem().transformToMultiAndConcatenate { ref ->
-                            loadReference(request.podId, request.graph, ref)
+                            loadReference(request.podId, "", ref)
                         }
                         .group().intoLists().of(referenceHandlingBuffer)
                         .onItem().transformToUni { deleteTuples ->
@@ -91,7 +91,7 @@ abstract class AbstractKnowledgeGraph(
                             // Insert from external sources
                             Multi.createFrom().iterable(request.insertFromRefs)
                                 .onItem().transformToMultiAndConcatenate { ref ->
-                                    loadReference(request.podId, request.graph, ref)
+                                    loadReference(request.podId, "", ref)
                                 }
                                 .group().intoLists().of(referenceHandlingBuffer)
                                 .onItem().transformToUni { insertTuples ->
@@ -109,7 +109,7 @@ abstract class AbstractKnowledgeGraph(
                         .chain { bindings ->
                             if (request.delete.contains("*") && request.with == null) {
                                 // Delete the entire graph
-                                deleteGraph(request.podId, request.graph)
+                                deleteGraph(request.podId, "")
                             } else {
                                 // Delete the specified records
                                 deleteStatements(

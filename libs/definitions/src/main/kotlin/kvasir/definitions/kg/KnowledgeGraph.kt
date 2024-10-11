@@ -118,10 +118,10 @@ data class ChangeRequest(
         require(deleteFromRefs.isEmpty() || (insert.isEmpty() && delete.isEmpty())) {
             "deleteFromRefs cannot be combined with regular insert or delete"
         }
-        require(insert.filterIsInstance<String>().isNotEmpty() && with == null) {
+        require(insert.filterIsInstance<String>().isEmpty() || with != null) {
             "Insert templates require a with-clause"
         }
-        require(delete.filterIsInstance<String>().isNotEmpty() && with == null) {
+        require(delete.filterIsInstance<String>().isEmpty() || with != null) {
             "Delete templates require a with-clause"
         }
     }
@@ -199,6 +199,8 @@ data class Slice(
     val description: String,
     @JsonProperty(KvasirVocab.schema)
     val schema: String,
+    @JsonProperty(KvasirVocab.shacl)
+    val shacl: String,
     @JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 )

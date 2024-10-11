@@ -1,13 +1,11 @@
 package kvasir.utils.graphql2shacl
 
-import com.github.jsonldjava.utils.JsonUtils
 import graphql.schema.GraphQLFieldDefinition
 import graphql.schema.GraphQLObjectType
 import graphql.schema.GraphQLScalarType
 import graphql.schema.idl.RuntimeWiring
 import graphql.schema.idl.SchemaGenerator
 import graphql.schema.idl.SchemaParser
-import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.utils.graphql.innerType
 import kvasir.utils.graphql.isList
 import kvasir.utils.graphql.isOptional
@@ -15,11 +13,15 @@ import kvasir.utils.graphql.isScalar
 import kvasir.utils.graphql.rdfDatatype
 import kvasir.utils.kg.KvasirNodeVisitor.Companion.GRAPHQL_NAME_PREFIX_SEPARATOR
 import kvasir.utils.kg.addKvasirDirectives
+import kvasir.utils.shacl.RDF4JSHACLValidator
+import kvasir.utils.shacl.SHACLValidationFailure
+import org.eclipse.rdf4j.model.IRI
 import org.eclipse.rdf4j.model.Model
 import org.eclipse.rdf4j.model.Statement
 import org.eclipse.rdf4j.model.impl.DynamicModelFactory
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory
 import org.eclipse.rdf4j.model.util.RDFCollections
+import org.eclipse.rdf4j.model.vocabulary.DASH
 import org.eclipse.rdf4j.model.vocabulary.RDF
 import org.eclipse.rdf4j.model.vocabulary.RDFS
 import org.eclipse.rdf4j.model.vocabulary.SHACL
@@ -38,34 +40,48 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
     private val rdfFactory = SimpleValueFactory.getInstance()
     private val shapeDocBaseIri = "kvasir:shapes:${UUID.randomUUID()}:"
 
-    fun toSHACL(): Model {
+    fun toSHACL(): String {
         typeRegistry.addKvasirDirectives()
         val graphQLSchema =
             SchemaGenerator().makeExecutableSchema(typeRegistry, RuntimeWiring.newRuntimeWiring().build())
-        val statements = graphQLSchema.allTypesAsList.filterIsInstance<GraphQLObjectType>()
+        val typeToShapes = graphQLSchema.allTypesAsList.filterIsInstance<GraphQLObjectType>()
             .filterNot { it.name in setOf("Query", "Mutation", "Subscription") || it.name.startsWith("__") }
-            .flatMap { typeToSHACL(it) }
+            .map { typeToSHACL(it) }
+
+        val statements = typeToShapes.flatMap { it.second }
+        val allowedTypes = typeToShapes.flatMap { it.first }
 
         val model = DynamicModelFactory().createEmptyModel()
         model.addAll(statements)
+        model.addAll(getFilterShape(model, allowedTypes))
+
         context.plus(SHACL.PREFIX to SHACL.NAMESPACE).forEach { (prefix, namespace) ->
             model.setNamespace(prefix, namespace.toString())
         }
-        return model
+        return StringWriter().use { writer ->
+            val config = WriterConfig().set(BasicWriterSettings.PRETTY_PRINT, true)
+                .set(BasicWriterSettings.INLINE_BLANK_NODES, true)
+            Rio.write(model, writer, RDFFormat.TURTLE, config)
+            writer.toString()
+        }
     }
 
-    fun getFilterShape(shacl: Model, targetSubjects: List<String>, allowedTypes: List<String>): Model {
-        val availableTypes = allowedTypes.map { rdfFactory.createIRI(it) }
-        val filterNodeShapeSubject = rdfFactory.createIRI("${shapeDocBaseIri}FilterShape")
+    private fun getFilterShape(shacl: Model, availableTypes: List<IRI>): Model {
+        val filterNodeShapeSubject = rdfFactory.createIRI("${shapeDocBaseIri}MustHaveTypeShape")
         val typeInSubject = rdfFactory.createBNode()
         val propertySubject = rdfFactory.createBNode()
-        RDFCollections.asRDF(availableTypes.toMutableList(), typeInSubject, shacl)
+        RDFCollections.asRDF(availableTypes, typeInSubject, shacl)
         shacl.addAll(
             listOf(
                 rdfFactory.createStatement(
                     filterNodeShapeSubject,
                     RDF.TYPE,
                     SHACL.NODE_SHAPE
+                ),
+                rdfFactory.createStatement(
+                    filterNodeShapeSubject,
+                    SHACL.TARGET,
+                    rdfFactory.createIRI("${DASH.NAMESPACE}AllSubjects")
                 ),
                 rdfFactory.createStatement(
                     filterNodeShapeSubject,
@@ -87,20 +103,16 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
                     propertySubject,
                     SHACL.IN,
                     typeInSubject
-                ),
-            ) +
-                    targetSubjects.map { targetSubject ->
-                        rdfFactory.createStatement(
-                            filterNodeShapeSubject,
-                            SHACL.TARGET_NODE,
-                            rdfFactory.createIRI(targetSubject)
-                        )
-                    }
+                )
+            )
         )
         return shacl
     }
 
-    private fun typeToSHACL(type: GraphQLObjectType): List<Statement> {
+    /**
+     * Returns a mapping of class IRIs to SHACL shape statements for the type
+     */
+    private fun typeToSHACL(type: GraphQLObjectType): Pair<List<IRI>, List<Statement>> {
         val subject = rdfFactory.createIRI(
             (resolveNameAsIri(type.name)
                 ?: run {
@@ -113,7 +125,7 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
         val ignoredPropertiesListID = rdfFactory.createBNode()
         val collectionNodes = mutableListOf<Statement>()
         RDFCollections.asRDF(listOf(RDF.TYPE), ignoredPropertiesListID, collectionNodes)
-        return listOfNotNull(
+        return listOf(subject) to listOfNotNull(
             rdfFactory.createStatement(subject, RDF.TYPE, SHACL.NODE_SHAPE),
             rdfFactory.createStatement(subject, SHACL.CLOSED, rdfFactory.createLiteral(true)),
             *collectionNodes.toTypedArray(),
@@ -239,78 +251,34 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
 }
 
 fun main() {
-    val context = mapOf(
-        "ex" to "http://example.org/",
-        "schema" to "http://schema.org/"
-    )
-    val graphql = """
-        type Query {
-          humans: [ex_Human!]!
-          human(id: ID!): ex_Human
-        }  
+    val shacl = """
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+        @prefix ex: <http://example.org/> .
+        @prefix dash: <http://datashapes.org/dash#> .
+        @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
         
-        type ex_Human @class {
-          id: ID!
-          schema_givenName: String! @shape(pattern: "^Bob.*$")
-          schema_familyName: String!
-          schema_age: Int! @shape(minInclusive: "18", maxInclusive: "120")
-        }
-        
-        type ex_Cat @class {
-          id: ID!
-          schema_givenName: String! @shape(hasValue: "Risto")
-        }
+        ex:SomeShape a sh:NodeShape ;
+            sh:target dash:AllSubjects ;
+            sh:property [
+                sh:path rdf:type ;
+                sh:minCount 1 ;
+                sh:in ( ex:Person )
+            ] .
     """.trimIndent()
-    val jsonLdInput = """
-        {
-          "@context" : {
-            "schema" : "http://schema.org/",
-            "ex" : "http://example.org/"
-          },
-            "@graph" : [ {
-                "@id" : "ex:risto",
-                "@type" : "ex:Cat",
-                "schema:givenName" : "Risto"
-            }, {
-                "@id" : "ex:bob",
-                "@type" : "ex:Human",
-                "schema:givenName" : "Bob",
-                "schema:familyName" : "Smith",
-                "schema:age" : 19
-            }, {
-                "@id" : "ex:alice",
-                "@type" : "ex:Human",
-                "schema:givenName" : "Alice",
-                "schema:familyName" : "Smith",
-                "schema:age" : 17
-            }]
-        }
-    """.trimIndent()
-    val graphQL2SHACL = GraphQL2SHACL(graphql, context)
 
-    val jsonLdInstances =
-        JsonLdHelper.toCompactFQForm(JsonUtils.fromString(jsonLdInput) as Map<String, Any>)["@graph"]!!.let { it as List<Map<String, Any>> }
-
-    println(jsonLdInstances.filter {
-        val shapes = graphQL2SHACL.getFilterShape(
-            graphQL2SHACL.toSHACL(),
-            listOf(it["@id"] as String),
-            listOf("http://example.org/Human", "http://example.org/Cat")
-        )
-        val instanceStr = StringWriter().use { writer ->
-            JsonUtils.write(writer, it)
-            writer.toString()
-        }
-        SHACLValidator.filter(shapes, instanceStr)
-    }
-    )
-}
-
-fun printModel(model: Model): String {
-    return StringWriter().use { writer ->
-        val config = WriterConfig().set(BasicWriterSettings.PRETTY_PRINT, true)
-            .set(BasicWriterSettings.INLINE_BLANK_NODES, true)
-        Rio.write(model, writer, RDFFormat.TURTLE, config)
-        writer.toString()
+    try {
+        RDF4JSHACLValidator.fromTurtleString(shacl)
+            .validate(
+                mapOf(
+                    "@context" to mapOf("ex" to "http://example.org/"),
+                    "@id" to "ex:bob",
+                    "@type" to "ex:Person"
+                )
+            )
+        println("Valid!")
+    } catch (e: SHACLValidationFailure) {
+        println("Not valid!")
+        println(e.report)
     }
 }
