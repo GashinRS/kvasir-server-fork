@@ -11,6 +11,7 @@ import org.eclipse.rdf4j.rio.Rio
 import org.eclipse.rdf4j.sail.memory.MemoryStore
 import org.eclipse.rdf4j.sail.shacl.ShaclSail
 import java.io.StringReader
+import java.io.StringWriter
 import kotlin.use
 
 interface SHACLValidator {
@@ -51,6 +52,7 @@ class RDF4JSHACLValidator(private val shapeModel: Model) : SHACLValidator {
 
     override fun validate(jsonLdInstance: Map<String, Any>) {
         val shaclSail = ShaclSail(MemoryStore())
+        shaclSail.isDashDataShapes = true
         SailRepository(shaclSail).connection.use { connection ->
             // add shape model
             connection.begin()
@@ -63,7 +65,12 @@ class RDF4JSHACLValidator(private val shapeModel: Model) : SHACLValidator {
                 connection.commit()
             } catch (e: RepositoryException) {
                 if (e.cause is ValidationException) {
-                    throw IllegalArgumentException("Validation failed", e.cause)
+                    val reportModel = (e.cause as ValidationException).validationReportAsModel()
+                    val report = StringWriter().use { writer ->
+                        Rio.write(reportModel, writer, RDFFormat.TURTLE)
+                        writer.toString()
+                    }
+                    throw SHACLValidationFailure(report)
                 }
             }
         }
@@ -76,7 +83,7 @@ class RDF4JSHACLValidator(private val shapeModel: Model) : SHACLValidator {
         try {
             validate(jsonLdInstance)
             return true
-        } catch (e: IllegalArgumentException) {
+        } catch (_: SHACLValidationFailure) {
             return false
         }
     }
