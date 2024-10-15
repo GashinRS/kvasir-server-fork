@@ -3,12 +3,14 @@ package kvasir.services.api.kg.query
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.common.hash.Hashing
 import io.smallrye.mutiny.Uni
+import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.kg.*
+import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
@@ -22,6 +24,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import org.eclipse.microprofile.reactive.messaging.Channel
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
 @Path("{podId}/kg")
@@ -29,7 +32,9 @@ class GraphSlicesApi(
     private val sliceStore: SliceStore,
     private val knowledgeGraph: KnowledgeGraph,
     private val podConfig: StaticBootstrapConfig,
-    private val uriInfo: UriInfo
+    private val uriInfo: UriInfo,
+    @Channel(Channels.SLICE_EVENT_PUBLISH)
+    private val sliceEventEmitter: MutinyEmitter<SliceEvent>
 ) {
 
     @Path("slices")
@@ -66,9 +71,11 @@ class GraphSlicesApi(
         // Validate the schema
         return try {
             SchemaValidator.validateSchema(slice.schema, slice.context)
-            sliceStore.persist(slice).map {
-                Response.created(uriInfo.absolutePathBuilder.path(slice.id).build()).build()
-            }
+            sliceStore.persist(slice)
+                .chain { _ -> sliceEventEmitter.send(SliceEvent(podId, slice.id, SliceEventType.CREATED)) }
+                .map {
+                    Response.created(uriInfo.absolutePathBuilder.path(slice.id).build()).build()
+                }
         } catch (e: Throwable) {
             Uni.createFrom().failure(e)
         }
@@ -97,7 +104,9 @@ class GraphSlicesApi(
     )
     fun deleteSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Uni<Response> {
         throw404IfPodNotFound(podConfig, podId)
-        return sliceStore.deleteById(podId, sliceId).map { Response.noContent().build() }
+        return sliceStore.deleteById(podId, sliceId)
+            .chain { _ -> sliceEventEmitter.send(SliceEvent(podId, sliceId, SliceEventType.DELETED)) }
+            .map { Response.noContent().build() }
     }
 
     @POST
