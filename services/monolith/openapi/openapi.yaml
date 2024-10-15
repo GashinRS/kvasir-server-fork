@@ -253,6 +253,51 @@ paths:
             text/turtle:
               schema:
                 type: string
+  /{podId}/kg/slices/{sliceId}/stream:
+    get:
+      tags:
+      - Stream Api
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sliceId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: {}
+  /{podId}/kg/stream:
+    get:
+      tags:
+      - Stream Api
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: {}
   /{podId}/s3/{objectKey}:
     get:
       tags:

@@ -20,4 +20,9 @@ object KvasirVocab {
     const val description = "${baseUri}description"
     const val targetGraphs = "${baseUri}targetGraphs"
     const val podId = "${baseUri}podId"
+    const val sliceId = "${baseUri}sliceId"
+    const val code = "${baseUri}code"
+    const val hasNextChunk = "${baseUri}hasNextChunk"
+    const val sequenceNumber = "${baseUri}sequenceNumber"
+    const val error = "${baseUri}error"
 }

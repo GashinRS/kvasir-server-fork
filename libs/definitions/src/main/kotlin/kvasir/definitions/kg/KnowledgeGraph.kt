@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
+import io.prometheus.client.Predicate
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
@@ -31,6 +32,10 @@ interface SliceStore {
     fun getById(podId: String, segmentId: String): Uni<Slice>
 
     fun deleteById(podId: String, segmentId: String): Uni<Void>
+
+    fun loadFilterById(podId: String, segmentId: String): Uni<ChangeResultSliceFilter>
+
+    fun loadAllFilters(podId: String): Uni<Set<ChangeResultSliceFilter>>
 }
 
 interface ReferenceLoader {
@@ -44,17 +49,7 @@ data class ChangeRequest(
     /**
      * The unique identifier of the Change Request.
      */
-    val id: String = UUID.randomUUID().toString(),
-    /**
-     * A Change Request can be chunked when it is too large to transfer as single message.
-     * The hasNextChunk flag indicates whether there are more chunks to follow.
-     */
-    val hasNextChunk: Boolean = false,
-    /**
-     * A Change Request can be chunked when it is too large to transfer as single message.
-     * The seqNr is used to identify the chunks.
-     */
-    val seqNr: Long = 0,
+    val id: String = "$URN_PREFIX${UUID.randomUUID()}",
     /**
      * The context used to produce the Change Request.
      */
@@ -67,10 +62,6 @@ data class ChangeRequest(
      * The unique identifier of the Slide where the Change Request should be applied.
      */
     val sliceId: String? = null,
-    /**
-     * Indicates whether the Change Request has been validated.
-     */
-    val validated: Boolean = false,
     /**
      * The Change Request will only be applied if all assertions resolve to true.
      */
@@ -125,6 +116,132 @@ data class ChangeRequest(
             "Delete templates require a with-clause"
         }
     }
+
+    companion object {
+        const val URN_PREFIX = "kvasir:change:"
+    }
+}
+
+enum class ChangeResultCode {
+    /**
+     * The Change Request was successfully applied.
+     */
+    COMMITTED,
+
+    /**
+     * The Change Request was not applied because one or more assertions failed.
+     */
+    ASSERTION_FAILED,
+
+    /**
+     * The Change Request was not applied because the with-clause did not return any results.
+     */
+    NO_MATCHES,
+
+    /**
+     * The Change Request was not applied because the with-clause returned too many results.
+     */
+    TOO_MANY_MATCHES,
+
+    /**
+     * The Change Request was not applied because of a validation error.
+     */
+    VALIDATION_ERROR,
+
+    /**
+     * The Change Request was not applied because of an internal error.
+     */
+    INTERNAL_ERROR
+}
+
+data class ChangeResult(
+    /**
+     * The unique identifier of the Change Request that resulted in this Change Result.
+     */
+    @JsonProperty(JsonLdKeywords.id)
+    val id: String,
+    /**
+     * The context that was used to produce the Change Request.
+     */
+    @JsonProperty(JsonLdKeywords.context)
+    val context: Map<String, Any> = emptyMap(),
+    /**
+     * The unique identifier of the Pod where the Change Request was applied.
+     */
+    @JsonProperty(KvasirVocab.podId)
+    val podId: String,
+    /**
+     * The unique identifier of the Slice where the Change Request was applied.
+     */
+    @JsonProperty(KvasirVocab.sliceId)
+    val sliceId: String? = null,
+    /**
+     * The status of the Change Request.
+     */
+    @JsonProperty(KvasirVocab.code)
+    val code: ChangeResultCode,
+    /**
+     * A Change Result can be chunked when it is too large to transfer as single message.
+     * The hasNextChunk flag indicates whether there are more chunks to follow.
+     */
+    @JsonProperty(KvasirVocab.hasNextChunk)
+    val hasNextChunk: Boolean = false,
+    /**
+     * A Change Result can be chunked when it is too large to transfer as single message.
+     * The seqNr is used to identify the chunks.
+     */
+    @JsonProperty(KvasirVocab.sequenceNumber)
+    val seqNr: Long = 0,
+    /**
+     * The JSON-LD instances that were inserted as a result of the Change Request.
+     */
+    @JsonProperty(KvasirVocab.insert)
+    val insert: List<Map<String, Any>>,
+    /**
+     * The JSON-LD instances that were deleted as a result of the Change Request.
+     */
+    @JsonProperty(KvasirVocab.delete)
+    val delete: List<Map<String, Any>>,
+    /**
+     * If the result code is not COMMITTED, this field may contain additional information on the nature of why
+     * the Change Request was not applied.
+     */
+    @JsonProperty(KvasirVocab.error)
+    val errors: List<Map<String, Any>>? = null
+) {
+
+    companion object {
+        fun success(
+            request: ChangeRequest,
+            effectiveDeletes: List<Map<String, Any>>,
+            effectiveInserts: List<Map<String, Any>>
+        ): ChangeResult {
+            return ChangeResult(
+                id = request.id,
+                context = request.context,
+                podId = request.podId,
+                sliceId = request.sliceId,
+                code = ChangeResultCode.COMMITTED,
+                insert = effectiveInserts,
+                delete = effectiveDeletes
+            )
+        }
+
+        fun error(request: ChangeRequest, status: ChangeResultCode, errors: List<Map<String, Any>>): ChangeResult {
+            return ChangeResult(
+                id = request.id,
+                context = request.context,
+                podId = request.podId,
+                sliceId = request.sliceId,
+                code = status,
+                insert = emptyList(),
+                delete = emptyList(),
+                errors = errors
+            )
+        }
+
+    }
+
 }
 
 @GenerateNoArgConstructor
@@ -214,6 +331,18 @@ data class SliceSummary(
     val description: String
 )
 
+enum class SliceEventType {
+    CREATED,
+    UPDATED,
+    DELETED
+}
+
+data class SliceEvent(
+    val podId: String,
+    val sliceId: String,
+    val eventType: SliceEventType
+)
+
 data class RDFStatement(
     val subject: String,
     val predicate: String,
@@ -222,3 +351,11 @@ data class RDFStatement(
     val dataType: String? = null,
     val language: String? = null
 )
+
+interface ChangeResultSliceFilter : Predicate<List<Map<String, Any>>> {
+
+    fun podId(): String
+
+    fun sliceId(): String
+
+}

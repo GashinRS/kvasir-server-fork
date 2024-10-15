@@ -101,19 +101,19 @@ class ChangeProcessor(
         }
     }
 
-    fun materializeRecords(records: List<Any>, bindings: QueryResult): List<RDFStatement> {
+    fun materializeRecords(records: List<Any>, bindings: QueryResult): List<Map<String, Any>> {
         return records.flatMap { record ->
             when (record) {
-                is Map<*, *> -> toStatements(listOf(record as Map<String, Any>))
+                is Map<*, *> -> listOf(record as Map<String, Any>)
                 is String -> {
                     if (record == "*") {
                         // Return bindings as is
-                        toStatements(bindings.toJsonLD(request.context))
+                        bindings.toJsonLD(request.context)["@graph"] as List<Map<String, Any>>
                     } else {
-                        toStatements(transformTemplate(
+                        transformTemplate(
                             record,
                             bindings.data ?: emptyMap()
-                        ).map { JsonLdHelper.toCompactFQForm(it.plus(JsonLdKeywords.context to request.context)) })
+                        ).map { JsonLdHelper.toCompactFQForm(it.plus(JsonLdKeywords.context to request.context)) }
                     }
                 }
 
@@ -130,7 +130,7 @@ class ChangeProcessor(
         }
     }
 
-    private fun toStatements(graphDoc: Map<String, Any>): List<RDFStatement> {
+    fun toStatements(graphDoc: Map<String, Any>): List<RDFStatement> {
         val dataset = JsonLdProcessor.toRDF(graphDoc) as RDFDataset
         return dataset.graphNames().flatMap { graph ->
             dataset.getQuads(graph).map { quad ->
@@ -138,7 +138,7 @@ class ChangeProcessor(
                     subject = quad.subject.value,
                     predicate = quad.predicate.value,
                     `object` = if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
-                    graph = quad.graph.value,
+                    graph = quad.graph?.value ?: "",
                     dataType = quad.`object`.datatype?.toString(),
                     language = quad.`object`.language?.toString()
                 )
@@ -146,7 +146,7 @@ class ChangeProcessor(
         }
     }
 
-    private fun toStatements(docs: List<Map<String, Any>>) = toStatements(mapOf(JsonLdKeywords.graph to docs))
+    fun toStatements(docs: List<Map<String, Any>>) = toStatements(mapOf(JsonLdKeywords.graph to docs))
 
 
     /**

@@ -24,7 +24,7 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
-@Path("{podId}/kg/slices")
+@Path("{podId}/kg")
 class GraphSlicesApi(
     private val sliceStore: SliceStore,
     private val knowledgeGraph: KnowledgeGraph,
@@ -32,6 +32,7 @@ class GraphSlicesApi(
     private val uriInfo: UriInfo
 ) {
 
+    @Path("slices")
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -50,6 +51,7 @@ class GraphSlicesApi(
             }
     }
 
+    @Path("slices")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -72,7 +74,7 @@ class GraphSlicesApi(
         }
     }
 
-    @Path("{sliceId}")
+    @Path("slices/{sliceId}")
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -87,7 +89,7 @@ class GraphSlicesApi(
         return sliceStore.getById(podId, sliceId).map { result -> result.copy(id = uriInfo.absolutePath.toString()) }
     }
 
-    @Path("{sliceId}")
+    @Path("slices/{sliceId}")
     @DELETE
     @Operation(
         summary = "Delete a specific slice.",
@@ -99,7 +101,7 @@ class GraphSlicesApi(
     }
 
     @POST
-    @Path("{sliceId}/query")
+    @Path("slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
@@ -118,7 +120,7 @@ class GraphSlicesApi(
     }
 
     @POST
-    @Path("{sliceId}/query")
+    @Path("slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(JSON_LD_MEDIA_TYPE)
     @APIResponse(
@@ -140,7 +142,7 @@ class GraphSlicesApi(
     }
 
     @GET
-    @Path("{sliceId}/shacl")
+    @Path("slices/{sliceId}/shacl")
     @Produces(RDFMediaTypes.TURTLE)
     fun getSHACL(
         @PathParam("podId") podId: String,
