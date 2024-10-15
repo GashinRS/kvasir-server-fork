@@ -297,7 +297,7 @@ class PredicateTargetSelectionLoader(private val clickhouse: ClickhouseClient, p
                         })"
                     }
                         ?: ""
-                "SELECT $index AS index, ARRAY_AGG([object, types]) AS targets FROM $database.$DATA_TABLE JOIN (SELECT subject AS targetSubject, ARRAY_AGG(object) as types FROM $database.$DATA_TABLE WHERE predicate = '${RDFVocab.type}'$optionalFilter GROUP BY subject) type ON object = targetSubject WHERE predicate = '${key.predicate}' AND subject = '${key.subject}'"
+                "SELECT $index AS index, ARRAY_AGG([object, types]) AS targets FROM $database.$DATA_TABLE LEFT JOIN (SELECT subject AS targetSubject, ARRAY_AGG(object) as types FROM $database.$DATA_TABLE WHERE predicate = '${RDFVocab.type}'$optionalFilter GROUP BY subject) type ON object = targetSubject WHERE predicate = '${key.predicate}' AND subject = '${key.subject}'"
             }.joinToString(" UNION ALL ")
         return clickhouse.query(GenericQuerySpec(database, DATA_TABLE, listOf("index", "targets")), q).map { results ->
             val resultMap = results.groupBy { it["index"] as Int }
