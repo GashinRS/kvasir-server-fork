@@ -80,7 +80,7 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
                 ),
                 rdfFactory.createStatement(
                     filterNodeShapeSubject,
-                    SHACL.TARGET,
+                    SHACL.TARGET_PROP,
                     rdfFactory.createIRI("${DASH.NAMESPACE}AllSubjects")
                 ),
                 rdfFactory.createStatement(
@@ -273,7 +273,7 @@ fun main() {
                 mapOf(
                     "@context" to mapOf("ex" to "http://example.org/"),
                     "@id" to "ex:bob",
-                    "@type" to "ex:Person"
+                    "ex:name" to "Bob"
                 )
             )
         println("Valid!")

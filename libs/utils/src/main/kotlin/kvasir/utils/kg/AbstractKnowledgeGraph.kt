@@ -8,8 +8,6 @@ import graphql.Scalars.GraphQLID
 import graphql.Scalars.GraphQLInt
 import graphql.Scalars.GraphQLString
 import graphql.introspection.Introspection
-import graphql.language.AstTransformer
-import graphql.parser.Parser
 import graphql.schema.DataFetcher
 import graphql.schema.GraphQLArgument
 import graphql.schema.GraphQLCodeRegistry
@@ -25,7 +23,9 @@ import graphql.schema.idl.WiringFactory
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
+import io.smallrye.reactive.messaging.MutinyEmitter
 import kvasir.definitions.kg.ChangeRequest
+import kvasir.definitions.kg.ChangeResult
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
@@ -33,8 +33,10 @@ import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.kg.ReferenceLoader
 import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
+import kvasir.definitions.messaging.Channels
 import kvasir.definitions.reactive.skipToLast
 import org.dataloader.DataLoaderRegistry
+import org.eclipse.microprofile.reactive.messaging.Channel
 
 /**
  * This class is used to implement common logic for knowledge graph implementations, including:
@@ -45,7 +47,8 @@ import org.dataloader.DataLoaderRegistry
 abstract class AbstractKnowledgeGraph(
     private val referenceLoaders: List<ReferenceLoader>,
     private val assertionCheckingParallelism: Int,
-    private val referenceHandlingBuffer: Int
+    private val referenceHandlingBuffer: Int,
+    private val outboxEmitter: MutinyEmitter<ChangeResult>
 ) : KnowledgeGraph {
 
     companion object {
@@ -109,23 +112,22 @@ abstract class AbstractKnowledgeGraph(
                     // Execute embedded inserts/deletes
                     changeProcessor.bindWhere()
                         .chain { bindings ->
-                            if (request.delete.contains("*") && request.with == null) {
-                                // Delete the entire graph
-                                deleteGraph(request.podId, "")
-                            } else {
-                                // Delete the specified records
-                                deleteStatements(
-                                    request.podId,
-                                    changeProcessor.materializeRecords(request.delete, bindings)
-                                )
-                            }
-                                .chain { _ ->
-                                    val insertTuples = changeProcessor.materializeRecords(request.insert, bindings)
+                            // Delete the specified records
+                            val deleteJsonLd = changeProcessor.materializeRecords(request.delete, bindings)
+                            deleteStatements(
+                                request.podId,
+                                changeProcessor.toStatements(deleteJsonLd)
+                            ).map { _ -> deleteJsonLd }
+                                .chain { deleteJsonLd ->
+                                    val insertJsonLd = changeProcessor.materializeRecords(request.insert, bindings)
                                     insertStatements(
                                         request.podId,
-                                        insertTuples
-                                    )
+                                        changeProcessor.toStatements(insertJsonLd)
+                                    ).map { _ -> deleteJsonLd to insertJsonLd }
                                 }
+                        }
+                        .chain { (effectiveDeletes, effectiveInserts) ->
+                            outboxEmitter.send(ChangeResult.success(request, effectiveDeletes, effectiveInserts))
                         }
                 }
             }
@@ -135,7 +137,9 @@ abstract class AbstractKnowledgeGraph(
                 Log.warn("Failed to process change request due to assertion error: $request", e)
                 Uni.createFrom().voidItem()
             }
-            .onFailure(InvalidTemplateException::class.java).recoverWithUni { e ->
+            .onFailure(
+                InvalidTemplateException::class.java
+            ).recoverWithUni { e ->
                 Log.warn("Failed to process change request due to invalid template expression: $request", e)
                 Uni.createFrom().voidItem()
             }

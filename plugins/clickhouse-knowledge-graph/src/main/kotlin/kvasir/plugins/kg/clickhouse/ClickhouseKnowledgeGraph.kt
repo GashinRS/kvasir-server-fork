@@ -3,19 +3,21 @@ package kvasir.plugins.kg.clickhouse
 import graphql.ExceptionWhileDataFetching
 import graphql.ExecutionResult
 import graphql.schema.DataFetcher
-import graphql.schema.DataFetcherFactoryEnvironment
 import graphql.schema.GraphQLUnionType
 import graphql.schema.TypeResolver
 import io.quarkus.arc.All
 import io.smallrye.mutiny.Uni
+import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.json.JsonObject
 import jakarta.inject.Singleton
+import kvasir.definitions.kg.ChangeResult
 import kvasir.definitions.kg.HistoryRequest
 import kvasir.definitions.kg.HistoryResult
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.kg.ReferenceLoader
+import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
@@ -33,6 +35,7 @@ import kvasir.utils.kg.KGType
 import kvasir.utils.kg.MetadataEntry
 import org.dataloader.DataLoaderRegistry
 import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.eclipse.microprofile.reactive.messaging.Channel
 import kotlin.collections.component1
 import kotlin.collections.component2
 
@@ -44,8 +47,10 @@ class ClickhouseKnowledgeGraph(
     @ConfigProperty(name = "kvasir.plugins.kg.xtdb.assertion-checking-parallelism", defaultValue = "4")
     private val assertionCheckingParallelism: Int,
     @ConfigProperty(name = "kvasir.plugins.kg.xtdb.ref-handling-buffer", defaultValue = "50000")
-    private val refHandlingBuffer: Int
-) : AbstractKnowledgeGraph(referenceLoaders, assertionCheckingParallelism, refHandlingBuffer) {
+    private val refHandlingBuffer: Int,
+    @Channel(Channels.OUTBOX_PUBLISH)
+    private val outboxEmitter: MutinyEmitter<ChangeResult>
+) : AbstractKnowledgeGraph(referenceLoaders, assertionCheckingParallelism, refHandlingBuffer, outboxEmitter) {
     override fun insertStatements(
         podId: String,
         statements: List<RDFStatement>

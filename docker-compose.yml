@@ -12,13 +12,6 @@ services:
       nofile:
         soft: 262144
         hard: 262144
-  xtdb:
-    # @sha256:735f69a0a361e1e1e0ac2c1c43b76f5301ddd41808022e0bbfbcdc1b0cd4d7d2
-    image: ghcr.io/xtdb/xtdb-standalone-ea
-    ports:
-      - "6543:3000"
-    volumes:
-      - "xtdb-data:/var/lib/xtdb"
 
   kvasir-ui:
     build: https://bot:sufPJVx5suVPs3W9kqxy@gitlab.ilabt.imec.be/ibcndevs/solid/kvasir-ui.git#s3
@@ -27,7 +20,5 @@ services:
     pull_policy: build
 
 volumes:
-  xtdb-data:
-    driver: local
   clickhouse_data:
     driver: local
