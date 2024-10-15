@@ -220,7 +220,7 @@ abstract class AbstractKnowledgeGraph(
     open fun mapExecutionResult(request: QueryRequest, result: ExecutionResult): QueryResult {
         return QueryResult(
             data = result.getData<Map<String, Any>>(),
-            errors = result.errors?.map { error -> mapOf("message" to error.message) } ?: emptyList()
+            errors = result.errors?.map { error -> mapOf("message" to error.message) }
         )
     }
 

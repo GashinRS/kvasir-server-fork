@@ -114,7 +114,8 @@ class ClickhouseKnowledgeGraph(
         return QueryResult(
             data = filteredData,
             errors = result.errors.filterNot { it is ExceptionWhileDataFetching && it.exception is NoResultsException }
-                .map { JsonObject.mapFrom(it).map })
+                .map { JsonObject.mapFrom(it).map }.takeIf {it.isNotEmpty()}
+        )
     }
 
     override fun history(request: HistoryRequest): Uni<HistoryResult> {
