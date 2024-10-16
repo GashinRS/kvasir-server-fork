@@ -19,6 +19,7 @@ import graphql.schema.GraphQLObjectType
 import graphql.schema.GraphQLType
 import graphql.schema.GraphQLTypeUtil
 import graphql.schema.TypeResolver
+import io.quarkus.logging.Log
 import io.vertx.core.json.JsonArray
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -30,11 +31,14 @@ import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.utils.kg.AbstractKnowledgeGraph
 import org.dataloader.BatchLoader
 import org.dataloader.DataLoaderFactory
+import org.dataloader.DataLoaderOptions
 import org.dataloader.DataLoaderRegistry
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 
 object SubOptimalResolver {
+
+    private const val DATA_LOADER_MAX_CONCURRENCY = 25
 
     fun getDataLoaderRegistry(
         podId: String,
@@ -48,7 +52,7 @@ object SubOptimalResolver {
                     EntrypointTargetSelectionLoader(
                         clickhouseClient,
                         databaseFromPodId(podId)
-                    )
+                    ), DataLoaderOptions.newOptions().setMaxBatchSize(DATA_LOADER_MAX_CONCURRENCY)
                 )
             )
             .register(
@@ -57,7 +61,7 @@ object SubOptimalResolver {
                     PredicateTargetSelectionLoader(
                         clickhouseClient,
                         databaseFromPodId(podId)
-                    )
+                    ), DataLoaderOptions.newOptions().setMaxBatchSize(DATA_LOADER_MAX_CONCURRENCY)
                 )
             )
             .register(
@@ -112,7 +116,7 @@ class ClickhouseDataFetchingHandler(
                 getFQName(outputType),
                 filter
             )
-        ).thenApply{ values -> handleFieldMultiplicity(env, values) }
+        ).thenApply { values -> handleFieldMultiplicity(env, values) }
     }
 
     fun handleScalar(env: DataFetchingEnvironment): Any {
@@ -129,7 +133,7 @@ class ClickhouseDataFetchingHandler(
             } else {
                 CompletableFuture.failedFuture(NoResultsException())
             }
-        }.thenApply{ values -> handleFieldMultiplicity(env, values) }
+        }.thenApply { values -> handleFieldMultiplicity(env, values) }
     }
 
     fun handleRelation(env: DataFetchingEnvironment): Any {
@@ -152,7 +156,7 @@ class ClickhouseDataFetchingHandler(
             } else {
                 CompletableFuture.failedFuture(NoResultsException())
             }
-        }.thenApply{ values -> handleFieldMultiplicity(env, values) }
+        }.thenApply { values -> handleFieldMultiplicity(env, values) }
     }
 
     private fun getArgsFilter(field: Field): Node? {
@@ -258,6 +262,7 @@ data class PredicateValueKey(val subject: String, val predicate: String)
 class EntrypointTargetSelectionLoader(private val clickhouse: ClickhouseClient, private val database: String) :
     BatchLoader<EntryPointKey, List<Target>> {
     override fun load(keys: List<EntryPointKey>): CompletionStage<List<List<Target>>> {
+        Log.debug("Loading entrypoint targets for:  ${keys.map { it.typeUri + " (filter: ${it.filter})" }}")
         val q = keys.mapIndexed { index, key ->
             val optionalFilter =
                 key.filter?.let {
@@ -285,6 +290,7 @@ class PredicateTargetSelectionLoader(private val clickhouse: ClickhouseClient, p
     BatchLoader<PredicateTargetSelectionKey, List<Target>> {
 
     override fun load(keys: List<PredicateTargetSelectionKey>): CompletionStage<List<List<Target>>> {
+        Log.debug("Loading predicate targets for: ${keys.map { it.subject + " -> " + it.predicate + " (filter: ${it.filter})" }}")
         val q =
             keys.mapIndexed { index, key ->
                 val optionalFilter =
@@ -299,7 +305,8 @@ class PredicateTargetSelectionLoader(private val clickhouse: ClickhouseClient, p
                         ?: ""
                 "SELECT $index AS index, ARRAY_AGG([object, types]) AS targets FROM $database.$DATA_TABLE LEFT JOIN (SELECT subject AS targetSubject, ARRAY_AGG(object) as types FROM $database.$DATA_TABLE WHERE predicate = '${RDFVocab.type}'$optionalFilter GROUP BY subject) type ON object = targetSubject WHERE predicate = '${key.predicate}' AND subject = '${key.subject}'"
             }.joinToString(" UNION ALL ")
-        return clickhouse.query(GenericQuerySpec(database, DATA_TABLE, listOf("index", "targets")), q).map { results ->
+        return clickhouse.query(GenericQuerySpec(database, DATA_TABLE, listOf("index", "targets")), q)
+            .invoke { _ -> Log.debug("Completed predicate target loader query.") }.map { results ->
             val resultMap = results.groupBy { it["index"] as Int }
             keys.mapIndexed { index, key ->
                 resultMap[index]?.firstOrNull()?.let {
@@ -326,6 +333,7 @@ class PredicateValueLoader(
     private val language = context[JsonLdKeywords.language] as String?
 
     override fun load(keys: List<PredicateValueKey>): CompletionStage<List<List<Any>>> {
+        Log.debug("Loading values for keys: $keys")
         val filter = keys.groupBy { it.predicate }.toList().joinToString(
             " OR ",
             " WHERE "
