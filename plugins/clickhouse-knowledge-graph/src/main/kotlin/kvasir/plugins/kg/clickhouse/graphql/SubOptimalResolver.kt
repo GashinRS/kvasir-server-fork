@@ -12,6 +12,7 @@ import graphql.language.FloatValue
 import graphql.language.InlineFragment
 import graphql.language.ScalarValue
 import graphql.language.StringValue
+import graphql.language.VariableReference
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
 import graphql.schema.GraphQLDirectiveContainer
@@ -108,7 +109,7 @@ class ClickhouseDataFetchingHandler(
         val outputType = GraphQLTypeUtil.unwrapAll(env.fieldDefinition.type) as GraphQLDirectiveContainer
         val filter = listOfNotNull(
             getNodeFilter(env.field),
-            getArgsFilter(env.field)
+            getArgsFilter(env, env.field)
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
         return targetSelectionLoader.load(
             EntryPointKey(
@@ -141,7 +142,7 @@ class ClickhouseDataFetchingHandler(
         val targetSelectionLoader = env.getDataLoader<PredicateTargetSelectionKey, List<Target>>("targets")!!
         val filter = listOfNotNull(
             getNodeFilter(env.field),
-            getArgsFilter(env.field)
+            getArgsFilter(env, env.field)
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
         return targetSelectionLoader.load(
             PredicateTargetSelectionKey(
@@ -159,7 +160,8 @@ class ClickhouseDataFetchingHandler(
         }.thenApply { values -> handleFieldMultiplicity(env, values) }
     }
 
-    private fun getArgsFilter(field: Field): Node? {
+    // TODO: rewrite this quick and dirty implementation
+    private fun getArgsFilter(env: DataFetchingEnvironment, field: Field): Node? {
         val argFilters =
             field.arguments.filter { it.name !in AbstractKnowledgeGraph.defaultRelationArguments.map { it.name } || it.name == "id" }
                 .map { argument ->
@@ -167,7 +169,35 @@ class ClickhouseDataFetchingHandler(
                         is List<*> -> ComparisonNode(
                             RSQLOperators.IN,
                             argument.name,
-                            (argument.value as List<Any>).filterIsInstance<ScalarValue<*>>().map { unboxScalar(it) })
+                            (argument.value as List<Any>).flatMap {
+                                if (it is VariableReference) {
+                                    val value = env.variables[it.name]!!
+                                    if (value is List<*>) {
+                                        value.map { it.toString() }
+                                    } else {
+                                        listOf(value.toString())
+                                    }
+                                } else {
+                                    listOf(unboxScalar(it as ScalarValue<*>))
+                                }
+                            })
+
+                        is VariableReference -> {
+                            val value = env.variables[(argument.value as VariableReference).name]!!
+                            if (value is List<*>) {
+                                ComparisonNode(
+                                    RSQLOperators.IN,
+                                    argument.name,
+                                    value.map { it.toString() }
+                                )
+                            } else {
+                                ComparisonNode(
+                                    RSQLOperators.EQUAL,
+                                    argument.name,
+                                    listOf(value.toString())
+                                )
+                            }
+                        }
 
                         else -> ComparisonNode(
                             RSQLOperators.EQUAL,
@@ -307,18 +337,18 @@ class PredicateTargetSelectionLoader(private val clickhouse: ClickhouseClient, p
             }.joinToString(" UNION ALL ")
         return clickhouse.query(GenericQuerySpec(database, DATA_TABLE, listOf("index", "targets")), q)
             .invoke { _ -> Log.debug("Completed predicate target loader query.") }.map { results ->
-            val resultMap = results.groupBy { it["index"] as Int }
-            keys.mapIndexed { index, key ->
-                resultMap[index]?.firstOrNull()?.let {
-                    val targets = it["targets"] as JsonArray
-                    targets.map {
-                        it as JsonArray
-                        val (id, types) = it.getString(0) to it.getJsonArray(1).map { it as String }
-                        Target(id as String, types)
-                    }
-                } ?: emptyList()
-            }
-        }.convert().toCompletableFuture()
+                val resultMap = results.groupBy { it["index"] as Int }
+                keys.mapIndexed { index, key ->
+                    resultMap[index]?.firstOrNull()?.let {
+                        val targets = it["targets"] as JsonArray
+                        targets.map {
+                            it as JsonArray
+                            val (id, types) = it.getString(0) to it.getJsonArray(1).map { it as String }
+                            Target(id as String, types)
+                        }
+                    } ?: emptyList()
+                }
+            }.convert().toCompletableFuture()
     }
 
 }

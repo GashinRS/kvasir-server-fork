@@ -165,6 +165,7 @@ abstract class AbstractKnowledgeGraph(
                 build.executeAsync(
                     ExecutionInput.newExecutionInput()
                         .dataLoaderRegistry(buildDataLoaderRegistry(request.podId, request.context))
+                        .variables(request.variables)
                         .query(request.query)
                         .build()
                 )
