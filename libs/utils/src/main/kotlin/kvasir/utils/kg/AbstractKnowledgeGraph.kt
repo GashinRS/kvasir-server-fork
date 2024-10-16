@@ -8,8 +8,6 @@ import graphql.Scalars.GraphQLID
 import graphql.Scalars.GraphQLInt
 import graphql.Scalars.GraphQLString
 import graphql.introspection.Introspection
-import graphql.language.AstTransformer
-import graphql.parser.Parser
 import graphql.schema.DataFetcher
 import graphql.schema.GraphQLArgument
 import graphql.schema.GraphQLCodeRegistry
@@ -165,7 +163,11 @@ abstract class AbstractKnowledgeGraph(
                 build.executeAsync(
                     ExecutionInput.newExecutionInput()
                         .dataLoaderRegistry(buildDataLoaderRegistry(request.podId, request.context))
-                        .variables(request.variables)
+                        .apply {
+                            if (request.variables != null) {
+                                this.variables(request.variables)
+                            }
+                        }
                         .query(request.query)
                         .build()
                 )
