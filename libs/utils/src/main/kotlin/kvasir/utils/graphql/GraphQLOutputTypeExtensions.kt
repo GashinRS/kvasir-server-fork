@@ -15,7 +15,7 @@ fun GraphQLOutputType.isOptional(): Boolean {
 }
 
 fun GraphQLOutputType.isList(): Boolean {
-    return GraphQLTypeUtil.isList(this)
+    return GraphQLTypeUtil.isList(this) || GraphQLTypeUtil.isList(GraphQLTypeUtil.unwrapNonNull(this))
 }
 
 fun GraphQLOutputType.isScalar(): Boolean {

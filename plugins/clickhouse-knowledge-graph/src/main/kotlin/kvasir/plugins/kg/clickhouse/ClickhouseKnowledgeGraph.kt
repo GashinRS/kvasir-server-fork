@@ -21,9 +21,9 @@ import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
+import kvasir.plugins.kg.clickhouse.graphql.ConvertToSQLResolver
 import kvasir.plugins.kg.clickhouse.graphql.NoResultsException
 import kvasir.plugins.kg.clickhouse.graphql.RDFClassTypeResolver
-import kvasir.plugins.kg.clickhouse.graphql.SubOptimalResolver
 import kvasir.plugins.kg.clickhouse.specs.KGTypeQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.META_DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.MetadataInsertRecordSpec
@@ -33,7 +33,6 @@ import kvasir.utils.kg.AbstractKnowledgeGraph
 import kvasir.utils.kg.KGPropertyKind
 import kvasir.utils.kg.KGType
 import kvasir.utils.kg.MetadataEntry
-import org.dataloader.DataLoaderRegistry
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
 import kotlin.collections.component1
@@ -73,15 +72,15 @@ class ClickhouseKnowledgeGraph(
         )
     }
 
-    override fun buildDataLoaderRegistry(podId: String, context: Map<String, Any>): DataLoaderRegistry {
-        return SubOptimalResolver.getDataLoaderRegistry(podId, clickhouseClient, context)
-    }
+//    override fun buildDataLoaderRegistry(podId: String, context: Map<String, Any>): DataLoaderRegistry {
+//        return SubOptimalResolver.getDataLoaderRegistry(podId, clickhouseClient, context)
+//    }
 
     override fun buildDatafetcher(
         podId: String,
         context: Map<String, Any>
     ): DataFetcher<Any> {
-        return SubOptimalResolver.getDatafetcher(podId, context)
+        return ConvertToSQLResolver.getDatafetcher(clickhouseClient, podId, context)
     }
 
     override fun buildUnionTypeResolver(
@@ -119,7 +118,7 @@ class ClickhouseKnowledgeGraph(
         return QueryResult(
             data = filteredData,
             errors = result.errors.filterNot { it is ExceptionWhileDataFetching && it.exception is NoResultsException }
-                .map { JsonObject.mapFrom(it).map }.takeIf {it.isNotEmpty()}
+                .map { JsonObject.mapFrom(it).map }.takeIf { it.isNotEmpty() }
         )
     }
 

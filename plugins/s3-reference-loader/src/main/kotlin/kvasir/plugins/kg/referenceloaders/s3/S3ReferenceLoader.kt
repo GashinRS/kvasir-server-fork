@@ -57,7 +57,7 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
     private fun getCompatibleRawValue(literal: Literal): Any {
         return when (literal.datatype.stringValue()) {
             XSDVocab.int, XSDVocab.integer -> literal.stringValue().let { it.toIntOrNull() ?: it.toLong() }
-            XSDVocab.double -> literal.doubleValue()
+            XSDVocab.double, XSDVocab.decimal -> literal.doubleValue()
             XSDVocab.long -> literal.longValue()
             XSDVocab.boolean -> literal.booleanValue()
             else -> literal.stringValue()

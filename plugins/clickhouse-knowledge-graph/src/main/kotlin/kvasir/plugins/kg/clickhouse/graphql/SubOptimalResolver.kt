@@ -230,7 +230,7 @@ class ClickhouseDataFetchingHandler(
                     val rsqlExpr = directive.getArgument("if")?.value?.let { (it as StringValue).value }
                         ?: throw IllegalArgumentException("Missing 'if' argument containing RSQL expression on filter directive")
                     val rsqlParser = RSQLParser()
-                    rsqlParser.parse(rsqlExpr).accept(FieldRefFilterVisitor(subField))
+                    rsqlParser.parse(rsqlExpr).accept(SelectorReplacingFilterVisitor(SELF_REF_SELECTOR, subField.name))
                 }
         }
         return filters?.takeIf { it.isNotEmpty() }?.let {
