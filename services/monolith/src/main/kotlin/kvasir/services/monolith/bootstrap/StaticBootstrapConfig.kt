@@ -1,4 +1,4 @@
-package kvasir.definitions.config
+package kvasir.services.monolith.bootstrap
 
 import io.smallrye.config.ConfigMapping
 import io.smallrye.config.WithDefault
@@ -18,5 +18,5 @@ interface StaticPodConfig {
     @WithName("auto-ingest-rdf")
     fun autoIngestRDF(): Boolean
 
-    fun defaultPrefixes(): Map<String, String>
+    fun defaultContext(): Map<String, String>
 }

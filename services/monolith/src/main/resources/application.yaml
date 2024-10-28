@@ -24,21 +24,21 @@ quarkus:
     bootstrap:
       pods:
         - name: alice
-          default-prefixes:
+          default-context:
             rdfs: http://www.w3.org/2000/01/rdf-schema#
             xsd: http://www.w3.org/2001/XMLSchema#
             schema: http://schema.org/
             ex: http://example.org/
           auto-ingest-rdf: true
         - name: bob
-          default-prefixes:
+          default-context:
             rdfs: http://www.w3.org/2000/01/rdf-schema#
             xsd: http://www.w3.org/2001/XMLSchema#
             schema: http://schema.org/
             ex: http://example.org/
           auto-ingest-rdf: false
         - name: swdemo
-          default-prefixes:
+          default-context:
             "@language": en
             voc: https://swapi.co/vocabulary/
             commons: https://commons.wikimedia.org/wiki/Special:FilePath/

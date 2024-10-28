@@ -2,34 +2,35 @@ package kvasir.plugins.kg.clickhouse
 
 import io.quarkus.logging.Log
 import io.quarkus.runtime.StartupEvent
-import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
+import jakarta.annotation.Priority
 import jakarta.enterprise.event.Observes
-import kvasir.definitions.config.StaticBootstrapConfig
-import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
+import kvasir.plugins.kg.clickhouse.specs.SYSTEM_DB
 
 class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
 
-    fun init(@Observes event: StartupEvent, config: StaticBootstrapConfig) {
-        Multi.createFrom().iterable(config.pods().map { it.name() })
-            .onItem().transformToUniAndConcatenate { pod ->
-                Log.debug("Making sure a Clickhouse schema exists pod $pod...")
-                val database = databaseFromPodId(pod)
-                createDatabase(database)
-                    .chain { _ -> createDataSchema(database) }
-                    .chain { _ -> createMetadataSchema(database) }
-                    .chain { _ -> createSliceSchema(database) }
-            }
-            .skipToLast()
+    fun init(@Observes @Priority(100) event: StartupEvent) {
+        Log.debug("Initializing Clickhouse schema for Kvasir system tables...")
+        createDatabase(SYSTEM_DB)
+            .chain { _ -> createPodSchema(SYSTEM_DB) }
+            .chain { _ -> createSliceSchema(SYSTEM_DB) }
             .await().indefinitely()
     }
 
-    private fun createDatabase(database: String): Uni<Void> {
+    fun initializePodSchema(podId: String): Uni<Void> {
+        Log.debug("Making sure a Clickhouse schema exists for pod $podId...")
+        val database = databaseFromPodId(podId)
+        return createDatabase(database)
+            .chain { _ -> createDataSchema(database) }
+            .chain { _ -> createMetadataSchema(database) }
+    }
+
+    fun createDatabase(database: String): Uni<Void> {
         return clickhouseClient.execute("CREATE DATABASE IF NOT EXISTS $database;")
     }
 
-    private fun createDataSchema(database: String): Uni<Void> {
+    fun createDataSchema(database: String): Uni<Void> {
         return clickhouseClient.execute(
             """
             CREATE TABLE IF NOT EXISTS $database.data (
@@ -48,7 +49,7 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
         )
     }
 
-    private fun createMetadataSchema(database: String): Uni<Void> {
+    fun createMetadataSchema(database: String): Uni<Void> {
         return clickhouseClient.execute(
             """
             CREATE TABLE IF NOT EXISTS $database.metadata (
@@ -62,10 +63,24 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
         )
     }
 
-    private fun createSliceSchema(database: String): Uni<Void> {
+    fun createSliceSchema(database: String): Uni<Void> {
         return clickhouseClient.execute(
             """
             CREATE TABLE IF NOT EXISTS $database.slices (
+                id String,
+                pod_id String,
+                timestamp DateTime64(3),
+                json String
+            ) ENGINE = ReplacingMergeTree()
+                ORDER BY (pod_id, id);
+        """.trimIndent()
+        )
+    }
+
+    fun createPodSchema(database: String): Uni<Void> {
+        return clickhouseClient.execute(
+            """
+            CREATE TABLE IF NOT EXISTS $database.pods (
                 id String,
                 timestamp DateTime64(3),
                 json String

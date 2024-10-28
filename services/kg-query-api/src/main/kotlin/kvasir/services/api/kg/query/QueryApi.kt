@@ -4,8 +4,9 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
-import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.Pod
+import kvasir.definitions.kg.PodStore
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.openapi.ApiDocConstants
@@ -21,7 +22,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 @Path("{podId}/kg/query")
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
-    private val podsConfig: StaticBootstrapConfig
+    private val podStore: PodStore
 ) {
 
     @POST
@@ -31,9 +32,11 @@ class QueryApi(
         description = "Query the knowledge graph of the specified pod using GraphQL."
     )
     fun query(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<QueryResult> {
-        throw404IfPodNotFound(podsConfig, podId)
-        val req = parseInput(podId, input)
-        return knowledgeGraph.query(req)
+        return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+            .onItem().ifNotNull().transformToUni { pod ->
+                val req = parseInput(pod!!, input)
+                knowledgeGraph.query(req)
+            }
     }
 
     @POST
@@ -44,27 +47,24 @@ class QueryApi(
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
     fun queryJsonLD(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<Map<String, Any>> {
-        throw404IfPodNotFound(podsConfig, podId)
-        val req = parseInput(podId, input)
-        return knowledgeGraph.query(req).map {
-            it.toJsonLD(req.context)
-        }
+        return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+            .onItem().ifNotNull().transformToUni { pod ->
+                val req = parseInput(pod!!, input)
+                knowledgeGraph.query(req).map {
+                    it.toJsonLD(req.context)
+                }
+            }
     }
 
-    private fun parseInput(podId: String, input: QueryInputWithContext): QueryRequest {
+    private fun parseInput(pod: Pod, input: QueryInputWithContext): QueryRequest {
         return QueryRequest(
-            getDefaultContextFor(podId),
-            podId,
+            pod.getDefaultContext(),
+            pod.id,
             input.query,
             input.variables,
             input.operationName,
             input.targetGraphs
         )
-    }
-
-    private fun getDefaultContextFor(podId: String): Map<String, Any> {
-        val pod = podsConfig.pods().first { it.name() == podId }
-        return pod.defaultPrefixes()
     }
 }
 
@@ -114,8 +114,7 @@ data class QueryInputWithContext(
     val providedContext: Map<String, Any>? = null
 ) : QueryInput
 
-internal fun throw404IfPodNotFound(podConfig: StaticBootstrapConfig, podId: String) {
-    if (podConfig.pods().none { it.name() == podId }) {
-        throw NotFoundException("Pod not found: $podId")
-    }
+internal fun throw404IfPodNotFound(podStore: PodStore, podId: String): Uni<Void> {
+    return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId")).onItem()
+        .ifNotNull().transformToUni { Uni.createFrom().voidItem() }
 }

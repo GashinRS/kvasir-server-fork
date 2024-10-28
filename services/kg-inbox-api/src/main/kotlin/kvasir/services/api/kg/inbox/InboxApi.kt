@@ -6,6 +6,7 @@ import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.smallrye.reactive.messaging.kafka.KafkaRecord
 import jakarta.ws.rs.Consumes
+import jakarta.ws.rs.NotFoundException
 import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
@@ -13,9 +14,9 @@ import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
-import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.PodStore
 import kvasir.definitions.kg.SliceStore
 import kvasir.definitions.kg.changeops.Assertion
 import kvasir.definitions.openapi.ApiDocConstants
@@ -40,7 +41,7 @@ class InboxApi(
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
     private val knowledgeGraph: KnowledgeGraph,
     private val sliceStore: SliceStore,
-    private val podConfig: StaticBootstrapConfig
+    private val podStore: PodStore
 ) {
 
     @Path("inbox")
@@ -57,14 +58,14 @@ class InboxApi(
         uriInfo: UriInfo,
         input: ChangeRequestInput
     ): Uni<Response> {
-        if (podConfig.pods().none { it.name() == podId }) {
-            return Uni.createFrom().item { Response.status(Response.Status.NOT_FOUND).build() }
-        }
-        val changeCommand = input.toChangeRequest(podId, uriInfo)
-        return changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
-            .map { _ -> Response.accepted().build() }
-            .onFailure(RecordTooLargeException::class.java)
-            .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
+        return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found"))
+            .onItem().ifNotNull().transformToUni { pod ->
+                val changeCommand = input.toChangeRequest(podId, uriInfo)
+                changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
+                    .map { _ -> Response.accepted().build() }
+                    .onFailure(RecordTooLargeException::class.java)
+                    .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
+            }
     }
 
     @Path("slices/{sliceId}/inbox")
@@ -82,31 +83,30 @@ class InboxApi(
         uriInfo: UriInfo,
         input: ChangeRequestInput
     ): Uni<Response> {
-        if (podConfig.pods().none { it.name() == podId }) {
-            return Uni.createFrom().item { Response.status(Response.Status.NOT_FOUND).build() }
-        }
-        return sliceStore.getById(podId, sliceId).chain { slice ->
-            val changeCommand = input.toChangeRequest(podId, uriInfo, sliceId)
-            val validator = RDF4JSHACLValidator.fromTurtleString(slice.shacl)
-            try {
-                // Validate plain inserts
-                changeCommand.insert.filterIsInstance<Map<String, Any>>()
-                    .forEach { jsonLdInstance -> validator.validate(jsonLdInstance) }
-                // Validate plain deletes
-                changeCommand.delete.filterIsInstance<Map<String, Any>>()
-                    .forEach { jsonLdInstance -> validator.validate(jsonLdInstance) }
-                // Publish the change request
-                changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
-                    .map { _ -> Response.accepted().build() }
-                    .onFailure(RecordTooLargeException::class.java)
-                    .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
-            } catch (e: SHACLValidationFailure) {
-                Uni.createFrom().item(
-                    Response.status(Response.Status.BAD_REQUEST).entity(e.report)
-                        .header(HttpHeaders.CONTENT_TYPE, e.contentType).build()
-                )
+        return sliceStore.getById(podId, sliceId)
+            .onItem().ifNull().failWith(NotFoundException("Slice not found"))
+            .onItem().ifNotNull().transformToUni { slice ->
+                val changeCommand = input.toChangeRequest(podId, uriInfo, sliceId)
+                val validator = RDF4JSHACLValidator.fromTurtleString(slice!!.shacl)
+                try {
+                    // Validate plain inserts
+                    changeCommand.insert.filterIsInstance<Map<String, Any>>()
+                        .forEach { jsonLdInstance -> validator.validate(jsonLdInstance) }
+                    // Validate plain deletes
+                    changeCommand.delete.filterIsInstance<Map<String, Any>>()
+                        .forEach { jsonLdInstance -> validator.validate(jsonLdInstance) }
+                    // Publish the change request
+                    changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
+                        .map { _ -> Response.accepted().build() }
+                        .onFailure(RecordTooLargeException::class.java)
+                        .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
+                } catch (e: SHACLValidationFailure) {
+                    Uni.createFrom().item(
+                        Response.status(Response.Status.BAD_REQUEST).entity(e.report)
+                            .header(HttpHeaders.CONTENT_TYPE, e.contentType).build()
+                    )
+                }
             }
-        }
     }
 
 }

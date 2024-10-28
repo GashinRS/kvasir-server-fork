@@ -11,7 +11,6 @@ import io.vertx.ext.web.Router
 import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
-import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.storage.StorageMutationEvent
 import kvasir.definitions.storage.StorageMutationEventType
 import org.eclipse.microprofile.config.inject.ConfigProperty
@@ -38,8 +37,7 @@ class StorageApi(
     private val s3Host: String,
     @ConfigProperty(name = "kvasir.services.storage.s3.port", defaultValue = "9000")
     private val s3Port: Int,
-    private val s3Interceptor: S3Interceptor,
-    private val podConfig: StaticBootstrapConfig
+    private val s3Interceptor: S3Interceptor
 ) {
 
     fun onStart(@Observes router: Router, vertx: Vertx) {
@@ -48,11 +46,7 @@ class StorageApi(
         proxy.origin(s3Port, s3Host).addInterceptor(s3Interceptor)
 
         router.route("/:podId/s3/*").handler { ctx ->
-            if (podConfig.pods().none { it.name() == ctx.pathParam("podId") }) {
-                ctx.fail(404)
-            } else {
-                proxy.handle(ctx.request())
-            }
+            proxy.handle(ctx.request())
         }
     }
 
@@ -89,7 +83,7 @@ class S3Interceptor(
             val isoDateTime = getIsoDateTime(context)
             val payloadHash = getPayloadHash(context, buffer)
             val targetUri = URI.create(target);
-            val targetDecoded = arrayOf(targetUri.path,targetUri.query ?: "").joinToString("?");
+            val targetDecoded = arrayOf(targetUri.path, targetUri.query ?: "").joinToString("?");
             val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
             val sig = Signer.builder()
                 .awsCredentials(AwsCredentials(s3AccessKey, s3SecretKey))

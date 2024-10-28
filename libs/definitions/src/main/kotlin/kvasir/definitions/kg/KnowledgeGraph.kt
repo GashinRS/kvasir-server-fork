@@ -29,11 +29,11 @@ interface SliceStore {
 
     fun list(podId: String): Uni<List<SliceSummary>>
 
-    fun getById(podId: String, segmentId: String): Uni<Slice>
+    fun getById(podId: String, segmentId: String): Uni<Slice?>
 
     fun deleteById(podId: String, segmentId: String): Uni<Void>
 
-    fun loadFilterById(podId: String, segmentId: String): Uni<ChangeResultSliceFilter>
+    fun loadFilterById(podId: String, segmentId: String): Uni<ChangeResultSliceFilter?>
 
     fun loadAllFilters(podId: String): Uni<Set<ChangeResultSliceFilter>>
 }

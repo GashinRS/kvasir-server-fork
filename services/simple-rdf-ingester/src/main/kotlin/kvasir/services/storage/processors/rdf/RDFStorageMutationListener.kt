@@ -6,7 +6,6 @@ import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
-import kvasir.definitions.config.StaticBootstrapConfig
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
@@ -22,18 +21,13 @@ import org.eclipse.microprofile.reactive.messaging.Outgoing
  */
 @ApplicationScoped
 class RDFStorageMutationListener(
-    private val minioClient: MinioAsyncClient,
-    private val staticBootstrapConfig: StaticBootstrapConfig
+    private val minioClient: MinioAsyncClient
 ) {
 
     @Incoming("storage_mutations_subscribe")
     @Outgoing("change_requests_publish")
     fun consumeAndLog(storageMutationEvents: Multi<StorageMutationEvent>): Multi<ChangeRequest> {
         return storageMutationEvents
-            .filter { event ->
-                // Only trigger this pipeline for pods that have auto-ingestion enabled
-                staticBootstrapConfig.pods().find { it.name() == event.podId }?.autoIngestRDF() == true
-            }
             .onItem()
             .transformToUniAndConcatenate { event ->
                 Uni.createFrom().completionStage(

@@ -2,7 +2,6 @@ package kvasir.plugins.kg.clickhouse
 
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.ws.rs.NotFoundException
 import kvasir.definitions.kg.ChangeResultSliceFilter
 import kvasir.definitions.kg.Slice
 import kvasir.definitions.kg.SliceStore
@@ -16,13 +15,13 @@ import kvasir.utils.shacl.RDF4JSHACLValidator
 @ApplicationScoped
 class ClickhouseSliceStore(private val clickhouseClient: ClickhouseClient) : SliceStore {
     override fun persist(segment: Slice): Uni<Void> {
-        return clickhouseClient.insert(SliceInsertRecordSpec(databaseFromPodId(segment.podId)), listOf(segment))
+        return clickhouseClient.insert(SliceInsertRecordSpec, listOf(segment))
     }
 
     override fun list(podId: String): Uni<List<SliceSummary>> {
         return clickhouseClient.query(
             SliceQuerySpec(databaseFromPodId(podId)),
-            "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE GROUP BY id"
+            "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE WHERE pod_id = '$podId' GROUP BY id"
         )
             .map { results ->
                 results.map { result ->
@@ -35,26 +34,26 @@ class ClickhouseSliceStore(private val clickhouseClient: ClickhouseClient) : Sli
             }
     }
 
-    override fun getById(podId: String, segmentId: String): Uni<Slice> {
+    override fun getById(podId: String, segmentId: String): Uni<Slice?> {
         return clickhouseClient.query(
             SliceQuerySpec(databaseFromPodId(podId)),
-            "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE WHERE id = '$segmentId' GROUP BY id"
+            "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE WHERE id = '$segmentId' AND pod_id = '$podId' GROUP BY id"
         )
             .map { results ->
-                results.firstOrNull() ?: throw NotFoundException("No slice found with id $segmentId")
+                results.firstOrNull()
             }
     }
 
     override fun deleteById(podId: String, segmentId: String): Uni<Void> {
-        return clickhouseClient.execute("ALTER TABLE ${databaseFromPodId(podId)}.$SLICE_TABLE DELETE WHERE id = '$segmentId'")
+        return clickhouseClient.execute("ALTER TABLE ${databaseFromPodId(podId)}.$SLICE_TABLE DELETE WHERE id = '$segmentId' AND pod_id = '$podId'")
     }
 
     override fun loadFilterById(
         podId: String,
         segmentId: String
-    ): Uni<ChangeResultSliceFilter> {
+    ): Uni<ChangeResultSliceFilter?> {
         return getById(podId, segmentId)
-            .map { slice -> sliceFilterFrom(slice) }
+            .map { slice -> slice?.let { sliceFilterFrom(it) } }
     }
 
     override fun loadAllFilters(podId: String): Uni<Set<ChangeResultSliceFilter>> {

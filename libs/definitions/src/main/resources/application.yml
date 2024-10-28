@@ -25,6 +25,11 @@ mp:
         topic: slice.events
         merge: true
         waitForWriteCompletion: false
+      pod_events_publish:
+        connector: smallrye-kafka
+        topic: pod.events
+        merge: true
+        waitForWriteCompletion: false
     incoming:
       change_requests_subscribe:
         connector: smallrye-kafka
@@ -54,6 +59,13 @@ mp:
         auto:
           offset:
             reset: earliest
+        pod_events_subscribe:
+            connector: smallrye-kafka
+            topic: pod.events
+            broadcast: true
+            auto:
+                offset:
+                reset: earliest
 
 "%dev":
    quarkus:
