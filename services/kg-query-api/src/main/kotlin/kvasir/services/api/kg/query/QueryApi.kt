@@ -15,8 +15,12 @@ import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.media.Schema
+import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import java.time.Instant
+import java.util.Optional
+import kotlin.jvm.optionals.getOrNull
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
 @Path("{podId}/kg/query")
@@ -31,10 +35,21 @@ class QueryApi(
         summary = "Retrieve data from the KG.",
         description = "Query the knowledge graph of the specified pod using GraphQL."
     )
-    fun query(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<QueryResult> {
+    fun query(
+        @PathParam("podId") podId: String,
+        input: QueryInputWithContext,
+        @QueryParam("atTimestamp") @Parameter(
+            description = "Query the state of the KG at the specified point in time.",
+            required = false
+        ) atTimestamp: Optional<Instant>,
+        @QueryParam("atChangeRequestId") @Parameter(
+            description = "Query the state of the KG when the specified change request was applied.",
+            required = false
+        ) atChangeRequestId: Optional<String>
+    ): Uni<QueryResult> {
         return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
-                val req = parseInput(pod!!, input)
+                val req = parseInput(pod!!, input, atTimestamp.getOrNull(), atChangeRequestId.getOrNull())
                 knowledgeGraph.query(req)
             }
     }
@@ -46,24 +61,41 @@ class QueryApi(
         description = "The query result in JSON-LD format.",
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
-    fun queryJsonLD(@PathParam("podId") podId: String, input: QueryInputWithContext): Uni<Map<String, Any>> {
+    fun queryJsonLD(
+        @PathParam("podId") podId: String, input: QueryInputWithContext,
+        @QueryParam("atTimestamp") @Parameter(
+            description = "Query the state of the KG at the specified point in time.",
+            required = false
+        ) atTimestamp: Optional<Instant>,
+        @QueryParam("atChangeRequestId") @Parameter(
+            description = "Query the state of the KG when the specified change request was applied.",
+            required = false
+        ) atChangeRequestId: Optional<String>
+    ): Uni<Map<String, Any>> {
         return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
-                val req = parseInput(pod!!, input)
+                val req = parseInput(pod!!, input, atTimestamp.getOrNull(), atChangeRequestId.getOrNull())
                 knowledgeGraph.query(req).map {
                     it.toJsonLD(req.context)
                 }
             }
     }
 
-    private fun parseInput(pod: Pod, input: QueryInputWithContext): QueryRequest {
+    private fun parseInput(
+        pod: Pod,
+        input: QueryInputWithContext,
+        atTimestamp: Instant? = null,
+        atChangeRequestId: String? = null
+    ): QueryRequest {
         return QueryRequest(
             pod.getDefaultContext(),
             pod.id,
             input.query,
             input.variables,
             input.operationName,
-            input.targetGraphs
+            input.targetGraphs,
+            atTimestamp = atTimestamp,
+            atChangeRequestId = atChangeRequestId
         )
     }
 }

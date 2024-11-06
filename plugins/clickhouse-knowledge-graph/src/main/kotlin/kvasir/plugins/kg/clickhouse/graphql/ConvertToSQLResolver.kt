@@ -25,6 +25,7 @@ import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
+import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
 import kvasir.utils.graphql.innerType
 import kvasir.utils.graphql.isList
 import kvasir.utils.kg.AbstractKnowledgeGraph
@@ -114,11 +115,11 @@ class SQLConvertor(
     fun scalarFieldJoinStatement(field: Field, parentJoinField: String): String {
         val name = field.name
         val joinField = "${name}_holder"
-        return "${getJoinType(field)} (SELECT subject AS $joinField, object AS $name FROM $tableRef WHERE predicate = '${
+        return "${getJoinType(field)} (SELECT anyLast(subject) AS $joinField, anyLast(object) AS $name FROM $tableRef WHERE predicate = '${
             getFQName(
                 field.name
             )
-        }') ${name}_join ON $parentJoinField = $joinField"
+        }' GROUP BY $SORT_COLUMNS HAVING sum(sign) > 0) ${name}_join ON $parentJoinField = $joinField"
     }
 
     fun relationFieldJoinStatement(field: Field, parentJoinField: String): String {

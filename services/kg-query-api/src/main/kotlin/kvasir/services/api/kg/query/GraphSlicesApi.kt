@@ -24,6 +24,9 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
+import java.time.Instant
+import java.util.Optional
+import kotlin.jvm.optionals.getOrNull
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
 @Path("{podId}/kg")
@@ -128,13 +131,21 @@ class GraphSlicesApi(
     fun queryVirtual(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
-        input: QueryInputImpl
+        input: QueryInputImpl,
+        @QueryParam("atTimestamp") @Parameter(
+            description = "Query the state of the KG at the specified point in time.",
+            required = false
+        ) atTimestamp: Optional<Instant>,
+        @QueryParam("atChangeRequestId") @Parameter(
+            description = "Query the state of the KG when the specified change request was applied.",
+            required = false
+        ) atChangeRequestId: Optional<String>
     ): Uni<QueryResult> {
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
                 .onItem().ifNotNull().transformToUni { slice ->
-                    executeQuery(podId, slice!!, input)
+                    executeQuery(podId, slice!!, input, atTimestamp.getOrNull(), atChangeRequestId.getOrNull())
                 }
         }
     }
@@ -151,13 +162,21 @@ class GraphSlicesApi(
     fun queryVirtualJsonLD(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
-        input: QueryInputImpl
+        input: QueryInputImpl,
+        @QueryParam("atTimestamp") @Parameter(
+            description = "Query the state of the KG at the specified point in time.",
+            required = false
+        ) atTimestamp: Optional<Instant>,
+        @QueryParam("atChangeRequestId") @Parameter(
+            description = "Query the state of the KG when the specified change request was applied.",
+            required = false
+        ) atChangeRequestId: Optional<String>
     ): Uni<Map<String, Any>> {
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
                 .onItem().ifNotNull().transformToUni { slice ->
-                    executeQuery(podId, slice!!, input).map {
+                    executeQuery(podId, slice!!, input, atTimestamp.getOrNull(), atChangeRequestId.getOrNull()).map {
                         it.toJsonLD(slice.context)
                     }
                 }
@@ -180,7 +199,13 @@ class GraphSlicesApi(
         }
     }
 
-    private fun executeQuery(podId: String, slice: Slice, input: QueryInputImpl): Uni<QueryResult> {
+    private fun executeQuery(
+        podId: String,
+        slice: Slice,
+        input: QueryInputImpl,
+        atTimestamp: Instant? = null,
+        atChangeRequestId: String? = null
+    ): Uni<QueryResult> {
         // Execute the query
         return knowledgeGraph.query(
             QueryRequest(
@@ -190,7 +215,9 @@ class GraphSlicesApi(
                 input.variables,
                 input.operationName,
                 slice.targetGraphs,
-                slice.schema
+                slice.schema,
+                atTimestamp,
+                atChangeRequestId
             )
         )
     }

@@ -40,11 +40,12 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
                 datatype LowCardinality(String),
                 language LowCardinality(String),
                 graph LowCardinality(String),
-                sign  Int8,
-                timestamp DateTime64(3) MATERIALIZED now64()
-            ) ENGINE = CollapsingMergeTree(sign)
+                timestamp DateTime64(3),
+                change_request_id String,
+                sign  Int8
+            ) ENGINE = ReplacingMergeTree
                 PARTITION BY toYYYYMM(timestamp)
-                ORDER BY (subject, predicate, object, datatype, language, graph);
+                ORDER BY (subject, predicate, object, datatype, language, graph, timestamp, change_request_id, sign);
         """.trimIndent()
         )
     }

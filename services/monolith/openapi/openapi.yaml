@@ -20,6 +20,82 @@ tags:
     \ or binary data) for a specific pod via S3 operations, modified to be compatible\
     \ with Solid auth(n/z). For more information, see the [S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations.html)."
 paths:
+  /:
+    get:
+      tags:
+      - Pod Management Api
+      responses:
+        "200":
+          description: OK
+          content:
+            application/ld+json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pod"
+    post:
+      tags:
+      - Pod Management Api
+      requestBody:
+        content:
+          application/ld+json:
+            schema:
+              $ref: "#/components/schemas/RegisterPodInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json: {}
+  /{podId}:
+    get:
+      tags:
+      - Pod Management Api
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/ld+json:
+              schema:
+                $ref: "#/components/schemas/Pod"
+    put:
+      tags:
+      - Pod Management Api
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/ld+json:
+            schema:
+              $ref: "#/components/schemas/UpdatePodInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json: {}
+    delete:
+      tags:
+      - Pod Management Api
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json: {}
   /{podId}/kg/inbox:
     post:
       tags:
@@ -437,6 +513,17 @@ components:
           example:
           - '@id': ex:123
             ex:givenName: Bob
+    Pod:
+      required:
+      - id
+      - configuration
+      type: object
+      properties:
+        id:
+          type: string
+        configuration:
+          type: object
+          additionalProperties: {}
     QueryInputImpl:
       required:
       - query
@@ -511,6 +598,17 @@ components:
             type: object
             additionalProperties: {}
           nullable: true
+    RegisterPodInput:
+      required:
+      - id
+      - configuration
+      type: object
+      properties:
+        id:
+          type: string
+        configuration:
+          type: object
+          additionalProperties: {}
     Slice:
       required:
       - id
@@ -579,3 +677,11 @@ components:
           type: string
         description:
           type: string
+    UpdatePodInput:
+      required:
+      - configuration
+      type: object
+      properties:
+        configuration:
+          type: object
+          additionalProperties: {}

@@ -10,6 +10,8 @@ import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.json.JsonObject
 import jakarta.inject.Singleton
+import kvasir.definitions.kg.ChangeRecord
+import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.ChangeResult
 import kvasir.definitions.kg.HistoryRequest
 import kvasir.definitions.kg.HistoryResult
@@ -27,7 +29,6 @@ import kvasir.plugins.kg.clickhouse.graphql.RDFClassTypeResolver
 import kvasir.plugins.kg.clickhouse.specs.KGTypeQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.META_DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.MetadataInsertRecordSpec
-import kvasir.plugins.kg.clickhouse.specs.RDFDatasetQuadDeleteSpec
 import kvasir.plugins.kg.clickhouse.specs.RDFDatasetQuadInsertSpec
 import kvasir.utils.kg.AbstractKnowledgeGraph
 import kvasir.utils.kg.KGPropertyKind
@@ -50,19 +51,16 @@ class ClickhouseKnowledgeGraph(
     @Channel(Channels.OUTBOX_PUBLISH)
     private val outboxEmitter: MutinyEmitter<ChangeResult>
 ) : AbstractKnowledgeGraph(referenceLoaders, assertionCheckingParallelism, refHandlingBuffer, outboxEmitter) {
-    override fun insertStatements(
+    override fun persist(
         podId: String,
-        statements: List<RDFStatement>
+        records: List<ChangeRecord>
     ): Uni<Void> {
-        return clickhouseClient.insert(RDFDatasetQuadInsertSpec(databaseFromPodId(podId)), statements)
-            .chain { _ -> syncMetadata(podId, statements) }
-    }
-
-    override fun deleteStatements(
-        podId: String,
-        statements: List<RDFStatement>
-    ): Uni<Void> {
-        return clickhouseClient.insert(RDFDatasetQuadDeleteSpec(databaseFromPodId(podId)), statements)
+        return clickhouseClient.insert(RDFDatasetQuadInsertSpec(databaseFromPodId(podId)), records)
+            .chain { _ ->
+                syncMetadata(
+                    podId,
+                    records.filter { it.type == ChangeRecordType.INSERT }.map { it.statement })
+            }
     }
 
     override fun deleteGraph(podId: String, graph: String): Uni<Void> {

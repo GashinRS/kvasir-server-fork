@@ -24,6 +24,8 @@ import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
+import kvasir.definitions.kg.ChangeRecord
+import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.ChangeResult
 import kvasir.definitions.kg.KnowledgeGraph
@@ -33,10 +35,9 @@ import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.kg.ReferenceLoader
 import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
-import kvasir.definitions.messaging.Channels
 import kvasir.definitions.reactive.skipToLast
 import org.dataloader.DataLoaderRegistry
-import org.eclipse.microprofile.reactive.messaging.Channel
+import java.time.Instant
 
 /**
  * This class is used to implement common logic for knowledge graph implementations, including:
@@ -77,6 +78,7 @@ abstract class AbstractKnowledgeGraph(
 
     override fun process(request: ChangeRequest): Uni<Void> {
         val start = System.currentTimeMillis()
+        val changeRequestTs = Instant.now()
         val changeProcessor = ChangeProcessor(request, this, assertionCheckingParallelism)
         return changeProcessor.executeAssertions()
             .chain { _ ->
@@ -88,7 +90,16 @@ abstract class AbstractKnowledgeGraph(
                         }
                         .group().intoLists().of(referenceHandlingBuffer)
                         .onItem().transformToUni { deleteTuples ->
-                            deleteStatements(request.podId, deleteTuples)
+                            persist(
+                                request.podId,
+                                deleteTuples.map {
+                                    ChangeRecord(
+                                        request.id,
+                                        changeRequestTs,
+                                        ChangeRecordType.DELETE,
+                                        it
+                                    )
+                                })
                         }
                         .concatenate()
                         .skipToLast()
@@ -100,9 +111,16 @@ abstract class AbstractKnowledgeGraph(
                                 }
                                 .group().intoLists().of(referenceHandlingBuffer)
                                 .onItem().transformToUni { insertTuples ->
-                                    insertStatements(
+                                    persist(
                                         request.podId,
-                                        insertTuples
+                                        insertTuples.map {
+                                            ChangeRecord(
+                                                request.id,
+                                                changeRequestTs,
+                                                ChangeRecordType.INSERT,
+                                                it
+                                            )
+                                        }
                                     )
                                 }
                                 .concatenate()
@@ -114,15 +132,25 @@ abstract class AbstractKnowledgeGraph(
                         .chain { bindings ->
                             // Delete the specified records
                             val deleteJsonLd = changeProcessor.materializeRecords(request.delete, bindings)
-                            deleteStatements(
+                            persist(
                                 request.podId,
-                                changeProcessor.toStatements(deleteJsonLd)
+                                changeProcessor.toStatements(deleteJsonLd).map {
+                                    ChangeRecord(
+                                        request.id, changeRequestTs,
+                                        ChangeRecordType.DELETE, it
+                                    )
+                                }
                             ).map { _ -> deleteJsonLd }
                                 .chain { deleteJsonLd ->
                                     val insertJsonLd = changeProcessor.materializeRecords(request.insert, bindings)
-                                    insertStatements(
+                                    persist(
                                         request.podId,
-                                        changeProcessor.toStatements(insertJsonLd)
+                                        changeProcessor.toStatements(insertJsonLd).map {
+                                            ChangeRecord(
+                                                request.id, changeRequestTs,
+                                                ChangeRecordType.INSERT, it
+                                            )
+                                        }
                                     ).map { _ -> deleteJsonLd to insertJsonLd }
                                 }
                         }
@@ -234,14 +262,9 @@ abstract class AbstractKnowledgeGraph(
     }
 
     /**
-     * Insert a list of RDF statements into the knowledge graph (should be provided by the concrete implementation).
+     * Persist a list of RDF statements inserts or deletes (should be provided by the concrete implementation).
      */
-    abstract fun insertStatements(podId: String, statements: List<RDFStatement>): Uni<Void>
-
-    /**
-     * Delete a list of RDF statements from the knowledge graph (should be provided by the concrete implementation).
-     */
-    abstract fun deleteStatements(podId: String, statements: List<RDFStatement>): Uni<Void>
+    abstract fun persist(podId: String, statements: List<ChangeRecord>): Uni<Void>
 
     /**
      * Delete an entire graph from the knowledge graph (should be provided by the concrete implementation).

@@ -11,6 +11,7 @@ import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.changeops.Assertion
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import java.time.Instant
 import java.util.*
 
 interface KnowledgeGraph {
@@ -252,7 +253,9 @@ data class QueryRequest(
     val variables: Map<String, Any>? = null,
     val operationName: String? = null,
     val targetGraphs: Set<String> = emptySet(),
-    val predefinedSchema: String? = null
+    val predefinedSchema: String? = null,
+    val atTimestamp: Instant? = null,
+    val atChangeRequestId: String? = null
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -351,6 +354,17 @@ data class RDFStatement(
     val dataType: String? = null,
     val language: String? = null
 )
+
+data class ChangeRecord(
+    val changeRequestId: String,
+    val timestamp: Instant,
+    val type: ChangeRecordType,
+    val statement: RDFStatement
+)
+
+enum class ChangeRecordType {
+    INSERT, DELETE
+}
 
 interface ChangeResultSliceFilter : Predicate<List<Map<String, Any>>> {
 

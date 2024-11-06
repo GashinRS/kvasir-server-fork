@@ -2,8 +2,9 @@ package kvasir.plugins.kg.clickhouse.specs
 
 import io.vertx.core.json.Json
 import io.vertx.core.json.JsonArray
+import kvasir.definitions.kg.ChangeRecord
+import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.kg.Slice
 import kvasir.plugins.kg.clickhouse.client.ClickhouseRecord
 import kvasir.plugins.kg.clickhouse.client.InsertRecordSpec
@@ -18,12 +19,15 @@ const val DATA_TABLE = "data"
 const val META_DATA_TABLE = "metadata"
 const val SLICE_TABLE = "slices"
 const val POD_TABLE = "pods"
-val DATA_COLUMNS = listOf("subject", "predicate", "object", "datatype", "language", "graph", "sign")
+val DATA_COLUMNS =
+    listOf("subject", "predicate", "object", "datatype", "language", "graph", "timestamp", "change_request_id", "sign")
 val META_DATA_COLUMNS = listOf("type_uri", "property_uri", "property_kind", "property_ref")
 val SLICE_COLUMNS = listOf("id", "pod_id", "timestamp", "json")
 val POD_COLUMNS = listOf("id", "timestamp", "json")
+val SORT_COLUMNS = listOf("subject", "predicate", "object", "datatype", "language", "graph")
 
-private fun statementToBaseRecord(t: RDFStatement): ClickhouseRecord {
+private fun statementToBaseRecord(record: ChangeRecord): ClickhouseRecord {
+    val t = record.statement
     return ClickhouseRecord()
         .add(t.subject)
         .add(t.predicate)
@@ -31,21 +35,21 @@ private fun statementToBaseRecord(t: RDFStatement): ClickhouseRecord {
         .add(t.dataType ?: "")
         .add(t.language ?: "")
         .add(t.graph)
+        .add(record.timestamp.toEpochMilli())
+        .add(record.changeRequestId)
+        .add(
+            when (record.type) {
+                ChangeRecordType.INSERT -> 1
+                ChangeRecordType.DELETE -> -1
+            }
+        )
 }
 
-class RDFDatasetQuadInsertSpec(database: String) : InsertRecordSpec<RDFStatement>(database, DATA_TABLE, DATA_COLUMNS) {
-    override fun toRecord(t: RDFStatement): ClickhouseRecord {
+class RDFDatasetQuadInsertSpec(database: String) : InsertRecordSpec<ChangeRecord>(database, DATA_TABLE, DATA_COLUMNS) {
+    override fun toRecord(t: ChangeRecord): ClickhouseRecord {
         return statementToBaseRecord(t)
-            .add(1)
     }
 
-}
-
-class RDFDatasetQuadDeleteSpec(database: String) : InsertRecordSpec<RDFStatement>(database, DATA_TABLE, DATA_COLUMNS) {
-    override fun toRecord(t: RDFStatement): ClickhouseRecord {
-        return statementToBaseRecord(t)
-            .add(-1)
-    }
 }
 
 class MetadataInsertRecordSpec(database: String) :
