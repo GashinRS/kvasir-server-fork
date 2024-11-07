@@ -135,7 +135,7 @@
         }
       }
     },
-    "/{podId}/kg/inbox" : {
+    "/{podId}/changes" : {
       "post" : {
         "tags" : [ "Knowledge Graph API" ],
         "summary" : "Perform mutations on the KG.",
@@ -164,7 +164,102 @@
         }
       }
     },
-    "/{podId}/kg/query" : {
+    "/{podId}/changes/history" : {
+      "get" : {
+        "tags" : [ "Change History Api" ],
+        "parameters" : [ {
+          "name" : "podId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ChangeReport"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{podId}/changes/history/{changeId}" : {
+      "get" : {
+        "tags" : [ "Change History Api" ],
+        "parameters" : [ {
+          "name" : "changeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "podId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChangeReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{podId}/changes/history/{changeId}/records" : {
+      "get" : {
+        "tags" : [ "Change History Api" ],
+        "parameters" : [ {
+          "name" : "changeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "podId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ChangeRecord"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{podId}/query" : {
       "post" : {
         "tags" : [ "Knowledge Graph API" ],
         "summary" : "Retrieve data from the KG.",
@@ -175,6 +270,22 @@
           "required" : true,
           "schema" : {
             "type" : "string"
+          }
+        }, {
+          "name" : "atChangeRequestId",
+          "in" : "query",
+          "description" : "Query the state of the KG when the specified change request was applied.",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "atTimestamp",
+          "in" : "query",
+          "description" : "Query the state of the KG at the specified point in time.",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/Instant"
           }
         } ],
         "requestBody" : {
@@ -215,7 +326,7 @@
         }
       }
     },
-    "/{podId}/kg/slices" : {
+    "/{podId}/slices" : {
       "get" : {
         "tags" : [ "Knowledge Graph API" ],
         "summary" : "List slices of the specified pod.",
@@ -275,20 +386,13 @@
         }
       }
     },
-    "/{podId}/kg/slices/{sliceId}" : {
+    "/{podId}/slices/{sliceId}" : {
       "get" : {
         "tags" : [ "Knowledge Graph API" ],
         "summary" : "Retrieve a specific slice definition..",
         "description" : "Retrieve a specific slice definition details.",
         "parameters" : [ {
           "name" : "podId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "name" : "sliceId",
           "in" : "path",
           "required" : true,
           "schema" : {
@@ -319,13 +423,6 @@
           "schema" : {
             "type" : "string"
           }
-        }, {
-          "name" : "sliceId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
         } ],
         "responses" : {
           "200" : {
@@ -337,7 +434,7 @@
         }
       }
     },
-    "/{podId}/kg/slices/{sliceId}/inbox" : {
+    "/{podId}/slices/{sliceId}/changes" : {
       "post" : {
         "tags" : [ "Knowledge Graph API" ],
         "summary" : "Perform mutations on a specific slice of the KG.",
@@ -373,7 +470,7 @@
         }
       }
     },
-    "/{podId}/kg/slices/{sliceId}/query" : {
+    "/{podId}/slices/{sliceId}/query" : {
       "post" : {
         "tags" : [ "Knowledge Graph API" ],
         "summary" : "Retrieve data from a specific subset of the KG.",
@@ -392,6 +489,22 @@
           "required" : true,
           "schema" : {
             "type" : "string"
+          }
+        }, {
+          "name" : "atChangeRequestId",
+          "in" : "query",
+          "description" : "Query the state of the KG when the specified change request was applied.",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "atTimestamp",
+          "in" : "query",
+          "description" : "Query the state of the KG at the specified point in time.",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/Instant"
           }
         } ],
         "requestBody" : {
@@ -432,7 +545,7 @@
         }
       }
     },
-    "/{podId}/kg/slices/{sliceId}/shacl" : {
+    "/{podId}/slices/{sliceId}/shacl" : {
       "get" : {
         "tags" : [ "Knowledge Graph API" ],
         "parameters" : [ {
@@ -464,7 +577,7 @@
         }
       }
     },
-    "/{podId}/kg/slices/{sliceId}/stream" : {
+    "/{podId}/slices/{sliceId}/stream" : {
       "get" : {
         "tags" : [ "Stream Api" ],
         "parameters" : [ {
@@ -500,7 +613,7 @@
         }
       }
     },
-    "/{podId}/kg/stream" : {
+    "/{podId}/stream" : {
       "get" : {
         "tags" : [ "Stream Api" ],
         "parameters" : [ {
@@ -660,6 +773,59 @@
           }
         }
       },
+      "ChangeRecord" : {
+        "required" : [ "changeRequestId", "timestamp", "type", "statement" ],
+        "type" : "object",
+        "properties" : {
+          "changeRequestId" : {
+            "type" : "string"
+          },
+          "timestamp" : {
+            "$ref" : "#/components/schemas/Instant"
+          },
+          "type" : {
+            "$ref" : "#/components/schemas/ChangeRecordType"
+          },
+          "statement" : {
+            "$ref" : "#/components/schemas/RDFStatement"
+          }
+        }
+      },
+      "ChangeRecordType" : {
+        "enum" : [ "INSERT", "DELETE" ],
+        "type" : "string"
+      },
+      "ChangeReport" : {
+        "required" : [ "id", "timestamp", "resultCode" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "timestamp" : {
+            "$ref" : "#/components/schemas/Instant"
+          },
+          "resultCode" : {
+            "$ref" : "#/components/schemas/ChangeResultCode"
+          },
+          "sliceId" : {
+            "type" : "string",
+            "nullable" : true
+          },
+          "nrOfInserts" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "nrOfDeletes" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "errorMessage" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }
+      },
       "ChangeRequestInput" : {
         "required" : [ "@context", "kss:assert", "kss:insert" ],
         "type" : "object",
@@ -696,6 +862,15 @@
             } ]
           }
         }
+      },
+      "ChangeResultCode" : {
+        "enum" : [ "COMMITTED", "ASSERTION_FAILED", "NO_MATCHES", "TOO_MANY_MATCHES", "VALIDATION_ERROR", "INTERNAL_ERROR" ],
+        "type" : "string"
+      },
+      "Instant" : {
+        "format" : "date-time",
+        "type" : "string",
+        "example" : "2022-03-10T16:15:50Z"
       },
       "Pod" : {
         "required" : [ "id", "configuration" ],
@@ -797,11 +972,35 @@
           }
         }
       },
-      "RegisterPodInput" : {
-        "required" : [ "id", "configuration" ],
+      "RDFStatement" : {
+        "required" : [ "subject", "predicate", "graph" ],
         "type" : "object",
         "properties" : {
-          "id" : {
+          "subject" : {
+            "type" : "string"
+          },
+          "predicate" : {
+            "type" : "string"
+          },
+          "object" : { },
+          "graph" : {
+            "type" : "string"
+          },
+          "dataType" : {
+            "type" : "string",
+            "nullable" : true
+          },
+          "language" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }
+      },
+      "RegisterPodInput" : {
+        "required" : [ "name", "configuration" ],
+        "type" : "object",
+        "properties" : {
+          "name" : {
             "type" : "string"
           },
           "configuration" : {

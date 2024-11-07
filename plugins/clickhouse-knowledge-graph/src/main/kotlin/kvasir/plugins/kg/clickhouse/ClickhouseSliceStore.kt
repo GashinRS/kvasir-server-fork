@@ -20,7 +20,7 @@ class ClickhouseSliceStore(private val clickhouseClient: ClickhouseClient) : Sli
 
     override fun list(podId: String): Uni<List<SliceSummary>> {
         return clickhouseClient.query(
-            SliceQuerySpec(databaseFromPodId(podId)),
+            SliceQuerySpec(),
             "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE WHERE pod_id = '$podId' GROUP BY id"
         )
             .map { results ->
@@ -36,7 +36,7 @@ class ClickhouseSliceStore(private val clickhouseClient: ClickhouseClient) : Sli
 
     override fun getById(podId: String, segmentId: String): Uni<Slice?> {
         return clickhouseClient.query(
-            SliceQuerySpec(databaseFromPodId(podId)),
+            SliceQuerySpec(),
             "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE WHERE id = '$segmentId' AND pod_id = '$podId' GROUP BY id"
         )
             .map { results ->
@@ -58,7 +58,7 @@ class ClickhouseSliceStore(private val clickhouseClient: ClickhouseClient) : Sli
 
     override fun loadAllFilters(podId: String): Uni<Set<ChangeResultSliceFilter>> {
         return clickhouseClient.query(
-            SliceQuerySpec(databaseFromPodId(podId)),
+            SliceQuerySpec(),
             "SELECT id, argMax(json, timestamp) FROM $SLICE_TABLE GROUP BY id"
         )
             .map { results -> results.map { sliceFilterFrom(it) }.toSet() }

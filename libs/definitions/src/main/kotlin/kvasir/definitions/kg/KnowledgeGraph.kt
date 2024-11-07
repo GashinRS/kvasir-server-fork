@@ -20,7 +20,11 @@ interface KnowledgeGraph {
 
     fun query(request: QueryRequest): Uni<QueryResult>
 
-    fun history(request: HistoryRequest): Uni<HistoryResult>
+    fun listChanges(request: ChangeHistoryRequest): Uni<List<ChangeReport>>
+
+    fun getChange(request: ChangeHistoryRequest): Uni<ChangeReport?>
+
+    fun getChangeRecords(request: ChangeHistoryRequest): Uni<List<ChangeRecord>>
 
 }
 
@@ -50,7 +54,7 @@ data class ChangeRequest(
     /**
      * The unique identifier of the Change Request.
      */
-    val id: String = "$URN_PREFIX${UUID.randomUUID()}",
+    val id: String,
     /**
      * The context used to produce the Change Request.
      */
@@ -245,6 +249,17 @@ data class ChangeResult(
 
 }
 
+@JsonInclude(JsonInclude.Include.NON_DEFAULT)
+data class ChangeReport(
+    val id: String,
+    val timestamp: Instant,
+    val resultCode: ChangeResultCode,
+    val sliceId: String? = null,
+    val nrOfInserts: Long = 0,
+    val nrOfDeletes: Long = 0,
+    val errorMessage: String? = null
+)
+
 @GenerateNoArgConstructor
 data class QueryRequest(
     val context: Map<String, Any> = emptyMap(),
@@ -256,6 +271,14 @@ data class QueryRequest(
     val predefinedSchema: String? = null,
     val atTimestamp: Instant? = null,
     val atChangeRequestId: String? = null
+)
+
+data class ChangeHistoryRequest(
+    val podId: String,
+    val sliceId: String? = null,
+    val fromTimestamp: Instant? = null,
+    val toTimestamp: Instant? = null,
+    val changeRequestId: String? = null
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -297,15 +320,6 @@ data class QueryResult(
     }
 }
 
-data class HistoryRequest(
-    val podId: String
-)
-
-data class HistoryResult(
-    val results: List<Map<String, Any>>,
-    val nextCursor: String? = null
-)
-
 data class Slice(
     @JsonProperty(JsonLdKeywords.id)
     val id: String,
@@ -346,6 +360,7 @@ data class SliceEvent(
     val eventType: SliceEventType
 )
 
+@JsonInclude(JsonInclude.Include.NON_DEFAULT)
 data class RDFStatement(
     val subject: String,
     val predicate: String,

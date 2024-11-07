@@ -21,7 +21,6 @@ import java.net.URI
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.util.stream.Collector
 
 internal const val HEADER_X_AMZ_CONTENT_SHA256 = "x-amz-content-sha256"
 internal const val HEADER_X_AMZ_DATE = "x-amz-date"
@@ -48,6 +47,10 @@ class StorageApi(
         router.route("/:podId/s3/*").handler { ctx ->
             proxy.handle(ctx.request())
         }
+
+        router.route("/:podId/slices/:sliceId/s3/*").handler { ctx ->
+            proxy.handle(ctx.request())
+        }
     }
 
 }
@@ -68,9 +71,6 @@ class S3Interceptor(
     companion object {
 
         private val ISO_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
-        private val EMPTY_PAYLOAD_HASH = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-
-        private val bufferCollector = Collector.of(Buffer::buffer, Buffer::appendBuffer, Buffer::appendBuffer)
 
     }
 
@@ -110,8 +110,11 @@ class S3Interceptor(
             UniHelper.toFuture(
                 if (resp.statusCode in 200..399 && mutationType != null) {
                     val podId = context.request().proxiedRequest().getParam("podId")
+                    val sliceId = context.request().proxiedRequest().getParam("sliceId")
+                    val baseUri = context.request().uri.substringBefore("/$podId/")
                     val event = StorageMutationEvent(
-                        podId = podId,
+                        podId = "$baseUri/$podId",
+                        sliceId = sliceId?.let { "$baseUri/$podId/slices/$it" },
                         objectId = context.request().uri.substringAfter("/$podId/").substringBefore("?"),
                         externalObjectUri = context.request().proxiedRequest().absoluteURI(),
                         internalStorageUri = "http://$s3Host:$s3Port${context.request().uri}",

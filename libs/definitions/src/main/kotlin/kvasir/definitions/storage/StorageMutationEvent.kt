@@ -2,6 +2,7 @@ package kvasir.definitions.storage
 
 data class StorageMutationEvent(
     val podId: String,
+    val sliceId: String? = null,
     val objectId: String,
     val externalObjectUri: String,
     val internalStorageUri: String,

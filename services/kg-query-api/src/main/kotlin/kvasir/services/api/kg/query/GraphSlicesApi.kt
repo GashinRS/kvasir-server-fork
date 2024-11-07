@@ -1,10 +1,10 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.google.common.hash.Hashing
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.ws.rs.*
+import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
@@ -24,12 +24,14 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
+import java.net.URI
 import java.time.Instant
 import java.util.Optional
+import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
-@Path("{podId}/kg")
+@Path("{podId}")
 class GraphSlicesApi(
     private val sliceStore: SliceStore,
     private val podStore: PodStore,
@@ -47,15 +49,9 @@ class GraphSlicesApi(
         description = "List slices of the specified pod's Knowledge Graph."
     )
     fun listSlices(@PathParam("podId") podId: String): Uni<List<SliceSummary>> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.list(podId)
-                .map { slices ->
-                    slices.map { slice ->
-                        slice.copy(
-                            id = uriInfo.absolutePathBuilder.path(slice.id).build().toString()
-                        )
-                    }
-                }
         }
     }
 
@@ -66,18 +62,19 @@ class GraphSlicesApi(
         summary = "Define a new slice of the KG.",
         description = "Define a new slice (subset) of the specified pod's Knowledge Graph, based on a GraphQL-LD schema."
     )
-    fun createSlice(@PathParam("podId") podId: String, input: SliceInput): Uni<Response> {
+    fun createSlice(@PathParam("podId") podId: String, input: SliceInput, @Context uriInfo: UriInfo): Uni<Response> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             // Generate shapes
             val shacl = GraphQL2SHACL(input.schema, input.context).toSHACL()
-            val slice = input.toSlice(podId, shacl)
+            val slice = input.toSlice(podId, shacl, uriInfo)
             // Validate the schema
             try {
                 SchemaValidator.validateSchema(slice.schema, slice.context)
                 sliceStore.persist(slice)
                     .chain { _ -> sliceEventEmitter.send(SliceEvent(podId, slice.id, SliceEventType.CREATED)) }
                     .map {
-                        Response.created(uriInfo.absolutePathBuilder.path(slice.id).build()).build()
+                        Response.created(URI.create(slice.id)).build()
                     }
             } catch (e: Throwable) {
                 Uni.createFrom().failure(e)
@@ -94,15 +91,12 @@ class GraphSlicesApi(
         description = "Retrieve a specific slice definition details."
     )
     fun getSlice(
-        @PathParam("podId") podId: String,
-        @PathParam("sliceId") sliceId: String
+        @PathParam("podId") podId: String
     ): Uni<Slice> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
-            sliceStore.getById(podId, sliceId)
+            sliceStore.getById(podId, uriInfo.absolutePath.toString())
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
-                .onItem().ifNotNull().transform { slice ->
-                    slice!!.copy(id = uriInfo.absolutePath.toString())
-                }
         }
     }
 
@@ -112,7 +106,9 @@ class GraphSlicesApi(
         summary = "Delete a specific slice.",
         description = "Delete a specific slice of the specified pod's Knowledge Graph."
     )
-    fun deleteSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Uni<Response> {
+    fun deleteSlice(@PathParam("podId") podId: String): Uni<Response> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val sliceId = uriInfo.absolutePath.toString()
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.deleteById(podId, sliceId)
                 .chain { _ -> sliceEventEmitter.send(SliceEvent(podId, sliceId, SliceEventType.DELETED)) }
@@ -141,6 +137,8 @@ class GraphSlicesApi(
             required = false
         ) atChangeRequestId: Optional<String>
     ): Uni<QueryResult> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val sliceId = uriInfo.absolutePath.toString()
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
@@ -172,6 +170,8 @@ class GraphSlicesApi(
             required = false
         ) atChangeRequestId: Optional<String>
     ): Uni<Map<String, Any>> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val sliceId = uriInfo.absolutePath.toString()
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
@@ -190,6 +190,8 @@ class GraphSlicesApi(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String
     ): Uni<String> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val sliceId = uriInfo.absolutePath.toString()
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
@@ -235,9 +237,9 @@ data class SliceInput(
     @JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 ) {
-    fun toSlice(podId: String, shacl: String): Slice {
+    fun toSlice(podId: String, shacl: String, uriInfo: UriInfo): Slice {
         return Slice(
-            id = Hashing.farmHashFingerprint64().hashString("$podId:$name", Charsets.UTF_8).toString(),
+            id = uriInfo.absolutePathBuilder.path(UUID.randomUUID().toString()).build().toString(),
             context = context,
             podId = podId,
             name = name,

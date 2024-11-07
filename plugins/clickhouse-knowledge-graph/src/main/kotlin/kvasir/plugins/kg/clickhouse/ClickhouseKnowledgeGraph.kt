@@ -10,11 +10,12 @@ import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.json.JsonObject
 import jakarta.inject.Singleton
+import kvasir.definitions.kg.ChangeHistoryRequest
 import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordType
+import kvasir.definitions.kg.ChangeReport
 import kvasir.definitions.kg.ChangeResult
-import kvasir.definitions.kg.HistoryRequest
-import kvasir.definitions.kg.HistoryResult
+import kvasir.definitions.kg.ChangeResultCode
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.kg.RDFStatement
@@ -26,6 +27,12 @@ import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.graphql.ConvertToSQLResolver
 import kvasir.plugins.kg.clickhouse.graphql.NoResultsException
 import kvasir.plugins.kg.clickhouse.graphql.RDFClassTypeResolver
+import kvasir.plugins.kg.clickhouse.specs.CHANGE_LOG_COLUMNS
+import kvasir.plugins.kg.clickhouse.specs.CHANGE_LOG_TABLE
+import kvasir.plugins.kg.clickhouse.specs.ChangelogInsertRecordSpec
+import kvasir.plugins.kg.clickhouse.specs.DATA_COLUMNS
+import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
+import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.KGTypeQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.META_DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.MetadataInsertRecordSpec
@@ -36,6 +43,7 @@ import kvasir.utils.kg.KGType
 import kvasir.utils.kg.MetadataEntry
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
+import java.time.Instant
 import kotlin.collections.component1
 import kotlin.collections.component2
 
@@ -61,6 +69,13 @@ class ClickhouseKnowledgeGraph(
                     podId,
                     records.filter { it.type == ChangeRecordType.INSERT }.map { it.statement })
             }
+    }
+
+    override fun logChangeReport(
+        podId: String,
+        changeReport: ChangeReport
+    ): Uni<Void> {
+        return clickhouseClient.insert(ChangelogInsertRecordSpec(databaseFromPodId(podId)), listOf(changeReport))
     }
 
     override fun deleteGraph(podId: String, graph: String): Uni<Void> {
@@ -120,10 +135,6 @@ class ClickhouseKnowledgeGraph(
         )
     }
 
-    override fun history(request: HistoryRequest): Uni<HistoryResult> {
-        TODO("Not yet implemented")
-    }
-
     private fun syncMetadata(podId: String, statements: List<RDFStatement>): Uni<Void> {
         // Transform
         val typeUrisToSubjects = statements.filter { it.predicate == RDFVocab.type }.groupBy { it.`object` as String }
@@ -152,6 +163,73 @@ class ClickhouseKnowledgeGraph(
                 }
         }
         return clickhouseClient.insert(MetadataInsertRecordSpec(databaseFromPodId(podId)), metadataEntries)
+    }
+
+    override fun listChanges(request: ChangeHistoryRequest): Uni<List<ChangeReport>> {
+        val sql =
+            "SELECT id, slice_id, timestamp, nr_of_inserts, nr_of_deletes, result_code, error_message FROM ${
+                databaseFromPodId(
+                    request.podId
+                )
+            }.$CHANGE_LOG_TABLE ORDER BY timestamp DESC"
+        return clickhouseClient.query(
+            GenericQuerySpec(
+                databaseFromPodId(request.podId), CHANGE_LOG_TABLE,
+                CHANGE_LOG_COLUMNS
+            ), sql
+        ).map { results -> results.map { resultToChangeReport(it) } }
+    }
+
+    override fun getChange(request: ChangeHistoryRequest): Uni<ChangeReport?> {
+        val sql =
+            "SELECT id, slice_id, timestamp, nr_of_inserts, nr_of_deletes, result_code, error_message FROM ${
+                databaseFromPodId(
+                    request.podId
+                )
+            }.$CHANGE_LOG_TABLE WHERE id = '${request.changeRequestId}'"
+        return clickhouseClient.query(
+            GenericQuerySpec(
+                databaseFromPodId(request.podId), CHANGE_LOG_TABLE,
+                CHANGE_LOG_COLUMNS
+            ), sql
+        ).map { results ->
+            results.firstOrNull()?.let { resultToChangeReport(it) }
+        }
+    }
+
+    override fun getChangeRecords(request: ChangeHistoryRequest): Uni<List<ChangeRecord>> {
+        val sql =
+            "SELECT * FROM ${databaseFromPodId(request.podId)}.$DATA_TABLE WHERE change_request_id = '${request.changeRequestId}'"
+        return clickhouseClient.query(GenericQuerySpec(databaseFromPodId(request.podId), DATA_TABLE, DATA_COLUMNS), sql)
+            .map { results -> results.map { resultToChangeRecord(it) } }
+    }
+
+    private fun resultToChangeReport(result: Map<String, Any>): ChangeReport {
+        return ChangeReport(
+            id = result["id"] as String,
+            sliceId = (result["slice_id"] as String).takeIf { it.isNotBlank() },
+            timestamp = Instant.parse(result["timestamp"] as String),
+            nrOfInserts = result["nr_of_inserts"].toString().toLong(),
+            nrOfDeletes = result["nr_of_deletes"].toString().toLong(),
+            resultCode = ChangeResultCode.valueOf(result["result_code"] as String),
+            errorMessage = (result["error_message"] as String).takeIf { it.isNotBlank() }
+        )
+    }
+
+    private fun resultToChangeRecord(result: Map<String, Any>): ChangeRecord {
+        return ChangeRecord(
+            statement = RDFStatement(
+                subject = result["subject"] as String,
+                predicate = result["predicate"] as String,
+                `object` = result["object"]!!,
+                dataType = (result["datatype"] as String).takeIf { it.isNotBlank() },
+                language = (result["language"] as String).takeIf { it.isNotBlank() },
+                graph = result["graph"] as String
+            ),
+            timestamp = Instant.parse(result["timestamp"] as String),
+            changeRequestId = result["change_request_id"] as String,
+            type = if (result["sign"] as Int == 1) ChangeRecordType.INSERT else ChangeRecordType.DELETE
+        )
     }
 
 }

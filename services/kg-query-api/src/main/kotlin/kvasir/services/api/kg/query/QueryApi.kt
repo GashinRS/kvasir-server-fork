@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
+import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStore
@@ -22,11 +23,14 @@ import java.time.Instant
 import java.util.Optional
 import kotlin.jvm.optionals.getOrNull
 
+const val QUERY_API_PATH = "/query"
+
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
-@Path("{podId}/kg/query")
+@Path("{podId}$QUERY_API_PATH")
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
-    private val podStore: PodStore
+    private val podStore: PodStore,
+    private val uriInfo: UriInfo
 ) {
 
     @POST
@@ -47,6 +51,7 @@ class QueryApi(
             required = false
         ) atChangeRequestId: Optional<String>
     ): Uni<QueryResult> {
+        val podId = uriInfo.absolutePath.toString().substringBefore(QUERY_API_PATH)
         return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input, atTimestamp.getOrNull(), atChangeRequestId.getOrNull())
@@ -72,6 +77,7 @@ class QueryApi(
             required = false
         ) atChangeRequestId: Optional<String>
     ): Uni<Map<String, Any>> {
+        val podId = uriInfo.absolutePath.toString().substringBefore(QUERY_API_PATH)
         return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input, atTimestamp.getOrNull(), atChangeRequestId.getOrNull())

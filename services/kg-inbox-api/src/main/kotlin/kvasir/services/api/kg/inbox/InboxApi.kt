@@ -32,10 +32,11 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
+import java.net.URI
 import java.util.UUID
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
-@Path("/{podId}/kg")
+@Path("/{podId}")
 class InboxApi(
     @Channel("change_requests_publish")
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
@@ -44,7 +45,7 @@ class InboxApi(
     private val podStore: PodStore
 ) {
 
-    @Path("inbox")
+    @Path("changes")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -58,17 +59,18 @@ class InboxApi(
         uriInfo: UriInfo,
         input: ChangeRequestInput
     ): Uni<Response> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/changes")
         return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val changeCommand = input.toChangeRequest(podId, uriInfo)
                 changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
-                    .map { _ -> Response.accepted().build() }
+                    .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
                     .onFailure(RecordTooLargeException::class.java)
                     .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
             }
     }
 
-    @Path("slices/{sliceId}/inbox")
+    @Path("/slices/{sliceId}/changes")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -83,6 +85,7 @@ class InboxApi(
         uriInfo: UriInfo,
         input: ChangeRequestInput
     ): Uni<Response> {
+        val podId = uriInfo.absolutePath.toString().substringBefore("/slices/$sliceId/changes")
         return sliceStore.getById(podId, sliceId)
             .onItem().ifNull().failWith(NotFoundException("Slice not found"))
             .onItem().ifNotNull().transformToUni { slice ->
@@ -165,6 +168,7 @@ data class ChangeRequestInput(
 
     fun toChangeRequest(podId: String, uriInfo: UriInfo, sliceId: String? = null): ChangeRequest {
         return ChangeRequest(
+            id = uriInfo.absolutePathBuilder.path(UUID.randomUUID().toString()).build().toString(),
             context = context,
             podId = podId,
             sliceId = sliceId,

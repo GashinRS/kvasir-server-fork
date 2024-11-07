@@ -17,8 +17,8 @@ import graphql.language.VariableReference
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
 import graphql.schema.GraphQLDirectiveContainer
-import graphql.schema.GraphQLOutputType
 import graphql.schema.GraphQLTypeUtil
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFVocab
@@ -26,8 +26,6 @@ import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
-import kvasir.utils.graphql.innerType
-import kvasir.utils.graphql.isList
 import kvasir.utils.kg.AbstractKnowledgeGraph
 
 object ConvertToSQLResolver {
@@ -62,7 +60,11 @@ object ConvertToSQLResolver {
                         is JsonObject -> source.getValue(key)
                         else -> null
                     }
-                    value
+                    when(value) {
+                        is List<*> -> value.filterNotNull()
+                        is JsonArray -> value.list.filterNotNull()
+                        else -> value
+                    }
                 }
             }
         }
@@ -138,8 +140,9 @@ class SQLConvertor(
                 )
             }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
-        val mappedFields = (listOf("'id'" to "object") + nestedFields.map { "'${it.field.name}'" to "arrayDistinct(ARRAY_AGG(${it.field.name}))" })
-            .joinToString { (a, b) -> "$a,$b" }
+        val mappedFields =
+            (listOf("'id'" to "object") + nestedFields.map { "'${it.field.name}'" to "arrayDistinct(ARRAY_AGG(${it.field.name}))" })
+                .joinToString { (a, b) -> "$a,$b" }
         return "${getJoinType(field)} (SELECT subject AS $joinField, map($mappedFields) as $name FROM $tableRef ${
             nestedFields.joinToString(" ") { it.joinStatement }
         } $whereClause GROUP BY subject, object) ${name}_join ON $parentJoinField = $joinField"

@@ -14,6 +14,7 @@ import kvasir.definitions.storage.StorageMutationEvent
 import kvasir.definitions.storage.StorageMutationEventType
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.eclipse.microprofile.reactive.messaging.Outgoing
+import java.util.UUID
 
 /**
  * Processor that listens for storage mutations on files that contain RDF data
@@ -43,8 +44,10 @@ class RDFStorageMutationListener(
             }
             .map { (event, _) ->
                 // Transform the object into a Kvasir change request
+                val id = event.externalObjectUri.substringBefore("/s3") + "/kg/changes/" + UUID.randomUUID()
                 when (event.mutationType) {
                     StorageMutationEventType.PUT_OBJECT, StorageMutationEventType.COMPLETE_MULTIPART_UPLOAD, StorageMutationEventType.RESTORE_OBJECT -> ChangeRequest(
+                        id = id,
                         podId = event.podId,
                         insertFromRefs = listOf(
                             mapOf(
@@ -56,6 +59,7 @@ class RDFStorageMutationListener(
                     )
 
                     StorageMutationEventType.DELETE_OBJECT -> ChangeRequest(
+                        id = id,
                         podId = event.podId,
                         insertFromRefs = emptyList(),
                         deleteFromRefs = listOf(

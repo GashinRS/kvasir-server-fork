@@ -23,7 +23,7 @@ import org.eclipse.microprofile.reactive.messaging.Message
 import org.jboss.resteasy.reactive.RestStreamElementType
 import java.util.UUID
 
-@Path("{podId}/kg")
+@Path("{podId}")
 class StreamApi(
     private val vertx: Vertx,
     @ConfigProperty(

@@ -24,6 +24,7 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
         return createDatabase(database)
             .chain { _ -> createDataSchema(database) }
             .chain { _ -> createMetadataSchema(database) }
+            .chain { _ -> createChangeLog(database) }
     }
 
     fun createDatabase(database: String): Uni<Void> {
@@ -40,12 +41,29 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
                 datatype LowCardinality(String),
                 language LowCardinality(String),
                 graph LowCardinality(String),
-                timestamp DateTime64(3),
+                timestamp DateTime64(3) Codec (DoubleDelta, LZ4),
                 change_request_id String,
                 sign  Int8
             ) ENGINE = ReplacingMergeTree
                 PARTITION BY toYYYYMM(timestamp)
                 ORDER BY (subject, predicate, object, datatype, language, graph, timestamp, change_request_id, sign);
+        """.trimIndent()
+        )
+    }
+
+    fun createChangeLog(database: String): Uni<Void> {
+        return clickhouseClient.execute(
+            """
+            CREATE TABLE IF NOT EXISTS $database.changelog (
+                id String,
+                slice_id LowCardinality(String),
+                timestamp DateTime64(3) Codec (DoubleDelta, LZ4),
+                nr_of_inserts Int64,
+                nr_of_deletes Int64,
+                result_code LowCardinality(String),
+                error_message String,
+            ) ENGINE = ReplacingMergeTree()
+                ORDER BY (slice_id, timestamp, id);
         """.trimIndent()
         )
     }
@@ -69,8 +87,8 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
             """
             CREATE TABLE IF NOT EXISTS $database.slices (
                 id String,
-                pod_id String,
-                timestamp DateTime64(3),
+                pod_id LowCardinality(String),
+                timestamp DateTime64(3) Codec (DoubleDelta, LZ4),
                 json String
             ) ENGINE = ReplacingMergeTree()
                 ORDER BY (pod_id, id);
@@ -82,7 +100,7 @@ class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
         return clickhouseClient.execute(
             """
             CREATE TABLE IF NOT EXISTS $database.pods (
-                id String,
+                id LowCardinality(String),
                 timestamp DateTime64(3),
                 json String
             ) ENGINE = ReplacingMergeTree()

@@ -22,7 +22,7 @@ class ClickhousePodStore(
                 .failure(IllegalArgumentException("Pod ID cannot be the same as the system database"))
         }
 
-        // If the pod is persisted for the first time, initialize the pod's database
+        // If the pod is persisted for the first time, initialize the pod's databases
         return getById(pod.id)
             .chain { existingPod ->
                 if (existingPod == null) {

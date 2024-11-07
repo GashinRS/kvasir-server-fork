@@ -25,20 +25,22 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 @Path((""))
 class PodManagementApi(
     private val podStore: PodStore,
-    @Channel(Channels.POD_EVENT_PUBLISH) private val podEventEmitter: MutinyEmitter<PodEvent>
+    @Channel(Channels.POD_EVENT_PUBLISH) private val podEventEmitter: MutinyEmitter<PodEvent>,
+    private val uriInfo: UriInfo
 ) {
 
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     fun register(@Context uriInfo: UriInfo, input: RegisterPodInput): Uni<Response> {
         // This basic implementation check if the pod already exists in a non-atomic way.
-        return podStore.getById(input.id).chain { existingPod ->
+        val podId = uriInfo.absolutePathBuilder.path(input.name).build().toString()
+        return podStore.getById(podId).chain { existingPod ->
             if (existingPod != null) {
                 Uni.createFrom().item(Response.status(Response.Status.CONFLICT).build())
             } else {
-                podStore.persist(Pod(input.id, input.configuration))
-                    .chain { _ -> podEventEmitter.send(PodEvent(PodEventType.CREATED, input.id)) }
-                    .map { Response.created(uriInfo.absolutePathBuilder.path(input.id).build()).build() }
+                podStore.persist(Pod(podId, input.configuration))
+                    .chain { _ -> podEventEmitter.send(PodEvent(PodEventType.CREATED, input.name)) }
+                    .map { Response.created(uriInfo.absolutePathBuilder.path(input.name).build()).build() }
             }
         }
     }
@@ -53,6 +55,7 @@ class PodManagementApi(
     @Produces(JSON_LD_MEDIA_TYPE)
     @Path("{podId}")
     fun get(@PathParam("podId") podId: String): Uni<Pod> {
+        val podId = uriInfo.absolutePath.toString()
         return podStore.getById(podId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transform { it!! }
@@ -62,6 +65,7 @@ class PodManagementApi(
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Path("{podId}")
     fun update(@PathParam("podId") podId: String, input: UpdatePodInput): Uni<Response> {
+        val podId = uriInfo.absolutePath.toString()
         return podStore.getById(podId).chain { existingPod ->
             if (existingPod == null) {
                 Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build())
@@ -76,6 +80,7 @@ class PodManagementApi(
     @DELETE
     @Path("{podId}")
     fun delete(@PathParam("podId") podId: String): Uni<Response> {
+        val podId = uriInfo.absolutePath.toString()
         return podStore.deleteById(podId)
             .chain { _ -> podEventEmitter.send(PodEvent(PodEventType.DELETED, podId)) }
             .map { Response.noContent().build() }
@@ -84,7 +89,7 @@ class PodManagementApi(
 }
 
 data class RegisterPodInput(
-    val id: String,
+    val name: String,
     val configuration: Map<String, Any>,
 )
 

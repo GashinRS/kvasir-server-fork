@@ -60,7 +60,8 @@ class ClickhouseClient(
 
     fun <S : QuerySpec<T, *>, T> query(spec: S, sql: String): Uni<List<T>> {
         Log.debug("Executing Clickhouse select query: $sql")
-        return httpClient.get("/").putHeader("X-ClickHouse-Format", "JSONCompact")
+        return httpClient.get("/")
+            .putHeader("X-ClickHouse-Format", "JSONCompact")
             .addAuthHeaders(clickhouseConfig)
             .addQueryParam("database", spec.database)
             .addQueryParam("date_time_input_format", "best_effort")

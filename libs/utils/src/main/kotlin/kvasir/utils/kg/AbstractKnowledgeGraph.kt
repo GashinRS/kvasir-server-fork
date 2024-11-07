@@ -26,8 +26,10 @@ import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordType
+import kvasir.definitions.kg.ChangeReport
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.ChangeResult
+import kvasir.definitions.kg.ChangeResultCode
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
@@ -38,6 +40,7 @@ import kvasir.definitions.kg.changeops.InvalidTemplateException
 import kvasir.definitions.reactive.skipToLast
 import org.dataloader.DataLoaderRegistry
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * This class is used to implement common logic for knowledge graph implementations, including:
@@ -80,6 +83,8 @@ abstract class AbstractKnowledgeGraph(
         val start = System.currentTimeMillis()
         val changeRequestTs = Instant.now()
         val changeProcessor = ChangeProcessor(request, this, assertionCheckingParallelism)
+        val nrOfInserts = AtomicLong(0)
+        val nrOfDeletes = AtomicLong(0)
         return changeProcessor.executeAssertions()
             .chain { _ ->
                 if (request.insertFromRefs.isNotEmpty() || request.deleteFromRefs.isNotEmpty()) {
@@ -90,6 +95,7 @@ abstract class AbstractKnowledgeGraph(
                         }
                         .group().intoLists().of(referenceHandlingBuffer)
                         .onItem().transformToUni { deleteTuples ->
+                            nrOfDeletes.addAndGet(deleteTuples.size.toLong())
                             persist(
                                 request.podId,
                                 deleteTuples.map {
@@ -111,6 +117,7 @@ abstract class AbstractKnowledgeGraph(
                                 }
                                 .group().intoLists().of(referenceHandlingBuffer)
                                 .onItem().transformToUni { insertTuples ->
+                                    nrOfInserts.addAndGet(insertTuples.size.toLong())
                                     persist(
                                         request.podId,
                                         insertTuples.map {
@@ -132,9 +139,11 @@ abstract class AbstractKnowledgeGraph(
                         .chain { bindings ->
                             // Delete the specified records
                             val deleteJsonLd = changeProcessor.materializeRecords(request.delete, bindings)
+                            val deleteStatements = changeProcessor.toStatements(deleteJsonLd)
+                            nrOfDeletes.addAndGet(deleteStatements.size.toLong())
                             persist(
                                 request.podId,
-                                changeProcessor.toStatements(deleteJsonLd).map {
+                                deleteStatements.map {
                                     ChangeRecord(
                                         request.id, changeRequestTs,
                                         ChangeRecordType.DELETE, it
@@ -143,9 +152,11 @@ abstract class AbstractKnowledgeGraph(
                             ).map { _ -> deleteJsonLd }
                                 .chain { deleteJsonLd ->
                                     val insertJsonLd = changeProcessor.materializeRecords(request.insert, bindings)
+                                    val insertStatements = changeProcessor.toStatements(insertJsonLd)
+                                    nrOfInserts.addAndGet(insertStatements.size.toLong())
                                     persist(
                                         request.podId,
-                                        changeProcessor.toStatements(insertJsonLd).map {
+                                        insertStatements.map {
                                             ChangeRecord(
                                                 request.id, changeRequestTs,
                                                 ChangeRecordType.INSERT, it
@@ -160,16 +171,48 @@ abstract class AbstractKnowledgeGraph(
                 }
             }
             .onItem()
+            .transformToUni { _ ->
+                logChangeReport(
+                    request.podId,
+                    ChangeReport(
+                        id = request.id,
+                        timestamp = changeRequestTs,
+                        resultCode = ChangeResultCode.COMMITTED,
+                        sliceId = request.sliceId,
+                        nrOfInserts = nrOfInserts.get(),
+                        nrOfDeletes = nrOfDeletes.get()
+                    )
+                )
+            }
             .invoke { _ -> Log.debug("Processed change request with id '${request.id}' in ${System.currentTimeMillis() - start} ms.") }
             .onFailure(ChangeAssertionException::class.java).recoverWithUni { e ->
                 Log.warn("Failed to process change request due to assertion error: $request", e)
-                Uni.createFrom().voidItem()
+                logFailedChangeRequest(
+                    changeRequestTs,
+                    request,
+                    ChangeResultCode.ASSERTION_FAILED,
+                    e.message ?: "Assertion failed"
+                )
             }
             .onFailure(
                 InvalidTemplateException::class.java
             ).recoverWithUni { e ->
                 Log.warn("Failed to process change request due to invalid template expression: $request", e)
-                Uni.createFrom().voidItem()
+                logFailedChangeRequest(
+                    changeRequestTs,
+                    request,
+                    ChangeResultCode.VALIDATION_ERROR,
+                    e.message ?: "Invalid template expression"
+                )
+            }
+            .onFailure().recoverWithUni { e ->
+                Log.error("Failed to process change request: $request", e)
+                logFailedChangeRequest(
+                    changeRequestTs,
+                    request,
+                    ChangeResultCode.INTERNAL_ERROR,
+                    e.message ?: "An unexpected error occurred while processing the change request: '${e.message}'"
+                )
             }
     }
 
@@ -267,6 +310,11 @@ abstract class AbstractKnowledgeGraph(
     abstract fun persist(podId: String, statements: List<ChangeRecord>): Uni<Void>
 
     /**
+     * Log a change report (should be provided by the concrete implementation).
+     */
+    abstract fun logChangeReport(podId: String, changeReport: ChangeReport): Uni<Void>
+
+    /**
      * Delete an entire graph from the knowledge graph (should be provided by the concrete implementation).
      */
     abstract fun deleteGraph(podId: String, graph: String): Uni<Void>
@@ -289,6 +337,24 @@ abstract class AbstractKnowledgeGraph(
      * Get the type information for a specific pod (should be provided by the concrete implementation).
      */
     abstract fun getTypeInfo(podId: String): Uni<List<KGType>>
+
+    private fun logFailedChangeRequest(
+        timestamp: Instant,
+        request: ChangeRequest,
+        resultCode: ChangeResultCode,
+        errorMessage: String
+    ): Uni<Void> {
+        return logChangeReport(
+            request.podId,
+            ChangeReport(
+                id = request.id,
+                timestamp = timestamp,
+                resultCode = resultCode,
+                sliceId = request.sliceId,
+                errorMessage = errorMessage
+            )
+        )
+    }
 
 }
 
