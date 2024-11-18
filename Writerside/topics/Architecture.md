@@ -16,7 +16,7 @@ dependency on a single write API, querying mechanism, or storage solution.
 Following the signal flow depicted in the diagram (from left to right), the key components of the Kvasir architecture
 are as follows:
 
-### Inbox API
+### Inbox (or Changes) API
 
 The Inbox API is responsible for processing all mutations on structured data, i.e. RDF statements to be added to or
 deleted from a pod's Knowledge Graph. It receives these mutations as change

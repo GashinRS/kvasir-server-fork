@@ -11,7 +11,7 @@
     <toc-element topic="Architecture.md"/>
     <toc-element topic="Usage.md">
         <toc-element topic="Knowledge-Graph.md">
-            <toc-element topic="Inbox.md"/>
+            <toc-element topic="Changes.md"/>
             <toc-element topic="Querying.md"/>
             <toc-element topic="Slices.md"/>
         </toc-element>

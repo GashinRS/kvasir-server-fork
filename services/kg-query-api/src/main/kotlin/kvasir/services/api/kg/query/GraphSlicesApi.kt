@@ -30,7 +30,6 @@ import java.util.Optional
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
-@Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
 @Path("")
 class GraphSlicesApi(
     private val sliceStore: SliceStore,
@@ -41,6 +40,7 @@ class GraphSlicesApi(
     private val sliceEventEmitter: MutinyEmitter<SliceEvent>
 ) {
 
+    @Tag(name = ApiDocTags.PODS_API)
     @Path("{podId}/slices")
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
@@ -55,6 +55,7 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.PODS_API)
     @Path("{podId}/slices")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
@@ -83,6 +84,7 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.PODS_API)
     @Path("{podId}/slices/{sliceId}")
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
@@ -100,6 +102,7 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.PODS_API)
     @Path("{podId}/slices/{sliceId}")
     @DELETE
     @Operation(
@@ -116,6 +119,7 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.KG_QUERYING_API)
     @POST
     @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
@@ -148,6 +152,7 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.KG_QUERYING_API)
     @POST
     @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
@@ -183,6 +188,7 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.PODS_API)
     @GET
     @Path("{podId}/slices/{sliceId}/shacl")
     @Produces(RDFMediaTypes.TURTLE)

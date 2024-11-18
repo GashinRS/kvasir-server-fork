@@ -35,7 +35,7 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 import java.net.URI
 import java.util.UUID
 
-@Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
+@Tag(name = ApiDocTags.KG_CHANGES_API)
 @Path("")
 class InboxApi(
     @Channel("change_requests_publish")
@@ -52,7 +52,7 @@ class InboxApi(
         summary = "Perform mutations on the KG.",
         description = "Post a change request, containing the requested mutations, to the inbox of the specified pod.",
     )
-    @APIResponse(responseCode = "202", description = "Change request accepted.")
+    @APIResponse(responseCode = "201", description = "Change request created.")
     fun processChangeRequest(
         @PathParam("podId") podId: String,
         @Context
@@ -77,7 +77,7 @@ class InboxApi(
         summary = "Perform mutations on a specific slice of the KG.",
         description = "Post a change request, containing the requested mutations, to a slice inbox of the specified pod.",
     )
-    @APIResponse(responseCode = "202", description = "Change request accepted.")
+    @APIResponse(responseCode = "201", description = "Change request created.")
     fun processSliceChangeRequest(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,

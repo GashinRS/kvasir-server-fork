@@ -12,18 +12,26 @@ servers:
 - url: http://0.0.0.0:8080
   description: Auto generated value
 tags:
-- name: Knowledge Graph API
-  description: "API for interfacing with the knowledge graph of a specific pod, allows\
-    \ storing and retrieving of structured data."
-- name: Storage API
+- name: Changes API
+  description: "API for managing changes to the knowledge graph, including requesting\
+    \ changes, listing changes, and retrieving change reports."
+- name: Querying API
+  description: API for querying the knowledge graph of a specific pod using GraphQL.
+- name: Streaming API
+  description: "API for streaming changes to the knowledge graph, including subscribing\
+    \ to changes and retrieving change records."
+- name: Low-level Storage API
   description: "API for interfacing with low-level storage (large RDF files, unstructured\
     \ or binary data) for a specific pod via S3 operations, modified to be compatible\
     \ with Solid auth(n/z). For more information, see the [S3 API documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_Operations.html)."
+- name: Pod Config API
+  description: "API for managing pods, including creating, listing, deleting pods,\
+    \ managing slices, etc."
 paths:
   /:
     get:
       tags:
-      - Pod Management Api
+      - Pod Config API
       responses:
         "200":
           description: OK
@@ -35,7 +43,7 @@ paths:
                   $ref: "#/components/schemas/Pod"
     post:
       tags:
-      - Pod Management Api
+      - Pod Config API
       requestBody:
         content:
           application/ld+json:
@@ -49,7 +57,7 @@ paths:
   /{podId}:
     get:
       tags:
-      - Pod Management Api
+      - Pod Config API
       parameters:
       - name: podId
         in: path
@@ -65,7 +73,7 @@ paths:
                 $ref: "#/components/schemas/Pod"
     put:
       tags:
-      - Pod Management Api
+      - Pod Config API
       parameters:
       - name: podId
         in: path
@@ -84,7 +92,7 @@ paths:
             application/json: {}
     delete:
       tags:
-      - Pod Management Api
+      - Pod Config API
       parameters:
       - name: podId
         in: path
@@ -99,7 +107,7 @@ paths:
   /{podId}/changes:
     get:
       tags:
-      - Change History Api
+      - Changes API
       parameters:
       - name: podId
         in: path
@@ -117,7 +125,7 @@ paths:
                   $ref: "#/components/schemas/ChangeReport"
     post:
       tags:
-      - Knowledge Graph API
+      - Changes API
       summary: Perform mutations on the KG.
       description: "Post a change request, containing the requested mutations, to\
         \ the inbox of the specified pod."
@@ -133,12 +141,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ChangeRequestInput"
       responses:
-        "202":
-          description: Change request accepted.
+        "201":
+          description: Change request created.
   /{podId}/changes/{changeId}:
     get:
       tags:
-      - Change History Api
+      - Changes API
       parameters:
       - name: changeId
         in: path
@@ -160,7 +168,7 @@ paths:
   /{podId}/changes/{changeId}/records:
     get:
       tags:
-      - Change History Api
+      - Changes API
       parameters:
       - name: changeId
         in: path
@@ -182,7 +190,7 @@ paths:
   /{podId}/query:
     post:
       tags:
-      - Knowledge Graph API
+      - Querying API
       summary: Retrieve data from the KG.
       description: Query the knowledge graph of the specified pod using GraphQL.
       parameters:
@@ -229,7 +237,7 @@ paths:
   /{podId}/slices:
     get:
       tags:
-      - Knowledge Graph API
+      - Pod Config API
       summary: List slices of the specified pod.
       description: List slices of the specified pod's Knowledge Graph.
       parameters:
@@ -249,7 +257,7 @@ paths:
                   $ref: "#/components/schemas/SliceSummary"
     post:
       tags:
-      - Knowledge Graph API
+      - Pod Config API
       summary: Define a new slice of the KG.
       description: "Define a new slice (subset) of the specified pod's Knowledge Graph,\
         \ based on a GraphQL-LD schema."
@@ -272,7 +280,7 @@ paths:
   /{podId}/slices/{sliceId}:
     get:
       tags:
-      - Knowledge Graph API
+      - Pod Config API
       summary: Retrieve a specific slice definition..
       description: Retrieve a specific slice definition details.
       parameters:
@@ -290,7 +298,7 @@ paths:
                 $ref: "#/components/schemas/Slice"
     delete:
       tags:
-      - Knowledge Graph API
+      - Pod Config API
       summary: Delete a specific slice.
       description: Delete a specific slice of the specified pod's Knowledge Graph.
       parameters:
@@ -307,7 +315,7 @@ paths:
   /{podId}/slices/{sliceId}/changes:
     post:
       tags:
-      - Knowledge Graph API
+      - Changes API
       summary: Perform mutations on a specific slice of the KG.
       description: "Post a change request, containing the requested mutations, to\
         \ a slice inbox of the specified pod."
@@ -328,12 +336,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ChangeRequestInput"
       responses:
-        "202":
-          description: Change request accepted.
+        "201":
+          description: Change request created.
   /{podId}/slices/{sliceId}/query:
     post:
       tags:
-      - Knowledge Graph API
+      - Querying API
       summary: Retrieve data from a specific subset of the KG.
       description: Query a predefined slice of the specified pod's Knowledge Graph
         using GraphQL.
@@ -388,7 +396,7 @@ paths:
   /{podId}/slices/{sliceId}/shacl:
     get:
       tags:
-      - Knowledge Graph API
+      - Pod Config API
       parameters:
       - name: podId
         in: path
@@ -410,7 +418,7 @@ paths:
   /{podId}/slices/{sliceId}/stream:
     get:
       tags:
-      - Stream Api
+      - Streaming API
       parameters:
       - name: podId
         in: path
@@ -435,7 +443,7 @@ paths:
   /{podId}/stream:
     get:
       tags:
-      - Stream Api
+      - Streaming API
       parameters:
       - name: podId
         in: path
@@ -454,7 +462,7 @@ paths:
   /{podId}/s3/{objectKey}:
     get:
       tags:
-      - Storage API
+      - Low-level Storage API
       summary: Download a stored object.
       description: Get an object from the specified pod's S3 storage.
       parameters:
@@ -473,9 +481,9 @@ paths:
           description: The object content
     put:
       tags:
-      - Storage API
+      - Low-level Storage API
       summary: Upload an object.
-      description: Put an object to the specified pod's S3 storage
+      description: Put an object to the specified pod's S3 storage.
       parameters:
       - name: podId
         in: path
@@ -518,9 +526,93 @@ paths:
           description: The object was stored successfully
     delete:
       tags:
-      - Storage API
+      - Low-level Storage API
       summary: Remove a stored object.
-      description: Delete an object from the specified pod's S3 storage
+      description: Delete an object from the specified pod's S3 storage.
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectKey
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: The object was deleted successfully
+  /{podId}/slices/{sliceId}/s3/{objectKey}:
+    get:
+      tags:
+      - Low-level Storage API
+      summary: Download a stored object.
+      description: Get an object from the specified slice's S3 storage.
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectKey
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The object content
+    put:
+      tags:
+      - Low-level Storage API
+      summary: Upload an object.
+      description: Put an object to the specified slice's S3 storage.
+      parameters:
+      - name: podId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: x-amz-content-sha256
+        in: header
+        description: The SHA256 hash of the object content (allows the server to verify
+          the integrity of the content).
+        required: true
+        schema:
+          type: string
+      - name: Content-Type
+        in: header
+        description: The MIME type of the object content.
+        required: true
+        schema:
+          type: string
+      - name: x-amz-date
+        in: header
+        description: "The date and time of the request, in ISO8601 format (offers\
+          \ additional protection against replay attacks)."
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+        required: true
+      responses:
+        "200":
+          description: The object was stored successfully
+    delete:
+      tags:
+      - Low-level Storage API
+      summary: Remove a stored object.
+      description: Delete an object from the specified slice's S3 storage.
       parameters:
       - name: podId
         in: path

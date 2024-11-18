@@ -3,10 +3,22 @@
 > The example requests in this document are out-of-date, refer to the examples in the [Knowledge Graph usage section](Knowledge-Graph.md) instead.
 > {style="warning"}
 
-## Knowledge Graph API
+## Changes API
 
-<api-doc openapi-path="../../services/monolith/openapi/openapi.json" tag = "Knowledge Graph API"/>
+<api-doc openapi-path="../../services/monolith/openapi/openapi.json" tag = "Changes API"/>
 
-## Storage API
+## Querying API
 
-<api-doc openapi-path="../../services/monolith/openapi/openapi.json" tag = "Storage API"/>
+<api-doc openapi-path="../../services/monolith/openapi/openapi.json" tag = "Querying API"/>
+
+## Streaming API
+
+<api-doc openapi-path="../../services/monolith/openapi/openapi.json" tag = "Streaming API"/>
+
+## Low-level Storage API
+
+<api-doc openapi-path="../../services/monolith/openapi/openapi.json" tag = "Low-level Storage API"/>
+
+## Pod Config API
+
+<api-doc openapi-path="../../services/monolith/openapi/openapi.json" tag = "Pod Config API"/>

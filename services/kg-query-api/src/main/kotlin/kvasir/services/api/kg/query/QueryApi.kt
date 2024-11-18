@@ -25,7 +25,7 @@ import kotlin.jvm.optionals.getOrNull
 
 const val QUERY_API_PATH = "/query"
 
-@Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
+@Tag(name = ApiDocTags.KG_QUERYING_API)
 @Path("")
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,

@@ -4,11 +4,14 @@ import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.*
+import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.rdf.RDFTransformer
+import org.eclipse.microprofile.openapi.annotations.tags.Tag
 
 @Path("")
+@Tag(name = ApiDocTags.KG_CHANGES_API)
 class ChangeHistoryApi(
     val knowledgeGraph: KnowledgeGraph,
     val uriInfo: UriInfo

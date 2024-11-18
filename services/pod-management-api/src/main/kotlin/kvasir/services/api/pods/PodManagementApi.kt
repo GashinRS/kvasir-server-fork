@@ -19,9 +19,12 @@ import kvasir.definitions.kg.PodEvent
 import kvasir.definitions.kg.PodEventType
 import kvasir.definitions.kg.PodStore
 import kvasir.definitions.messaging.Channels
+import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 
+@Tag(name = ApiDocTags.PODS_API)
 @Path((""))
 class PodManagementApi(
     private val podStore: PodStore,

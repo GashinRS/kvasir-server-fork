@@ -23,26 +23,36 @@ import org.eclipse.microprofile.openapi.models.parameters.Parameter
 @OpenApiFilter(OpenApiFilter.RunStage.BUILD)
 class OpenApiProvider : OASFilter {
 
+    private val commonParams = listOf(
+        ParameterImpl()
+            .`in`(Parameter.In.PATH)
+            .name("podId")
+            .required(true)
+            .schema(SchemaImpl().type(Schema.SchemaType.STRING)),
+        ParameterImpl()
+            .`in`(Parameter.In.PATH)
+            .name("objectKey")
+            .required(true)
+            .schema(SchemaImpl().type(Schema.SchemaType.STRING))
+    )
+
     override fun filterOpenAPI(openAPI: OpenAPI) {
-        val commonParams = listOf(
-            ParameterImpl()
-                .`in`(Parameter.In.PATH)
-                .name("podId")
-                .required(true)
-                .schema(SchemaImpl().type(Schema.SchemaType.STRING)),
-            ParameterImpl()
-                .`in`(Parameter.In.PATH)
-                .name("objectKey")
-                .required(true)
-                .schema(SchemaImpl().type(Schema.SchemaType.STRING))
-        )
         if (openAPI.paths == null) {
             openAPI.paths = PathsImpl()
         }
-        openAPI.paths.addPathItem("/{podId}/s3/{objectKey}", PathItemImpl().apply {
+        generateS3Operations(openAPI, "/{podId}/s3/{objectKey}", "the specified pod's S3 storage")
+        generateS3Operations(openAPI, "/{podId}/slices/{sliceId}/s3/{objectKey}", "the specified slice's S3 storage")
+    }
+
+    private fun generateS3Operations(
+        openAPI: OpenAPI,
+        path: String,
+        targetRefDescription: String
+    ) {
+        openAPI.paths.addPathItem(path, PathItemImpl().apply {
             this.setOperation(PathItem.HttpMethod.GET, OperationImpl().apply {
                 this.summary = "Download a stored object."
-                this.description = "Get an object from the specified pod's S3 storage."
+                this.description = "Get an object from $targetRefDescription."
                 this.addTag(ApiDocTags.STORAGE_API)
                 this.parameters = commonParams
                 this.responses = APIResponsesImpl().addAPIResponse("200", APIResponseImpl().apply {
@@ -51,7 +61,7 @@ class OpenApiProvider : OASFilter {
             })
             this.setOperation(PathItem.HttpMethod.PUT, OperationImpl().apply {
                 this.summary = "Upload an object."
-                this.description = "Put an object to the specified pod's S3 storage"
+                this.description = "Put an object to $targetRefDescription."
                 this.addTag(ApiDocTags.STORAGE_API)
                 this.parameters = commonParams.plus(
                     listOf(
@@ -89,7 +99,7 @@ class OpenApiProvider : OASFilter {
             })
             this.setOperation(PathItem.HttpMethod.DELETE, OperationImpl().apply {
                 this.summary = "Remove a stored object."
-                this.description = "Delete an object from the specified pod's S3 storage"
+                this.description = "Delete an object from $targetRefDescription."
                 this.addTag(ApiDocTags.STORAGE_API)
                 this.parameters = commonParams
                 this.responses = APIResponsesImpl().addAPIResponse("204", APIResponseImpl().apply {

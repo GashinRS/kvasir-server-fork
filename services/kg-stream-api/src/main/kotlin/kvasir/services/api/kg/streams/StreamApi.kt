@@ -10,13 +10,16 @@ import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
 import kvasir.definitions.messaging.Channels
+import kvasir.definitions.openapi.ApiDocTags
 import kvasir.utils.rdf.RDFTransformer
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Message
 import org.jboss.resteasy.reactive.RestStreamElementType
+import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import java.time.Duration
 import java.util.*
 
+@Tag(name = ApiDocTags.KG_STREAMING_API)
 @Path("")
 class StreamApi(
     private val vertx: Vertx,

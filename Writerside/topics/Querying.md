@@ -34,7 +34,7 @@ as the main querying mechanism[^1] for the following reasons:
 The top-level field in the query represents the type of resource you want to retrieve. E.g. The following query
 retrieves all resources of the type `http://example.org/Person` that have a name and an email address:
 
-**POST** `http://localhost:8080/alice/kg/query`
+**POST** `http://localhost:8080/alice/query`
 
 Request body:
 
@@ -80,7 +80,7 @@ Use the RDF parent class `rdfs:Resource` to retrieve all resources, regardless o
 don't know the type of the resources, but you know which specific properties you are looking for. For example, the
 following query retrieves all resources that have a name and an email address:
 
-**POST** `http://localhost:8080/alice/kg/query`
+**POST** `http://localhost:8080/alice/query`
 
 ```json
 {
@@ -95,7 +95,7 @@ following query retrieves all resources that have a name and an email address:
 
 Nested queries are also supported:
 
-**POST** `http://localhost:8080/alice/kg/query`
+**POST** `http://localhost:8080/alice/query`
 
 ```json
 {
@@ -165,7 +165,7 @@ rewritten as:
 You can use GraphQL arguments to impose additional conditions on resources or linked resources. For example, the
 following query retrieves the Person resource with a specific id:
 
-**POST** `http://localhost:8080/alice/kg/query`
+**POST** `http://localhost:8080/alice/query`
 
 ```json
 {
@@ -199,7 +199,7 @@ This returns:
 
 You can use an array to match multiple values:
 
-**POST** `http://localhost:8080/alice/kg/query`
+**POST** `http://localhost:8080/alice/query`
 
 ```json
 {
@@ -211,8 +211,8 @@ You can use an array to match multiple values:
 }
 ```
 
-> At this time, only the `id` field supports this feature. We aim to extend this to other fields in the future. For
-> filtering on other fields, see the next section (filters).
+> This feature also works for other properties, not just the `id` field. When the property is a relation, the expected
+> argument value is a string (or string array), representing the URI(s) of the target resource(s).
 > {style="note"}
 
 ### Filters
@@ -223,7 +223,7 @@ logical operators.
 
 For example, the following query retrieves the person with the name 'Bob':
 
-**POST** `http://localhost:8080/alice/kg/query`
+**POST** `http://localhost:8080/alice/query`
 
 ```json
 {
@@ -277,7 +277,7 @@ directly, by setting the `Accept` header to `application/ld+json`.
 
 For example:
 
-**POST** `http://localhost:8080/alice/kg/query`
+**POST** `http://localhost:8080/alice/query`
 
 `Accept: application/ld+json`
 
