@@ -12,6 +12,7 @@ import kvasir.definitions.kg.ReferenceLoader
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
+import kvasir.utils.s3.S3Utils
 import org.eclipse.rdf4j.model.Literal
 import org.eclipse.rdf4j.query.QueryResults
 import org.eclipse.rdf4j.rio.RDFFormat
@@ -24,10 +25,11 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
         return reference[JsonLdKeywords.type] == KvasirVocab.S3Reference
     }
 
-    override fun loadReference(podId: String, targetGraph: String, reference: Map<String, Any>): Multi<RDFStatement> {
+    override fun loadReference(podOrSliceId: String, reference: Map<String, Any>): Multi<RDFStatement> {
         val key = reference[KvasirVocab.Key] as String
+        val bucketId = S3Utils.getBucket(podOrSliceId)
         return Uni.createFrom()
-            .future(minioClient.getObject(GetObjectArgs.builder().bucket(podId).`object`(key).build()))
+            .future(minioClient.getObject(GetObjectArgs.builder().bucket(bucketId).`object`(key).build()))
             .onItem().transformToMulti { resp ->
                 // TODO: do we need to set a baseURI here?
                 Multi.createFrom().iterable(QueryResults.parseGraphBackground(resp, null, parseLang(resp)))
@@ -37,7 +39,7 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
                     statement.subject.stringValue(),
                     statement.predicate.stringValue(),
                     if (statement.`object`.isLiteral) getCompatibleRawValue(statement.`object` as Literal) else statement.`object`.stringValue(),
-                    targetGraph,
+                    statement.context?.stringValue() ?: "",
                     statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.datatype?.stringValue(),
                     statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.language?.getOrNull(),
                 )

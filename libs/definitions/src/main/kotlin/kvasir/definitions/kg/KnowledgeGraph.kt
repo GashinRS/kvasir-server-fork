@@ -12,7 +12,6 @@ import kvasir.definitions.kg.changeops.Assertion
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import java.time.Instant
-import java.util.*
 
 interface KnowledgeGraph {
 
@@ -25,6 +24,10 @@ interface KnowledgeGraph {
     fun getChange(request: ChangeHistoryRequest): Uni<ChangeReport?>
 
     fun getChangeRecords(request: ChangeHistoryRequest): Uni<List<ChangeRecord>>
+
+    fun streamChangeRecords(request: ChangeHistoryRequest): Multi<ChangeRecord>
+
+    fun rollback(request: ChangeRollbackRequest): Uni<Void>
 
 }
 
@@ -47,7 +50,7 @@ interface ReferenceLoader {
 
     fun isSupported(reference: Map<String, Any>): Boolean
 
-    fun loadReference(podId: String, targetGraph: String, reference: Map<String, Any>): Multi<RDFStatement>
+    fun loadReference(podOrSliceId: String, reference: Map<String, Any>): Multi<RDFStatement>
 }
 
 data class ChangeRequest(
@@ -159,104 +162,28 @@ enum class ChangeResultCode {
     INTERNAL_ERROR
 }
 
-data class ChangeResult(
-    /**
-     * The unique identifier of the Change Request that resulted in this Change Result.
-     */
-    @JsonProperty(JsonLdKeywords.id)
-    val id: String,
-    /**
-     * The context that was used to produce the Change Request.
-     */
-    @JsonProperty(JsonLdKeywords.context)
-    val context: Map<String, Any> = emptyMap(),
-    /**
-     * The unique identifier of the Pod where the Change Request was applied.
-     */
-    @JsonProperty(KvasirVocab.podId)
+data class ChangeRollbackRequest(
     val podId: String,
-    /**
-     * The unique identifier of the Slice where the Change Request was applied.
-     */
-    @JsonProperty(KvasirVocab.sliceId)
-    val sliceId: String? = null,
-    /**
-     * The status of the Change Request.
-     */
-    @JsonProperty(KvasirVocab.code)
-    val code: ChangeResultCode,
-    /**
-     * A Change Result can be chunked when it is too large to transfer as single message.
-     * The hasNextChunk flag indicates whether there are more chunks to follow.
-     */
-    @JsonProperty(KvasirVocab.hasNextChunk)
-    val hasNextChunk: Boolean = false,
-    /**
-     * A Change Result can be chunked when it is too large to transfer as single message.
-     * The seqNr is used to identify the chunks.
-     */
-    @JsonProperty(KvasirVocab.sequenceNumber)
-    val seqNr: Long = 0,
-    /**
-     * The JSON-LD instances that were inserted as a result of the Change Request.
-     */
-    @JsonProperty(KvasirVocab.insert)
-    val insert: List<Map<String, Any>>,
-    /**
-     * The JSON-LD instances that were deleted as a result of the Change Request.
-     */
-    @JsonProperty(KvasirVocab.delete)
-    val delete: List<Map<String, Any>>,
-    /**
-     * If the result code is not COMMITTED, this field may contain additional information on the nature of why
-     * the Change Request was not applied.
-     */
-    @JsonProperty(KvasirVocab.error)
-    val errors: List<Map<String, Any>>? = null
-) {
-
-    companion object {
-        fun success(
-            request: ChangeRequest,
-            effectiveDeletes: List<Map<String, Any>>,
-            effectiveInserts: List<Map<String, Any>>
-        ): ChangeResult {
-            return ChangeResult(
-                id = request.id,
-                context = request.context,
-                podId = request.podId,
-                sliceId = request.sliceId,
-                code = ChangeResultCode.COMMITTED,
-                insert = effectiveInserts,
-                delete = effectiveDeletes
-            )
-        }
-
-        fun error(request: ChangeRequest, status: ChangeResultCode, errors: List<Map<String, Any>>): ChangeResult {
-            return ChangeResult(
-                id = request.id,
-                context = request.context,
-                podId = request.podId,
-                sliceId = request.sliceId,
-                code = status,
-                insert = emptyList(),
-                delete = emptyList(),
-                errors = errors
-            )
-        }
-
-    }
-
-}
+    val changeRequestId: String
+)
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 data class ChangeReport(
+    @JsonProperty(JsonLdKeywords.id)
     val id: String,
+    @JsonProperty(KvasirVocab.podId)
+    val podId: String,
+    @JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
+    @JsonProperty(KvasirVocab.resultCode)
     val resultCode: ChangeResultCode,
+    @JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null,
+    @JsonProperty(KvasirVocab.nrOfInserts)
     val nrOfInserts: Long = 0,
+    @JsonProperty(KvasirVocab.nrOfDeletes)
     val nrOfDeletes: Long = 0,
+    @JsonProperty(KvasirVocab.errorMessage)
     val errorMessage: String? = null
 )
 
@@ -375,6 +302,20 @@ data class ChangeRecord(
     val timestamp: Instant,
     val type: ChangeRecordType,
     val statement: RDFStatement
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class ChangeRecords(
+    @JsonProperty(JsonLdKeywords.context)
+    val context: Map<String, Any>,
+    @JsonProperty(JsonLdKeywords.id)
+    val id: String,
+    @JsonProperty(KvasirVocab.timestamp)
+    val timestamp: Instant,
+    @JsonProperty(KvasirVocab.delete)
+    val deleted: Any?,
+    @JsonProperty(KvasirVocab.insert)
+    val inserted: Any?
 )
 
 enum class ChangeRecordType {

@@ -25,4 +25,11 @@ object KvasirVocab {
     const val hasNextChunk = "${baseUri}hasNextChunk"
     const val sequenceNumber = "${baseUri}sequenceNumber"
     const val error = "${baseUri}error"
+    const val configuration = "${baseUri}configuration"
+    const val defaultContext = "${baseUri}defaultContext"
+    const val timestamp = "${baseUri}timestamp"
+    const val resultCode = "${baseUri}resultCode"
+    const val nrOfDeletes = "${baseUri}nrOfDeletes"
+    const val nrOfInserts = "${baseUri}nrOfInserts"
+    const val errorMessage = "${baseUri}errorMessage"
 }

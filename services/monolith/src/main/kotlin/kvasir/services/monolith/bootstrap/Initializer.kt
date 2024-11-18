@@ -3,13 +3,19 @@ package kvasir.services.monolith.bootstrap
 import io.minio.BucketExistsArgs
 import io.minio.MakeBucketArgs
 import io.minio.MinioClient
+import io.quarkus.logging.Log
 import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.event.Observes
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodConfigurationProperty
 import kvasir.definitions.kg.PodStore
+import kvasir.utils.s3.S3Utils
+import org.eclipse.microprofile.config.inject.ConfigProperty
 
-class Initializer {
+class Initializer(
+    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
+    private val baseUri: String
+) {
 
     fun init(
         @Observes event: StartupEvent,
@@ -18,13 +24,17 @@ class Initializer {
         podStore: PodStore
     ) {
         config.pods().forEach { podConfig ->
-            if (!minioClient.bucketExists(BucketExistsArgs.builder().bucket(podConfig.name()).build())) {
-                minioClient.makeBucket(MakeBucketArgs.builder().bucket(podConfig.name()).build())
+            val podId = "${baseUri}${podConfig.name()}"
+            val bucketId = S3Utils.getBucket(podId)
+            if (!minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketId).build())) {
+                Log.debug("Creating bucket '$bucketId' for pod '$podId'")
+                minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucketId).build())
             }
 
+            Log.debug("Initializing database entry for pod '$podId'")
             podStore.persist(
                 Pod(
-                    podConfig.name(),
+                    podId,
                     mapOf(PodConfigurationProperty.DEFAULT_CONTEXT to podConfig.defaultContext())
                 )
             ).await().indefinitely()

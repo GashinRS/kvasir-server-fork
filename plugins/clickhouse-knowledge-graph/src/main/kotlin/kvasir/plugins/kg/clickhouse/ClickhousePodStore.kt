@@ -16,12 +16,6 @@ class ClickhousePodStore(
     private val clickhouseInitializer: ClickhouseInitializer
 ) : PodStore {
     override fun persist(pod: Pod): Uni<Void> {
-        // The pod's database name cannot be the same as the system database
-        if (pod.id == SYSTEM_DB) {
-            return Uni.createFrom()
-                .failure(IllegalArgumentException("Pod ID cannot be the same as the system database"))
-        }
-
         // If the pod is persisted for the first time, initialize the pod's databases
         return getById(pod.id)
             .chain { existingPod ->

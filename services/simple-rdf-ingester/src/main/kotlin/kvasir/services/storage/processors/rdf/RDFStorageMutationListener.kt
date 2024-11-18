@@ -12,6 +12,7 @@ import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.storage.StorageMutationEvent
 import kvasir.definitions.storage.StorageMutationEventType
+import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.eclipse.microprofile.reactive.messaging.Outgoing
 import java.util.UUID
@@ -31,9 +32,10 @@ class RDFStorageMutationListener(
         return storageMutationEvents
             .onItem()
             .transformToUniAndConcatenate { event ->
+                val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
                 Uni.createFrom().completionStage(
                     minioClient.getObject(
-                        GetObjectArgs.builder().bucket(event.podId).`object`(event.objectId).versionId(event.versionId)
+                        GetObjectArgs.builder().bucket(bucketId).`object`(event.objectId).versionId(event.versionId)
                             .build()
                     )
                 ).map { resp -> Pair(event, resp) }
@@ -44,7 +46,7 @@ class RDFStorageMutationListener(
             }
             .map { (event, _) ->
                 // Transform the object into a Kvasir change request
-                val id = event.externalObjectUri.substringBefore("/s3") + "/kg/changes/" + UUID.randomUUID()
+                val id = event.externalObjectUri.substringBefore("/s3") + "/changes/" + UUID.randomUUID()
                 when (event.mutationType) {
                     StorageMutationEventType.PUT_OBJECT, StorageMutationEventType.COMPLETE_MULTIPART_UPLOAD, StorageMutationEventType.RESTORE_OBJECT -> ChangeRequest(
                         id = id,

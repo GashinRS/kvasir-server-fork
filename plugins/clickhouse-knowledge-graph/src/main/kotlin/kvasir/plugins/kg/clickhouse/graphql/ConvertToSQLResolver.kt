@@ -5,15 +5,7 @@ import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
-import graphql.language.ArrayValue
-import graphql.language.BooleanValue
-import graphql.language.Field
-import graphql.language.FloatValue
-import graphql.language.FragmentSpread
-import graphql.language.InlineFragment
-import graphql.language.ScalarValue
-import graphql.language.StringValue
-import graphql.language.VariableReference
+import graphql.language.*
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
 import graphql.schema.GraphQLDirectiveContainer
@@ -23,6 +15,7 @@ import io.vertx.core.json.JsonObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
+import kvasir.plugins.kg.clickhouse.databaseFromPodId
 import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
@@ -37,16 +30,17 @@ object ConvertToSQLResolver {
     ): DataFetcher<Any> {
         return object : DataFetcher<Any> {
             override fun get(env: DataFetchingEnvironment): Any? {
+                val databaseName = databaseFromPodId(podId)
                 return if (env.executionStepInfo.path.parent.isRootPath) {
                     // Handle entrypoints
                     val sqlConvertor = SQLConvertor(
                         context,
-                        podId,
+                        databaseName,
                         DATA_TABLE,
                         env
                     )
                     val (sql, columns) = sqlConvertor.toSQL()
-                    clickhouseClient.query(GenericQuerySpec(podId, DATA_TABLE, columns), sql)
+                    clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
                         .map { result ->
                             result
                         }
@@ -60,7 +54,7 @@ object ConvertToSQLResolver {
                         is JsonObject -> source.getValue(key)
                         else -> null
                     }
-                    when(value) {
+                    when (value) {
                         is List<*> -> value.filterNotNull()
                         is JsonArray -> value.list.filterNotNull()
                         else -> value
@@ -71,6 +65,8 @@ object ConvertToSQLResolver {
     }
 
 }
+
+private const val COLLAPSE_STATE_EXPR = "HAVING argMax(sign, timestamp) > 0"
 
 class SQLConvertor(
     val context: Map<String, Any>,
@@ -121,7 +117,7 @@ class SQLConvertor(
             getFQName(
                 field.name
             )
-        }' GROUP BY $SORT_COLUMNS HAVING sum(sign) > 0) ${name}_join ON $parentJoinField = $joinField"
+        }' GROUP BY $SORT_COLUMNS $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
     }
 
     fun relationFieldJoinStatement(field: Field, parentJoinField: String): String {
@@ -145,7 +141,7 @@ class SQLConvertor(
                 .joinToString { (a, b) -> "$a,$b" }
         return "${getJoinType(field)} (SELECT subject AS $joinField, map($mappedFields) as $name FROM $tableRef ${
             nestedFields.joinToString(" ") { it.joinStatement }
-        } $whereClause GROUP BY subject, object) ${name}_join ON $parentJoinField = $joinField"
+        } $whereClause GROUP BY $SORT_COLUMNS $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
     }
 
     private fun getJoinType(field: Field): String =

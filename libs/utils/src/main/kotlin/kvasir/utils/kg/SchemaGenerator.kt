@@ -1,31 +1,16 @@
 package kvasir.utils.kg
 
 import com.google.common.hash.Hashing
-import graphql.Scalars.GraphQLBoolean
-import graphql.Scalars.GraphQLFloat
-import graphql.Scalars.GraphQLID
-import graphql.Scalars.GraphQLInt
-import graphql.Scalars.GraphQLString
-import graphql.language.DirectiveDefinition
-import graphql.language.DirectiveLocation
-import graphql.language.InputValueDefinition
-import graphql.language.ListType
-import graphql.language.ScalarTypeDefinition
-import graphql.language.StringValue
-import graphql.language.TypeName
+import graphql.Scalars.*
+import graphql.language.*
 import graphql.scalars.ExtendedScalars
-import graphql.schema.GraphQLFieldDefinition
-import graphql.schema.GraphQLList
-import graphql.schema.GraphQLObjectType
-import graphql.schema.GraphQLOutputType
-import graphql.schema.GraphQLScalarType
-import graphql.schema.GraphQLSchema
-import graphql.schema.GraphQLTypeReference
-import graphql.schema.GraphQLUnionType
+import graphql.schema.*
 import graphql.schema.idl.TypeDefinitionRegistry
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.definitions.rdf.XSDVocab
+import kvasir.utils.graphql.innerType
+import kvasir.utils.graphql.isScalar
 
 class SchemaGenerator(private val types: List<KGType>, private val context: Map<String, Any>) {
 
@@ -60,7 +45,11 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                                         })
                                 }
                             )
-                            .arguments(if (KGPropertyKind.IRI == property.kind) AbstractKnowledgeGraph.defaultRelationArguments else emptyList())
+                            .arguments(
+                                if (KGPropertyKind.IRI == property.kind) AbstractKnowledgeGraph.defaultRelationArguments.plus(
+                                    argumentsForType(propertyType)
+                                ) else emptyList()
+                            )
                             .name(prefixedProperty)
                             .description(property.uri)
                             .type(GraphQLList.list(propertyType))
@@ -78,7 +67,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                 GraphQLObjectType.newObject().name("Query")
                     .fields((listOf(rdfsResourceEntryPoint) + graphQLObjects).map { type ->
                         GraphQLFieldDefinition.newFieldDefinition().name(type.name).type(GraphQLList.list(type))
-                            .arguments(AbstractKnowledgeGraph.defaultRelationArguments)
+                            .arguments(AbstractKnowledgeGraph.defaultRelationArguments.plus(argumentsForType(type)))
                             .build()
                     }).build()
             )
@@ -87,6 +76,16 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
             .additionalDirective(AbstractKnowledgeGraph.typeDirective)
             .additionalDirective(AbstractKnowledgeGraph.predicateDirective)
         return SchemaGeneratorResult(schema, unionTypes)
+    }
+
+    private fun argumentsForType(type: GraphQLOutputType): List<GraphQLArgument> {
+        if (type !is GraphQLObjectType) {
+            return emptyList()
+        }
+        return type.fieldDefinitions.map { field ->
+            val argType = if (field.type.isScalar()) field.type.innerType<GraphQLScalarType>() else GraphQLID
+            GraphQLArgument.newArgument().name(field.name).type(GraphQLList.list(argType)).build()
+        }
     }
 
     private fun getGraphQLPropertyType(

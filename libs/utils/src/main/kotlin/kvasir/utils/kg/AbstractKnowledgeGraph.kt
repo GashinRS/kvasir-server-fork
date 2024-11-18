@@ -3,19 +3,9 @@ package kvasir.utils.kg
 import graphql.ExecutionInput
 import graphql.ExecutionResult
 import graphql.GraphQL
-import graphql.Scalars.GraphQLBoolean
-import graphql.Scalars.GraphQLID
-import graphql.Scalars.GraphQLInt
-import graphql.Scalars.GraphQLString
+import graphql.Scalars.*
 import graphql.introspection.Introspection
-import graphql.schema.DataFetcher
-import graphql.schema.GraphQLArgument
-import graphql.schema.GraphQLCodeRegistry
-import graphql.schema.GraphQLDirective
-import graphql.schema.GraphQLList
-import graphql.schema.GraphQLSchema
-import graphql.schema.GraphQLUnionType
-import graphql.schema.TypeResolver
+import graphql.schema.*
 import graphql.schema.idl.FieldWiringEnvironment
 import graphql.schema.idl.RuntimeWiring
 import graphql.schema.idl.SchemaParser
@@ -24,17 +14,7 @@ import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
-import kvasir.definitions.kg.ChangeRecord
-import kvasir.definitions.kg.ChangeRecordType
-import kvasir.definitions.kg.ChangeReport
-import kvasir.definitions.kg.ChangeRequest
-import kvasir.definitions.kg.ChangeResult
-import kvasir.definitions.kg.ChangeResultCode
-import kvasir.definitions.kg.KnowledgeGraph
-import kvasir.definitions.kg.QueryRequest
-import kvasir.definitions.kg.QueryResult
-import kvasir.definitions.kg.RDFStatement
-import kvasir.definitions.kg.ReferenceLoader
+import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
 import kvasir.definitions.reactive.skipToLast
@@ -52,7 +32,7 @@ abstract class AbstractKnowledgeGraph(
     private val referenceLoaders: List<ReferenceLoader>,
     private val assertionCheckingParallelism: Int,
     private val referenceHandlingBuffer: Int,
-    private val outboxEmitter: MutinyEmitter<ChangeResult>
+    private val outboxEmitter: MutinyEmitter<ChangeReport>
 ) : KnowledgeGraph {
 
     companion object {
@@ -91,7 +71,7 @@ abstract class AbstractKnowledgeGraph(
                     // Delete from external sources
                     Multi.createFrom().iterable(request.deleteFromRefs)
                         .onItem().transformToMultiAndConcatenate { ref ->
-                            loadReference(request.podId, "", ref)
+                            loadReference(request.podId, ref)
                         }
                         .group().intoLists().of(referenceHandlingBuffer)
                         .onItem().transformToUni { deleteTuples ->
@@ -113,7 +93,7 @@ abstract class AbstractKnowledgeGraph(
                             // Insert from external sources
                             Multi.createFrom().iterable(request.insertFromRefs)
                                 .onItem().transformToMultiAndConcatenate { ref ->
-                                    loadReference(request.podId, "", ref)
+                                    loadReference(request.podId, ref)
                                 }
                                 .group().intoLists().of(referenceHandlingBuffer)
                                 .onItem().transformToUni { insertTuples ->
@@ -149,8 +129,8 @@ abstract class AbstractKnowledgeGraph(
                                         ChangeRecordType.DELETE, it
                                     )
                                 }
-                            ).map { _ -> deleteJsonLd }
-                                .chain { deleteJsonLd ->
+                            )
+                                .chain { _ ->
                                     val insertJsonLd = changeProcessor.materializeRecords(request.insert, bindings)
                                     val insertStatements = changeProcessor.toStatements(insertJsonLd)
                                     nrOfInserts.addAndGet(insertStatements.size.toLong())
@@ -162,27 +142,23 @@ abstract class AbstractKnowledgeGraph(
                                                 ChangeRecordType.INSERT, it
                                             )
                                         }
-                                    ).map { _ -> deleteJsonLd to insertJsonLd }
+                                    )
                                 }
-                        }
-                        .chain { (effectiveDeletes, effectiveInserts) ->
-                            outboxEmitter.send(ChangeResult.success(request, effectiveDeletes, effectiveInserts))
                         }
                 }
             }
             .onItem()
             .transformToUni { _ ->
-                logChangeReport(
-                    request.podId,
-                    ChangeReport(
-                        id = request.id,
-                        timestamp = changeRequestTs,
-                        resultCode = ChangeResultCode.COMMITTED,
-                        sliceId = request.sliceId,
-                        nrOfInserts = nrOfInserts.get(),
-                        nrOfDeletes = nrOfDeletes.get()
-                    )
+                val report = ChangeReport(
+                    id = request.id,
+                    podId = request.podId,
+                    timestamp = changeRequestTs,
+                    resultCode = ChangeResultCode.COMMITTED,
+                    sliceId = request.sliceId,
+                    nrOfInserts = nrOfInserts.get(),
+                    nrOfDeletes = nrOfDeletes.get()
                 )
+                logChangeReport(request.podId, report).map { report }
             }
             .invoke { _ -> Log.debug("Processed change request with id '${request.id}' in ${System.currentTimeMillis() - start} ms.") }
             .onFailure(ChangeAssertionException::class.java).recoverWithUni { e ->
@@ -214,6 +190,7 @@ abstract class AbstractKnowledgeGraph(
                     e.message ?: "An unexpected error occurred while processing the change request: '${e.message}'"
                 )
             }
+            .onItem().transformToUni { report -> outboxEmitter.send(report) }
     }
 
     override fun query(request: QueryRequest): Uni<QueryResult> {
@@ -287,9 +264,9 @@ abstract class AbstractKnowledgeGraph(
     /**
      * Load a reference from an external source and return it as a Mutiny stream (Multi).
      */
-    open fun loadReference(podId: String, targetGraph: String, reference: Map<String, Any>): Multi<RDFStatement> {
+    open fun loadReference(podId: String, reference: Map<String, Any>): Multi<RDFStatement> {
         return referenceLoaders.firstOrNull { loader -> loader.isSupported(reference) }
-            ?.loadReference(podId, targetGraph, reference)
+            ?.loadReference(podId, reference)
             ?: Multi.createFrom().failure(RuntimeException("Unsupported reference type: $reference"))
     }
 
@@ -343,17 +320,19 @@ abstract class AbstractKnowledgeGraph(
         request: ChangeRequest,
         resultCode: ChangeResultCode,
         errorMessage: String
-    ): Uni<Void> {
+    ): Uni<ChangeReport> {
+        val report = ChangeReport(
+            id = request.id,
+            podId = request.podId,
+            timestamp = timestamp,
+            resultCode = resultCode,
+            sliceId = request.sliceId,
+            errorMessage = errorMessage
+        )
         return logChangeReport(
             request.podId,
-            ChangeReport(
-                id = request.id,
-                timestamp = timestamp,
-                resultCode = resultCode,
-                sliceId = request.sliceId,
-                errorMessage = errorMessage
-            )
-        )
+            report
+        ).map { report }
     }
 
 }

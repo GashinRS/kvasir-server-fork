@@ -36,7 +36,7 @@ import java.net.URI
 import java.util.UUID
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
-@Path("/{podId}")
+@Path("")
 class InboxApi(
     @Channel("change_requests_publish")
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
@@ -45,7 +45,7 @@ class InboxApi(
     private val podStore: PodStore
 ) {
 
-    @Path("changes")
+    @Path("{podId}/changes")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -70,7 +70,7 @@ class InboxApi(
             }
     }
 
-    @Path("/slices/{sliceId}/changes")
+    @Path("{podId}/slices/{sliceId}/changes")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(

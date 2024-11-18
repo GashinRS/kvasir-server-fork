@@ -3,8 +3,8 @@ package kvasir.plugins.messaging.kafka
 import io.smallrye.mutiny.Multi
 import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.enterprise.context.ApplicationScoped
+import kvasir.definitions.kg.ChangeReport
 import kvasir.definitions.kg.ChangeRequest
-import kvasir.definitions.kg.ChangeResult
 import kvasir.definitions.kg.PodEvent
 import kvasir.definitions.kg.SliceEvent
 import kvasir.definitions.messaging.Channels
@@ -23,11 +23,11 @@ class ChannelInitializer(
     @Channel(Channels.STORAGE_MUTATIONS_SUBSCRIBE)
     private val storageMutationSubscriber: Multi<Message<StorageMutationEvent>>,
     @Channel(Channels.OUTBOX_PUBLISH)
-    private val outboxEmitter: MutinyEmitter<ChangeResult>,
+    private val outboxEmitter: MutinyEmitter<ChangeReport>,
     @Channel(Channels.SLICE_OUTBOX_PUBLISH)
-    val sliceOutboxEmitter: MutinyEmitter<ChangeResult>,
+    val sliceOutboxEmitter: MutinyEmitter<ChangeReport>,
     @Channel(Channels.OUTBOX_SUBSCRIBE)
-    private val outboxSubscriber: Multi<Message<ChangeResult>>,
+    private val outboxSubscriber: Multi<Message<ChangeReport>>,
     @Channel(Channels.SLICE_EVENT_PUBLISH)
     private val sliceEventEmitter: MutinyEmitter<SliceEvent>,
     @Channel(Channels.SLICE_EVENT_SUBSCRIBE)

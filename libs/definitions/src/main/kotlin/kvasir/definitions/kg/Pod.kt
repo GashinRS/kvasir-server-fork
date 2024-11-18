@@ -1,7 +1,10 @@
 package kvasir.definitions.kg
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
+import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.KvasirVocab
 
 interface PodStore {
 
@@ -16,7 +19,9 @@ interface PodStore {
 }
 
 data class Pod(
+    @JsonProperty(JsonLdKeywords.id)
     val id: String,
+    @JsonProperty(KvasirVocab.configuration)
     val configuration: Map<String, Any>,
 ) {
 
@@ -29,7 +34,7 @@ data class Pod(
 
 object PodConfigurationProperty {
 
-    const val DEFAULT_CONTEXT = "defaultContext"
+    const val DEFAULT_CONTEXT = KvasirVocab.defaultContext
 
 }
 

@@ -31,7 +31,7 @@ import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
-@Path("{podId}")
+@Path("")
 class GraphSlicesApi(
     private val sliceStore: SliceStore,
     private val podStore: PodStore,
@@ -41,7 +41,7 @@ class GraphSlicesApi(
     private val sliceEventEmitter: MutinyEmitter<SliceEvent>
 ) {
 
-    @Path("slices")
+    @Path("{podId}/slices")
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -55,7 +55,7 @@ class GraphSlicesApi(
         }
     }
 
-    @Path("slices")
+    @Path("{podId}/slices")
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -83,7 +83,7 @@ class GraphSlicesApi(
         }
     }
 
-    @Path("slices/{sliceId}")
+    @Path("{podId}/slices/{sliceId}")
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
     @Operation(
@@ -100,7 +100,7 @@ class GraphSlicesApi(
         }
     }
 
-    @Path("slices/{sliceId}")
+    @Path("{podId}/slices/{sliceId}")
     @DELETE
     @Operation(
         summary = "Delete a specific slice.",
@@ -117,7 +117,7 @@ class GraphSlicesApi(
     }
 
     @POST
-    @Path("slices/{sliceId}/query")
+    @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
@@ -149,7 +149,7 @@ class GraphSlicesApi(
     }
 
     @POST
-    @Path("slices/{sliceId}/query")
+    @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(JSON_LD_MEDIA_TYPE)
     @APIResponse(
@@ -184,7 +184,7 @@ class GraphSlicesApi(
     }
 
     @GET
-    @Path("slices/{sliceId}/shacl")
+    @Path("{podId}/slices/{sliceId}/shacl")
     @Produces(RDFMediaTypes.TURTLE)
     fun getSHACL(
         @PathParam("podId") podId: String,

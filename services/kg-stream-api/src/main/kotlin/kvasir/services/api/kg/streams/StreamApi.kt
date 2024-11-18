@@ -1,69 +1,85 @@
 package kvasir.services.api.kg.streams
 
-import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.core.type.TypeReference
-import com.fasterxml.jackson.module.kotlin.jsonMapper
-import com.fasterxml.jackson.module.kotlin.kotlinModule
-import com.github.jsonldjava.core.JsonLdOptions
-import com.github.jsonldjava.core.JsonLdProcessor
 import io.smallrye.mutiny.Multi
 import io.vertx.core.json.Json
-import io.vertx.core.json.JsonObject
 import io.vertx.mutiny.core.Vertx
 import io.vertx.mutiny.kafka.client.consumer.KafkaConsumer
 import jakarta.ws.rs.GET
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.core.MediaType
-import kvasir.definitions.kg.ChangeResult
+import kvasir.definitions.kg.*
 import kvasir.definitions.messaging.Channels
-import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.utils.rdf.RDFTransformer
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Message
 import org.jboss.resteasy.reactive.RestStreamElementType
-import java.util.UUID
+import java.time.Duration
+import java.util.*
 
-@Path("{podId}")
+@Path("")
 class StreamApi(
     private val vertx: Vertx,
+    private val knowledgeGraph: KnowledgeGraph,
     @ConfigProperty(
         name = "kafka.bootstrap.servers"
     )
-    private val kafkaBootstrapServers: String
+    private val kafkaBootstrapServers: String,
+    @ConfigProperty(
+        name = "kvasir.streaming.buffer-size",
+        defaultValue = "500"
+    )
+    private val bufferSize: Int,
+    @ConfigProperty(
+        name = "kvasir.streaming.buffering-max-delay-ms",
+        defaultValue = "1000"
+    )
+    private val bufferingMaxDelayMs: Long,
+    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
+    private val baseUri: String
 ) {
 
-    val mapper = jsonMapper {
-        addModule(kotlinModule())
-    }.setSerializationInclusion(JsonInclude.Include.NON_DEFAULT)
-
-    @Path("stream")
+    @Path("{podId}/stream")
     @GET
     @RestStreamElementType(MediaType.APPLICATION_JSON)
-    fun stream(@PathParam("podId") podId: String): Multi<Map<String, Any>> {
+    fun stream(@PathParam("podId") podIdParam: String): Multi<ChangeRecords> {
+        val podId = "$baseUri$podIdParam"
         val consumerId = UUID.randomUUID().toString()
-        return streamFrom(Channels.OUTBOX_TOPIC, ChangeResult::class.java, consumerId)
+        return streamFrom(Channels.OUTBOX_TOPIC, ChangeReport::class.java, consumerId)
             .filter { msg -> msg.payload.podId == podId }
-            .map { msg ->
-                val jsonld = mapper.convertValue(msg.payload, object : TypeReference<Map<String, Object>>() {})
-                JsonLdProcessor.compact(jsonld, jsonld[JsonLdKeywords.context], JsonLdOptions())
+            .onItem()
+            .transformToMultiAndConcatenate { msg ->
+                knowledgeGraph.streamChangeRecords(
+                    ChangeHistoryRequest(
+                        podId = msg.payload.podId,
+                        changeRequestId = msg.payload.id
+                    )
+                )
             }
+            .group().intoLists().of(bufferSize, Duration.ofMillis(bufferingMaxDelayMs))
+            .map { buffer ->
+                buffer.groupBy { it.changeRequestId }.map { (changeRequestId, records) ->
+                    ChangeRecords(
+                        mapOf("kss" to baseUri),
+                        changeRequestId,
+                        records.first().timestamp,
+                        records.filter { it.type == ChangeRecordType.DELETE }
+                            .map { it.statement }.takeIf { it.isNotEmpty() }
+                            ?.let { RDFTransformer.statementsToJsonLD(it) },
+                        records.filter { it.type == ChangeRecordType.INSERT }
+                            .map { it.statement }.takeIf { it.isNotEmpty() }
+                            ?.let { RDFTransformer.statementsToJsonLD(it) }
+                    )
+                }
+            }
+            .onItem().disjoint<ChangeRecords>()
     }
 
-    @Path("slices/{sliceId}/stream")
+    @Path("{podId}/slices/{sliceId}/stream")
     @GET
     @RestStreamElementType(MediaType.APPLICATION_JSON)
     fun streamSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Multi<Map<String, Any>> {
-        val consumerId = UUID.randomUUID().toString()
-        return streamFrom(
-            Channels.outboxTopicForSlice(podId, sliceId),
-            ChangeResult::class.java,
-            consumerId
-        )
-            .filter { msg -> msg.payload.podId == podId && msg.payload.sliceId == sliceId }
-            .map { msg ->
-                val jsonld = JsonObject.mapFrom(msg.payload).map
-                JsonLdProcessor.compact(jsonld, jsonld[JsonLdKeywords.context], JsonLdOptions())
-            }
+        TODO()
     }
 
     private fun <T> streamFrom(

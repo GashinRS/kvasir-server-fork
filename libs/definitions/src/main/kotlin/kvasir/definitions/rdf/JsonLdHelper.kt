@@ -42,5 +42,4 @@ object JsonLdHelper {
             context[prefix]?.let { ns -> "$ns$localName" }
         }
     }
-
 }

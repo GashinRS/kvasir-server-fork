@@ -1,25 +1,18 @@
 package kvasir.plugins.kg.clickhouse
 
+import com.google.common.hash.Hashing
 import graphql.ExceptionWhileDataFetching
 import graphql.ExecutionResult
 import graphql.schema.DataFetcher
 import graphql.schema.GraphQLUnionType
 import graphql.schema.TypeResolver
 import io.quarkus.arc.All
+import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.json.JsonObject
 import jakarta.inject.Singleton
-import kvasir.definitions.kg.ChangeHistoryRequest
-import kvasir.definitions.kg.ChangeRecord
-import kvasir.definitions.kg.ChangeRecordType
-import kvasir.definitions.kg.ChangeReport
-import kvasir.definitions.kg.ChangeResult
-import kvasir.definitions.kg.ChangeResultCode
-import kvasir.definitions.kg.QueryRequest
-import kvasir.definitions.kg.QueryResult
-import kvasir.definitions.kg.RDFStatement
-import kvasir.definitions.kg.ReferenceLoader
+import kvasir.definitions.kg.*
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
@@ -27,16 +20,7 @@ import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.graphql.ConvertToSQLResolver
 import kvasir.plugins.kg.clickhouse.graphql.NoResultsException
 import kvasir.plugins.kg.clickhouse.graphql.RDFClassTypeResolver
-import kvasir.plugins.kg.clickhouse.specs.CHANGE_LOG_COLUMNS
-import kvasir.plugins.kg.clickhouse.specs.CHANGE_LOG_TABLE
-import kvasir.plugins.kg.clickhouse.specs.ChangelogInsertRecordSpec
-import kvasir.plugins.kg.clickhouse.specs.DATA_COLUMNS
-import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
-import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
-import kvasir.plugins.kg.clickhouse.specs.KGTypeQuerySpec
-import kvasir.plugins.kg.clickhouse.specs.META_DATA_TABLE
-import kvasir.plugins.kg.clickhouse.specs.MetadataInsertRecordSpec
-import kvasir.plugins.kg.clickhouse.specs.RDFDatasetQuadInsertSpec
+import kvasir.plugins.kg.clickhouse.specs.*
 import kvasir.utils.kg.AbstractKnowledgeGraph
 import kvasir.utils.kg.KGPropertyKind
 import kvasir.utils.kg.KGType
@@ -44,8 +28,6 @@ import kvasir.utils.kg.MetadataEntry
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
 import java.time.Instant
-import kotlin.collections.component1
-import kotlin.collections.component2
 
 @Singleton
 class ClickhouseKnowledgeGraph(
@@ -57,7 +39,7 @@ class ClickhouseKnowledgeGraph(
     @ConfigProperty(name = "kvasir.plugins.kg.xtdb.ref-handling-buffer", defaultValue = "50000")
     private val refHandlingBuffer: Int,
     @Channel(Channels.OUTBOX_PUBLISH)
-    private val outboxEmitter: MutinyEmitter<ChangeResult>
+    private val outboxEmitter: MutinyEmitter<ChangeReport>
 ) : AbstractKnowledgeGraph(referenceLoaders, assertionCheckingParallelism, refHandlingBuffer, outboxEmitter) {
     override fun persist(
         podId: String,
@@ -177,7 +159,7 @@ class ClickhouseKnowledgeGraph(
                 databaseFromPodId(request.podId), CHANGE_LOG_TABLE,
                 CHANGE_LOG_COLUMNS
             ), sql
-        ).map { results -> results.map { resultToChangeReport(it) } }
+        ).map { results -> results.map { resultToChangeReport(request.podId, it) } }
     }
 
     override fun getChange(request: ChangeHistoryRequest): Uni<ChangeReport?> {
@@ -193,7 +175,7 @@ class ClickhouseKnowledgeGraph(
                 CHANGE_LOG_COLUMNS
             ), sql
         ).map { results ->
-            results.firstOrNull()?.let { resultToChangeReport(it) }
+            results.firstOrNull()?.let { resultToChangeReport(request.podId, it) }
         }
     }
 
@@ -204,9 +186,22 @@ class ClickhouseKnowledgeGraph(
             .map { results -> results.map { resultToChangeRecord(it) } }
     }
 
-    private fun resultToChangeReport(result: Map<String, Any>): ChangeReport {
+    override fun streamChangeRecords(request: ChangeHistoryRequest): Multi<ChangeRecord> {
+        // TODO: Implement via cursor-based paging
+        return getChangeRecords(request).onItem().transformToMulti { t -> Multi.createFrom().iterable(t) }
+    }
+
+    override fun rollback(request: ChangeRollbackRequest): Uni<Void> {
+        return clickhouseClient.execute(
+            "ALTER TABLE ${databaseFromPodId(request.podId)}.$DATA_TABLE DELETE WHERE change_request_id = '${request.changeRequestId}'",
+            databaseFromPodId(request.podId)
+        )
+    }
+
+    private fun resultToChangeReport(podId: String, result: Map<String, Any>): ChangeReport {
         return ChangeReport(
             id = result["id"] as String,
+            podId = podId,
             sliceId = (result["slice_id"] as String).takeIf { it.isNotBlank() },
             timestamp = Instant.parse(result["timestamp"] as String),
             nrOfInserts = result["nr_of_inserts"].toString().toLong(),
@@ -235,6 +230,6 @@ class ClickhouseKnowledgeGraph(
 }
 
 internal fun databaseFromPodId(podId: String): String {
-    return podId
+    return Hashing.farmHashFingerprint64().hashString(podId, Charsets.UTF_8).toString()
 }
 

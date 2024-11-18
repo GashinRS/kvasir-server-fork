@@ -13,6 +13,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import kvasir.definitions.storage.StorageMutationEvent
 import kvasir.definitions.storage.StorageMutationEventType
+import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
 import uk.co.lucasweb.aws.v4.signer.Signer
@@ -57,6 +58,8 @@ class StorageApi(
 
 @ApplicationScoped
 class S3Interceptor(
+    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
+    private val baseUri: String,
     @ConfigProperty(name = "kvasir.services.storage.s3.host")
     private val s3Host: String,
     @ConfigProperty(name = "kvasir.services.storage.s3.port")
@@ -78,7 +81,8 @@ class S3Interceptor(
         return context.request().proxiedRequest().resume().body().compose { buffer ->
             context.request().body = Body.body(buffer)
             val podId = context.request().proxiedRequest().getParam("podId")
-            val target = replacePath(context.request().uri, podId)
+            val sliceId = context.request().proxiedRequest().getParam("sliceId")
+            val target = replacePath(context.request().uri, podId, sliceId)
             context.request().setURI(target)
             val isoDateTime = getIsoDateTime(context)
             val payloadHash = getPayloadHash(context, buffer)
@@ -111,11 +115,12 @@ class S3Interceptor(
                 if (resp.statusCode in 200..399 && mutationType != null) {
                     val podId = context.request().proxiedRequest().getParam("podId")
                     val sliceId = context.request().proxiedRequest().getParam("sliceId")
-                    val baseUri = context.request().uri.substringBefore("/$podId/")
+                    val bucket = sliceId?.let { S3Utils.getBucket("$baseUri$podId/slices/$it") }
+                        ?: S3Utils.getBucket("$baseUri$podId")
                     val event = StorageMutationEvent(
-                        podId = "$baseUri/$podId",
-                        sliceId = sliceId?.let { "$baseUri/$podId/slices/$it" },
-                        objectId = context.request().uri.substringAfter("/$podId/").substringBefore("?"),
+                        podId = "$baseUri$podId",
+                        sliceId = sliceId?.let { "$baseUri$podId/slices/$it" },
+                        objectId = context.request().uri.substringAfter("/$bucket/").substringBefore("?"),
                         externalObjectUri = context.request().proxiedRequest().absoluteURI(),
                         internalStorageUri = "http://$s3Host:$s3Port${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),
@@ -140,8 +145,14 @@ class S3Interceptor(
     }
 
     // TODO: take into account potential API prefixes
-    private fun replacePath(uri: String, podId: String): String {
-        return uri.replaceFirst("/$podId/s3", "/$podId")
+    private fun replacePath(uri: String, podId: String, sliceId: String?): String {
+        return if (sliceId != null) {
+            val bucketId = S3Utils.getBucket("$baseUri$podId/slices/$sliceId")
+            uri.replaceFirst("/$podId/slices/$sliceId/s3", "/$bucketId")
+        } else {
+            val bucketId = S3Utils.getBucket("$baseUri$podId")
+            uri.replaceFirst("/$podId/s3", "/$bucketId")
+        }
     }
 
     // TODO: Implement the determineMutationType method properly

@@ -136,6 +136,32 @@
       }
     },
     "/{podId}/changes" : {
+      "get" : {
+        "tags" : [ "Change History Api" ],
+        "parameters" : [ {
+          "name" : "podId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/ld+json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ChangeReport"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "post" : {
         "tags" : [ "Knowledge Graph API" ],
         "summary" : "Perform mutations on the KG.",
@@ -164,35 +190,7 @@
         }
       }
     },
-    "/{podId}/changes/history" : {
-      "get" : {
-        "tags" : [ "Change History Api" ],
-        "parameters" : [ {
-          "name" : "podId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/ChangeReport"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/{podId}/changes/history/{changeId}" : {
+    "/{podId}/changes/{changeId}" : {
       "get" : {
         "tags" : [ "Change History Api" ],
         "parameters" : [ {
@@ -214,7 +212,7 @@
           "200" : {
             "description" : "OK",
             "content" : {
-              "application/json" : {
+              "application/ld+json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ChangeReport"
                 }
@@ -224,7 +222,7 @@
         }
       }
     },
-    "/{podId}/changes/history/{changeId}/records" : {
+    "/{podId}/changes/{changeId}/records" : {
       "get" : {
         "tags" : [ "Change History Api" ],
         "parameters" : [ {
@@ -246,12 +244,9 @@
           "200" : {
             "description" : "OK",
             "content" : {
-              "application/json" : {
+              "application/ld+json" : {
                 "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/ChangeRecord"
-                  }
+                  "$ref" : "#/components/schemas/ChangeRecords"
                 }
               }
             }
@@ -632,8 +627,7 @@
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "type" : "object",
-                    "additionalProperties" : { }
+                    "$ref" : "#/components/schemas/ChangeRecords"
                   }
                 }
               }
@@ -773,33 +767,32 @@
           }
         }
       },
-      "ChangeRecord" : {
-        "required" : [ "changeRequestId", "timestamp", "type", "statement" ],
+      "ChangeRecords" : {
+        "required" : [ "context", "id", "timestamp" ],
         "type" : "object",
         "properties" : {
-          "changeRequestId" : {
+          "context" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "id" : {
             "type" : "string"
           },
           "timestamp" : {
             "$ref" : "#/components/schemas/Instant"
           },
-          "type" : {
-            "$ref" : "#/components/schemas/ChangeRecordType"
-          },
-          "statement" : {
-            "$ref" : "#/components/schemas/RDFStatement"
-          }
+          "deleted" : { },
+          "inserted" : { }
         }
       },
-      "ChangeRecordType" : {
-        "enum" : [ "INSERT", "DELETE" ],
-        "type" : "string"
-      },
       "ChangeReport" : {
-        "required" : [ "id", "timestamp", "resultCode" ],
+        "required" : [ "id", "podId", "timestamp", "resultCode" ],
         "type" : "object",
         "properties" : {
           "id" : {
+            "type" : "string"
+          },
+          "podId" : {
             "type" : "string"
           },
           "timestamp" : {
@@ -968,30 +961,6 @@
               "type" : "object",
               "additionalProperties" : { }
             },
-            "nullable" : true
-          }
-        }
-      },
-      "RDFStatement" : {
-        "required" : [ "subject", "predicate", "graph" ],
-        "type" : "object",
-        "properties" : {
-          "subject" : {
-            "type" : "string"
-          },
-          "predicate" : {
-            "type" : "string"
-          },
-          "object" : { },
-          "graph" : {
-            "type" : "string"
-          },
-          "dataType" : {
-            "type" : "string",
-            "nullable" : true
-          },
-          "language" : {
-            "type" : "string",
             "nullable" : true
           }
         }

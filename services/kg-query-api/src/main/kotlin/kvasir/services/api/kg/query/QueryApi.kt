@@ -26,13 +26,14 @@ import kotlin.jvm.optionals.getOrNull
 const val QUERY_API_PATH = "/query"
 
 @Tag(name = ApiDocTags.KNOWLEDGE_GRAPH_API)
-@Path("{podId}$QUERY_API_PATH")
+@Path("")
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
     private val podStore: PodStore,
     private val uriInfo: UriInfo
 ) {
 
+    @Path("{podId}$QUERY_API_PATH")
     @POST
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
@@ -59,6 +60,7 @@ class QueryApi(
             }
     }
 
+    @Path("{podId}$QUERY_API_PATH")
     @POST
     @Produces(JSON_LD_MEDIA_TYPE)
     @APIResponse(
