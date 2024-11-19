@@ -1,7 +1,7 @@
 variables:
   INSTANCE: 'Writerside/kd'
   ARTIFACT: 'webHelpKD2-all.zip'
-  DOCKER_VERSION: '241.18775'
+  DOCKER_VERSION: '243.21565'
   ALGOLIA_ARTIFACT: 'algolia-indexes-KD.zip'
   ALGOLIA_APP_NAME: '23BLLNEZ2S'
   ALGOLIA_INDEX_NAME: 'prod_KVASIR-NEXT'
