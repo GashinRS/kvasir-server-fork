@@ -20,13 +20,15 @@ import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
 import kvasir.utils.kg.AbstractKnowledgeGraph
+import java.time.Instant
 
 object ConvertToSQLResolver {
 
     fun getDatafetcher(
         clickhouseClient: ClickhouseClient,
         podId: String,
-        context: Map<String, Any>
+        context: Map<String, Any>,
+        atTimestamp: Instant?
     ): DataFetcher<Any> {
         return object : DataFetcher<Any> {
             override fun get(env: DataFetchingEnvironment): Any? {
@@ -35,6 +37,7 @@ object ConvertToSQLResolver {
                     // Handle entrypoints
                     val sqlConvertor = SQLConvertor(
                         context,
+                        atTimestamp,
                         databaseName,
                         DATA_TABLE,
                         env
@@ -70,6 +73,7 @@ private const val COLLAPSE_STATE_EXPR = "HAVING argMax(sign, timestamp) > 0"
 
 class SQLConvertor(
     val context: Map<String, Any>,
+    val atTimestamp: Instant?,
     database: String,
     table: String,
     private val env: DataFetchingEnvironment
@@ -113,11 +117,11 @@ class SQLConvertor(
     fun scalarFieldJoinStatement(field: Field, parentJoinField: String): String {
         val name = field.name
         val joinField = "${name}_holder"
-        return "${getJoinType(field)} (SELECT anyLast(subject) AS $joinField, anyLast(object) AS $name FROM $tableRef WHERE predicate = '${
-            getFQName(
-                field.name
-            )
-        }' GROUP BY $SORT_COLUMNS $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
+        val whereClause = listOfNotNull(
+            "predicate = '${getFQName(field.name)}'",
+            atTimestamp?.let { "timestamp <= ${convertInstant(it)}" }
+        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
+        return "${getJoinType(field)} (SELECT anyLast(subject) AS $joinField, anyLast(object) AS $name FROM $tableRef $whereClause GROUP BY $SORT_COLUMNS $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
     }
 
     fun relationFieldJoinStatement(field: Field, parentJoinField: String): String {
@@ -126,6 +130,7 @@ class SQLConvertor(
         val nestedFields = getNestedFields(field, "object")
         val whereClause = listOfNotNull(
             "predicate = '${getFQName(field.name)}'",
+            atTimestamp?.let { "timestamp <= ${convertInstant(it)}" },
             getNodeFilter(field)?.let { GraphQLFilterVisitor2(context).visitNode(it) },
             getArgsFilter(field)?.let {
                 GraphQLFilterVisitor2(context).visitNode(
@@ -296,6 +301,10 @@ class SQLConvertor(
                 ComparisonNode(RSQLOperators.IN, "object", requiredTypes)
             )
         )
+    }
+
+    private fun convertInstant(value: Instant): String {
+        return "'${value.toString().replace("T", " ").removeSuffix("Z")}'"
     }
 
 }

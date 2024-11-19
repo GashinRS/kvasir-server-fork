@@ -132,14 +132,6 @@ class GraphSlicesApi(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
         input: QueryInputImpl,
-        @QueryParam("atTimestamp") @Parameter(
-            description = "Query the state of the KG at the specified point in time.",
-            required = false
-        ) atTimestamp: Optional<Instant>,
-        @QueryParam("atChangeRequestId") @Parameter(
-            description = "Query the state of the KG when the specified change request was applied.",
-            required = false
-        ) atChangeRequestId: Optional<String>
     ): Uni<QueryResult> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
         val sliceId = uriInfo.absolutePath.toString()
@@ -147,7 +139,7 @@ class GraphSlicesApi(
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
                 .onItem().ifNotNull().transformToUni { slice ->
-                    executeQuery(podId, slice!!, input, atTimestamp.getOrNull(), atChangeRequestId.getOrNull())
+                    executeQuery(podId, slice!!, input)
                 }
         }
     }
@@ -166,14 +158,6 @@ class GraphSlicesApi(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
         input: QueryInputImpl,
-        @QueryParam("atTimestamp") @Parameter(
-            description = "Query the state of the KG at the specified point in time.",
-            required = false
-        ) atTimestamp: Optional<Instant>,
-        @QueryParam("atChangeRequestId") @Parameter(
-            description = "Query the state of the KG when the specified change request was applied.",
-            required = false
-        ) atChangeRequestId: Optional<String>
     ): Uni<Map<String, Any>> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
         val sliceId = uriInfo.absolutePath.toString()
@@ -181,7 +165,7 @@ class GraphSlicesApi(
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
                 .onItem().ifNotNull().transformToUni { slice ->
-                    executeQuery(podId, slice!!, input, atTimestamp.getOrNull(), atChangeRequestId.getOrNull()).map {
+                    executeQuery(podId, slice!!, input).map {
                         it.toJsonLD(slice.context)
                     }
                 }
@@ -210,9 +194,7 @@ class GraphSlicesApi(
     private fun executeQuery(
         podId: String,
         slice: Slice,
-        input: QueryInputImpl,
-        atTimestamp: Instant? = null,
-        atChangeRequestId: String? = null
+        input: QueryInputImpl
     ): Uni<QueryResult> {
         // Execute the query
         return knowledgeGraph.query(
@@ -224,8 +206,8 @@ class GraphSlicesApi(
                 input.operationName,
                 slice.targetGraphs,
                 slice.schema,
-                atTimestamp,
-                atChangeRequestId
+                input.atTimestamp,
+                input.atChangeRequest
             )
         )
     }

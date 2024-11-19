@@ -67,15 +67,12 @@ class ClickhouseKnowledgeGraph(
         )
     }
 
-//    override fun buildDataLoaderRegistry(podId: String, context: Map<String, Any>): DataLoaderRegistry {
-//        return SubOptimalResolver.getDataLoaderRegistry(podId, clickhouseClient, context)
-//    }
-
     override fun buildDatafetcher(
         podId: String,
-        context: Map<String, Any>
+        context: Map<String, Any>,
+        atTimestamp: Instant?
     ): DataFetcher<Any> {
-        return ConvertToSQLResolver.getDatafetcher(clickhouseClient, podId, context)
+        return ConvertToSQLResolver.getDatafetcher(clickhouseClient, podId, context, atTimestamp)
     }
 
     override fun buildUnionTypeResolver(

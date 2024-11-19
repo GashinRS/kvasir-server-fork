@@ -195,13 +195,14 @@ abstract class AbstractKnowledgeGraph(
 
     override fun query(request: QueryRequest): Uni<QueryResult> {
         val subscribeToExecutableSchema = if (request.predefinedSchema != null) {
-            Uni.createFrom().item(setupPredefinedSchema(request))
+            setupPredefinedSchema(request)
         } else {
             buildSchema(request.podId, request.context)
-                .map { generatedSchema ->
+                .chain { generatedSchema -> getRequestedStateAtTimestamp(request).map { it to generatedSchema } }
+                .map { (atTimestamp, generatedSchema) ->
                     val codeRegistry =
                         GraphQLCodeRegistry.newCodeRegistry()
-                            .defaultDataFetcher { _ -> buildDatafetcher(request.podId, request.context) }
+                            .defaultDataFetcher { _ -> buildDatafetcher(request.podId, request.context, atTimestamp) }
                     generatedSchema.unionTypes.forEach { unionType ->
                         codeRegistry.typeResolver(
                             unionType,
@@ -230,22 +231,40 @@ abstract class AbstractKnowledgeGraph(
         }
     }
 
-    protected open fun setupPredefinedSchema(request: QueryRequest): GraphQLSchema {
-        val typeDefinitionRegistry = SchemaParser().parse(request.predefinedSchema)
-        typeDefinitionRegistry.addKvasirDirectives()
-        val dynamicWiringFactory = object : WiringFactory {
+    private fun getRequestedStateAtTimestamp(request: QueryRequest): Uni<Instant> {
+        return when {
+            request.atTimestamp != null -> Uni.createFrom().item(request.atTimestamp)
+            request.atChangeRequestId != null -> getChange(
+                ChangeHistoryRequest(
+                    request.podId,
+                    changeRequestId = request.atChangeRequestId
+                )
+            )
+                .map { change -> change?.timestamp }
 
-            override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
-                return buildDatafetcher(request.podId, request.context)
-            }
-
-            // TODO: provide type resolvers for union and interface types
-
+            else -> Uni.createFrom().nullItem()
         }
-        val runtimeWiring = RuntimeWiring.newRuntimeWiring().wiringFactory(dynamicWiringFactory).build()
-        val executableSchema =
-            graphql.schema.idl.SchemaGenerator().makeExecutableSchema(typeDefinitionRegistry, runtimeWiring)
-        return executableSchema
+    }
+
+    protected open fun setupPredefinedSchema(request: QueryRequest): Uni<GraphQLSchema> {
+        return getRequestedStateAtTimestamp(request)
+            .map { atTimestamp ->
+                val typeDefinitionRegistry = SchemaParser().parse(request.predefinedSchema)
+                typeDefinitionRegistry.addKvasirDirectives()
+                val dynamicWiringFactory = object : WiringFactory {
+
+                    override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
+                        return buildDatafetcher(request.podId, request.context, atTimestamp)
+                    }
+
+                    // TODO: provide type resolvers for union and interface types
+
+                }
+                val runtimeWiring = RuntimeWiring.newRuntimeWiring().wiringFactory(dynamicWiringFactory).build()
+                val executableSchema =
+                    graphql.schema.idl.SchemaGenerator().makeExecutableSchema(typeDefinitionRegistry, runtimeWiring)
+                executableSchema
+            }
     }
 
     open fun buildSchema(podId: String, context: Map<String, Any>): Uni<SchemaGeneratorResult> {
@@ -301,7 +320,8 @@ abstract class AbstractKnowledgeGraph(
      */
     abstract fun buildDatafetcher(
         podId: String,
-        context: Map<String, Any>
+        context: Map<String, Any>,
+        atTimestamp: Instant?
     ): DataFetcher<Any>
 
     abstract fun buildUnionTypeResolver(
