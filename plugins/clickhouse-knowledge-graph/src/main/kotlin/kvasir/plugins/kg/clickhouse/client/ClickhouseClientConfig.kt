@@ -4,7 +4,7 @@ import io.smallrye.config.ConfigMapping
 import io.smallrye.config.WithDefault
 import java.util.*
 
-@ConfigMapping(prefix = "oblx.datastore.clickhouse")
+@ConfigMapping(prefix = "kvasir.kg.clickhouse")
 interface ClickhouseClientConfig {
     @WithDefault("localhost")
     fun host(): String
