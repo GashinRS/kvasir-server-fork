@@ -17,7 +17,7 @@ Request body:
 ```json
 {
   "@context": {
-    "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
     "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
@@ -68,7 +68,7 @@ Request body:
 ```json
 {
   "@context": {
-    "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
     "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
@@ -93,7 +93,7 @@ Request body:
 ```json
 {
   "@context": {
-    "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
     "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
@@ -131,7 +131,7 @@ Request body:
 ```json
 {
   "@context": {
-    "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
     "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
@@ -168,6 +168,7 @@ insert operation to add a triple with predicate `ex:knows`, referencing the Pers
 
 > **Tip**: Use the [JSONata Playground](https://try.jsonata.org/) to test your JSONata expressions, to see if it
 > transforms the with-query result into the desired output.
+> {style="tip"}
 
 ### Delete wildcard
 
@@ -182,7 +183,7 @@ Request body:
 ```json
 {
   "@context": {
-    "kss": "http://kvasir.discover.ilabt.imec.be/vocab#",
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
     "so": "http://schema.org/",
     "ex": "http://example.org/"
   },
@@ -275,7 +276,7 @@ near-realtime.
 This will return a stream of events, where each event is a JSON-LD instance containing information on changes made to
 the Pod's Knowledge Graph.
 
-```json
+```
 data:{"@context":{"kss":"http://localhost:8080/"},"@id":"http://localhost:8080/alice/changes/762066cd-78d5-4610-b1d2-589914abbd05","https://kvasir.discover.ilabt.imec.be/vocab#timestamp":"2024-11-18T12:17:13.395Z","https://kvasir.discover.ilabt.imec.be/vocab#insert":[{"@id":"http://example.org/alice","http://schema.org/email":[{"@value":"alice@example.org"}],"http://schema.org/givenName":[{"@value":"Alice"}],"http://schema.org/knows":[{"@id":"http://example.org/bob"}],"@type":["http://schema.org/Person"]},{"@id":"http://example.org/bob","http://schema.org/email":[{"@value":"bob@example.org"}],"http://schema.org/givenName":[{"@value":"Bob"}],"http://schema.org/knows":[{"@id":"http://example.org/risto"}],"@type":["http://schema.org/Person"]},{"@id":"http://example.org/risto","http://schema.org/givenName":[{"@value":"Risto"}],"@type":["http://example.org/Cat"]}]}
 
 data:{"@context":{"kss":"http://localhost:8080/"},"@id":"http://localhost:8080/alice/changes/f65997cb-80c2-466e-82f1-03ea48d72a91","https://kvasir.discover.ilabt.imec.be/vocab#timestamp":"2024-11-18T12:36:54.285Z","https://kvasir.discover.ilabt.imec.be/vocab#delete":[{"@id":"http://example.org/alice","http://schema.org/email":[{"@value":"alice@example.org"}]}]}

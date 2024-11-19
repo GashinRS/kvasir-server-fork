@@ -254,6 +254,28 @@ Returns:
 > **Tip**: you can refer to the annotated field using `it` in the filter directive. The filter expression in the
 > previous example can thus be abbreviated to `@filter(if: "it==Bob")`.
 
+## Time travel
+Since the Knowledge Graph retains a complete history of all changes, it is possible to query the state of the graph at a
+specific point in time. This is done by adding a field to the request body:
+
+* `atTimestamp`: Perform the query on the state of the Knowledge Graph at the specified ISO 8601 timestamp.
+* `atChangeRequest`: Perform the query on the state of the Knowledge Graph right after the specified change request was committed.
+
+For example, the following query retrieves the state of the Knowledge Graph at a change request:
+
+**POST** `http://localhost:8080/alice/query`
+
+```json
+{
+  "@context": {
+    "ex": "http://example.org/",
+    "schema": "http://schema.org/"
+  },
+  "query": "{ ex_Person { schema_givenName } }",
+  "atChangeRequest": "http://localhost:8080/alice/changes/716131e7-a373-4f31-8b4f-fc37c5af19cc"
+}
+```
+
 ## Introspection
 
 The Query endpoint implements the standard [GraphQL introspection mechanism](https://graphql.org/learn/introspection/).

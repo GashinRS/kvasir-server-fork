@@ -108,6 +108,7 @@ paths:
     get:
       tags:
       - Changes API
+      - Streaming API
       parameters:
       - name: podId
         in: path
@@ -123,6 +124,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ChangeReport"
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChangeRecords"
     post:
       tags:
       - Changes API
@@ -199,19 +205,6 @@ paths:
         required: true
         schema:
           type: string
-      - name: atChangeRequestId
-        in: query
-        description: Query the state of the KG when the specified change request was
-          applied.
-        required: false
-        schema:
-          type: string
-      - name: atTimestamp
-        in: query
-        description: Query the state of the KG at the specified point in time.
-        required: false
-        schema:
-          $ref: "#/components/schemas/Instant"
       requestBody:
         content:
           application/json:
@@ -358,19 +351,6 @@ paths:
         required: true
         schema:
           type: string
-      - name: atChangeRequestId
-        in: query
-        description: Query the state of the KG when the specified change request was
-          applied.
-        required: false
-        schema:
-          type: string
-      - name: atTimestamp
-        in: query
-        description: Query the state of the KG at the specified point in time.
-        required: false
-        schema:
-          $ref: "#/components/schemas/Instant"
       requestBody:
         content:
           application/json:
@@ -440,25 +420,6 @@ paths:
                 items:
                   type: object
                   additionalProperties: {}
-  /{podId}/stream:
-    get:
-      tags:
-      - Streaming API
-      parameters:
-      - name: podId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ChangeRecords"
   /{podId}/s3/{objectKey}:
     get:
       tags:
@@ -702,7 +663,7 @@ components:
           type: object
           additionalProperties: {}
           example:
-            kss: http://kvasir.discover.ilabt.imec.be/vocab#
+            kss: https://kvasir.discover.ilabt.imec.be/vocab#
             ex: http://example.org/
         kss:assert:
           description: List of assertions to be checked before applying the change
@@ -777,6 +738,17 @@ components:
           type: array
           items:
             type: string
+        atTimestamp:
+          description: Query the state of the KG at the specified point in time.
+          type: string
+          allOf:
+          - $ref: "#/components/schemas/Instant"
+          nullable: true
+        atChangeRequest:
+          description: Query the state of the KG when the specified change request
+            was applied.
+          type: string
+          nullable: true
     QueryInputWithContext:
       required:
       - query
@@ -804,6 +776,17 @@ components:
           type: array
           items:
             type: string
+        atTimestamp:
+          description: Query the state of the KG at the specified point in time.
+          type: string
+          allOf:
+          - $ref: "#/components/schemas/Instant"
+          nullable: true
+        atChangeRequest:
+          description: Query the state of the KG when the specified change request
+            was applied.
+          type: string
+          nullable: true
         '@context':
           description: The JSON-LD context for the query.
           type: object

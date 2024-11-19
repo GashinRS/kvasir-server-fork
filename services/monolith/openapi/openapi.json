@@ -146,7 +146,7 @@
     },
     "/{podId}/changes" : {
       "get" : {
-        "tags" : [ "Changes API" ],
+        "tags" : [ "Changes API", "Streaming API" ],
         "parameters" : [ {
           "name" : "podId",
           "in" : "path",
@@ -164,6 +164,14 @@
                   "type" : "array",
                   "items" : {
                     "$ref" : "#/components/schemas/ChangeReport"
+                  }
+                }
+              },
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ChangeRecords"
                   }
                 }
               }
@@ -274,22 +282,6 @@
           "required" : true,
           "schema" : {
             "type" : "string"
-          }
-        }, {
-          "name" : "atChangeRequestId",
-          "in" : "query",
-          "description" : "Query the state of the KG when the specified change request was applied.",
-          "required" : false,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "name" : "atTimestamp",
-          "in" : "query",
-          "description" : "Query the state of the KG at the specified point in time.",
-          "required" : false,
-          "schema" : {
-            "$ref" : "#/components/schemas/Instant"
           }
         } ],
         "requestBody" : {
@@ -494,22 +486,6 @@
           "schema" : {
             "type" : "string"
           }
-        }, {
-          "name" : "atChangeRequestId",
-          "in" : "query",
-          "description" : "Query the state of the KG when the specified change request was applied.",
-          "required" : false,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "name" : "atTimestamp",
-          "in" : "query",
-          "description" : "Query the state of the KG at the specified point in time.",
-          "required" : false,
-          "schema" : {
-            "$ref" : "#/components/schemas/Instant"
-          }
         } ],
         "requestBody" : {
           "content" : {
@@ -609,34 +585,6 @@
                   "items" : {
                     "type" : "object",
                     "additionalProperties" : { }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/{podId}/stream" : {
-      "get" : {
-        "tags" : [ "Streaming API" ],
-        "parameters" : [ {
-          "name" : "podId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/ChangeRecords"
                   }
                 }
               }
@@ -948,7 +896,7 @@
             "type" : "object",
             "additionalProperties" : { },
             "example" : {
-              "kss" : "http://kvasir.discover.ilabt.imec.be/vocab#",
+              "kss" : "https://kvasir.discover.ilabt.imec.be/vocab#",
               "ex" : "http://example.org/"
             }
           },
@@ -1025,6 +973,19 @@
             "items" : {
               "type" : "string"
             }
+          },
+          "atTimestamp" : {
+            "description" : "Query the state of the KG at the specified point in time.",
+            "type" : "string",
+            "allOf" : [ {
+              "$ref" : "#/components/schemas/Instant"
+            } ],
+            "nullable" : true
+          },
+          "atChangeRequest" : {
+            "description" : "Query the state of the KG when the specified change request was applied.",
+            "type" : "string",
+            "nullable" : true
           }
         }
       },
@@ -1055,6 +1016,19 @@
             "items" : {
               "type" : "string"
             }
+          },
+          "atTimestamp" : {
+            "description" : "Query the state of the KG at the specified point in time.",
+            "type" : "string",
+            "allOf" : [ {
+              "$ref" : "#/components/schemas/Instant"
+            } ],
+            "nullable" : true
+          },
+          "atChangeRequest" : {
+            "description" : "Query the state of the KG when the specified change request was applied.",
+            "type" : "string",
+            "nullable" : true
           },
           "@context" : {
             "description" : "The JSON-LD context for the query.",
