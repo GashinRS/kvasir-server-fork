@@ -1,29 +1,31 @@
 Technical preview of the Kvasir Data Storage Server
 
-# Running in dev mode
-
-To run the server in dev mode, you need Docker (for the dependencies Minio, Kafka
-and [Clickhouse](https://clickhouse.com)) and a Java 21 JDK.
-
-```bash
-docker compose up -d
-./gradlew :services:monolith:quarkusDev
-```
-
 # Running with Docker Compose
 
-When you don't need to build the code, a faster way to get a dev server (with persistent storage) up and running is to
-use Docker Compose.
+The fastest way to get a dev server (with persistent storage) up and running is to use Docker Compose.
 
-Download the folder [.deployment/docker-compose](./.deployment/docker-compose) to your local machine and run the
-following command:
+Clone this repository and run the following commands:
 
 ```bash
+cd .deployment/docker-compose
 docker compose up -d
 ```
 
 This will automatically create a pod at `http://localhost:8080/alice` for you to play with.
 The settings for this pod can be modified via the file `application.yaml` in the `kvasir-config` folder.
+
+# Running on Kubernetes
+(A guide will be added in the future)
+
+# Running in dev mode
+
+If you want to experiment with modifications to the code, you can run the server in dev mode via the gradle wrapper.
+This requires you to have Java JDK 21 installed.
+
+```bash
+docker compose up -d
+./gradlew :services:monolith:quarkusDev
+```
 
 # Documentation
 
