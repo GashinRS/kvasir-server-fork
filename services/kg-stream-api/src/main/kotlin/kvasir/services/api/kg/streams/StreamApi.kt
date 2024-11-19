@@ -42,7 +42,7 @@ class StreamApi(
     private val baseUri: String
 ) {
 
-    @Path("{podId}/stream")
+    @Path("{podId}/changes")
     @GET
     @RestStreamElementType(MediaType.APPLICATION_JSON)
     fun stream(@PathParam("podId") podIdParam: String): Multi<ChangeRecords> {
