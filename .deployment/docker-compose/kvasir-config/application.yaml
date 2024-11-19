@@ -1,0 +1,10 @@
+kvasir:
+  bootstrap:
+    pods:
+      - name: alice
+        default-context:
+          rdfs: http://www.w3.org/2000/01/rdf-schema#
+          xsd: http://www.w3.org/2001/XMLSchema#
+          schema: http://schema.org/
+          ex: http://example.org/
+        auto-ingest-rdf: true

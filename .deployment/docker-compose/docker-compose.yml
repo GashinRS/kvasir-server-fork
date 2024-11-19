@@ -1,0 +1,65 @@
+services:
+  kvasir:
+    # The Kvasir monolith bundles all Kvasir microservices into a single image (handy for development and testing)
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:latest
+    pull_policy: always
+    ports:
+      - "8080:8080"
+    volumes:
+      # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
+      - './kvasir-config:/home/jboss/config'
+    environment:
+      - KVASIR_KG_CLICKHOUSE_HOST=clickhouse
+      - KVASIR_KG_CLICKHOUSE_PORT=8123
+      - KVASIR_SERVICES_STORAGE_S3_HOST=minio
+      - KVASIR_SERVICES_STORAGE_S3_PORT=9000
+      - QUARKUS_MINIO_URL=http://minio:9000/
+      - QUARKUS_MINIO_SECURE=false
+      - QUARKUS_MINIO_ACCESS_KEY=kvasir
+      - QUARKUS_MINIO_SECRET_KEY=kvasirkvasir
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      clickhouse:
+        condition: service_started
+      minio:
+        condition: service_started
+      kafka:
+        condition: service_started
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8.4.13
+    ports:
+      - "8123:8123"
+      # TCP port for ClickHouse (should not be required externally)
+      #- "9000:9000"
+    volumes:
+      - 'clickhouse_data:/var/lib/clickhouse'
+      - './ch-config:/etc/clickhouse-server/users.d'
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+  minio:
+    image: docker.io/bitnami/minio:2024
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - 'minio_data:/bitnami/minio/data'
+    environment:
+      # Doubles as access key and secret key for the MinIO server
+      - MINIO_ROOT_USER=kvasir
+      - MINIO_ROOT_PASSWORD=kvasirkvasir
+  kafka:
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092
+      - --advertise-kafka-addr internal://kafka:9092
+      - --mode dev-container
+    image: redpandadata/redpanda:v23.3.4
+
+volumes:
+  clickhouse_data:
+    driver: local
+  minio_data:
+      driver: local
