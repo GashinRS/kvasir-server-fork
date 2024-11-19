@@ -10,7 +10,7 @@ variables:
   CONFIG_JSON_VERSION: 'master'
   GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Dorg.gradle.caching=true"
   GRADLE_USER_HOME: cache/
-  QUARKUS_JIB_BASE_JVM_IMAGE: "eclipse-temurin:21"
+  QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.stud.atlantis.ugent.be:5050/utils/docker/eclipse-temurin:21"
 
 .gradleChanges: &gradleChanges
   - "buildSrc/**/*"
