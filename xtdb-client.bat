@@ -1,1 +1,0 @@
-curl -s https://docs.xtdb.com/xtsql.py -O && python xtsql.py --url=http://localhost:6543
