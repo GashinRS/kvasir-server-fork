@@ -1,25 +1,23 @@
 package kvasir.plugins.kg.clickhouse
 
 import com.google.common.hash.Hashing
-import graphql.ExceptionWhileDataFetching
-import graphql.ExecutionResult
+import graphql.TypeResolutionEnvironment
 import graphql.schema.DataFetcher
+import graphql.schema.GraphQLObjectType
 import graphql.schema.GraphQLUnionType
 import graphql.schema.TypeResolver
 import io.quarkus.arc.All
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
-import io.vertx.core.json.JsonObject
 import jakarta.inject.Singleton
 import kvasir.definitions.kg.*
 import kvasir.definitions.messaging.Channels
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.graphql.ConvertToSQLResolver
-import kvasir.plugins.kg.clickhouse.graphql.NoResultsException
-import kvasir.plugins.kg.clickhouse.graphql.RDFClassTypeResolver
 import kvasir.plugins.kg.clickhouse.specs.*
 import kvasir.utils.kg.AbstractKnowledgeGraph
 import kvasir.utils.kg.KGPropertyKind
@@ -91,26 +89,6 @@ class ClickhouseKnowledgeGraph(
                     podId
                 )
             }.$META_DATA_TABLE GROUP BY type_uri"
-        )
-    }
-
-    override fun mapExecutionResult(request: QueryRequest, result: ExecutionResult): QueryResult {
-        // Use NonNullableValueCoercedAsNullException to filter out paths that have no results
-        val skipPositions = result.errors
-            .filter { it is ExceptionWhileDataFetching && it.exception is NoResultsException }
-            .groupBy { it.path.first() }
-            .mapValues { err -> err.value.map { it.path.drop(1).first() }.toSet() }
-        val filteredData = result?.getData<Map<String, Any>>()?.mapValues { entryPoint ->
-            skipPositions[entryPoint.key]?.let { positions ->
-                val values = entryPoint.value as List<Any>
-                values.mapIndexed { index, any -> if (index in positions) null else any }
-                    .filterNotNull()
-            } ?: entryPoint.value
-        }
-        return QueryResult(
-            data = filteredData,
-            errors = result.errors.filterNot { it is ExceptionWhileDataFetching && it.exception is NoResultsException }
-                .map { JsonObject.mapFrom(it).map }.takeIf { it.isNotEmpty() }
         )
     }
 
@@ -230,3 +208,13 @@ internal fun databaseFromPodId(podId: String): String {
     return Hashing.farmHashFingerprint64().hashString(podId, Charsets.UTF_8).toString()
 }
 
+class RDFClassTypeResolver(private val context: Map<String, Any>) : TypeResolver {
+    override fun getType(env: TypeResolutionEnvironment): GraphQLObjectType {
+        val target = env.getObject<Target>()
+        // TODO: Implement type resolution, for now just return the first type in the list
+        val prefixedTypeName = JsonLdHelper.compactUri(target.types.first(), context, "_")
+        return env.schema.getObjectType(prefixedTypeName)
+    }
+}
+
+data class Target(val id: String, val types: List<String>)
