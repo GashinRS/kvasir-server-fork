@@ -160,6 +160,26 @@ rewritten as:
 }
 ```
 
+### Context language-tag
+
+By default, Kvasir will return all possible values for language-tagged string literals. However, you can request a
+specific language
+by adding an entry for `@language` in the `@context` object. For example, the following query retrieves the name of a
+Person, only if it is in English (en) or when no language is specified:
+
+**POST** `http://localhost:8080/alice/query`
+
+```json
+{
+  "@context": {
+    "so": "http://schema.org/",
+    "ex": "http://example.org/",
+    "@language": "en"
+  },
+  "query": "{ ex_Person { so_givenName so_email } }"
+}
+```
+
 ### Arguments
 
 You can use GraphQL arguments to impose additional conditions on resources or linked resources. For example, the
@@ -255,11 +275,13 @@ Returns:
 > previous example can thus be abbreviated to `@filter(if: "it==Bob")`.
 
 ## Time travel
+
 Since the Knowledge Graph retains a complete history of all changes, it is possible to query the state of the graph at a
 specific point in time. This is done by adding a field to the request body:
 
 * `atTimestamp`: Perform the query on the state of the Knowledge Graph at the specified ISO 8601 timestamp.
-* `atChangeRequest`: Perform the query on the state of the Knowledge Graph right after the specified change request was committed.
+* `atChangeRequest`: Perform the query on the state of the Knowledge Graph right after the specified change request was
+  committed.
 
 For example, the following query retrieves the state of the Knowledge Graph at a change request:
 

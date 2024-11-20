@@ -12,6 +12,8 @@ For example, the following operation writes some RDF statements as JSON-LD into 
 
 **POST** `http://localhost:8080/alice/changes`
 
+Content-Type: `application/ld+json`
+
 Request body:
 
 ```json
@@ -52,16 +54,14 @@ model, so the changes may not be immediately visible in queries. However, the re
 which refers to the change request resource. This resource can be queried to check the status of the change request (
 see [Reviewing a specific change](#reviewing-a-specific-change)).
 
-> The data is stored in the default graph of the Knowledge Graph, unless the change request contains the key `kss:graph`
-> with the desired named graph IRI as value.
-> {style="note"}
-
 ### Delete mutation
 
 Delete mutations work similarly to insert mutations, but with a different keyword. For example, the following operation
 removes John's email-address from the pod of Alice.
 
 **POST** `http://localhost:8080/alice/changes`
+
+Content-Type: `application/ld+json`
 
 Request body:
 
@@ -87,6 +87,8 @@ Sometimes it can be useful to only transact a change request if a certain condit
 operation only inserts the statement if the email address of Alice is not already known.
 
 **POST** `http://localhost:8080/alice/changes`
+
+Content-Type: `application/ld+json`
 
 Request body:
 
@@ -118,6 +120,9 @@ type `kss:AssertEmptyResult`) or a
 non-empty result (in case of type `kss:AssertNonEmptyResult`). If one of the assertions fails, the entire transaction is
 discarded.
 
+Use the URL returned via the `Location` header to check the status of the change request. When the change resource
+is available on the server (remember: eventual consistency), you should see a `resultCode` of `ASSERTION_FAILED`.
+
 ### With clause
 
 The `kss:with` keyword can be used to bind a set of variables that can be used in the insert and delete operations. For
@@ -125,6 +130,8 @@ example, the following operation binds the id of a Person with the first name `A
 additional personal information in the insert operation:
 
 **POST** `http://localhost:8080/alice/changes`
+
+Content-Type: `application/ld+json`
 
 Request body:
 
@@ -137,7 +144,7 @@ Request body:
   },
   "kss:with": "{ ex_Person { id so_givenName @filter(if:\"it==Alice\") } }",
   "kss:insert": [
-    "{ \"@id\": ex_Person.id, \"ex:knows\": { \"@id\": \"ex:jdoe\" } }"
+    "{ \"@id\": ex_Person.id, \"ex:knows\": { \"@id\": \"ex:john\" } }"
   ]
 }
 ```
@@ -164,11 +171,17 @@ processed. Conceptually you could think of this being the following JSON object:
 ```
 
 You can then write a JSONata expression that extracts the `id` from the first element of the array and uses it in the
-insert operation to add a triple with predicate `ex:knows`, referencing the Person with id `ex:jdoe`.
+insert operation to add a triple with predicate `ex:knows`, referencing the Person with id `ex:john`.
 
 > **Tip**: Use the [JSONata Playground](https://try.jsonata.org/) to test your JSONata expressions, to see if it
 > transforms the with-query result into the desired output.
 > {style="tip"}
+
+Use the URL returned via the `Location` header to check the status of the change request. When the change resource
+is available on the server, you should see a `resultCode` of `COMMITTED`. To review the actual content that was inserted
+or deleted via the with-clause,
+you can view details by appending the path `/records` to the change request URL (see
+also: [Reviewing a specific change](#reviewing-a-specific-change)).
 
 ### Delete wildcard
 
@@ -177,6 +190,8 @@ wildcard expression. For example, the following operation deletes all triples th
 request.
 
 **POST** `http://localhost:8080/alice/changes`
+
+Content-Type: `application/ld+json`
 
 Request body:
 
@@ -200,7 +215,9 @@ A full log of the changes made to a pod's Knowledge Graph can be retrieved by qu
 
 **GET** `http://localhost:8080/alice/changes`
 
-This should return a `200 OK` response with a JSON object containing the change history of the pod.
+Accept: `application/ld+json`
+
+This should return a `200 OK` response with a JSON-LD object containing the change history of the pod.
 
 ```json
 {
@@ -239,7 +256,9 @@ You can query the status of a specific change request.
 
 **GET** `http://localhost:8080/alice/changes/f65997cb-80c2-466e-82f1-03ea48d72a91`
 
-This should return a `200 OK` response with a JSON object containing the details of the change request.
+Accept: `application/ld+json`
+
+This should return a `200 OK` response with a JSON-LD object containing the details of the change request.
 
 ```json
 {
@@ -264,6 +283,29 @@ values are:
 * `INTERNAL_ERROR`: The Change Request was not applied because of an internal error.
 
 In case of an error, the response will contain an `errorMessage` field with a description of the error.
+
+To review the actual content that was inserted or deleted, you can view details by appending the path `/records` to the
+change request URL.
+
+**GET** `http://localhost:8080/alice/changes/f65997cb-80c2-466e-82f1-03ea48d72a91/records`
+
+Accept: `application/ld+json`
+
+This should return a `200 OK` response with a JSON-LD object containing the records that were inserted or deleted.
+
+```json
+{
+  "@id": "http://localhost:8080/alice/changes/f65997cb-80c2-466e-82f1-03ea48d72a91",
+  "kss:delete": {
+    "@id": "http://example.org/john",
+    "http://schema.org/email": "jdoe@example.org"
+  },
+  "kss:timestamp": "2024-11-18T12:36:54.285Z",
+  "@context": {
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+  }
+}
+```
 
 ## Streaming changes
 

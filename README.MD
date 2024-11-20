@@ -43,4 +43,6 @@ any, please report them in the [Issues](https://gitlab.ilabt.imec.be/kvasir/kvas
 * Complete the GraphQL query model with more advanced features
 * Complete the subgraph (Slices) prototype implementation
 * Provide a decent cursor-based pagination mechanism
+  * E.g. via Link headers for REST APIs (Changes API, Slices API)
+  * E.g. via Relay-style pagination for GraphQL APIs
 * Optimize and harden the current prototype
