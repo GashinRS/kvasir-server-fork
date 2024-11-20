@@ -13,6 +13,7 @@ import graphql.schema.GraphQLTypeUtil
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.databaseFromPodId
@@ -49,11 +50,10 @@ object ConvertToSQLResolver {
                         }
                         .convert().toCompletionStage()
                 } else {
-                    // TODO: waarom wordt rdfs_label voor nested objects niet gemapt? (ondanks in SQL result) Is het het feit dat het geen array is? (en GraphQL wel een array verwacht?)
                     val source = env.getSource<Any?>()
                     val key = env.fieldDefinition.name
                     val value = when (source) {
-                        is Map<*, *> -> source["_$key"]
+                        is Map<*, *> -> source["_$key"]?:source[key]
                         is JsonObject -> source.getValue(key)
                         else -> null
                     }
@@ -119,9 +119,15 @@ class SQLConvertor(
         val joinField = "${name}_holder"
         val whereClause = listOfNotNull(
             "predicate = '${getFQName(field.name)}'",
-            atTimestamp?.let { "timestamp <= ${convertInstant(it)}" }
+            atTimestamp?.let { "timestamp <= ${convertInstant(it)}" },
+            context[JsonLdKeywords.language]?.let{ "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
-        return "${getJoinType(field)} (SELECT anyLast(subject) AS $joinField, anyLast(object) AS $name FROM $tableRef $whereClause GROUP BY $SORT_COLUMNS $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
+        return "${getJoinType(field)} (SELECT subject AS $joinField, object AS $name FROM $tableRef $whereClause GROUP BY ${
+            SORT_COLUMNS.joinToString(
+                prefix = "(",
+                postfix = ")"
+            )
+        } $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
     }
 
     fun relationFieldJoinStatement(field: Field, parentJoinField: String): String {
@@ -146,7 +152,12 @@ class SQLConvertor(
                 .joinToString { (a, b) -> "$a,$b" }
         return "${getJoinType(field)} (SELECT subject AS $joinField, map($mappedFields) as $name FROM $tableRef ${
             nestedFields.joinToString(" ") { it.joinStatement }
-        } $whereClause GROUP BY $SORT_COLUMNS $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
+        } $whereClause GROUP BY ${
+            SORT_COLUMNS.joinToString(
+                prefix = "(",
+                postfix = ")"
+            )
+        } $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
     }
 
     private fun getJoinType(field: Field): String =
