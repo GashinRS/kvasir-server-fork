@@ -25,10 +25,6 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import java.net.URI
-import java.time.Instant
-import java.util.Optional
-import java.util.UUID
-import kotlin.jvm.optionals.getOrNull
 
 @Path("")
 class GraphSlicesApi(
@@ -65,23 +61,31 @@ class GraphSlicesApi(
     )
     fun createSlice(@PathParam("podId") podId: String, input: SliceInput, @Context uriInfo: UriInfo): Uni<Response> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        return throw404IfPodNotFound(podStore, podId).chain { _ ->
-            // Generate shapes
-            val shacl = GraphQL2SHACL(input.schema, input.context).toSHACL()
-            val slice = input.toSlice(podId, shacl, uriInfo)
-            // Validate the schema
-            try {
-                SchemaValidator.validateSchema(slice.schema, slice.context)
-                sliceStore.persist(slice)
-                    .chain { _ -> sliceEventEmitter.send(SliceEvent(podId, slice.id, SliceEventType.CREATED)) }
-                    .map {
-                        Response.created(URI.create(slice.id)).build()
-                    }
-            } catch (e: Throwable) {
-                Uni.createFrom().failure(e)
-
+        return throw404IfPodNotFound(podStore, podId)
+            .chain { _ ->
+                // Generate shapes
+                val shacl = GraphQL2SHACL(input.schema, input.context).toSHACL()
+                val slice = input.toSlice(podId, shacl, uriInfo)
+                // A Slice with the same name should not exist
+                sliceStore.getById(podId, slice.id)
+                    .onItem().ifNotNull().failWith(ClientErrorException(Response.Status.CONFLICT))
+                    .onItem().ifNull().continueWith(slice)
             }
-        }
+            .chain { slice ->
+                slice!!
+                // Validate the schema
+                try {
+                    SchemaValidator.validateSchema(slice.schema, slice.context)
+                    sliceStore.persist(slice)
+                        .chain { _ -> sliceEventEmitter.send(SliceEvent(podId, slice.id, SliceEventType.CREATED)) }
+                        .map {
+                            Response.created(URI.create(slice.id)).build()
+                        }
+                } catch (e: Throwable) {
+                    Uni.createFrom().failure(e)
+
+                }
+            }
     }
 
     @Tag(name = ApiDocTags.PODS_API)
@@ -227,7 +231,7 @@ data class SliceInput(
 ) {
     fun toSlice(podId: String, shacl: String, uriInfo: UriInfo): Slice {
         return Slice(
-            id = uriInfo.absolutePathBuilder.path(UUID.randomUUID().toString()).build().toString(),
+            id = uriInfo.absolutePathBuilder.path(name).build().toString(),
             context = context,
             podId = podId,
             name = name,
