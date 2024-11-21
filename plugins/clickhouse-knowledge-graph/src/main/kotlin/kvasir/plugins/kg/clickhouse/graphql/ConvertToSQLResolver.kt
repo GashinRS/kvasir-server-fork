@@ -54,7 +54,7 @@ object ConvertToSQLResolver {
                     val source = env.getSource<Any?>()
                     val key = env.fieldDefinition.name
                     val value = when (source) {
-                        is Map<*, *> -> source["_$key"]?:source[key]
+                        is Map<*, *> -> source["_$key"] ?: source[key]
                         is JsonObject -> source.getValue(key)
                         else -> null
                     }
@@ -84,6 +84,8 @@ class SQLConvertor(
 
     fun toSQL(): SQLQuery {
         val outputType = GraphQLTypeUtil.unwrapAll(env.fieldDefinition.type) as GraphQLDirectiveContainer
+        val limit = limitStatement(env.field)
+        val orderBy = orderByStatement(env.field, "_")
         val whereClause = listOfNotNull(
             typeFilter(listOf(getFQName(outputType))),
             getNodeFilter(env.field),
@@ -111,7 +113,7 @@ class SQLConvertor(
         return SQLQuery(
             "SELECT $projection FROM $tableRef ${
                 nestedFields.joinToString(" ") { it.joinStatement }
-            } $whereClause GROUP BY subject", listOf("_id") + nestedFields.map { "_${it.field.name}" }
+            } $whereClause GROUP BY subject $orderBy $limit", listOf("_id") + nestedFields.map { "_${it.field.name}" }
         )
     }
 
@@ -121,7 +123,7 @@ class SQLConvertor(
         val whereClause = listOfNotNull(
             "predicate = '${getFQName(field.name)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
-            context[JsonLdKeywords.language]?.let{ "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
+            context[JsonLdKeywords.language]?.let { "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
         return "${getJoinType(field)} (SELECT subject AS $joinField, object AS $name FROM $tableRef $whereClause GROUP BY ${
             SORT_COLUMNS.joinToString(
@@ -135,6 +137,8 @@ class SQLConvertor(
         val name = field.name
         val joinField = "${name}_holder"
         val nestedFields = getNestedFields(field, "object")
+        val limit = limitStatement(field)
+        val orderBy = orderByStatement(field)
         val whereClause = listOfNotNull(
             "predicate = '${getFQName(field.name)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
@@ -158,7 +162,21 @@ class SQLConvertor(
                 prefix = "(",
                 postfix = ")"
             )
-        } $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
+        } $COLLAPSE_STATE_EXPR $orderBy $limit) ${name}_join ON $parentJoinField = $joinField"
+    }
+
+    private fun limitStatement(field: Field): String {
+        return (field.arguments.find { it.name == "first" }?.value as? IntValue)?.value?.let { limit ->
+            val skip = (field.arguments.find { it.name == "skip" }?.value as? IntValue)?.value ?: 0
+            "LIMIT $limit OFFSET $skip"
+        } ?: ""
+    }
+
+    private fun orderByStatement(field: Field, prefix: String = ""): String {
+        return field.arguments.find { it.name == "orderBy" }?.let {
+            val fields = (it.value as ArrayValue).values.map { (it as StringValue).value }
+            "ORDER BY ${fields.joinToString { prefix + if (it.startsWith("-")) "${it.substring(1)} DESC" else it.toString() }} "
+        } ?: ""
     }
 
     private fun getJoinType(field: Field): String =

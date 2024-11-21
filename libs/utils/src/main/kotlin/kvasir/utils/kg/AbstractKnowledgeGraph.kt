@@ -55,7 +55,7 @@ abstract class AbstractKnowledgeGraph(
             GraphQLArgument.newArgument().name("id").type(GraphQLList.list(GraphQLID)).build(),
             GraphQLArgument.newArgument().name("first").type(GraphQLInt).build(),
             GraphQLArgument.newArgument().name("skip").type(GraphQLInt).build(),
-            GraphQLArgument.newArgument().name("orderBy").type(GraphQLString).build()
+            GraphQLArgument.newArgument().name("orderBy").type(GraphQLList.list(GraphQLString)).build()
         )
     }
 
