@@ -23,9 +23,14 @@ import kvasir.utils.kg.AbstractKnowledgeGraph
 import kvasir.utils.kg.KGPropertyKind
 import kvasir.utils.kg.KGType
 import kvasir.utils.kg.MetadataEntry
+import kvasir.utils.string.decodeB64
+import kvasir.utils.string.encodeB64
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
 import java.time.Instant
+
+private const val MAX_PAGE_SIZE_RECORDS = 25000
+private const val MAX_PAGE_SIZE_CHANGE_REPORTS = 250
 
 @Singleton
 class ClickhouseKnowledgeGraph(
@@ -122,19 +127,28 @@ class ClickhouseKnowledgeGraph(
         return clickhouseClient.insert(MetadataInsertRecordSpec(databaseFromPodId(podId)), metadataEntries)
     }
 
-    override fun listChanges(request: ChangeHistoryRequest): Uni<List<ChangeReport>> {
+    override fun listChanges(request: ChangeHistoryRequest): Uni<PagedResult<ChangeReport>> {
+        val pageSize = request.pageSize.coerceAtMost(MAX_PAGE_SIZE_CHANGE_REPORTS)
+        val offset = request.cursor?.let { OffsetBasedCursor.fromString(it) }?.offset ?: 0
         val sql =
             "SELECT id, slice_id, timestamp, nr_of_inserts, nr_of_deletes, result_code, error_message FROM ${
                 databaseFromPodId(
                     request.podId
                 )
-            }.$CHANGE_LOG_TABLE ORDER BY timestamp DESC"
+            }.$CHANGE_LOG_TABLE ORDER BY (timestamp, id) DESC LIMIT ${pageSize + 1} OFFSET $offset"
         return clickhouseClient.query(
             GenericQuerySpec(
                 databaseFromPodId(request.podId), CHANGE_LOG_TABLE,
                 CHANGE_LOG_COLUMNS
             ), sql
-        ).map { results -> results.map { resultToChangeReport(request.podId, it) } }
+        ).map { results ->
+            val processedResults = results.map { resultToChangeReport(request.podId, it) }
+            PagedResult(
+                items = processedResults.take(pageSize),
+                nextCursor = if (processedResults.size > pageSize) OffsetBasedCursor(offset + pageSize).encode() else null,
+                previousCursor = (offset - pageSize).takeIf { it >= 0 }?.let { OffsetBasedCursor(it).encode() }
+            )
+        }
     }
 
     override fun getChange(request: ChangeHistoryRequest): Uni<ChangeReport?> {
@@ -154,16 +168,35 @@ class ClickhouseKnowledgeGraph(
         }
     }
 
-    override fun getChangeRecords(request: ChangeHistoryRequest): Uni<List<ChangeRecord>> {
+    override fun getChangeRecords(request: ChangeHistoryRequest): Uni<PagedResult<ChangeRecord>> {
+        val pageSize = request.pageSize.coerceAtMost(MAX_PAGE_SIZE_RECORDS)
+        val offset = request.cursor?.let { OffsetBasedCursor.fromString(it) }?.offset ?: 0
+        val whereClause = listOfNotNull(
+            "change_request_id = '${request.changeRequestId}'"
+        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE (", ")") ?: ""
         val sql =
-            "SELECT * FROM ${databaseFromPodId(request.podId)}.$DATA_TABLE WHERE change_request_id = '${request.changeRequestId}'"
+            "SELECT * FROM ${databaseFromPodId(request.podId)}.$DATA_TABLE $whereClause LIMIT ${pageSize + 1} OFFSET $offset"
         return clickhouseClient.query(GenericQuerySpec(databaseFromPodId(request.podId), DATA_TABLE, DATA_COLUMNS), sql)
-            .map { results -> results.map { resultToChangeRecord(it) } }
+            .map { results ->
+                val processedResults = results.map { resultToChangeRecord(it) }
+                PagedResult(
+                    items = processedResults.take(pageSize),
+                    nextCursor = if (processedResults.size > pageSize) OffsetBasedCursor(offset + pageSize).encode() else null,
+                    previousCursor = (offset - pageSize).takeIf { it >= 0 }?.let { OffsetBasedCursor(it).encode() }
+                )
+            }
     }
 
     override fun streamChangeRecords(request: ChangeHistoryRequest): Multi<ChangeRecord> {
-        // TODO: Implement via cursor-based paging
-        return getChangeRecords(request).onItem().transformToMulti { t -> Multi.createFrom().iterable(t) }
+        return Multi.createBy().repeating().uni({ request }, { request ->
+            getChangeRecords(request).map { result ->
+                request.copy(cursor = result.nextCursor)
+                result
+            }
+        })
+            .whilst { it.nextCursor != null }
+            .map { it.items }
+            .onItem().disjoint()
     }
 
     override fun rollback(request: ChangeRollbackRequest): Uni<Void> {
@@ -218,3 +251,19 @@ class RDFClassTypeResolver(private val context: Map<String, Any>) : TypeResolver
 }
 
 data class Target(val id: String, val types: List<String>)
+
+// TODO: replace with a generic ordering-based implementation (to optimize for performance)
+class OffsetBasedCursor(val offset: Long) {
+
+    companion object {
+
+        fun fromString(cursor: String): OffsetBasedCursor? {
+            return cursor.decodeB64().toLongOrNull()?.let { OffsetBasedCursor(it) }
+        }
+
+    }
+
+    fun encode(): String {
+        return offset.toString().encodeB64()
+    }
+}

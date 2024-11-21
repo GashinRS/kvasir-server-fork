@@ -81,6 +81,10 @@ Request body:
 }
 ```
 
+<warning>
+When a change request includes both insert and delete statements, the delete statements are always executed first.
+</warning>
+
 ### Assertions
 
 Sometimes it can be useful to only transact a change request if a certain condition holds. For example, the following

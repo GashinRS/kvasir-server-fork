@@ -19,11 +19,11 @@ interface KnowledgeGraph {
 
     fun query(request: QueryRequest): Uni<QueryResult>
 
-    fun listChanges(request: ChangeHistoryRequest): Uni<List<ChangeReport>>
+    fun listChanges(request: ChangeHistoryRequest): Uni<PagedResult<ChangeReport>>
 
     fun getChange(request: ChangeHistoryRequest): Uni<ChangeReport?>
 
-    fun getChangeRecords(request: ChangeHistoryRequest): Uni<List<ChangeRecord>>
+    fun getChangeRecords(request: ChangeHistoryRequest): Uni<PagedResult<ChangeRecord>>
 
     fun streamChangeRecords(request: ChangeHistoryRequest): Multi<ChangeRecord>
 
@@ -205,7 +205,9 @@ data class ChangeHistoryRequest(
     val sliceId: String? = null,
     val fromTimestamp: Instant? = null,
     val toTimestamp: Instant? = null,
-    val changeRequestId: String? = null
+    val changeRequestId: String? = null,
+    val cursor: String? = null,
+    val pageSize: Int = 100
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -329,3 +331,10 @@ interface ChangeResultSliceFilter : Predicate<List<Map<String, Any>>> {
     fun sliceId(): String
 
 }
+
+data class PagedResult<T>(
+    val items: List<T>,
+    val nextCursor: String? = null,
+    val previousCursor: String? = null,
+    val totalCount: Long? = null
+)

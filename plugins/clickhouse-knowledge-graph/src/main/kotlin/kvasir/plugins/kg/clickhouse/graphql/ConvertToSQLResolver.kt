@@ -20,6 +20,7 @@ import kvasir.plugins.kg.clickhouse.databaseFromPodId
 import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
+import kvasir.plugins.kg.clickhouse.utils.ClickhouseUtils
 import kvasir.utils.kg.AbstractKnowledgeGraph
 import java.time.Instant
 
@@ -119,7 +120,7 @@ class SQLConvertor(
         val joinField = "${name}_holder"
         val whereClause = listOfNotNull(
             "predicate = '${getFQName(field.name)}'",
-            atTimestamp?.let { "timestamp <= ${convertInstant(it)}" },
+            atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             context[JsonLdKeywords.language]?.let{ "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
         return "${getJoinType(field)} (SELECT subject AS $joinField, object AS $name FROM $tableRef $whereClause GROUP BY ${
@@ -136,7 +137,7 @@ class SQLConvertor(
         val nestedFields = getNestedFields(field, "object")
         val whereClause = listOfNotNull(
             "predicate = '${getFQName(field.name)}'",
-            atTimestamp?.let { "timestamp <= ${convertInstant(it)}" },
+            atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             getNodeFilter(field)?.let { GraphQLFilterVisitor2(context).visitNode(it) },
             getArgsFilter(field)?.let {
                 GraphQLFilterVisitor2(context).visitNode(
@@ -312,10 +313,6 @@ class SQLConvertor(
                 ComparisonNode(RSQLOperators.IN, "object", requiredTypes)
             )
         )
-    }
-
-    private fun convertInstant(value: Instant): String {
-        return "'${value.toString().replace("T", " ").removeSuffix("Z")}'"
     }
 
 }

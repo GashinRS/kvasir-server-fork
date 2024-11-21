@@ -1,7 +1,6 @@
 package kvasir.plugins.kg.clickhouse.graphql
 
 import cz.jirutka.rsql.parser.ast.*
-import graphql.language.Field
 import kvasir.definitions.rdf.JsonLdHelper
 
 /**
@@ -55,7 +54,7 @@ class GraphQLFilterVisitor(private val context: Map<String, Any>) :
             value.toDoubleOrNull() != null -> value
             else -> {
                 // If getFQName returns null, use the original value
-                val fqValue = JsonLdHelper.getFQName(value, context, ":")?: value
+                val fqValue = JsonLdHelper.getFQName(value, context, ":") ?: value
                 "'$fqValue'"
             }
         }
@@ -104,7 +103,7 @@ class GraphQLFilterVisitor2(private val context: Map<String, Any>) :
             value.toDoubleOrNull() != null -> value
             else -> {
                 // If getFQName returns null, use the original value
-                val fqValue = JsonLdHelper.getFQName(value, context, ":")?: value
+                val fqValue = JsonLdHelper.getFQName(value, context, ":") ?: value
                 "'$fqValue'"
             }
         }
@@ -113,7 +112,8 @@ class GraphQLFilterVisitor2(private val context: Map<String, Any>) :
 
 internal const val SELF_REF_SELECTOR = "it"
 
-class SelectorReplacingFilterVisitor(val currentSelector: String, val newSelector: String) : NoArgRSQLVisitorAdapter<Node>() {
+class SelectorReplacingFilterVisitor(val currentSelector: String, val newSelector: String) :
+    NoArgRSQLVisitorAdapter<Node>() {
 
     override fun visit(node: AndNode): Node {
         return AndNode(node.children.map { visitNode(it) })
@@ -134,6 +134,51 @@ class SelectorReplacingFilterVisitor(val currentSelector: String, val newSelecto
             is OrNode -> visit(node)
             is ComparisonNode -> visit(node)
             else -> throw IllegalArgumentException("Unknown node type: $node")
+        }
+    }
+}
+
+class GenericRSQLToSQLVisitor() : NoArgRSQLVisitorAdapter<String>() {
+    override fun visit(and: AndNode): String {
+        return and.joinToString(" AND ", "(", ")") { visitNode(it) }
+    }
+
+    override fun visit(or: OrNode): String {
+        return or.joinToString(" OR ", "(", ")") { visitNode(it) }
+    }
+
+    override fun visit(node: ComparisonNode): String {
+        val arguments = node.arguments.map { toSQLValue(it) }
+        return when (node.operator) {
+            RSQLOperators.EQUAL -> "${node.selector} = ${arguments[0]}"
+            RSQLOperators.NOT_EQUAL -> "${node.selector} != ${arguments[0]}"
+            RSQLOperators.GREATER_THAN -> "${node.selector} > ${arguments[0]}"
+            RSQLOperators.GREATER_THAN_OR_EQUAL -> "${node.selector} >= ${arguments[0]}"
+            RSQLOperators.LESS_THAN -> "${node.selector} < ${arguments[0]}"
+            RSQLOperators.LESS_THAN_OR_EQUAL -> "${node.selector} <= ${arguments[0]}"
+            RSQLOperators.IN -> "${node.selector} IN (${arguments.joinToString(", ")})"
+            RSQLOperators.NOT_IN -> "${node.selector} NOT IN (${arguments.joinToString(", ")})"
+            else -> throw IllegalArgumentException("Unknown operator: ${node.operator}")
+        }
+    }
+
+    fun visitNode(node: Node): String {
+        return when (node) {
+            is AndNode -> visit(node)
+            is OrNode -> visit(node)
+            is ComparisonNode -> visit(node)
+            else -> throw IllegalArgumentException("Unknown node type: $node")
+        }
+    }
+
+    private fun toSQLValue(value: String): String {
+        return when {
+            value.toBooleanStrictOrNull() != null -> value
+            value.toLongOrNull() != null -> value
+            value.toDoubleOrNull() != null -> value
+            else -> {
+                "'$value'"
+            }
         }
     }
 }
