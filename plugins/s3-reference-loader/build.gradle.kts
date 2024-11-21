@@ -11,6 +11,5 @@ dependencies {
     implementation("org.eclipse.rdf4j:rdf4j-rio-jsonld:5.0.2")
     implementation("org.eclipse.rdf4j:rdf4j-rio-n3:5.0.2")
     implementation("org.eclipse.rdf4j:rdf4j-rio-ntriples:5.0.2")
-    implementation("io.quarkiverse.minio:quarkus-minio:3.7.5")
     testImplementation(project(":plugins:kafka-channel-initializer"))
 }

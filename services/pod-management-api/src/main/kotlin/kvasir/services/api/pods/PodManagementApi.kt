@@ -1,16 +1,12 @@
 package kvasir.services.api.pods
 
+import io.minio.MakeBucketArgs
+import io.minio.MinioAsyncClient
+import io.minio.SetBucketVersioningArgs
+import io.minio.messages.VersioningConfiguration
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
-import jakarta.ws.rs.Consumes
-import jakarta.ws.rs.DELETE
-import jakarta.ws.rs.GET
-import jakarta.ws.rs.NotFoundException
-import jakarta.ws.rs.POST
-import jakarta.ws.rs.PUT
-import jakarta.ws.rs.Path
-import jakarta.ws.rs.PathParam
-import jakarta.ws.rs.Produces
+import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
@@ -21,6 +17,7 @@ import kvasir.definitions.kg.PodStore
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 
@@ -28,6 +25,7 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 @Path((""))
 class PodManagementApi(
     private val podStore: PodStore,
+    private val minioClient: MinioAsyncClient,
     @Channel(Channels.POD_EVENT_PUBLISH) private val podEventEmitter: MutinyEmitter<PodEvent>,
     private val uriInfo: UriInfo
 ) {
@@ -42,6 +40,24 @@ class PodManagementApi(
                 Uni.createFrom().item(Response.status(Response.Status.CONFLICT).build())
             } else {
                 podStore.persist(Pod(podId, input.configuration))
+                    .chain { _ ->
+                        // Initialize a new S3 bucket for the pod
+                        Uni.createFrom().completionStage(
+                            minioClient.makeBucket(
+                                MakeBucketArgs.builder().bucket(S3Utils.getBucket(podId)).build()
+                            )
+                        ).chain { _ ->
+                            // Enable versioning for the bucket
+                            Uni.createFrom().completionStage(
+                                minioClient.setBucketVersioning(
+                                    SetBucketVersioningArgs.builder()
+                                        .bucket(S3Utils.getBucket(podId))
+                                        .config(VersioningConfiguration(VersioningConfiguration.Status.ENABLED, true))
+                                        .build()
+                                )
+                            )
+                        }
+                    }
                     .chain { _ -> podEventEmitter.send(PodEvent(PodEventType.CREATED, input.name)) }
                     .map { Response.created(uriInfo.absolutePathBuilder.path(input.name).build()).build() }
             }

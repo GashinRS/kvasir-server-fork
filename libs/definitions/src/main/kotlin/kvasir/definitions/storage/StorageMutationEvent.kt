@@ -6,7 +6,7 @@ data class StorageMutationEvent(
     val objectId: String,
     val externalObjectUri: String,
     val internalStorageUri: String,
-    val versionId: String? = null,
+    val versionId: String,
     val mutationType: StorageMutationEventType
 )
 

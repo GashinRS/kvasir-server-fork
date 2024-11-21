@@ -1,9 +1,12 @@
 package kvasir.services.storage.processors.rdf
 
 import io.minio.GetObjectArgs
+import io.minio.ListObjectsArgs
 import io.minio.MinioAsyncClient
+import io.minio.messages.Item
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
+import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.kg.ChangeRequest
@@ -15,7 +18,7 @@ import kvasir.definitions.storage.StorageMutationEventType
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.eclipse.microprofile.reactive.messaging.Outgoing
-import java.util.UUID
+import java.util.*
 
 /**
  * Processor that listens for storage mutations on files that contain RDF data
@@ -23,7 +26,8 @@ import java.util.UUID
  */
 @ApplicationScoped
 class RDFStorageMutationListener(
-    private val minioClient: MinioAsyncClient
+    private val minioClient: MinioAsyncClient,
+    private val vertx: Vertx
 ) {
 
     @Incoming("storage_mutations_subscribe")
@@ -33,12 +37,32 @@ class RDFStorageMutationListener(
             .onItem()
             .transformToUniAndConcatenate { event ->
                 val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
+
+                // If the operation is of type DELETE_OBJECT, we need to look up the version previous to the deletion
+                if (event.mutationType == StorageMutationEventType.DELETE_OBJECT) {
+                    vertx.executeBlocking {
+                        val versions: List<io.minio.Result<Item>> = minioClient.listObjects(
+                            ListObjectsArgs.builder().bucket(bucketId).prefix(event.objectId)
+                                .includeVersions(true).build()
+                        ).toList().sortedByDescending { it.get().lastModified() }
+                        versions.find { it.get().versionId() == event.versionId }?.let {
+                            val previousVersion = versions[versions.indexOf(it) + 1]
+                            event.copy(versionId = previousVersion.get().versionId())
+                        }
+                    }
+                } else {
+                    Uni.createFrom().item(event)
+                }
+            }
+            .onItem()
+            .transformToUniAndConcatenate { event ->
+                val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
                 Uni.createFrom().completionStage(
                     minioClient.getObject(
                         GetObjectArgs.builder().bucket(bucketId).`object`(event.objectId).versionId(event.versionId)
                             .build()
                     )
-                ).map { resp -> Pair(event, resp) }
+                ).map { event to it }
             }
             .filter { (_, resp) ->
                 // Only process objects that are RDF data
@@ -54,7 +78,8 @@ class RDFStorageMutationListener(
                         insertFromRefs = listOf(
                             mapOf(
                                 JsonLdKeywords.type to KvasirVocab.S3Reference,
-                                KvasirVocab.Key to event.objectId
+                                KvasirVocab.key to event.objectId,
+                                KvasirVocab.versionId to event.versionId
                             )
                         ),
                         deleteFromRefs = emptyList()
@@ -67,7 +92,8 @@ class RDFStorageMutationListener(
                         deleteFromRefs = listOf(
                             mapOf(
                                 JsonLdKeywords.type to KvasirVocab.S3Reference,
-                                KvasirVocab.Key to event.objectId
+                                KvasirVocab.key to event.objectId,
+                                KvasirVocab.versionId to event.versionId
                             )
                         )
                     )

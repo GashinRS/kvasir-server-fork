@@ -12,7 +12,6 @@ dependencies {
     implementation("org.eclipse.rdf4j:rdf4j-rio-jsonld:5.0.2")
     implementation("org.eclipse.rdf4j:rdf4j-rio-n3:5.0.2")
     implementation("org.eclipse.rdf4j:rdf4j-rio-ntriples:5.0.2")
-    implementation("io.quarkiverse.minio:quarkus-minio:3.7.5")
     implementation("io.github.nstdio:rsql-parser:2.3.2")
     implementation("io.smallrye.reactive:smallrye-mutiny-vertx-web-client")
     testImplementation(project(":plugins:kafka-channel-initializer"))

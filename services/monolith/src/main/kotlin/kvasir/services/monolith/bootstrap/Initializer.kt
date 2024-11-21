@@ -3,6 +3,8 @@ package kvasir.services.monolith.bootstrap
 import io.minio.BucketExistsArgs
 import io.minio.MakeBucketArgs
 import io.minio.MinioClient
+import io.minio.SetBucketVersioningArgs
+import io.minio.messages.VersioningConfiguration
 import io.quarkus.logging.Log
 import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.event.Observes
@@ -29,6 +31,11 @@ class Initializer(
             if (!minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketId).build())) {
                 Log.debug("Creating bucket '$bucketId' for pod '$podId'")
                 minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucketId).build())
+                minioClient.setBucketVersioning(
+                    SetBucketVersioningArgs.builder().bucket(bucketId).config(
+                        VersioningConfiguration(VersioningConfiguration.Status.ENABLED, false)
+                    ).build()
+                )
             }
 
             Log.debug("Initializing database entry for pod '$podId'")

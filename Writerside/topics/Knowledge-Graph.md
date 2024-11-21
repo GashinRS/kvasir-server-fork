@@ -16,4 +16,5 @@ publishing them to a message queue. The changes are then applied to the Knowledg
 it easier to handle large volumes of changes, while ensuring consistency.
 
 Finally, this design supports other processes to subscribe to the message queue and react to changes in the Knowledge
-Graph. This enables real-time processing of data and facilitates the integration with other systems.
+Graph. This enables real-time processing of data and facilitates the integration with other systems (
+see [](Changes.md#streaming-changes)).

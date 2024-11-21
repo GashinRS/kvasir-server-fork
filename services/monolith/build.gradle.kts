@@ -12,5 +12,4 @@ dependencies {
     implementation(project(":services:pod-management-api"))
     implementation(project(":services:storage-api"))
     implementation(project(":services:simple-rdf-ingester"))
-    implementation("io.quarkiverse.minio:quarkus-minio:3.7.5")
 }

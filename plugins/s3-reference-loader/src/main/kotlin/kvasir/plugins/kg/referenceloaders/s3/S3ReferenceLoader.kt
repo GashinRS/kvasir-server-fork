@@ -26,10 +26,15 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
     }
 
     override fun loadReference(podOrSliceId: String, reference: Map<String, Any>): Multi<RDFStatement> {
-        val key = reference[KvasirVocab.Key] as String
+        val key = reference[KvasirVocab.key] as String
+        val versionId = reference[KvasirVocab.versionId] as String
         val bucketId = S3Utils.getBucket(podOrSliceId)
         return Uni.createFrom()
-            .future(minioClient.getObject(GetObjectArgs.builder().bucket(bucketId).`object`(key).build()))
+            .future(
+                minioClient.getObject(
+                    GetObjectArgs.builder().bucket(bucketId).`object`(key).versionId(versionId).build()
+                )
+            )
             .onItem().transformToMulti { resp ->
                 // TODO: do we need to set a baseURI here?
                 Multi.createFrom().iterable(QueryResults.parseGraphBackground(resp, null, parseLang(resp)))

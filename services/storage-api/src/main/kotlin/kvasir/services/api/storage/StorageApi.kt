@@ -48,10 +48,10 @@ class StorageApi(
         router.route("/:podId/s3/*").handler { ctx ->
             proxy.handle(ctx.request())
         }
-
-        router.route("/:podId/slices/:sliceId/s3/*").handler { ctx ->
-            proxy.handle(ctx.request())
-        }
+// Disable Slice-specific S3 for now
+//        router.route("/:podId/slices/:sliceId/s3/*").handler { ctx ->
+//            proxy.handle(ctx.request())
+//        }
     }
 
 }

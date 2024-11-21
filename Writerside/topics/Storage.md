@@ -43,8 +43,11 @@ Hello World!
     </category>
 </seealso>
 
-## Slice-specific storage
+[//]: # (## Slice-specific storage)
 
-Low-level S3 storage is also available for individual slices. The base path for slice storage is
-`/{podId}/slices/{sliceId}/s3`.
-This allows for validating data according to the slice's schema when e.g. uploading a turtle file to this location.
+[//]: # ()
+[//]: # (Low-level S3 storage is also available for individual slices. The base path for slice storage is)
+
+[//]: # (`/{podId}/slices/{sliceId}/s3`.)
+
+[//]: # (This allows for validating data according to the slice's schema when e.g. uploading a turtle file to this location.)

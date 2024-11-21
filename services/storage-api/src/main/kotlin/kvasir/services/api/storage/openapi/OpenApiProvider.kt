@@ -41,7 +41,7 @@ class OpenApiProvider : OASFilter {
             openAPI.paths = PathsImpl()
         }
         generateS3Operations(openAPI, "/{podId}/s3/{objectKey}", "the specified pod's S3 storage")
-        generateS3Operations(openAPI, "/{podId}/slices/{sliceId}/s3/{objectKey}", "the specified slice's S3 storage")
+        //generateS3Operations(openAPI, "/{podId}/slices/{sliceId}/s3/{objectKey}", "the specified slice's S3 storage")
     }
 
     private fun generateS3Operations(
