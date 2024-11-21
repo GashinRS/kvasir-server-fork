@@ -249,36 +249,3 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
     }
 
 }
-
-fun main() {
-    val shacl = """
-        @prefix sh: <http://www.w3.org/ns/shacl#> .
-        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-        @prefix ex: <http://example.org/> .
-        @prefix dash: <http://datashapes.org/dash#> .
-        @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-        
-        ex:SomeShape a sh:NodeShape ;
-            sh:target dash:AllSubjects ;
-            sh:property [
-                sh:path rdf:type ;
-                sh:minCount 1 ;
-                sh:in ( ex:Person )
-            ] .
-    """.trimIndent()
-
-    try {
-        RDF4JSHACLValidator.fromTurtleString(shacl)
-            .validate(
-                mapOf(
-                    "@context" to mapOf("ex" to "http://example.org/"),
-                    "@id" to "ex:bob",
-                    "ex:name" to "Bob"
-                )
-            )
-        println("Valid!")
-    } catch (e: SHACLValidationFailure) {
-        println("Not valid!")
-        println(e.report)
-    }
-}
