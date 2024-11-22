@@ -163,7 +163,7 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
                 subject,
                 SHACL.MAX_COUNT,
                 rdfFactory.createLiteral(1)
-            ) else if (field.getAppliedDirective("shape")?.getArgument("maxCount") != null) rdfFactory.createStatement(
+            ) else if (field.getAppliedDirective("shape")?.getArgument("maxCount")?.getValue<Int?>() != null) rdfFactory.createStatement(
                 subject,
                 SHACL.MAX_COUNT,
                 rdfFactory.createLiteral(field.getAppliedDirective("shape").getArgument("maxCount").getValue<Int>())

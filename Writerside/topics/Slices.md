@@ -57,7 +57,7 @@ also: [Querying - Namespace prefixes](Querying.md#namespace-prefixes)).
 
 ```graphql
 type Query {
-    persons: [Person!]!
+    persons: [schema_Person!]!
 }
 
 type schema_Person {
@@ -76,7 +76,7 @@ ending on `@example.com`:
 
 ```graphql
 type Query {
-    persons: [Person!]!
+    persons: [schema_Person!]!
 }
 
 type schema_Person {
@@ -103,7 +103,7 @@ To register the Slice, post the definition to the `/slices` endpoint of the Pod:
   },
   "kss:name": "PersonDemoSlice",
   "kss:description": "Demo Slice exposing Persons that have an '@example.org' email address",
-  "kss:schema": "type Query { persons: [Person!]! } type schema_Person { id: ID! schema_givenName: String! schema_familyName: String! schema_email: [String!]! @shape(pattern: \".*@example\\.org$\") }"
+  "kss:schema": "type Query { persons: [schema_Person!]! } type schema_Person { id: ID! schema_givenName: String! schema_familyName: String! schema_email: [String!]! @shape(pattern: \".*@example\\\\.org$\") }"
 }
 ```
 

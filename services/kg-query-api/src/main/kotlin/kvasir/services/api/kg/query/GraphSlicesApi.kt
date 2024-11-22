@@ -138,7 +138,7 @@ class GraphSlicesApi(
         input: QueryInputImpl,
     ): Uni<QueryResult> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        val sliceId = uriInfo.absolutePath.toString()
+        val sliceId = uriInfo.absolutePath.toString().substringBefore("/query")
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
@@ -164,7 +164,7 @@ class GraphSlicesApi(
         input: QueryInputImpl,
     ): Uni<Map<String, Any>> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        val sliceId = uriInfo.absolutePath.toString()
+        val sliceId = uriInfo.absolutePath.toString().substringBefore("/query")
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
@@ -185,7 +185,7 @@ class GraphSlicesApi(
         @PathParam("sliceId") sliceId: String
     ): Uni<String> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        val sliceId = uriInfo.absolutePath.toString()
+        val sliceId = uriInfo.absolutePath.toString().substringBefore("/shacl")
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.getById(podId, sliceId)
                 .onItem().ifNull().failWith(NotFoundException("Slice not found"))
