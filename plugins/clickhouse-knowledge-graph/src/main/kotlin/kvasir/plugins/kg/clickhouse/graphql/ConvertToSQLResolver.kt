@@ -137,8 +137,8 @@ class SQLConvertor(
         val name = field.name
         val joinField = "${name}_holder"
         val nestedFields = getNestedFields(field, "object")
-        val limit = limitStatement(field)
-        val orderBy = orderByStatement(field)
+        val limit = limitStatement(field).takeIf { it.isNotEmpty() }?.let { "$it BY subject" }
+        val orderBy = orderByStatement(field, "$name['", "']")
         val whereClause = listOfNotNull(
             "predicate = '${getFQName(field.name)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
@@ -172,10 +172,10 @@ class SQLConvertor(
         } ?: ""
     }
 
-    private fun orderByStatement(field: Field, prefix: String = ""): String {
+    private fun orderByStatement(field: Field, prefix: String = "", postFix: String = ""): String {
         return field.arguments.find { it.name == "orderBy" }?.let {
             val fields = (it.value as ArrayValue).values.map { (it as StringValue).value }
-            "ORDER BY ${fields.joinToString { prefix + if (it.startsWith("-")) "${it.substring(1)} DESC" else it.toString() }} "
+            "ORDER BY ${fields.joinToString { prefix + (if (it.startsWith("-")) "${it.substring(1)} DESC" else it.toString()) + postFix }} "
         } ?: ""
     }
 
