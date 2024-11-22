@@ -101,10 +101,13 @@ class SQLConvertor(
                     )
                 }"
             } ?: ""
-        val nestedFields = getNestedFields(env.field, "_id")
+        val (nestedFields, enableCount) = getNestedFields(env.field, "_id")
         val projection =
             (
-                    listOf("subject AS _id") + nestedFields.map {
+                    listOfNotNull(
+                        "subject AS _id",
+                        "count(*) AS _totalCount".takeIf { enableCount }
+                    ) + nestedFields.map {
                         val baseFieldProj = "arrayDistinct(ARRAY_AGG(${it.field.name}))"
                         (if (it.field.selectionSet != null) "arrayFilter(x -> notEmpty(x), $baseFieldProj)" else baseFieldProj)
                             .plus(" AS _${it.field.name}")
@@ -113,7 +116,8 @@ class SQLConvertor(
         return SQLQuery(
             "SELECT $projection FROM $tableRef ${
                 nestedFields.joinToString(" ") { it.joinStatement }
-            } $whereClause GROUP BY subject $orderBy $limit", listOf("_id") + nestedFields.map { "_${it.field.name}" }
+            } $whereClause GROUP BY subject $orderBy $limit",
+            listOfNotNull("_id", "_totalCount".takeIf { enableCount }) + nestedFields.map { "_${it.field.name}" }
         )
     }
 
@@ -136,8 +140,8 @@ class SQLConvertor(
     fun relationFieldJoinStatement(field: Field, parentJoinField: String): String {
         val name = field.name
         val joinField = "${name}_holder"
-        val nestedFields = getNestedFields(field, "object")
-        val limit = limitStatement(field).takeIf { it.isNotEmpty() }?.let { "$it BY subject" }
+        val (nestedFields, enableCount) = getNestedFields(field, "object")
+        val limit = limitStatement(field).takeIf { it.isNotEmpty() }?.let { "$it BY subject" } ?: ""
         val orderBy = orderByStatement(field, "$name['", "']")
         val whereClause = listOfNotNull(
             "predicate = '${getFQName(field.name)}'",
@@ -153,7 +157,10 @@ class SQLConvertor(
             }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
         val mappedFields =
-            (listOf("'id'" to "object") + nestedFields.map { "'${it.field.name}'" to "arrayDistinct(ARRAY_AGG(${it.field.name}))" })
+            (listOfNotNull(
+                "'id'" to "object",
+                ("'totalCount'" to "count(*)").takeIf { enableCount }
+            ) + nestedFields.map { "'${it.field.name}'" to "arrayDistinct(ARRAY_AGG(${it.field.name}))" })
                 .joinToString { (a, b) -> "$a,$b" }
         return "${getJoinType(field)} (SELECT subject AS $joinField, map($mappedFields) as $name FROM $tableRef ${
             nestedFields.joinToString(" ") { it.joinStatement }
@@ -173,8 +180,8 @@ class SQLConvertor(
     }
 
     private fun orderByStatement(field: Field, prefix: String = "", postFix: String = ""): String {
-        return field.arguments.find { it.name == "orderBy" }?.let {
-            val fields = (it.value as ArrayValue).values.map { (it as StringValue).value }
+        return (field.arguments.find { it.name == "orderBy" }?.value as? ArrayValue)?.values?.let { values ->
+            val fields = values.map { (it as StringValue).value }
             "ORDER BY ${fields.joinToString { prefix + (if (it.startsWith("-")) "${it.substring(1)} DESC" else it.toString()) + postFix }} "
         } ?: ""
     }
@@ -182,8 +189,8 @@ class SQLConvertor(
     private fun getJoinType(field: Field): String =
         if (field.hasDirective(AbstractKnowledgeGraph.optionalDirective.name)) "LEFT JOIN" else "JOIN"
 
-    private fun getNestedFields(field: Field, parentJoinField: String): List<SelectedField> {
-        return field.selectionSet.selections.flatMap { selection ->
+    private fun getNestedFields(field: Field, parentJoinField: String): FieldInfo {
+        val processedFields = field.selectionSet.selections.flatMap { selection ->
             when (selection) {
                 is InlineFragment -> {
                     val requiredType = getFQName(selection.typeCondition.name)
@@ -204,18 +211,20 @@ class SQLConvertor(
                 is Field -> listOf(FieldToJoin(selection, null))
                 else -> emptyList()
             }
-        }.filterNot { it.field.name == "id" }.map { (nestedField, typeFilter) ->
-            // TODO: handle typeFilters
-            SelectedField(
-                nestedField, if (nestedField.selectionSet == null) {
-                    // Scalar field
-                    scalarFieldJoinStatement(nestedField, parentJoinField)
-                } else {
-                    // Relation field
-                    relationFieldJoinStatement(nestedField, parentJoinField)
-                }
-            )
         }
+        return FieldInfo(processedFields.filterNot { it.field.name == "id" || it.field.name == "totalCount" }
+            .map { (nestedField, typeFilter) ->
+                // TODO: handle typeFilters
+                SelectedField(
+                    nestedField, if (nestedField.selectionSet == null) {
+                        // Scalar field
+                        scalarFieldJoinStatement(nestedField, parentJoinField)
+                    } else {
+                        // Relation field
+                        relationFieldJoinStatement(nestedField, parentJoinField)
+                    }
+                )
+            }, processedFields.any { it.field.name == "totalCount" })
     }
 
     // TODO: rewrite this quick and dirty implementation
@@ -334,6 +343,8 @@ class SQLConvertor(
     }
 
 }
+
+data class FieldInfo(val fieldSelection: List<SelectedField>, val enableCount: Boolean)
 
 data class SQLQuery(val sql: String, val columns: List<String>)
 

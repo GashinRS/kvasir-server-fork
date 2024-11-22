@@ -19,6 +19,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         val graphQLObjects = types.map { type ->
             val prefixedTypeName = graphqLCompatibleName(type.uri, context)
             val idField = GraphQLFieldDefinition.newFieldDefinition().name("id").type(GraphQLID).build()
+            val totalCount = GraphQLFieldDefinition.newFieldDefinition().name("totalCount").type(GraphQLInt).build()
             val typeDirective = AbstractKnowledgeGraph.typeDirective.toAppliedDirective()
             GraphQLObjectType.newObject().name(prefixedTypeName).description(type.uri)
                 .withAppliedDirective(typeDirective.transform { directiveBuilder ->
@@ -30,7 +31,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                 }
                 )
                 .fields(
-                    listOf(idField) + type.properties.map { property ->
+                    listOf(idField, totalCount) + type.properties.map { property ->
                         val prefixedProperty = graphqLCompatibleName(property.uri, context)
                         val propertyType = getGraphQLPropertyType(property, unionTypes, context)
                         val predicateDirective = AbstractKnowledgeGraph.predicateDirective.toAppliedDirective()
