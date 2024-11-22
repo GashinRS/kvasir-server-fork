@@ -5,4 +5,5 @@ plugins {
 dependencies {
     implementation(project(":libs:definitions"))
     implementation(project(":libs:utils"))
+    implementation(project(":plugins:clickhouse-knowledge-graph"))
 }

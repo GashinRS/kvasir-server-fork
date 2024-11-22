@@ -154,6 +154,22 @@
           "schema" : {
             "type" : "string"
           }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "default" : 100,
+            "type" : "integer"
+          }
         } ],
         "responses" : {
           "200" : {
@@ -255,6 +271,22 @@
           "required" : true,
           "schema" : {
             "type" : "string"
+          }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "default" : 2500,
+            "type" : "integer"
           }
         } ],
         "responses" : {

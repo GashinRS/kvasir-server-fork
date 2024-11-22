@@ -7,6 +7,7 @@ import io.minio.SetBucketVersioningArgs
 import io.minio.messages.VersioningConfiguration
 import io.quarkus.logging.Log
 import io.quarkus.runtime.StartupEvent
+import io.vertx.core.json.Json
 import jakarta.enterprise.event.Observes
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodConfigurationProperty
@@ -42,7 +43,10 @@ class Initializer(
             podStore.persist(
                 Pod(
                     podId,
-                    mapOf(PodConfigurationProperty.DEFAULT_CONTEXT to podConfig.defaultContext())
+                    mapOf(
+                        PodConfigurationProperty.DEFAULT_CONTEXT to Json.encode(podConfig.defaultContext()),
+                        PodConfigurationProperty.AUTO_INGEST_RDF to podConfig.autoIngestRDF()
+                    )
                 )
             ).await().indefinitely()
         }

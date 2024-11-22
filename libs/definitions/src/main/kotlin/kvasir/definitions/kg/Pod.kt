@@ -3,6 +3,7 @@ package kvasir.definitions.kg
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
+import io.vertx.core.json.JsonObject
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 
@@ -27,7 +28,12 @@ data class Pod(
 
     @JsonIgnore
     fun getDefaultContext(): Map<String, Any> {
-        return configuration[PodConfigurationProperty.DEFAULT_CONTEXT]?.let { it as Map<String, Any> } ?: emptyMap()
+        return configuration[PodConfigurationProperty.DEFAULT_CONTEXT]?.let { JsonObject(it as String).map } ?: emptyMap()
+    }
+
+    @JsonIgnore
+    fun getAutoIngestRDF(): Boolean {
+        return configuration[PodConfigurationProperty.AUTO_INGEST_RDF] as? Boolean == true
     }
 
 }
@@ -35,6 +41,7 @@ data class Pod(
 object PodConfigurationProperty {
 
     const val DEFAULT_CONTEXT = KvasirVocab.defaultContext
+    const val AUTO_INGEST_RDF = KvasirVocab.autoIngestRDF
 
 }
 

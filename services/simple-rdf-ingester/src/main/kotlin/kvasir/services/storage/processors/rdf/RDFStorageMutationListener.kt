@@ -10,6 +10,7 @@ import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.kg.ChangeRequest
+import kvasir.definitions.kg.PodStore
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
@@ -27,6 +28,7 @@ import java.util.*
 @ApplicationScoped
 class RDFStorageMutationListener(
     private val minioClient: MinioAsyncClient,
+    private val podStore: PodStore,
     private val vertx: Vertx
 ) {
 
@@ -34,6 +36,11 @@ class RDFStorageMutationListener(
     @Outgoing("change_requests_publish")
     fun consumeAndLog(storageMutationEvents: Multi<StorageMutationEvent>): Multi<ChangeRequest> {
         return storageMutationEvents
+            .onItem().transformToUniAndConcatenate { event ->
+                podStore.getById(event.podId).map { event to (it?.getAutoIngestRDF() == true) }
+            }
+            .filter { (_, autoIngestEnabled) -> autoIngestEnabled }
+            .map { (event, _) -> event }
             .onItem()
             .transformToUniAndConcatenate { event ->
                 val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
