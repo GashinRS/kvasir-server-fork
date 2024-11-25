@@ -69,11 +69,16 @@ class RDFStorageMutationListener(
                         GetObjectArgs.builder().bucket(bucketId).`object`(event.objectId).versionId(event.versionId)
                             .build()
                     )
-                ).map { event to it }
+                ).map { resp ->
+                    // Copy headers and then close the response
+                    resp.use {
+                        event to it.headers()
+                    }
+                }
             }
-            .filter { (_, resp) ->
+            .filter { (_, headers) ->
                 // Only process objects that are RDF data
-                RDFMediaTypes.supportedTypes.contains(resp.headers()[HttpHeaders.CONTENT_TYPE])
+                RDFMediaTypes.supportedTypes.contains(headers[HttpHeaders.CONTENT_TYPE])
             }
             .map { (event, _) ->
                 // Transform the object into a Kvasir change request
