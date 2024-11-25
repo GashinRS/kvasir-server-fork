@@ -4,7 +4,7 @@
 
 The fastest way to get a dev server (with persistent storage) up and running is to use Docker Compose.
 
-Clone this repository and run the following commands:
+Clone [this repository](https://gitlab.ilabt.imec.be/kvasir/kvasir-server) and run the following commands:
 
 ```bash
 cd .deployment/docker-compose
