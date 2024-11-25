@@ -10,16 +10,13 @@ quarkus:
   http:
     cors:
       ~: true
+      origins: /.*/
   minio:
     devservices:
   smallrye-openapi:
     store-schema-directory: ./openapi
 
 "%dev":
-  quarkus:
-    http:
-      cors:
-        origins: /.*/
   kvasir:
     bootstrap:
       pods:
