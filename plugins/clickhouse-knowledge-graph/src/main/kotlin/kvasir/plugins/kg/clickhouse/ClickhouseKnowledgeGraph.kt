@@ -37,6 +37,7 @@ class ClickhouseKnowledgeGraph(
     @All
     private val referenceLoaders: MutableList<ReferenceLoader>,
     private val clickhouseClient: ClickhouseClient,
+    private val convertToSQLResolver: ConvertToSQLResolver,
     @ConfigProperty(name = "kvasir.plugins.kg.xtdb.assertion-checking-parallelism", defaultValue = "4")
     private val assertionCheckingParallelism: Int,
     @ConfigProperty(name = "kvasir.plugins.kg.xtdb.ref-handling-buffer", defaultValue = "50000")
@@ -75,7 +76,7 @@ class ClickhouseKnowledgeGraph(
         context: Map<String, Any>,
         atTimestamp: Instant?
     ): DataFetcher<Any> {
-        return ConvertToSQLResolver.getDatafetcher(clickhouseClient, podId, context, atTimestamp)
+        return convertToSQLResolver.getDatafetcher(podId, context, atTimestamp)
     }
 
     override fun buildUnionTypeResolver(

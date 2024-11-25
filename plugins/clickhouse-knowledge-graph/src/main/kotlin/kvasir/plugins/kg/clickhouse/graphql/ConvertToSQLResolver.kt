@@ -1,17 +1,18 @@
 package kvasir.plugins.kg.clickhouse.graphql
 
+import com.google.common.hash.Hashing
 import cz.jirutka.rsql.parser.RSQLParser
 import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
 import graphql.language.*
-import graphql.schema.DataFetcher
-import graphql.schema.DataFetchingEnvironment
-import graphql.schema.GraphQLDirectiveContainer
-import graphql.schema.GraphQLTypeUtil
+import graphql.schema.*
+import io.quarkus.cache.Cache
+import io.quarkus.cache.CacheName
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFVocab
@@ -24,10 +25,14 @@ import kvasir.plugins.kg.clickhouse.utils.ClickhouseUtils
 import kvasir.utils.kg.AbstractKnowledgeGraph
 import java.time.Instant
 
-object ConvertToSQLResolver {
+@ApplicationScoped
+class ConvertToSQLResolver(
+    private val clickhouseClient: ClickhouseClient,
+    @CacheName("total-count-request-cache")
+    private val countCache: Cache
+) {
 
     fun getDatafetcher(
-        clickhouseClient: ClickhouseClient,
         podId: String,
         context: Map<String, Any>,
         atTimestamp: Instant?
@@ -42,6 +47,8 @@ object ConvertToSQLResolver {
                         atTimestamp,
                         databaseName,
                         DATA_TABLE,
+                        env.field,
+                        env.fieldDefinition,
                         env
                     )
                     val (sql, columns) = sqlConvertor.toSQL()
@@ -53,15 +60,39 @@ object ConvertToSQLResolver {
                 } else {
                     val source = env.getSource<Any?>()
                     val key = env.fieldDefinition.name
-                    val value = when (source) {
-                        is Map<*, *> -> source["_$key"] ?: source[key]
-                        is JsonObject -> source.getValue(key)
-                        else -> null
-                    }
-                    when (value) {
-                        is List<*> -> value.filterNotNull()
-                        is JsonArray -> value.list.filterNotNull()
-                        else -> value
+
+                    if (env.fieldDefinition.name == "totalCount") {
+                        val sqlConvertor = SQLConvertor(
+                            context,
+                            atTimestamp,
+                            databaseName,
+                            DATA_TABLE,
+                            env.executionStepInfo.parent.field.singleField,
+                            env.executionStepInfo.parent.fieldDefinition,
+                            env,
+                            SQLConvertorMode.COUNT
+                        )
+                        val (sql, columns) = sqlConvertor.toSQL()
+
+                        val cacheKey = Hashing.farmHashFingerprint64().hashBytes(sql.toByteArray()).toString()
+                        countCache.getAsync(cacheKey) { key ->
+                            clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
+                                .map { result ->
+                                    result[0]["totalCount"]
+                                }
+                        }.convert().toCompletionStage()
+                    } else {
+
+                        val value = when (source) {
+                            is Map<*, *> -> source["_$key"] ?: source[key]
+                            is JsonObject -> source.getValue(key)
+                            else -> null
+                        }
+                        when (value) {
+                            is List<*> -> value.filterNotNull()
+                            is JsonArray -> value.list.filterNotNull()
+                            else -> value
+                        }
                     }
                 }
             }
@@ -71,54 +102,84 @@ object ConvertToSQLResolver {
 }
 
 private const val COLLAPSE_STATE_EXPR = "HAVING argMax(sign, timestamp) > 0"
+private const val VIA_SPLIT_CHAR = "^^"
+
+enum class SQLConvertorMode {
+    GET_DATA,
+    COUNT
+}
 
 class SQLConvertor(
     val context: Map<String, Any>,
     val atTimestamp: Instant?,
     database: String,
     table: String,
-    private val env: DataFetchingEnvironment
+    private val targetField: Field,
+    private val targetFieldDefinition: GraphQLFieldDefinition,
+    private val env: DataFetchingEnvironment,
+    private val mode: SQLConvertorMode = SQLConvertorMode.GET_DATA
 ) {
 
     private val tableRef = "$database.$table"
 
     fun toSQL(): SQLQuery {
-        val outputType = GraphQLTypeUtil.unwrapAll(env.fieldDefinition.type) as GraphQLDirectiveContainer
-        val limit = limitStatement(env.field)
-        val orderBy = orderByStatement(env.field, "_")
+        val outputType = GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLDirectiveContainer
+        val limit = limitStatement(targetField)
+        val orderBy = orderByStatement(targetField, "_")
+        val idField = when (mode) {
+            SQLConvertorMode.GET_DATA -> "_id"
+            SQLConvertorMode.COUNT -> "subject"
+        }
         val whereClause = listOfNotNull(
             typeFilter(listOf(getFQName(outputType))),
-            getNodeFilter(env.field),
-            getArgsFilter(env.field)
+            getNodeFilter(targetField),
+            getArgsFilter(targetField),
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
             ?.let {
                 "WHERE ${
                     GraphQLFilterVisitor2(context).visitNode(
                         SelectorReplacingFilterVisitor(
                             "id",
-                            "_id"
+                            idField
                         ).visitNode(it)
                     )
                 }"
             } ?: ""
-        val (nestedFields, enableCount) = getNestedFields(env.field, "_id")
+        val (nestedFields, enableCount) = getNestedFields(targetField, idField)
         val projection =
             (
-                    listOfNotNull(
-                        "subject AS _id",
-                        "count(*) AS _totalCount".takeIf { enableCount }
-                    ) + nestedFields.map {
+                    listOf("subject AS $idField") + nestedFields.map {
                         val baseFieldProj = "arrayDistinct(ARRAY_AGG(${it.field.name}))"
                         (if (it.field.selectionSet != null) "arrayFilter(x -> notEmpty(x), $baseFieldProj)" else baseFieldProj)
                             .plus(" AS _${it.field.name}")
                     }
                     ).joinToString()
-        return SQLQuery(
-            "SELECT $projection FROM $tableRef ${
-                nestedFields.joinToString(" ") { it.joinStatement }
-            } $whereClause GROUP BY subject $orderBy $limit",
-            listOfNotNull("_id", "_totalCount".takeIf { enableCount }) + nestedFields.map { "_${it.field.name}" }
-        )
+        return when (mode) {
+            SQLConvertorMode.GET_DATA -> {
+                SQLQuery(
+                    "SELECT $projection FROM $tableRef ${
+                        nestedFields.joinToString(" ") { it.joinStatement }
+                    } $whereClause GROUP BY subject $orderBy $limit",
+                    listOf(idField) + nestedFields.map { "_${it.field.name}" }
+                )
+            }
+
+            SQLConvertorMode.COUNT -> {
+                val modifiedWhere = getRelationshipFilter()?.let { extraFilter ->
+                    if (whereClause.isNotEmpty()) {
+                        "$whereClause AND $extraFilter"
+                    } else {
+                        "WHERE $extraFilter"
+                    }
+                } ?: whereClause
+                SQLQuery(
+                    "SELECT count(distinct subject) as totalCount FROM $tableRef ${
+                        nestedFields.joinToString(" ") { it.joinStatement }
+                    } $modifiedWhere ",
+                    listOf("totalCount")
+                )
+            }
+        }
     }
 
     fun scalarFieldJoinStatement(field: Field, parentJoinField: String): String {
@@ -157,9 +218,9 @@ class SQLConvertor(
             }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
         val mappedFields =
-            (listOfNotNull(
+            (listOf(
                 "'id'" to "object",
-                ("'totalCount'" to "count(*)").takeIf { enableCount }
+                "'via'" to "[concat(subject, '$VIA_SPLIT_CHAR', predicate)]"
             ) + nestedFields.map { "'${it.field.name}'" to "arrayDistinct(ARRAY_AGG(${it.field.name}))" })
                 .joinToString { (a, b) -> "$a,$b" }
         return "${getJoinType(field)} (SELECT subject AS $joinField, map($mappedFields) as $name FROM $tableRef ${
@@ -306,19 +367,6 @@ class SQLConvertor(
         }
     }
 
-    private fun handleFieldMultiplicity(values: List<Any>): Any? {
-        return if (GraphQLTypeUtil.isList(env.fieldDefinition.type) || GraphQLTypeUtil.isList(
-                GraphQLTypeUtil.unwrapOne(
-                    env.fieldDefinition.type
-                )
-            )
-        ) {
-            values
-        } else {
-            values.firstOrNull()
-        }
-    }
-
     private fun getFQName(node: GraphQLDirectiveContainer): String {
         return JsonLdHelper.getFQName(node.name, context, "_")?.takeIf { it != node.name }
             ?: run {
@@ -340,6 +388,19 @@ class SQLConvertor(
                 ComparisonNode(RSQLOperators.IN, "object", requiredTypes)
             )
         )
+    }
+
+    private fun getRelationshipFilter(): String? {
+        val source = env.getSource<Any?>()
+        val via: List<String>? = when (source) {
+            is Map<*, *> -> source["via"] as List<String>?
+            is JsonObject -> source.getValue("via") as List<String>?
+            else -> null
+        }
+        return via?.let { path ->
+            val (parentId, predicate) = path.first().split(VIA_SPLIT_CHAR)
+            "subject IN (SELECT object FROM $tableRef WHERE subject = '$parentId' AND predicate = '$predicate')"
+        }
     }
 
 }

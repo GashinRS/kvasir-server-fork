@@ -40,6 +40,7 @@ dependencies {
     implementation("com.google.guava:guava:33.0.0-jre")
     implementation("io.quarkus:quarkus-micrometer-registry-prometheus")
     implementation("io.quarkiverse.minio:quarkus-minio:3.7.7")
+    implementation("io.quarkus:quarkus-cache")
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.quarkus:quarkus-jacoco")
 }
