@@ -1,5 +1,6 @@
 package kvasir.services.api.pods
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.minio.MakeBucketArgs
 import io.minio.MinioAsyncClient
 import io.minio.SetBucketVersioningArgs
@@ -17,6 +18,7 @@ import kvasir.definitions.kg.PodStore
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.definitions.rdf.KvasirVocab
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
@@ -108,10 +110,13 @@ class PodManagementApi(
 }
 
 data class RegisterPodInput(
+    @JsonProperty(KvasirVocab.name)
     val name: String,
+    @JsonProperty(KvasirVocab.configuration)
     val configuration: Map<String, Any>,
 )
 
 data class UpdatePodInput(
+    @JsonProperty(KvasirVocab.configuration)
     val configuration: Map<String, Any>,
 )
