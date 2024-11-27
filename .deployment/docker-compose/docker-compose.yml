@@ -40,7 +40,7 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -57,7 +57,7 @@ services:
       - MINIO_ROOT_USER=kvasir
       - MINIO_ROOT_PASSWORD=kvasirkvasir
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -71,10 +71,20 @@ services:
       - --mode dev-container
     image: redpandadata/redpanda:v23.3.4
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      test: [ "CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'" ]
       interval: 30s
       timeout: 10s
       retries: 5
+
+  kvasir-ui:
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:latest
+    pull_policy: always
+    depends_on:
+      - kvasir
+    ports:
+      - "80:80"
+    environment:
+      - "KVASIR_HOST=http://localhost:8080"
 
 volumes:
   clickhouse_data:
