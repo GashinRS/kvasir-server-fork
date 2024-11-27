@@ -11,6 +11,7 @@ quarkus:
     cors:
       ~: true
       origins: /.*/
+      exposed-headers: Link
   minio:
     devservices:
   smallrye-openapi:
