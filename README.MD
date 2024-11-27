@@ -13,6 +13,7 @@ docker compose up -d
 
 This will automatically create a pod at `http://localhost:8080/alice` for you to play with.
 The settings for this pod can be modified via the file `application.yaml` in the `kvasir-config` folder.
+It also starts the Kvasir-UI at `http://localhost:8081`. You can select a pod to play with (`alice`).
 
 # Running on Kubernetes
 (A guide will be added in the future)
