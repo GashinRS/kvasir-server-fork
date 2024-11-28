@@ -121,6 +121,7 @@ build:writerside:
     expire_in: 1 week
 
 test:writerside:
+  needs: [build:writerside]
   stage: test
   rules:
     - if: '$CI_COMMIT_TAG'
