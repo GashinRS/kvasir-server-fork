@@ -5,7 +5,6 @@ variables:
   ALGOLIA_ARTIFACT: 'algolia-indexes-KD.zip'
   ALGOLIA_APP_NAME: '23BLLNEZ2S'
   ALGOLIA_INDEX_NAME: 'prod_KVASIR-NEXT'
-  ALGOLIA_KEY: '$ALGOLIA_KEY'
   CONFIG_JSON_PRODUCT: 'kd'
   CONFIG_JSON_VERSION: 'master'
   MAVEN_CLI_OPTS: "--batch-mode"
