@@ -1,20 +1,13 @@
 {
-  "openapi" : "3.0.3",
+  "openapi" : "3.1.0",
   "info" : {
-    "title" : "Kvasir API",
     "license" : {
       "name" : "Apache 2.0",
       "url" : "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
+    "title" : "Kvasir API",
     "version" : "0.1.0"
   },
-  "servers" : [ {
-    "url" : "http://localhost:8080",
-    "description" : "Auto generated value"
-  }, {
-    "url" : "http://0.0.0.0:8080",
-    "description" : "Auto generated value"
-  } ],
   "tags" : [ {
     "name" : "Changes API",
     "description" : "API for managing changes to the knowledge graph, including requesting changes, listing changes, and retrieving change reports."
@@ -31,8 +24,364 @@
     "name" : "Pod Config API",
     "description" : "API for managing pods, including creating, listing, deleting pods, managing slices, etc."
   } ],
+  "components" : {
+    "schemas" : {
+      "Assertion" : {
+        "type" : "object",
+        "required" : [ "@type", "kss:query" ],
+        "properties" : {
+          "@type" : {
+            "type" : "string",
+            "description" : "The type of the assertion.",
+            "examples" : [ "kss:AssertEmptyResult" ],
+            "enum" : [ "https://kvasir.discover.ilabt.imec.be/vocab#AssertEmptyResult", "https://kvasir.discover.ilabt.imec.be/vocab#AssertNonEmptyResult" ]
+          },
+          "kss:query" : {
+            "type" : "string",
+            "description" : "The GraphQL query string to be executed.",
+            "examples" : [ "{ id ex_givenName(_: \"Bob\") }" ]
+          }
+        }
+      },
+      "ChangeRecords" : {
+        "type" : "object",
+        "required" : [ "context", "id", "timestamp" ],
+        "properties" : {
+          "context" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "timestamp" : {
+            "$ref" : "#/components/schemas/Instant"
+          },
+          "deleted" : { },
+          "inserted" : { }
+        }
+      },
+      "ChangeReport" : {
+        "type" : "object",
+        "required" : [ "id", "podId", "timestamp", "resultCode" ],
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "podId" : {
+            "type" : "string"
+          },
+          "timestamp" : {
+            "$ref" : "#/components/schemas/Instant"
+          },
+          "resultCode" : {
+            "$ref" : "#/components/schemas/ChangeResultCode"
+          },
+          "sliceId" : {
+            "type" : [ "string", "null" ]
+          },
+          "nrOfInserts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "nrOfDeletes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "errorMessage" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
+      "ChangeRequestInput" : {
+        "type" : "object",
+        "required" : [ "@context", "kss:assert", "kss:insert" ],
+        "properties" : {
+          "@context" : {
+            "type" : "object",
+            "additionalProperties" : { },
+            "description" : "The JSON-LD context for the change request.",
+            "examples" : [ {
+              "kss" : "https://kvasir.discover.ilabt.imec.be/vocab#",
+              "ex" : "http://example.org/"
+            } ]
+          },
+          "kss:assert" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Assertion"
+            },
+            "description" : "List of assertions to be checked before applying the change request."
+          },
+          "kss:with" : {
+            "type" : [ "string", "null" ],
+            "description" : "Optional GraphQL query where matches are required to be found for the change request to be applied. Results are bound to the field names in the query and can be used in the insert and delete operations (via templates).",
+            "examples" : [ "{ id ex_givenName(_: \"Bob\") }" ]
+          },
+          "kss:insert" : {
+            "type" : "array",
+            "items" : { },
+            "description" : "List of triples to be inserted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
+            "examples" : [ [ {
+              "@id" : "ex:123",
+              "ex:givenName" : "Bob"
+            } ] ]
+          }
+        }
+      },
+      "ChangeResultCode" : {
+        "type" : "string",
+        "enum" : [ "COMMITTED", "ASSERTION_FAILED", "NO_MATCHES", "TOO_MANY_MATCHES", "VALIDATION_ERROR", "INTERNAL_ERROR" ]
+      },
+      "Instant" : {
+        "type" : "string",
+        "format" : "date-time",
+        "examples" : [ "2022-03-10T16:15:50Z" ]
+      },
+      "Pod" : {
+        "type" : "object",
+        "required" : [ "id", "configuration" ],
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "configuration" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          }
+        }
+      },
+      "QueryInputImpl" : {
+        "type" : "object",
+        "required" : [ "query", "targetGraphs" ],
+        "properties" : {
+          "query" : {
+            "type" : "string",
+            "description" : "The GraphQL query string to be executed.",
+            "examples" : [ "{ id ex_givenName(_: \"Bob\") ex_friends { id ex_givenName } }" ]
+          },
+          "operationName" : {
+            "type" : [ "string", "null" ],
+            "description" : "The name of the operation to be executed (optional, only required if the GraphQL query expresses more than one operation)."
+          },
+          "variables" : {
+            "type" : [ "object", "null" ],
+            "additionalProperties" : { },
+            "description" : "The variables to be used in the query."
+          },
+          "targetGraphs" : {
+            "type" : "array",
+            "uniqueItems" : true,
+            "items" : {
+              "type" : "string"
+            },
+            "description" : "The named graphs to be targeted by the query. If no graphs are specified, all graphs are targeted."
+          },
+          "atTimestamp" : {
+            "description" : "Query the state of the KG at the specified point in time.",
+            "type" : [ "string", "null" ],
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Instant"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "atChangeRequest" : {
+            "type" : [ "string", "null" ],
+            "description" : "Query the state of the KG when the specified change request was applied."
+          }
+        }
+      },
+      "QueryInputWithContext" : {
+        "type" : "object",
+        "required" : [ "query", "targetGraphs" ],
+        "properties" : {
+          "query" : {
+            "type" : "string",
+            "description" : "The GraphQL query string to be executed.",
+            "examples" : [ "{ id ex_givenName(_: \"Bob\") ex_friends { id ex_givenName } }" ]
+          },
+          "operationName" : {
+            "type" : [ "string", "null" ],
+            "description" : "The name of the operation to be executed (optional, only required if the GraphQL query expresses more than one operation)."
+          },
+          "variables" : {
+            "type" : [ "object", "null" ],
+            "additionalProperties" : { },
+            "description" : "The variables to be used in the query."
+          },
+          "targetGraphs" : {
+            "type" : "array",
+            "uniqueItems" : true,
+            "items" : {
+              "type" : "string"
+            },
+            "description" : "The named graphs to be targeted by the query. If no graphs are specified, all graphs are targeted."
+          },
+          "atTimestamp" : {
+            "description" : "Query the state of the KG at the specified point in time.",
+            "type" : [ "string", "null" ],
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Instant"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "atChangeRequest" : {
+            "type" : [ "string", "null" ],
+            "description" : "Query the state of the KG when the specified change request was applied."
+          },
+          "@context" : {
+            "type" : [ "object", "null" ],
+            "additionalProperties" : { },
+            "description" : "The JSON-LD context for the query.",
+            "examples" : [ {
+              "ex" : "http://example.org/"
+            } ]
+          }
+        }
+      },
+      "QueryResult" : {
+        "type" : "object",
+        "properties" : {
+          "data" : {
+            "type" : [ "object", "null" ],
+            "additionalProperties" : { }
+          },
+          "errors" : {
+            "type" : [ "array", "null" ],
+            "items" : {
+              "type" : "object",
+              "additionalProperties" : { }
+            }
+          }
+        }
+      },
+      "RegisterPodInput" : {
+        "type" : "object",
+        "required" : [ "name", "configuration" ],
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "configuration" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          }
+        }
+      },
+      "Slice" : {
+        "type" : "object",
+        "required" : [ "id", "context", "podId", "name", "description", "schema", "shacl", "targetGraphs" ],
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "context" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "podId" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "schema" : {
+            "type" : "string"
+          },
+          "shacl" : {
+            "type" : "string"
+          },
+          "targetGraphs" : {
+            "type" : "array",
+            "uniqueItems" : true,
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "SliceInput" : {
+        "type" : "object",
+        "required" : [ "context", "name", "schema", "description", "targetGraphs" ],
+        "properties" : {
+          "context" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "schema" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "targetGraphs" : {
+            "type" : "array",
+            "uniqueItems" : true,
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "SliceSummary" : {
+        "type" : "object",
+        "required" : [ "id", "name", "description" ],
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          }
+        }
+      },
+      "UpdatePodInput" : {
+        "type" : "object",
+        "required" : [ "configuration" ],
+        "properties" : {
+          "configuration" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          }
+        }
+      }
+    }
+  },
   "paths" : {
     "/" : {
+      "post" : {
+        "tags" : [ "Pod Config API" ],
+        "requestBody" : {
+          "content" : {
+            "application/ld+json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterPodInput"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        },
+        "summary" : "Register"
+      },
       "get" : {
         "tags" : [ "Pod Config API" ],
         "responses" : {
@@ -49,18 +398,30 @@
               }
             }
           }
-        }
-      },
-      "post" : {
+        },
+        "summary" : "List"
+      }
+    },
+    "/{podId}" : {
+      "put" : {
         "tags" : [ "Pod Config API" ],
+        "parameters" : [ {
+          "name" : "podId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
         "requestBody" : {
           "content" : {
             "application/ld+json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/RegisterPodInput"
+                "$ref" : "#/components/schemas/UpdatePodInput"
               }
             }
-          }
+          },
+          "required" : true
         },
         "responses" : {
           "200" : {
@@ -69,10 +430,9 @@
               "application/json" : { }
             }
           }
-        }
-      }
-    },
-    "/{podId}" : {
+        },
+        "summary" : "Update"
+      },
       "get" : {
         "tags" : [ "Pod Config API" ],
         "parameters" : [ {
@@ -94,35 +454,8 @@
               }
             }
           }
-        }
-      },
-      "put" : {
-        "tags" : [ "Pod Config API" ],
-        "parameters" : [ {
-          "name" : "podId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/ld+json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/UpdatePodInput"
-              }
-            }
-          }
         },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : { }
-            }
-          }
-        }
+        "summary" : "Get"
       },
       "delete" : {
         "tags" : [ "Pod Config API" ],
@@ -141,10 +474,39 @@
               "application/json" : { }
             }
           }
-        }
+        },
+        "summary" : "Delete"
       }
     },
     "/{podId}/changes" : {
+      "post" : {
+        "summary" : "Perform mutations on the KG.",
+        "description" : "Post a change request, containing the requested mutations, to the inbox of the specified pod.",
+        "tags" : [ "Changes API" ],
+        "parameters" : [ {
+          "name" : "podId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/ld+json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChangeRequestInput"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Change request created."
+          }
+        }
+      },
       "get" : {
         "tags" : [ "Changes API", "Streaming API" ],
         "parameters" : [ {
@@ -155,20 +517,20 @@
             "type" : "string"
           }
         }, {
+          "required" : false,
           "name" : "cursor",
           "in" : "query",
-          "required" : false,
           "schema" : {
             "type" : "string"
           }
         }, {
+          "required" : false,
           "name" : "pageSize",
           "in" : "query",
-          "required" : false,
           "schema" : {
+            "type" : "integer",
             "format" : "int32",
-            "default" : 100,
-            "type" : "integer"
+            "default" : 100
           }
         } ],
         "responses" : {
@@ -193,34 +555,8 @@
               }
             }
           }
-        }
-      },
-      "post" : {
-        "tags" : [ "Changes API" ],
-        "summary" : "Perform mutations on the KG.",
-        "description" : "Post a change request, containing the requested mutations, to the inbox of the specified pod.",
-        "parameters" : [ {
-          "name" : "podId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/ld+json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/ChangeRequestInput"
-              }
-            }
-          }
         },
-        "responses" : {
-          "201" : {
-            "description" : "Change request created."
-          }
-        }
+        "summary" : "Stream"
       }
     },
     "/{podId}/changes/{changeId}" : {
@@ -252,7 +588,8 @@
               }
             }
           }
-        }
+        },
+        "summary" : "Get Change Report"
       }
     },
     "/{podId}/changes/{changeId}/records" : {
@@ -273,20 +610,20 @@
             "type" : "string"
           }
         }, {
+          "required" : false,
           "name" : "cursor",
           "in" : "query",
-          "required" : false,
           "schema" : {
             "type" : "string"
           }
         }, {
+          "required" : false,
           "name" : "pageSize",
           "in" : "query",
-          "required" : false,
           "schema" : {
+            "type" : "integer",
             "format" : "int32",
-            "default" : 2500,
-            "type" : "integer"
+            "default" : 2500
           }
         } ],
         "responses" : {
@@ -300,14 +637,13 @@
               }
             }
           }
-        }
+        },
+        "summary" : "Get Change Records"
       }
     },
     "/{podId}/query" : {
       "post" : {
         "tags" : [ "Querying API" ],
-        "summary" : "Retrieve data from the KG.",
-        "description" : "Query the knowledge graph of the specified pod using GraphQL.",
         "parameters" : [ {
           "name" : "podId",
           "in" : "path",
@@ -323,7 +659,8 @@
                 "$ref" : "#/components/schemas/QueryInputWithContext"
               }
             }
-          }
+          },
+          "required" : true
         },
         "responses" : {
           "200" : {
@@ -351,14 +688,16 @@
               }
             }
           }
-        }
+        },
+        "summary" : "Retrieve data from the KG.",
+        "description" : "Query the knowledge graph of the specified pod using GraphQL."
       }
     },
     "/{podId}/slices" : {
       "get" : {
-        "tags" : [ "Pod Config API" ],
         "summary" : "List slices of the specified pod.",
         "description" : "List slices of the specified pod's Knowledge Graph.",
+        "tags" : [ "Pod Config API" ],
         "parameters" : [ {
           "name" : "podId",
           "in" : "path",
@@ -384,9 +723,9 @@
         }
       },
       "post" : {
-        "tags" : [ "Pod Config API" ],
         "summary" : "Define a new slice of the KG.",
         "description" : "Define a new slice (subset) of the specified pod's Knowledge Graph, based on a GraphQL-LD schema.",
+        "tags" : [ "Pod Config API" ],
         "parameters" : [ {
           "name" : "podId",
           "in" : "path",
@@ -402,7 +741,8 @@
                 "$ref" : "#/components/schemas/SliceInput"
               }
             }
-          }
+          },
+          "required" : true
         },
         "responses" : {
           "200" : {
@@ -416,9 +756,9 @@
     },
     "/{podId}/slices/{sliceId}" : {
       "get" : {
-        "tags" : [ "Pod Config API" ],
         "summary" : "Retrieve a specific slice definition..",
         "description" : "Retrieve a specific slice definition details.",
+        "tags" : [ "Pod Config API" ],
         "parameters" : [ {
           "name" : "podId",
           "in" : "path",
@@ -441,9 +781,9 @@
         }
       },
       "delete" : {
-        "tags" : [ "Pod Config API" ],
         "summary" : "Delete a specific slice.",
         "description" : "Delete a specific slice of the specified pod's Knowledge Graph.",
+        "tags" : [ "Pod Config API" ],
         "parameters" : [ {
           "name" : "podId",
           "in" : "path",
@@ -464,9 +804,9 @@
     },
     "/{podId}/slices/{sliceId}/changes" : {
       "post" : {
-        "tags" : [ "Changes API" ],
         "summary" : "Perform mutations on a specific slice of the KG.",
         "description" : "Post a change request, containing the requested mutations, to a slice inbox of the specified pod.",
+        "tags" : [ "Changes API" ],
         "parameters" : [ {
           "name" : "podId",
           "in" : "path",
@@ -489,7 +829,8 @@
                 "$ref" : "#/components/schemas/ChangeRequestInput"
               }
             }
-          }
+          },
+          "required" : true
         },
         "responses" : {
           "201" : {
@@ -501,8 +842,6 @@
     "/{podId}/slices/{sliceId}/query" : {
       "post" : {
         "tags" : [ "Querying API" ],
-        "summary" : "Retrieve data from a specific subset of the KG.",
-        "description" : "Query a predefined slice of the specified pod's Knowledge Graph using GraphQL.",
         "parameters" : [ {
           "name" : "podId",
           "in" : "path",
@@ -513,11 +852,11 @@
         }, {
           "name" : "sliceId",
           "in" : "path",
-          "description" : "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.",
           "required" : true,
           "schema" : {
             "type" : "string"
-          }
+          },
+          "description" : "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph."
         } ],
         "requestBody" : {
           "content" : {
@@ -526,7 +865,8 @@
                 "$ref" : "#/components/schemas/QueryInputImpl"
               }
             }
-          }
+          },
+          "required" : true
         },
         "responses" : {
           "200" : {
@@ -554,7 +894,9 @@
               }
             }
           }
-        }
+        },
+        "summary" : "Retrieve data from a specific subset of the KG.",
+        "description" : "Query a predefined slice of the specified pod's Knowledge Graph using GraphQL."
       }
     },
     "/{podId}/slices/{sliceId}/shacl" : {
@@ -586,7 +928,8 @@
               }
             }
           }
-        }
+        },
+        "summary" : "Get SHACL"
       }
     },
     "/{podId}/slices/{sliceId}/stream" : {
@@ -622,24 +965,25 @@
               }
             }
           }
-        }
+        },
+        "summary" : "Stream Slice"
       }
     },
     "/{podId}/s3/{objectKey}" : {
       "get" : {
-        "tags" : [ "Low-level Storage API" ],
         "summary" : "Download a stored object.",
         "description" : "Get an object from the specified pod's S3 storage.",
+        "tags" : [ "Low-level Storage API" ],
         "parameters" : [ {
-          "name" : "podId",
           "in" : "path",
+          "name" : "podId",
           "required" : true,
           "schema" : {
             "type" : "string"
           }
         }, {
-          "name" : "objectKey",
           "in" : "path",
+          "name" : "objectKey",
           "required" : true,
           "schema" : {
             "type" : "string"
@@ -652,42 +996,42 @@
         }
       },
       "put" : {
-        "tags" : [ "Low-level Storage API" ],
         "summary" : "Upload an object.",
         "description" : "Put an object to the specified pod's S3 storage.",
+        "tags" : [ "Low-level Storage API" ],
         "parameters" : [ {
+          "in" : "path",
           "name" : "podId",
-          "in" : "path",
           "required" : true,
           "schema" : {
             "type" : "string"
           }
         }, {
+          "in" : "path",
           "name" : "objectKey",
-          "in" : "path",
           "required" : true,
           "schema" : {
             "type" : "string"
           }
         }, {
-          "name" : "x-amz-content-sha256",
           "in" : "header",
+          "name" : "x-amz-content-sha256",
           "description" : "The SHA256 hash of the object content (allows the server to verify the integrity of the content).",
           "required" : true,
           "schema" : {
             "type" : "string"
           }
         }, {
-          "name" : "Content-Type",
           "in" : "header",
+          "name" : "Content-Type",
           "description" : "The MIME type of the object content.",
           "required" : true,
           "schema" : {
             "type" : "string"
           }
         }, {
-          "name" : "x-amz-date",
           "in" : "header",
+          "name" : "x-amz-date",
           "description" : "The date and time of the request, in ISO8601 format (offers additional protection against replay attacks).",
           "required" : false,
           "schema" : {
@@ -695,14 +1039,14 @@
           }
         } ],
         "requestBody" : {
+          "required" : true,
           "content" : {
             "*/*" : {
               "schema" : {
                 "type" : "string"
               }
             }
-          },
-          "required" : true
+          }
         },
         "responses" : {
           "200" : {
@@ -711,19 +1055,19 @@
         }
       },
       "delete" : {
-        "tags" : [ "Low-level Storage API" ],
         "summary" : "Remove a stored object.",
         "description" : "Delete an object from the specified pod's S3 storage.",
+        "tags" : [ "Low-level Storage API" ],
         "parameters" : [ {
-          "name" : "podId",
           "in" : "path",
+          "name" : "podId",
           "required" : true,
           "schema" : {
             "type" : "string"
           }
         }, {
-          "name" : "objectKey",
           "in" : "path",
+          "name" : "objectKey",
           "required" : true,
           "schema" : {
             "type" : "string"
@@ -737,348 +1081,11 @@
       }
     }
   },
-  "components" : {
-    "schemas" : {
-      "Assertion" : {
-        "required" : [ "@type", "kss:query" ],
-        "type" : "object",
-        "properties" : {
-          "@type" : {
-            "description" : "The type of the assertion.",
-            "enum" : [ "https://kvasir.discover.ilabt.imec.be/vocab#AssertEmptyResult", "https://kvasir.discover.ilabt.imec.be/vocab#AssertNonEmptyResult" ],
-            "type" : "string",
-            "example" : "kss:AssertEmptyResult"
-          },
-          "kss:query" : {
-            "description" : "The GraphQL query string to be executed.",
-            "type" : "string",
-            "example" : "{ id ex_givenName(_: \"Bob\") }"
-          }
-        }
-      },
-      "ChangeRecords" : {
-        "required" : [ "context", "id", "timestamp" ],
-        "type" : "object",
-        "properties" : {
-          "context" : {
-            "type" : "object",
-            "additionalProperties" : { }
-          },
-          "id" : {
-            "type" : "string"
-          },
-          "timestamp" : {
-            "$ref" : "#/components/schemas/Instant"
-          },
-          "deleted" : { },
-          "inserted" : { }
-        }
-      },
-      "ChangeReport" : {
-        "required" : [ "id", "podId", "timestamp", "resultCode" ],
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string"
-          },
-          "podId" : {
-            "type" : "string"
-          },
-          "timestamp" : {
-            "$ref" : "#/components/schemas/Instant"
-          },
-          "resultCode" : {
-            "$ref" : "#/components/schemas/ChangeResultCode"
-          },
-          "sliceId" : {
-            "type" : "string",
-            "nullable" : true
-          },
-          "nrOfInserts" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "nrOfDeletes" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "errorMessage" : {
-            "type" : "string",
-            "nullable" : true
-          }
-        }
-      },
-      "ChangeRequestInput" : {
-        "required" : [ "@context", "kss:assert", "kss:insert" ],
-        "type" : "object",
-        "properties" : {
-          "@context" : {
-            "description" : "The JSON-LD context for the change request.",
-            "type" : "object",
-            "additionalProperties" : { },
-            "example" : {
-              "kss" : "https://kvasir.discover.ilabt.imec.be/vocab#",
-              "ex" : "http://example.org/"
-            }
-          },
-          "kss:assert" : {
-            "description" : "List of assertions to be checked before applying the change request.",
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/Assertion"
-            }
-          },
-          "kss:with" : {
-            "description" : "Optional GraphQL query where matches are required to be found for the change request to be applied. Results are bound to the field names in the query and can be used in the insert and delete operations (via templates).",
-            "type" : "string",
-            "example" : "{ id ex_givenName(_: \"Bob\") }",
-            "nullable" : true
-          },
-          "kss:insert" : {
-            "description" : "List of triples to be inserted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
-            "type" : "array",
-            "items" : { },
-            "example" : [ {
-              "@id" : "ex:123",
-              "ex:givenName" : "Bob"
-            } ]
-          }
-        }
-      },
-      "ChangeResultCode" : {
-        "enum" : [ "COMMITTED", "ASSERTION_FAILED", "NO_MATCHES", "TOO_MANY_MATCHES", "VALIDATION_ERROR", "INTERNAL_ERROR" ],
-        "type" : "string"
-      },
-      "Instant" : {
-        "format" : "date-time",
-        "type" : "string",
-        "example" : "2022-03-10T16:15:50Z"
-      },
-      "Pod" : {
-        "required" : [ "id", "configuration" ],
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string"
-          },
-          "configuration" : {
-            "type" : "object",
-            "additionalProperties" : { }
-          }
-        }
-      },
-      "QueryInputImpl" : {
-        "required" : [ "query", "targetGraphs" ],
-        "type" : "object",
-        "properties" : {
-          "query" : {
-            "description" : "The GraphQL query string to be executed.",
-            "type" : "string",
-            "example" : "{ id ex_givenName(_: \"Bob\") ex_friends { id ex_givenName } }"
-          },
-          "operationName" : {
-            "description" : "The name of the operation to be executed (optional, only required if the GraphQL query expresses more than one operation).",
-            "type" : "string",
-            "nullable" : true
-          },
-          "variables" : {
-            "description" : "The variables to be used in the query.",
-            "type" : "object",
-            "additionalProperties" : { },
-            "nullable" : true
-          },
-          "targetGraphs" : {
-            "description" : "The named graphs to be targeted by the query. If no graphs are specified, all graphs are targeted.",
-            "uniqueItems" : true,
-            "type" : "array",
-            "items" : {
-              "type" : "string"
-            }
-          },
-          "atTimestamp" : {
-            "description" : "Query the state of the KG at the specified point in time.",
-            "type" : "string",
-            "allOf" : [ {
-              "$ref" : "#/components/schemas/Instant"
-            } ],
-            "nullable" : true
-          },
-          "atChangeRequest" : {
-            "description" : "Query the state of the KG when the specified change request was applied.",
-            "type" : "string",
-            "nullable" : true
-          }
-        }
-      },
-      "QueryInputWithContext" : {
-        "required" : [ "query", "targetGraphs" ],
-        "type" : "object",
-        "properties" : {
-          "query" : {
-            "description" : "The GraphQL query string to be executed.",
-            "type" : "string",
-            "example" : "{ id ex_givenName(_: \"Bob\") ex_friends { id ex_givenName } }"
-          },
-          "operationName" : {
-            "description" : "The name of the operation to be executed (optional, only required if the GraphQL query expresses more than one operation).",
-            "type" : "string",
-            "nullable" : true
-          },
-          "variables" : {
-            "description" : "The variables to be used in the query.",
-            "type" : "object",
-            "additionalProperties" : { },
-            "nullable" : true
-          },
-          "targetGraphs" : {
-            "description" : "The named graphs to be targeted by the query. If no graphs are specified, all graphs are targeted.",
-            "uniqueItems" : true,
-            "type" : "array",
-            "items" : {
-              "type" : "string"
-            }
-          },
-          "atTimestamp" : {
-            "description" : "Query the state of the KG at the specified point in time.",
-            "type" : "string",
-            "allOf" : [ {
-              "$ref" : "#/components/schemas/Instant"
-            } ],
-            "nullable" : true
-          },
-          "atChangeRequest" : {
-            "description" : "Query the state of the KG when the specified change request was applied.",
-            "type" : "string",
-            "nullable" : true
-          },
-          "@context" : {
-            "description" : "The JSON-LD context for the query.",
-            "type" : "object",
-            "additionalProperties" : { },
-            "example" : {
-              "ex" : "http://example.org/"
-            },
-            "nullable" : true
-          }
-        }
-      },
-      "QueryResult" : {
-        "type" : "object",
-        "properties" : {
-          "data" : {
-            "type" : "object",
-            "additionalProperties" : { },
-            "nullable" : true
-          },
-          "errors" : {
-            "type" : "array",
-            "items" : {
-              "type" : "object",
-              "additionalProperties" : { }
-            },
-            "nullable" : true
-          }
-        }
-      },
-      "RegisterPodInput" : {
-        "required" : [ "name", "configuration" ],
-        "type" : "object",
-        "properties" : {
-          "name" : {
-            "type" : "string"
-          },
-          "configuration" : {
-            "type" : "object",
-            "additionalProperties" : { }
-          }
-        }
-      },
-      "Slice" : {
-        "required" : [ "id", "context", "podId", "name", "description", "schema", "shacl", "targetGraphs" ],
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string"
-          },
-          "context" : {
-            "type" : "object",
-            "additionalProperties" : { }
-          },
-          "podId" : {
-            "type" : "string"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "description" : {
-            "type" : "string"
-          },
-          "schema" : {
-            "type" : "string"
-          },
-          "shacl" : {
-            "type" : "string"
-          },
-          "targetGraphs" : {
-            "uniqueItems" : true,
-            "type" : "array",
-            "items" : {
-              "type" : "string"
-            }
-          }
-        }
-      },
-      "SliceInput" : {
-        "required" : [ "context", "name", "schema", "description", "targetGraphs" ],
-        "type" : "object",
-        "properties" : {
-          "context" : {
-            "type" : "object",
-            "additionalProperties" : { }
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "schema" : {
-            "type" : "string"
-          },
-          "description" : {
-            "type" : "string"
-          },
-          "targetGraphs" : {
-            "uniqueItems" : true,
-            "type" : "array",
-            "items" : {
-              "type" : "string"
-            }
-          }
-        }
-      },
-      "SliceSummary" : {
-        "required" : [ "id", "name", "description" ],
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "description" : {
-            "type" : "string"
-          }
-        }
-      },
-      "UpdatePodInput" : {
-        "required" : [ "configuration" ],
-        "type" : "object",
-        "properties" : {
-          "configuration" : {
-            "type" : "object",
-            "additionalProperties" : { }
-          }
-        }
-      }
-    }
-  }
+  "servers" : [ {
+    "url" : "http://localhost:8080",
+    "description" : "Auto generated value"
+  }, {
+    "url" : "http://0.0.0.0:8080",
+    "description" : "Auto generated value"
+  } ]
 }

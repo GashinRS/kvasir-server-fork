@@ -12,12 +12,9 @@ variables:
   MVN_OPTS: "-Dmaven.repo.local=.m2/repository"
   QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.stud.atlantis.ugent.be:5050/utils/docker/eclipse-temurin:21"
 
-.gradleChanges: &gradleChanges
-  - "buildSrc/**/*"
-  - "gradle.properties"
-  - "gradlew"
-  - "gradle/**/*"
-  - "settings.gradle.kts"
+.mavenChanges: &mavenChanges
+  - "**/src/**/*"
+  - "**/pom.xml"
 
 stages:
   - build
@@ -25,18 +22,14 @@ stages:
   - deploy
   - search
 
-build:gradle:
+build:maven:
   stage: build
   image: eclipse-temurin:21
   tags: [ "cache", "docker" ]
   cache:
-    key:
-      files:
-        - gradle/wrapper/gradle-wrapper.properties
+    key: ${CI_COMMIT_REF_SLUG}
     paths:
-      - cache/caches/
-      - cache/notifications/
-      - cache/wrapper/
+      - .m2/repository/
     policy: pull-push
   services:
     - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
@@ -47,7 +40,6 @@ build:gradle:
         QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_TAG"
         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "latest"
     - when: on_success
-#      changes: *gradleChanges
       variables: &commitBranchVersions
         QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
