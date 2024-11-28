@@ -25,7 +25,7 @@ This requires you to have Java JDK 21 installed.
 
 ```bash
 docker compose up -d
-./mvnw compile quarkus:dev -Pmonolith
+./mvnw compile quarkus:dev
 ```
 
 # Documentation
