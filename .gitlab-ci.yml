@@ -8,8 +8,8 @@ variables:
   ALGOLIA_KEY: '$ALGOLIA_KEY'
   CONFIG_JSON_PRODUCT: 'kd'
   CONFIG_JSON_VERSION: 'master'
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Dorg.gradle.caching=true"
-  GRADLE_USER_HOME: cache/
+  MVN_CLI_OPTS: "--batch-mode"
+  MVN_OPTS: "-Dmaven.repo.local=.m2/repository"
   QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.stud.atlantis.ugent.be:5050/utils/docker/eclipse-temurin:21"
 
 .gradleChanges: &gradleChanges
@@ -60,7 +60,7 @@ build:gradle:
     QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
     QUARKUS_CONTAINER_IMAGE_PUSH: "true"
   script:
-    - ./gradlew --build-cache build -x test
+    - ./mvnw $MVN_CLI_OPTS package -DskipTests -T 4
 #  after_script:
 #    - awk -F,
 #      '{ instructions += $4 + $5; covered += $5 } END
