@@ -16,7 +16,7 @@ services:
   kvasir-ui:
     build: https://bot:sufPJVx5suVPs3W9kqxy@gitlab.ilabt.imec.be/ibcndevs/solid/kvasir-ui.git#main
     ports:
-      - "8081:4200"
+      - "3000:4200"
     pull_policy: build
 
 volumes:
