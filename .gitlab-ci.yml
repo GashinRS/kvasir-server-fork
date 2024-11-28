@@ -8,16 +8,35 @@ variables:
   ALGOLIA_KEY: '$ALGOLIA_KEY'
   CONFIG_JSON_PRODUCT: 'kd'
   CONFIG_JSON_VERSION: 'master'
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Dorg.gradle.caching=true"
-  GRADLE_USER_HOME: cache/
+  MAVEN_CLI_OPTS: "--batch-mode"
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
   QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.stud.atlantis.ugent.be:5050/utils/docker/eclipse-temurin:21"
 
-.gradleChanges: &gradleChanges
-  - "buildSrc/**/*"
-  - "gradle.properties"
-  - "gradlew"
-  - "gradle/**/*"
-  - "settings.gradle.kts"
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+      variables:
+        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_TAG"
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "latest"
+        QUARKUS_CONTAINER_IMAGE_PUSH: "true"
+    #    Ignore Draft MRs
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /^(\[Draft\]|\(Draft\)|Draft:)/
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      variables: &commitBranchVersions
+        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
+        QUARKUS_CONTAINER_IMAGE_PUSH: "true"
+    #   Don't trigger branch pipeline when there is an open MR
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+      variables: *commitBranchVersions
+
+
+.mavenChanges: &mavenChanges
+  - "**/src/**/*"
+  - "**/pom.xml"
 
 stages:
   - build
@@ -25,32 +44,23 @@ stages:
   - deploy
   - search
 
-build:gradle:
+build:maven:
   stage: build
   image: eclipse-temurin:21
   tags: [ "cache", "docker" ]
   cache:
-    key:
-      files:
-        - gradle/wrapper/gradle-wrapper.properties
+    key: ${CI_COMMIT_REF_SLUG}
     paths:
-      - cache/caches/
-      - cache/notifications/
-      - cache/wrapper/
+      - .m2/repository/
     policy: pull-push
-  services:
-    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
-      alias: docker
+#  services:
+#    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
+#      alias: docker
   rules:
     - if: '$CI_COMMIT_TAG'
-      variables: &commitTagVersions
-        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_TAG"
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "latest"
-    - when: on_success
-#      changes: *gradleChanges
-      variables: &commitBranchVersions
-        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+    - changes: *mavenChanges
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
@@ -58,9 +68,8 @@ build:gradle:
     QUARKUS_CONTAINER_IMAGE_GROUP: $CI_PROJECT_PATH
     QUARKUS_CONTAINER_IMAGE_USERNAME: $CI_REGISTRY_USER
     QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
-    QUARKUS_CONTAINER_IMAGE_PUSH: "true"
   script:
-    - ./gradlew --build-cache build -x test
+    - ./mvnw $MAVEN_CLI_OPTS package -DskipTests -T 4
 #  after_script:
 #    - awk -F,
 #      '{ instructions += $4 + $5; covered += $5 } END
@@ -75,25 +84,27 @@ build:gradle:
 #      junit: "**/TEST-*.xml"
 #    when: always
 
-deploy-cnl:
-  rules:
-    - if: '$CI_COMMIT_TAG'
-      variables: *commitTagVersions
-      when: manual
-    - variables: *commitBranchVersions
-      when: manual
-  cache: []
-  stage: deploy
-  image: dtzar/helm-kubectl:3.15.4
-  before_script:
-    - kubectl config view
-  script:
-    - kubectl config use-context ibcndevs/clusters:kvasir-cnl
-#    - helm upgrade --install obelisk helm/obelisk --namespace obelisk -f helm/cnl-values.yaml --set global.tag=$CI_COMMIT_REF_SLUG%
+#deploy-cnl:
+#  rules:
+#    - if: '$CI_COMMIT_TAG'
+#    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+#    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+#    - changes: *mavenChanges
+#  cache: []
+#  stage: deploy
+#  image: dtzar/helm-kubectl:3.15.4
+#  before_script:
+#    - kubectl config view
+#  script:
+#    - kubectl config use-context ibcndevs/clusters:kvasir-cnl
 
 
 build:writerside:
   stage: build
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
   image: registry.jetbrains.team/p/writerside/builder/writerside-builder:$DOCKER_VERSION
   script:
     - set -e
@@ -110,7 +121,12 @@ build:writerside:
     expire_in: 1 week
 
 test:writerside:
+  needs: [build:writerside]
   stage: test
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
   image: openjdk:18-jdk-alpine
   before_script:
     - apk add curl
@@ -121,6 +137,9 @@ test:writerside:
 
 pages:
   stage: deploy
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
   needs: [build:writerside, test:writerside]
   image: ubuntu:latest
   before_script:
@@ -138,6 +157,9 @@ pages:
 
 search:
   stage: search
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
   needs: [build:writerside, test:writerside, pages]
   image: registry.jetbrains.team/p/writerside/builder/algolia-publisher:2.0.32-3
   script:
