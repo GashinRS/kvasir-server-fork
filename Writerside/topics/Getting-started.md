@@ -19,12 +19,12 @@ The settings for this pod can be modified via the file `application.yaml` in the
 
 ## Running in dev mode
 
-If you want to experiment with modifications to the code, you can run the server in dev mode via the gradle wrapper.
+If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper.
 This requires you to have Java JDK 21 installed.
 
 ```bash
 docker compose up -d
-./gradlew :services:monolith:quarkusDev
+./mvnw compile quarkus:dev -Pmonolith
 ```
 
 ## Issues
