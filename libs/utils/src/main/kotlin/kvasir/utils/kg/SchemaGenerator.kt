@@ -76,6 +76,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
             .additionalDirective(AbstractKnowledgeGraph.filterDirective)
             .additionalDirective(AbstractKnowledgeGraph.typeDirective)
             .additionalDirective(AbstractKnowledgeGraph.predicateDirective)
+            .additionalDirective(AbstractKnowledgeGraph.graphDirective)
         return SchemaGeneratorResult(schema, unionTypes)
     }
 

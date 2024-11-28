@@ -57,6 +57,11 @@ abstract class AbstractKnowledgeGraph(
             GraphQLArgument.newArgument().name("skip").type(GraphQLInt).build(),
             GraphQLArgument.newArgument().name("orderBy").type(GraphQLList.list(GraphQLString)).build()
         )
+        val graphDirective =
+            GraphQLDirective.newDirective().name("graph").validLocations(Introspection.DirectiveLocation.FIELD,
+                Introspection.DirectiveLocation.QUERY)
+                .argument(GraphQLArgument.newArgument().name("iri").type(GraphQLList.list(GraphQLString)).build())
+                .build()
     }
 
     override fun process(request: ChangeRequest): Uni<Void> {
