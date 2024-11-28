@@ -70,6 +70,7 @@ build:maven:
     QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
   script:
     - ./mvnw $MAVEN_CLI_OPTS package -DskipTests -T 4
+  interruptible: true
 #  after_script:
 #    - awk -F,
 #      '{ instructions += $4 + $5; covered += $5 } END
@@ -119,6 +120,7 @@ build:writerside:
       - public/report.json
       - public/$ALGOLIA_ARTIFACT
     expire_in: 1 week
+  interruptible: true
 
 test:writerside:
   needs: [build:writerside]
@@ -144,20 +146,22 @@ pages:
   image: ubuntu:latest
   before_script:
     - apt-get update -y && apt-get install unzip -y
-
   script:
     - cd public
     - unzip -O UTF-8 $ARTIFACT
     - ls -l
-
   artifacts:
     paths:
       - public
     expire_in: 1 week
+  interruptible: false
 
 search:
   stage: search
   rules:
+    # Never run when the ALGOLIA_KEY is not set
+    - when: never
+      if: '$ALGOLIA_KEY == ""'
     - if: '$CI_COMMIT_TAG'
     - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
   needs: [build:writerside, test:writerside, pages]
@@ -169,3 +173,4 @@ search:
     paths:
       - algolia-update-index-log.txt
     expire_in: 1 week
+  interruptible: false
