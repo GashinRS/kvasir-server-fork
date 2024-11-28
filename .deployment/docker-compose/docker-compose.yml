@@ -82,7 +82,7 @@ services:
     depends_on:
       - kvasir
     ports:
-      - "80:80"
+      - "8081:80"
     environment:
       - "KVASIR_HOST=http://localhost:8080"
 
