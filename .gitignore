@@ -34,3 +34,4 @@ load-tests/results
 .helmsman-tmp
 *.drawio.bkp
 .kotlin
+**/target
