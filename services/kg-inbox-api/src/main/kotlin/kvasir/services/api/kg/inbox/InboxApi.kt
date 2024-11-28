@@ -24,6 +24,7 @@ import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.shacl.RDF4JSHACLValidator
 import kvasir.utils.shacl.SHACLValidationFailure
 import org.apache.kafka.common.errors.RecordTooLargeException
@@ -183,6 +184,11 @@ data class ChangeRequestInput(
 
     // Assigns a random UUID to the @id field of the entity and all its nested entities (if not already present).
     private fun assignIds(entity: Map<String, Any>, uriInfo: UriInfo): Map<String, Any> {
+        // If the entity is a literal, do not assign an id
+        if (entity.containsKey(JsonLdKeywords.type) && XSDVocab.literalTypes.contains(entity[JsonLdKeywords.type])) {
+            return entity
+        }
+
         val id = (entity["@id"] as? String) ?: uriInfo.requestUri.resolve("#${UUID.randomUUID()}").toString()
         return mapOf("@id" to id).plus(entity.entries.filterNot { (key, _) -> key == "@id" }.associate { (key, value) ->
             key to when (value) {

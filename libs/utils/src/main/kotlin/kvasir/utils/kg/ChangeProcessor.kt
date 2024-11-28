@@ -146,7 +146,13 @@ class ChangeProcessor(
         }
     }
 
-    fun toStatements(docs: List<Map<String, Any>>) = toStatements(mapOf(JsonLdKeywords.graph to docs))
+    fun toStatements(docs: List<Map<String, Any>>): List<RDFStatement> {
+        val defaultStatements =
+            toStatements(mapOf(JsonLdKeywords.graph to docs.filterNot { it.containsKey(JsonLdKeywords.graph) }))
+        val namedGraphStatements =
+            docs.filter { it.containsKey(JsonLdKeywords.graph) }.flatMap { doc -> toStatements(doc) }
+        return defaultStatements + namedGraphStatements
+    }
 
 
     /**

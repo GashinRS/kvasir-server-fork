@@ -12,4 +12,6 @@ object XSDVocab {
     val double = "${baseUri}double"
     val decimal = "${baseUri}decimal"
     val dateTime = "${baseUri}dateTime"
+
+    val literalTypes = setOf(string, boolean, int, integer, long, double, decimal, dateTime)
 }
