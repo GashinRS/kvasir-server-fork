@@ -145,7 +145,11 @@ class SQLConvertor(
                     )
                 }"
             } ?: ""
-        val (nestedFields, enableCount) = getNestedFields(targetField, idField)
+        val (nestedFields) = getNestedFields(
+            targetField,
+            GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLFieldsContainer,
+            idField
+        )
         val projection =
             (
                     listOf("subject AS $idField") + nestedFields.map {
@@ -182,11 +186,15 @@ class SQLConvertor(
         }
     }
 
-    fun scalarFieldJoinStatement(field: Field, parentJoinField: String): String {
+    fun scalarFieldJoinStatement(
+        field: Field,
+        fieldDefinition: GraphQLFieldDefinition,
+        parentJoinField: String
+    ): String {
         val name = field.name
         val joinField = "${name}_holder"
         val whereClause = listOfNotNull(
-            "predicate = '${getFQName(field.name)}'",
+            "predicate = '${getFQName(fieldDefinition)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             context[JsonLdKeywords.language]?.let { "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
@@ -198,14 +206,22 @@ class SQLConvertor(
         } $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
     }
 
-    fun relationFieldJoinStatement(field: Field, parentJoinField: String): String {
+    fun relationFieldJoinStatement(
+        field: Field,
+        fieldDefinition: GraphQLFieldDefinition,
+        parentJoinField: String
+    ): String {
         val name = field.name
         val joinField = "${name}_holder"
-        val (nestedFields, enableCount) = getNestedFields(field, "object")
+        val (nestedFields) = getNestedFields(
+            field,
+            GraphQLTypeUtil.unwrapAll(fieldDefinition.type) as GraphQLFieldsContainer,
+            "object"
+        )
         val limit = limitStatement(field).takeIf { it.isNotEmpty() }?.let { "$it BY subject" } ?: ""
         val orderBy = orderByStatement(field, "$name['", "']")
         val whereClause = listOfNotNull(
-            "predicate = '${getFQName(field.name)}'",
+            "predicate = '${getFQName(fieldDefinition)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             getNodeFilter(field)?.let { GraphQLFilterVisitor2(context).visitNode(it) },
             getArgsFilter(field)?.let {
@@ -250,7 +266,11 @@ class SQLConvertor(
     private fun getJoinType(field: Field): String =
         if (field.hasDirective(AbstractKnowledgeGraph.optionalDirective.name)) "LEFT JOIN" else "JOIN"
 
-    private fun getNestedFields(field: Field, parentJoinField: String): FieldInfo {
+    private fun getNestedFields(
+        field: Field,
+        outputDefinition: GraphQLFieldsContainer,
+        parentJoinField: String
+    ): FieldInfo {
         val processedFields = field.selectionSet.selections.flatMap { selection ->
             when (selection) {
                 is InlineFragment -> {
@@ -263,7 +283,7 @@ class SQLConvertor(
                     // Fragment spread, lookup FragmentDefinition...
                     val fragmentDefinition = env.fragmentsByName[selection.name]
                         ?: throw IllegalArgumentException("Fragment definition for '${selection.name}' not found")
-                    //... and treat included selection set as fields, but with an additional type condition )
+                    //... and treat included selection set as fields, but with an additional type condition
                     val requiredType = getFQName(fragmentDefinition.typeCondition.name)
                     fragmentDefinition.selectionSet.selections.filterIsInstance<Field>()
                         .map { FieldToJoin(it, typeFilter(listOf(requiredType))) }
@@ -279,13 +299,21 @@ class SQLConvertor(
                 SelectedField(
                     nestedField, if (nestedField.selectionSet == null) {
                         // Scalar field
-                        scalarFieldJoinStatement(nestedField, parentJoinField)
+                        scalarFieldJoinStatement(
+                            nestedField,
+                            outputDefinition.getFieldDefinition(nestedField.name),
+                            parentJoinField
+                        )
                     } else {
                         // Relation field
-                        relationFieldJoinStatement(nestedField, parentJoinField)
+                        relationFieldJoinStatement(
+                            nestedField,
+                            outputDefinition.getFieldDefinition(nestedField.name),
+                            parentJoinField
+                        )
                     }
                 )
-            }, processedFields.any { it.field.name == "totalCount" })
+            })
     }
 
     // TODO: rewrite this quick and dirty implementation
@@ -405,7 +433,7 @@ class SQLConvertor(
 
 }
 
-data class FieldInfo(val fieldSelection: List<SelectedField>, val enableCount: Boolean)
+data class FieldInfo(val fieldSelection: List<SelectedField>)
 
 data class SQLQuery(val sql: String, val columns: List<String>)
 
