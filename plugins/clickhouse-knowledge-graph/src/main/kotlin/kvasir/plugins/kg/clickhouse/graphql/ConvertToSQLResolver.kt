@@ -15,6 +15,7 @@ import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.databaseFromPodId
@@ -131,7 +132,7 @@ class SQLConvertor(
             SQLConvertorMode.COUNT -> "subject"
         }
         val whereClause = listOfNotNull(
-            typeFilter(listOf(getFQName(outputType))),
+            getFQName(outputType).takeIf { it != RDFSVocab.Resource }?.let { typeFilter(listOf(it)) },
             getNodeFilter(targetField),
             getArgsFilter(targetField),
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
