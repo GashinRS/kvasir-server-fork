@@ -122,6 +122,14 @@ class SQLConvertor(
 ) {
 
     private val tableRef = "$database.$table"
+    private val targetGraphFilterNode = getTargetGraphs()?.let { targetGraphs ->
+        val node = ComparisonNode(
+            RSQLOperators.IN,
+            "graph",
+            targetGraphs
+        )
+        node
+    }
 
     fun toSQL(): SQLQuery {
         val outputType = GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLDirectiveContainer
@@ -132,6 +140,7 @@ class SQLConvertor(
             SQLConvertorMode.COUNT -> "subject"
         }
         val whereClause = listOfNotNull(
+            targetGraphFilterNode,
             getFQName(outputType).takeIf { it != RDFSVocab.Resource }?.let { typeFilter(listOf(it)) },
             getNodeFilter(targetField),
             getArgsFilter(targetField),
@@ -195,6 +204,7 @@ class SQLConvertor(
         val name = field.name
         val joinField = "${name}_holder"
         val whereClause = listOfNotNull(
+            targetGraphFilterNode?.let { GraphQLFilterVisitor2(context).visitNode(it) },
             "predicate = '${getFQName(fieldDefinition)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             context[JsonLdKeywords.language]?.let { "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
@@ -222,6 +232,7 @@ class SQLConvertor(
         val limit = limitStatement(field).takeIf { it.isNotEmpty() }?.let { "$it BY subject" } ?: ""
         val orderBy = orderByStatement(field, "$name['", "']")
         val whereClause = listOfNotNull(
+            targetGraphFilterNode?.let { GraphQLFilterVisitor2(context).visitNode(it) },
             "predicate = '${getFQName(fieldDefinition)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             getNodeFilter(field)?.let { GraphQLFilterVisitor2(context).visitNode(it) },
@@ -248,6 +259,20 @@ class SQLConvertor(
                 postfix = ")"
             )
         } $COLLAPSE_STATE_EXPR $orderBy $limit) ${name}_join ON $parentJoinField = $joinField"
+    }
+
+    private fun getTargetGraphs(): List<String>? {
+        val graphDirective = env.document.getDefinitionsOfType(OperationDefinition::class.java)
+            .first { it.operation == OperationDefinition.Operation.QUERY }.directivesByName["graph"]?.firstOrNull()
+        return graphDirective?.let { directive ->
+            directive.getArgument("iri")?.value?.let { value ->
+                when (value) {
+                    is StringValue -> listOf(value.value)
+                    is ArrayValue -> value.values.mapNotNull { (it as? StringValue)?.value }
+                    else -> null
+                }?.takeIf { it.isNotEmpty() }
+            }
+        }
     }
 
     private fun limitStatement(field: Field): String {
