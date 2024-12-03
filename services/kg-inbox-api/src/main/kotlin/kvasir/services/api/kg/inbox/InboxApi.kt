@@ -146,7 +146,7 @@ data class ChangeRequestInput(
     @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val insert: List<Any> = emptyList(),
     @get:Schema(
-        name = "kss:insert",
+        name = "kss:delete",
         description = "List of triples to be deleted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
         example = "[ { \"@id\": \"ex:123\", \"ex:givenName\": \"Alice\" } ]"
     )

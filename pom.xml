@@ -25,6 +25,7 @@
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.17.0</quarkus.platform.version>
         <quarkus.extensions.minio.version>3.7.7</quarkus.extensions.minio.version>
+        <jackson.version>2.17.1</jackson.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.0</surefire-plugin.version>
     </properties>
@@ -73,6 +74,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-openapi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-kotlin</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -172,10 +178,25 @@
                             <artifactId>kotlin-maven-allopen</artifactId>
                             <version>${kotlin.version}</version>
                         </dependency>
+                        <dependency>
+                            <groupId>org.jetbrains.kotlin</groupId>
+                            <artifactId>kotlin-maven-noarg</artifactId>
+                            <version>${kotlin.version}</version>
+                        </dependency>
                     </dependencies>
                     <configuration>
                         <javaParameters>true</javaParameters>
                         <jvmTarget>21</jvmTarget>
+                        <compilerPlugins>
+                            <plugin>all-open</plugin>
+                            <plugin>no-arg</plugin>
+                        </compilerPlugins>
+                        <pluginOptions>
+                            <option>all-open:annotation=jakarta.ws.rs.Path</option>
+                            <option>all-open:annotation=jakarta.enterprise.context.ApplicationScoped</option>
+                            <option>all-open:annotation=io.quarkus.test.junit.QuarkusTest</option>
+                            <option>no-arg:annotation=kvasir.definitions.annotations.GenerateNoArgConstructor</option>
+                        </pluginOptions>
                     </configuration>
                 </plugin>
                 <plugin>
