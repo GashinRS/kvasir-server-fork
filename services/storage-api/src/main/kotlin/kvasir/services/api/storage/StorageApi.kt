@@ -7,6 +7,7 @@ import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.net.HostAndPort
 import io.vertx.ext.web.Router
 import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
@@ -83,7 +84,7 @@ class S3Interceptor(
             val podId = context.request().proxiedRequest().getParam("podId")
             val sliceId = context.request().proxiedRequest().getParam("sliceId")
             val target = replacePath(context.request().uri, podId, sliceId)
-            context.request().setURI(target)
+            context.request().uri = target
             val isoDateTime = getIsoDateTime(context)
             val payloadHash = getPayloadHash(context, buffer)
             val targetUri = URI.create(target);
@@ -101,6 +102,7 @@ class S3Interceptor(
             context.request().putHeader("x-amz-date", isoDateTime)
             context.request().putHeader("x-amz-content-sha256", payloadHash)
             context.request().putHeader("Host", "$s3Host:$s3Port")
+            context.request().authority = HostAndPort.authority(s3Host, s3Port)
             context.sendRequest()
         }
     }

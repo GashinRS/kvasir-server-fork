@@ -1,5 +1,6 @@
 '%test':
   kvasir:
+    base-uri: http://localhost:8081
     bootstrap:
       pods:
         - name: test
