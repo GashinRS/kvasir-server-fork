@@ -135,10 +135,12 @@ class ChangeProcessor(
         return dataset.graphNames().flatMap { graph ->
             dataset.getQuads(graph).map { quad ->
                 RDFStatement(
-                    subject = quad.subject.value,
-                    predicate = quad.predicate.value,
-                    `object` = if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else quad.`object`.value,
-                    graph = quad.graph?.value ?: "",
+                    subject = ensureValidAbsoluteIri(quad.subject.value),
+                    predicate = ensureValidAbsoluteIri(quad.predicate.value),
+                    `object` = if (quad.`object`.isLiteral) getCompatibleRawValue(quad.`object` as RDFDataset.Literal) else ensureValidAbsoluteIri(
+                        quad.`object`.value
+                    ),
+                    graph = quad.graph?.value?.let { ensureValidAbsoluteIri(it) } ?: "",
                     dataType = quad.`object`.datatype?.toString(),
                     language = quad.`object`.language?.toString()
                 )
@@ -154,6 +156,12 @@ class ChangeProcessor(
         return defaultStatements + namedGraphStatements
     }
 
+    private fun ensureValidAbsoluteIri(iri: String): String {
+        if (iri.indexOf(':') < 0) {
+            throw IllegalArgumentException("Not a valid (absolute) IRI: '$iri'")
+        }
+        return iri
+    }
 
     /**
      * Get the value of an RDF Literal as a Java compatible primitive (if not supported, the string representation is used).
