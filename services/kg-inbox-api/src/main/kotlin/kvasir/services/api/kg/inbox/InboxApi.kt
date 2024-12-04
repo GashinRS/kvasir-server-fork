@@ -22,6 +22,7 @@ import kvasir.definitions.kg.changeops.Assertion
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
@@ -191,12 +192,22 @@ data class ChangeRequestInput(
 
         val id = (entity["@id"] as? String) ?: uriInfo.requestUri.resolve("#${UUID.randomUUID()}").toString()
         return mapOf("@id" to id).plus(entity.entries.filterNot { (key, _) -> key == "@id" }.associate { (key, value) ->
-            key to when (value) {
-                is Map<*, *> -> assignIds(value as Map<String, Any>, uriInfo)
-                is List<*> -> value.map { if (it is Map<*, *>) assignIds(it as Map<String, Any>, uriInfo) else it }
-                else -> value
+            key to when (key) {
+                JsonLdKeywords.reverse -> value.takeIf { it is Map<*, *> }
+                    ?.let { (it as Map<*, *>).mapValues { it.value?.let{ assignIdsMapValue(it, uriInfo) }} }
+                    ?: throw IllegalArgumentException("@reverse property must be a map")
+
+                else -> assignIdsMapValue(value, uriInfo)
             }
         })
+    }
+
+    private fun assignIdsMapValue(value: Any, uriInfo: UriInfo): Any {
+        return when (value) {
+            is Map<*, *> -> assignIds(value as Map<String, Any>, uriInfo)
+            is List<*> -> value.map { if (it is Map<*, *>) assignIds(it as Map<String, Any>, uriInfo) else it }
+            else -> value
+        }
     }
 
 }

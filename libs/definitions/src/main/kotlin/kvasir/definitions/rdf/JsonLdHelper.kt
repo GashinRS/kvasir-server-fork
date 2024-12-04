@@ -10,6 +10,7 @@ object JsonLdKeywords {
     const val id = "@id"
     const val type = "@type"
     const val graph = "@graph"
+    const val reverse = "@reverse"
     const val language = "@language"
 }
 
