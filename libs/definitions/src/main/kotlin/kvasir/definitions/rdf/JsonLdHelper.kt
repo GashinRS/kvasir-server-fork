@@ -27,8 +27,10 @@ object JsonLdHelper {
             // Nothing to compact given the context
             uri
         } else {
-            val (prefix, rest) = compactedString.split(":", limit = 2)
-            "${prefix}${separator}${rest}"
+            compactedString.split(":", limit = 2).takeIf { parts -> parts.size == 2 }?.let { (prefix, rest) ->
+                "${prefix}${separator}${rest}"
+            } ?: compactedString
+
         }
     }
 

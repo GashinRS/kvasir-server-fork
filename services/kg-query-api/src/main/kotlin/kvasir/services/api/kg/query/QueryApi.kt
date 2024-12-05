@@ -71,7 +71,7 @@ class QueryApi(
         input: QueryInputWithContext
     ): QueryRequest {
         return QueryRequest(
-            pod.getDefaultContext(),
+            input.providedContext ?: pod.getDefaultContext(),
             pod.id,
             input.query,
             input.variables,
