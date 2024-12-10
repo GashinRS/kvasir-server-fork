@@ -2,6 +2,7 @@ package kvasir.plugins.kg.clickhouse
 
 import com.google.common.hash.Hashing
 import graphql.TypeResolutionEnvironment
+import graphql.execution.instrumentation.Instrumentation
 import graphql.schema.DataFetcher
 import graphql.schema.GraphQLObjectType
 import graphql.schema.GraphQLUnionType
@@ -18,6 +19,7 @@ import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.graphql.ConvertToSQLResolver
+import kvasir.plugins.kg.clickhouse.graphql.PaginationInstrumentation
 import kvasir.plugins.kg.clickhouse.specs.*
 import kvasir.utils.kg.AbstractKnowledgeGraph
 import kvasir.utils.kg.KGPropertyKind
@@ -85,6 +87,14 @@ class ClickhouseKnowledgeGraph(
         context: Map<String, Any>
     ): TypeResolver {
         return RDFClassTypeResolver(context)
+    }
+
+    override fun provideInstrumentation(
+        podId: String,
+        context: Map<String, Any>,
+        atTimestamp: Instant?
+    ): Instrumentation {
+        return PaginationInstrumentation(clickhouseClient, podId, context, atTimestamp)
     }
 
     override fun getTypeInfo(podId: String): Uni<List<KGType>> {

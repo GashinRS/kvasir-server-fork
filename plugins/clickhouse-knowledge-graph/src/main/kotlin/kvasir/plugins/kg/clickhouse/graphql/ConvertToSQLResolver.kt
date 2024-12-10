@@ -6,31 +6,39 @@ import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
+import graphql.ExecutionResult
+import graphql.execution.ExecutionStepInfo
+import graphql.execution.FetchedValue
+import graphql.execution.instrumentation.InstrumentationContext
+import graphql.execution.instrumentation.InstrumentationState
+import graphql.execution.instrumentation.SimpleInstrumentationContext
+import graphql.execution.instrumentation.SimplePerformantInstrumentation
+import graphql.execution.instrumentation.parameters.InstrumentationCreateStateParameters
+import graphql.execution.instrumentation.parameters.InstrumentationExecutionParameters
+import graphql.execution.instrumentation.parameters.InstrumentationFieldCompleteParameters
+import graphql.execution.instrumentation.parameters.InstrumentationFieldFetchParameters
 import graphql.language.*
 import graphql.schema.*
-import io.quarkus.cache.Cache
-import io.quarkus.cache.CacheName
+import io.smallrye.mutiny.Multi
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
-import kvasir.definitions.rdf.JsonLdHelper
-import kvasir.definitions.rdf.JsonLdKeywords
-import kvasir.definitions.rdf.RDFSVocab
-import kvasir.definitions.rdf.RDFVocab
+import kvasir.definitions.rdf.*
+import kvasir.plugins.kg.clickhouse.OffsetBasedCursor
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.databaseFromPodId
 import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
 import kvasir.plugins.kg.clickhouse.utils.ClickhouseUtils
+import kvasir.utils.graphql.isList
 import kvasir.utils.kg.AbstractKnowledgeGraph
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
 
 @ApplicationScoped
 class ConvertToSQLResolver(
-    private val clickhouseClient: ClickhouseClient,
-    @CacheName("total-count-request-cache")
-    private val countCache: Cache
+    private val clickhouseClient: ClickhouseClient
 ) {
 
     fun getDatafetcher(
@@ -59,41 +67,11 @@ class ConvertToSQLResolver(
                         }
                         .convert().toCompletionStage()
                 } else {
-                    val source = env.getSource<Any?>()
-                    val key = env.fieldDefinition.name
-
-                    if (env.fieldDefinition.name == "totalCount") {
-                        val sqlConvertor = SQLConvertor(
-                            context,
-                            atTimestamp,
-                            databaseName,
-                            DATA_TABLE,
-                            env.executionStepInfo.parent.field.singleField,
-                            env.executionStepInfo.parent.fieldDefinition,
-                            env,
-                            SQLConvertorMode.COUNT
-                        )
-                        val (sql, columns) = sqlConvertor.toSQL()
-
-                        val cacheKey = Hashing.farmHashFingerprint64().hashBytes(sql.toByteArray()).toString()
-                        countCache.getAsync(cacheKey) { key ->
-                            clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
-                                .map { result ->
-                                    result[0]["totalCount"]
-                                }
-                        }.convert().toCompletionStage()
-                    } else {
-
-                        val value = when (source) {
-                            is Map<*, *> -> source["_$key"] ?: source[key]
-                            is JsonObject -> source.getValue(key)
-                            else -> null
-                        }
-                        when (value) {
-                            is List<*> -> value.filterNotNull()
-                            is JsonArray -> value.list.filterNotNull()
-                            else -> value
-                        }
+                    val value = env.getFromSource<Any>(env.fieldDefinition.name)
+                    when (value) {
+                        is List<*> -> value.filterNotNull()
+                        is JsonArray -> value.list.filterNotNull()
+                        else -> value
                     }
                 }
             }
@@ -103,7 +81,6 @@ class ConvertToSQLResolver(
 }
 
 private const val COLLAPSE_STATE_EXPR = "HAVING argMax(sign, timestamp) > 0"
-private const val VIA_SPLIT_CHAR = "^^"
 
 enum class SQLConvertorMode {
     GET_DATA,
@@ -133,7 +110,7 @@ class SQLConvertor(
 
     fun toSQL(): SQLQuery {
         val outputType = GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLDirectiveContainer
-        val limit = limitStatement(targetField)
+        val (pageSize, offset) = targetField.getPaginationInfo()
         val orderBy = orderByStatement(targetField, "_")
         val idField = when (mode) {
             SQLConvertorMode.GET_DATA -> "_id"
@@ -141,7 +118,7 @@ class SQLConvertor(
         }
         val whereClause = listOfNotNull(
             targetGraphFilterNode,
-            getFQName(outputType).takeIf { it != RDFSVocab.Resource }?.let { typeFilter(listOf(it)) },
+            getFQName(outputType, context).takeIf { it != RDFSVocab.Resource }?.let { typeFilter(listOf(it)) },
             getNodeFilter(targetField),
             getArgsFilter(targetField),
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
@@ -173,7 +150,7 @@ class SQLConvertor(
                 SQLQuery(
                     "SELECT $projection FROM $tableRef ${
                         nestedFields.joinToString(" ") { it.joinStatement }
-                    } $whereClause GROUP BY subject $orderBy $limit",
+                    } $whereClause GROUP BY subject $orderBy LIMIT $offset, $pageSize",
                     listOf(idField) + nestedFields.map { "_${it.field.name}" }
                 )
             }
@@ -202,10 +179,11 @@ class SQLConvertor(
         parentJoinField: String
     ): String {
         val name = field.name
+        val (pageSize, offset) = field.getPaginationInfo()
         val joinField = "${name}_holder"
         val whereClause = listOfNotNull(
             targetGraphFilterNode?.let { GraphQLFilterVisitor2(context).visitNode(it) },
-            "predicate = '${getFQName(fieldDefinition)}'",
+            "predicate = '${getFQName(fieldDefinition, context)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             context[JsonLdKeywords.language]?.let { "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
@@ -214,7 +192,7 @@ class SQLConvertor(
                 prefix = "(",
                 postfix = ")"
             )
-        } $COLLAPSE_STATE_EXPR) ${name}_join ON $parentJoinField = $joinField"
+        } $COLLAPSE_STATE_EXPR LIMIT $offset, $pageSize BY subject) ${name}_join ON $parentJoinField = $joinField"
     }
 
     fun relationFieldJoinStatement(
@@ -223,17 +201,17 @@ class SQLConvertor(
         parentJoinField: String
     ): String {
         val name = field.name
+        val (pageSize, offset) = field.getPaginationInfo()
         val joinField = "${name}_holder"
         val (nestedFields) = getNestedFields(
             field,
             GraphQLTypeUtil.unwrapAll(fieldDefinition.type) as GraphQLFieldsContainer,
             "object"
         )
-        val limit = limitStatement(field).takeIf { it.isNotEmpty() }?.let { "$it BY subject" } ?: ""
         val orderBy = orderByStatement(field, "$name['", "']")
         val whereClause = listOfNotNull(
             targetGraphFilterNode?.let { GraphQLFilterVisitor2(context).visitNode(it) },
-            "predicate = '${getFQName(fieldDefinition)}'",
+            "predicate = '${getFQName(fieldDefinition, context)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             getNodeFilter(field)?.let { GraphQLFilterVisitor2(context).visitNode(it) },
             getArgsFilter(field)?.let {
@@ -247,8 +225,7 @@ class SQLConvertor(
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
         val mappedFields =
             (listOf(
-                "'id'" to "object",
-                "'via'" to "[concat(subject, '$VIA_SPLIT_CHAR', predicate)]"
+                "'id'" to "object"
             ) + nestedFields.map { "'${it.field.name}'" to "arrayDistinct(ARRAY_AGG(${it.field.name}))" })
                 .joinToString { (a, b) -> "$a,$b" }
         return "${getJoinType(field)} (SELECT subject AS $joinField, map($mappedFields) as $name FROM $tableRef ${
@@ -258,7 +235,7 @@ class SQLConvertor(
                 prefix = "(",
                 postfix = ")"
             )
-        } $COLLAPSE_STATE_EXPR $orderBy $limit) ${name}_join ON $parentJoinField = $joinField"
+        } $COLLAPSE_STATE_EXPR $orderBy LIMIT $offset, $pageSize BY subject) ${name}_join ON $parentJoinField = $joinField"
     }
 
     private fun getTargetGraphs(): List<String>? {
@@ -273,13 +250,6 @@ class SQLConvertor(
                 }?.takeIf { it.isNotEmpty() }
             }
         }
-    }
-
-    private fun limitStatement(field: Field): String {
-        return (field.arguments.find { it.name == "first" }?.value as? IntValue)?.value?.let { limit ->
-            val skip = (field.arguments.find { it.name == "skip" }?.value as? IntValue)?.value ?: 0
-            "LIMIT $limit OFFSET $skip"
-        } ?: ""
     }
 
     private fun orderByStatement(field: Field, prefix: String = "", postFix: String = ""): String {
@@ -319,7 +289,7 @@ class SQLConvertor(
                 else -> emptyList()
             }
         }
-        return FieldInfo(processedFields.filterNot { it.field.name == "id" || it.field.name == "totalCount" }
+        return FieldInfo(processedFields.filterNot { it.field.name == "id" || it.field.name.startsWith("__") }
             .map { (nestedField, typeFilter) ->
                 // TODO: handle typeFilters
                 SelectedField(
@@ -421,15 +391,6 @@ class SQLConvertor(
         }
     }
 
-    private fun getFQName(node: GraphQLDirectiveContainer): String {
-        return JsonLdHelper.getFQName(node.name, context, "_")?.takeIf { it != node.name }
-            ?: run {
-                node.getAppliedDirective("predicate")?.getArgument("iri")?.getValue<String>()
-                    ?: node.getAppliedDirective("type")?.getArgument("iri")?.getValue<String>()
-
-            } ?: throw IllegalArgumentException("No semantic context found for ${node.name}")
-    }
-
     private fun getFQName(name: String): String {
         return JsonLdHelper.getFQName(name, context, "_")?.takeIf { it != name }
             ?: throw IllegalArgumentException("No semantic context found for $name")
@@ -445,16 +406,117 @@ class SQLConvertor(
     }
 
     private fun getRelationshipFilter(): String? {
-        val source = env.getSource<Any?>()
-        val via: List<String>? = when (source) {
-            is Map<*, *> -> source["via"] as List<String>?
-            is JsonObject -> source.getValue("via") as List<String>?
-            else -> null
+        val targetSubject = env.getFromSource<Any>("id")
+        val targetPredicate = getFQName(targetFieldDefinition, context)
+        return targetSubject?.let { "subject IN (SELECT object FROM $tableRef WHERE subject = '$targetSubject' AND predicate = '$targetPredicate')" }
+    }
+
+}
+
+class PaginationInstrumentationState(
+    val state: MutableMap<String, String> = mutableMapOf(),
+    val environments: MutableMap<String, DataFetchingEnvironment> = mutableMapOf()
+) : InstrumentationState {
+
+    fun addCountTarget(executionStepInfo: ExecutionStepInfo, countSql: String) {
+        state[executionStepInfo.path.toString()] = countSql
+    }
+
+}
+
+class PaginationInstrumentation(
+    val clickhouseClient: ClickhouseClient,
+    val podId: String,
+    val context: Map<String, Any>,
+    val atTimestamp: Instant?
+) : SimplePerformantInstrumentation() {
+
+    companion object {
+        const val EXTENSION_ID = "pagination"
+    }
+
+    private val databaseName = databaseFromPodId(podId)
+
+    override fun createState(parameters: InstrumentationCreateStateParameters?): InstrumentationState? {
+        return PaginationInstrumentationState()
+    }
+
+    override fun beginFieldFetch(
+        parameters: InstrumentationFieldFetchParameters,
+        state: InstrumentationState
+    ): InstrumentationContext<in Any> {
+        state as PaginationInstrumentationState
+        state.environments[parameters.executionStepInfo.path.toString()] = parameters.environment
+        return SimpleInstrumentationContext.noOp()
+    }
+
+    override fun beginFieldCompletion(
+        parameters: InstrumentationFieldCompleteParameters,
+        state: InstrumentationState
+    ): InstrumentationContext<in Any> {
+        state as PaginationInstrumentationState
+        if (parameters.executionStepInfo.fieldDefinition.type.isList()) {
+            val env = state.environments[parameters.executionStepInfo.path.toString()]!!
+            val (pageSize, _) = env.field.getPaginationInfo()
+            val outputSize = ((parameters.fetchedValue as? FetchedValue)?.fetchedValue as? List<*>)?.size
+            if (outputSize != null && outputSize == pageSize) {
+                return object : SimpleInstrumentationContext<Any>() {
+                    override fun onCompleted(result: Any?, t: Throwable?) {
+                        val sqlConvertor = SQLConvertor(
+                            context,
+                            atTimestamp,
+                            databaseName,
+                            DATA_TABLE,
+                            env.field,
+                            env.fieldDefinition,
+                            env,
+                            SQLConvertorMode.COUNT
+                        )
+                        val (sql, _) = sqlConvertor.toSQL()
+                        state.addCountTarget(parameters.executionStepInfo, sql)
+                    }
+                }
+            }
         }
-        return via?.let { path ->
-            val (parentId, predicate) = path.first().split(VIA_SPLIT_CHAR)
-            "subject IN (SELECT object FROM $tableRef WHERE subject = '$parentId' AND predicate = '$predicate')"
-        }
+        return SimpleInstrumentationContext.noOp()
+    }
+
+    override fun instrumentExecutionResult(
+        executionResult: ExecutionResult,
+        parameters: InstrumentationExecutionParameters,
+        state: InstrumentationState
+    ): CompletableFuture<ExecutionResult> {
+        return Multi.createFrom().iterable((state as PaginationInstrumentationState).state.entries)
+            .onItem().transformToUni { (path, sql) ->
+                val env = state.environments[path]!!
+                val (pageSize, offset) = env.field.getPaginationInfo()
+                clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, listOf("totalCount")), sql)
+                    .map { result ->
+                        val totalCount = result[0]["totalCount"].toString().toLong()
+                        mapOf(
+                            JsonLdKeywords.id to "kvasir:qr-page-info:${
+                                Hashing.farmHashFingerprint64()
+                                    .hashString(path, Charsets.UTF_8)
+                            }",
+                            "path" to path,
+                            "parent" to env.getFromSource("id"),
+                            (if (env.executionStepInfo.path.parent.isRootPath) "class" else "predicate") to getFQName(
+                                env.fieldDefinition,
+                                context
+                            ),
+                            "totalCount" to totalCount,
+                            "next" to if (offset + pageSize < totalCount) OffsetBasedCursor(offset + pageSize).encode() else null,
+                            "previous" to if (offset - pageSize >= 0) OffsetBasedCursor(offset - pageSize).encode() else null
+                        ).filterValues { it != null }
+                    }
+            }
+            .merge().collect().asList()
+            .map { pageData ->
+                executionResult.transform { result ->
+                    result.extensions(mapOf(EXTENSION_ID to pageData))
+                }
+            }
+            .convert().toCompletableFuture()
     }
 
 }
@@ -465,3 +527,30 @@ data class SQLQuery(val sql: String, val columns: List<String>)
 
 data class FieldToJoin(val field: Field, val typeFilter: Node?)
 data class SelectedField(val field: Field, val joinStatement: String)
+
+private fun Field.getPaginationInfo(): Pair<Int, Long> {
+    val pageSize = (arguments.find { it.name == "pageSize" }?.value as? IntValue)?.value?.toInt()
+        ?: AbstractKnowledgeGraph.DEFAULT_PAGE_SIZE
+    val cursor = (arguments.find { it.name == "cursor" }?.value as? StringValue)?.value?.let {
+        OffsetBasedCursor.fromString(it)?.offset
+    } ?: 0L
+    return pageSize to cursor
+}
+
+private fun <T> DataFetchingEnvironment.getFromSource(key: String): T? {
+    val source = getSource<Any?>()
+    return when (source) {
+        is Map<*, *> -> source["_$key"] ?: source[key]
+        is JsonObject -> source.getValue(key)
+        else -> null
+    } as T?
+}
+
+private fun getFQName(node: GraphQLDirectiveContainer, context: Map<String, Any>): String {
+    return JsonLdHelper.getFQName(node.name, context, "_")?.takeIf { it != node.name }
+        ?: run {
+            node.getAppliedDirective("predicate")?.getArgument("iri")?.getValue<String>()
+                ?: node.getAppliedDirective("type")?.getArgument("iri")?.getValue<String>()
+
+        } ?: throw IllegalArgumentException("No semantic context found for ${node.name}")
+}

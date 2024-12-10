@@ -4,13 +4,17 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
+import com.github.jsonldjava.shaded.com.google.common.hash.Hashing
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.changeops.Assertion
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.KvasirNamedGraphs
 import kvasir.definitions.rdf.KvasirVocab
 import java.time.Instant
+import java.util.UUID
 import java.util.function.Predicate
 
 interface KnowledgeGraph {
@@ -213,27 +217,58 @@ data class ChangeHistoryRequest(
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class QueryResult(
     val data: Map<String, Any>? = null,
-    val errors: List<Map<String, Any>>? = null
+    val errors: List<Map<String, Any>>? = null,
+    val extensions: Map<String, Any>? = null
 ) {
 
-    fun toJsonLD(context: Map<String, Any>): Map<String, Any> {
-        return transformKeys(data, context)?.let { nonNullGraph ->
+    fun toJsonLD(context: Map<String, Any>): List<Map<String, Any>> {
+        val dataAsGraph = transform(data, context)?.let {
+            when (it) {
+                is List<*> -> mapOf(JsonLdKeywords.graph to it)
+                else -> mapOf(JsonLdKeywords.graph to listOf(it))
+            }
+        }
+        return listOfNotNull(
             // Compact data coming from GraphQL using context
-            JsonLdProcessor.compact(JsonLdProcessor.expand(nonNullGraph), context, JsonLdOptions())
-        } ?: emptyMap()
+            dataAsGraph?.let {
+                JsonLdProcessor.compact(
+                    JsonLdProcessor.expand(
+                        mapOf(
+                            JsonLdKeywords.id to KvasirNamedGraphs.queryResultDataGraph,
+                            JsonLdKeywords.context to KvasirVocab.context
+                        ) + it
+                    ),
+                    context,
+                    JsonLdOptions()
+                ) as Map<String, Any>
+            },
+            extensions?.get("pagination")?.let { it as List<Map<String, Any>> }?.takeIf { it.isNotEmpty() }?.let {
+                mapOf(
+                    JsonLdKeywords.context to KvasirVocab.context,
+                    JsonLdKeywords.id to KvasirNamedGraphs.queryResultPaginationGraph,
+                    JsonLdKeywords.graph to it
+                )
+            },
+            errors?.takeIf { it.isNotEmpty() }?.let {
+                mapOf(
+                    JsonLdKeywords.context to KvasirVocab.context,
+                    JsonLdKeywords.id to KvasirNamedGraphs.queryResultErrorsGraph,
+                    JsonLdKeywords.graph to it
+                )
+            },
+        )
     }
 
-    private fun transformKeys(graphQLData: Any?, context: Map<String, Any>): Any? {
+    private fun transform(graphQLData: Any?, context: Map<String, Any>): Any? {
         return when (graphQLData) {
             null -> null
-            is List<*> -> graphQLData.map { transformKeys(it!!, context) }
             is Map<*, *> -> graphQLData.mapKeys { e ->
                 val key = e.key as String
                 if (key == "id") {
-                    return@mapKeys "@id"
+                    return@mapKeys JsonLdKeywords.id
                 }
                 if (key == "__typename") {
-                    return@mapKeys "@type"
+                    return@mapKeys JsonLdKeywords.type
                 }
                 val keyPrefix = key.substringBefore("_")
                 if (context.contains(keyPrefix)) {
@@ -242,7 +277,15 @@ data class QueryResult(
                     key
                 }
             }
-                .mapValues { transformKeys(it.value!!, context) }
+                .mapValues { (key, value) ->
+                    if (key == JsonLdKeywords.type) {
+                        JsonLdHelper.getFQName(value as String, context, "_")
+                    } else {
+                        transform(value!!, context)
+                    }
+                }
+
+            is Collection<*> -> graphQLData.map { transform(it!!, context) }
 
             else -> graphQLData
         }

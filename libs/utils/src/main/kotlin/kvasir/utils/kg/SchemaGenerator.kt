@@ -7,6 +7,7 @@ import graphql.scalars.ExtendedScalars
 import graphql.schema.*
 import graphql.schema.idl.TypeDefinitionRegistry
 import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.graphql.innerType
@@ -19,7 +20,10 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         val graphQLObjects = types.map { type ->
             val prefixedTypeName = graphqLCompatibleName(type.uri, context)
             val idField = GraphQLFieldDefinition.newFieldDefinition().name("id").type(GraphQLID).build()
-            val totalCount = GraphQLFieldDefinition.newFieldDefinition().name("totalCount").type(GraphQLInt).build()
+            val totalCount =
+                GraphQLFieldDefinition.newFieldDefinition().name(graphqLCompatibleName(KvasirVocab.totalCount, context))
+                    .description("Total number of selected '${type.uri}' instances")
+                    .type(GraphQLInt).build()
             val typeDirective = AbstractKnowledgeGraph.typeDirective.toAppliedDirective()
             GraphQLObjectType.newObject().name(prefixedTypeName).description(type.uri)
                 .withAppliedDirective(typeDirective.transform { directiveBuilder ->
@@ -49,7 +53,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                             .arguments(
                                 if (KGPropertyKind.IRI == property.kind) AbstractKnowledgeGraph.defaultRelationArguments.plus(
                                     argumentsForType(propertyType)
-                                ) else emptyList()
+                                ) else AbstractKnowledgeGraph.defaultRelationArguments
                             )
                             .name(prefixedProperty)
                             .description(property.uri)

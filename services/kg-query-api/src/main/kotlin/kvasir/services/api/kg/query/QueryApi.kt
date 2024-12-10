@@ -55,7 +55,7 @@ class QueryApi(
     )
     fun queryJsonLD(
         @PathParam("podId") podId: String, input: QueryInputWithContext
-    ): Uni<Map<String, Any>> {
+    ): Uni<Any> {
         val podId = uriInfo.absolutePath.toString().substringBefore(QUERY_API_PATH)
         return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->

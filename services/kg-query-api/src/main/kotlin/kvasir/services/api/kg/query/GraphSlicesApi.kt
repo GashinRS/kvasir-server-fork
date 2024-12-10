@@ -162,7 +162,7 @@ class GraphSlicesApi(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
         input: QueryInputImpl,
-    ): Uni<Map<String, Any>> {
+    ): Uni<Any> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
         val sliceId = uriInfo.absolutePath.toString().substringBefore("/query")
         return throw404IfPodNotFound(podStore, podId).chain { _ ->

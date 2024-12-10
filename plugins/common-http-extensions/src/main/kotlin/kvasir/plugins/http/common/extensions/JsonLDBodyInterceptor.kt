@@ -5,11 +5,7 @@ import com.github.jsonldjava.core.JsonLdProcessor
 import com.github.jsonldjava.utils.JsonUtils
 import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
-import jakarta.ws.rs.ext.Provider
-import jakarta.ws.rs.ext.ReaderInterceptor
-import jakarta.ws.rs.ext.ReaderInterceptorContext
-import jakarta.ws.rs.ext.WriterInterceptor
-import jakarta.ws.rs.ext.WriterInterceptorContext
+import jakarta.ws.rs.ext.*
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
@@ -23,16 +19,26 @@ private val defaultContext = mapOf("kss" to KvasirVocab.baseUri)
 class JsonLDBodyInterceptor : WriterInterceptor, ReaderInterceptor {
     override fun aroundWriteTo(ctx: WriterInterceptorContext) {
         if (ctx.mediaType?.type == MAIN_MEDIA_TYPE && ctx.mediaType?.subtype == SUB_MEDIA_TYPE) {
-            ctx.entity = if (ctx.entity is List<*>) {
-                // TODO: Optimize, prevent double serialization
-                mapOf(
-                    JsonLdKeywords.context to defaultContext,
-                    JsonLdKeywords.graph to (JsonUtils.fromString(Json.encode(ctx.entity)) as List<*>).map {
-                        JsonLdProcessor.compact(it, defaultContext, JsonLdOptions()).minus(JsonLdKeywords.context)
-                    }
-                )
+            val content = ctx.entity
+            ctx.entity = if (content is List<*>) {
+                // if the list contains JSON-LD, return as is
+                if (content.any {
+                        it is Map<*, *> && (it.containsKey(JsonLdKeywords.context) || it.containsKey(
+                            JsonLdKeywords.graph
+                        ))
+                    }) {
+                    content
+                } else {
+                    // TODO: Optimize, prevent double serialization
+                    mapOf(
+                        JsonLdKeywords.context to defaultContext,
+                        JsonLdKeywords.graph to (JsonUtils.fromString(Json.encode(ctx.entity)) as List<*>).map {
+                            JsonLdProcessor.compact(it, defaultContext, JsonLdOptions()).minus(JsonLdKeywords.context)
+                        }
+                    )
+                }
             } else {
-                val jsonld = JsonObject.mapFrom(ctx.entity).map
+                val jsonld = JsonObject.mapFrom(content).map
                 JsonLdProcessor.compact(jsonld, jsonld[JsonLdKeywords.context] ?: defaultContext, JsonLdOptions())
             }
         }

@@ -13,6 +13,7 @@ import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.KvasirNamedGraphs
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.definitions.reactive.skipToLast
@@ -108,7 +109,15 @@ class ChangeProcessor(
                 is String -> {
                     if (record == "*") {
                         // Return bindings as is
-                        bindings.toJsonLD(request.context)["@graph"] as List<Map<String, Any>>
+                        bindings.toJsonLD(request.context)
+                            .find { it[JsonLdKeywords.id] == KvasirNamedGraphs.queryResultDataGraph }?.let {
+                            val graph = it[JsonLdKeywords.graph]
+                            if (graph is List<*>) {
+                                graph.map { it as Map<String, Any> }
+                            } else {
+                                listOf(graph as Map<String, Any>)
+                            }
+                        } ?: listOf()
                     } else {
                         transformTemplate(
                             record,

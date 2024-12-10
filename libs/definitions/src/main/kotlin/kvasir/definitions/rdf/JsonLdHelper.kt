@@ -12,6 +12,7 @@ object JsonLdKeywords {
     const val graph = "@graph"
     const val reverse = "@reverse"
     const val language = "@language"
+    const val vocab = "@vocab"
 }
 
 object JsonLdHelper {

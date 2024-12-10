@@ -23,6 +23,7 @@ quarkus:
       pods:
         - name: alice
           default-context:
+            kss: https://kvasir.discover.ilabt.imec.be/vocab#
             rdfs: http://www.w3.org/2000/01/rdf-schema#
             xsd: http://www.w3.org/2001/XMLSchema#
             schema: http://schema.org/
@@ -30,6 +31,7 @@ quarkus:
           auto-ingest-rdf: true
         - name: bob
           default-context:
+            kss: https://kvasir.discover.ilabt.imec.be/vocab#
             rdfs: http://www.w3.org/2000/01/rdf-schema#
             xsd: http://www.w3.org/2001/XMLSchema#
             schema: http://schema.org/
@@ -38,6 +40,7 @@ quarkus:
         - name: swdemo
           default-context:
             "@language": en
+            kss: https://kvasir.discover.ilabt.imec.be/vocab#
             voc: https://swapi.co/vocabulary/
             commons: https://commons.wikimedia.org/wiki/Special:FilePath/
             dc: http://purl.org/dc/elements/1.1/

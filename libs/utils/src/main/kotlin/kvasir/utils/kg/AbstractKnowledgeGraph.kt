@@ -4,6 +4,7 @@ import graphql.ExecutionInput
 import graphql.ExecutionResult
 import graphql.GraphQL
 import graphql.Scalars.*
+import graphql.execution.instrumentation.Instrumentation
 import graphql.introspection.Introspection
 import graphql.schema.*
 import graphql.schema.idl.FieldWiringEnvironment
@@ -14,6 +15,7 @@ import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
+import io.vertx.core.json.JsonObject
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changeops.ChangeAssertionException
 import kvasir.definitions.kg.changeops.InvalidTemplateException
@@ -36,6 +38,8 @@ abstract class AbstractKnowledgeGraph(
 ) : KnowledgeGraph {
 
     companion object {
+        val DEFAULT_PAGE_SIZE = 100
+
         val typeDirective = GraphQLDirective.newDirective().name("type").validLocations(
             Introspection.DirectiveLocation.INTERFACE,
             Introspection.DirectiveLocation.OBJECT
@@ -53,8 +57,9 @@ abstract class AbstractKnowledgeGraph(
                 .argument(GraphQLArgument.newArgument().name("if").type(GraphQLString).build()).build()
         val defaultRelationArguments = listOf(
             GraphQLArgument.newArgument().name("id").type(GraphQLList.list(GraphQLID)).build(),
-            GraphQLArgument.newArgument().name("first").type(GraphQLInt).build(),
-            GraphQLArgument.newArgument().name("skip").type(GraphQLInt).build(),
+            GraphQLArgument.newArgument().name("pageSize").type(GraphQLInt).defaultValueProgrammatic(DEFAULT_PAGE_SIZE)
+                .build(),
+            GraphQLArgument.newArgument().name("cursor").type(GraphQLString).build(),
             GraphQLArgument.newArgument().name("orderBy").type(GraphQLList.list(GraphQLString)).build()
         )
         val graphDirective =
@@ -219,7 +224,13 @@ abstract class AbstractKnowledgeGraph(
                 }
         }
         return subscribeToExecutableSchema.chain { executableSchema ->
-            val build = GraphQL.newGraphQL(executableSchema).build()
+            val build = GraphQL.newGraphQL(executableSchema).instrumentation(
+                provideInstrumentation(
+                    request.podId,
+                    request.context,
+                    request.atTimestamp
+                )
+            ).build()
             Uni.createFrom().future(
                 build.executeAsync(
                     ExecutionInput.newExecutionInput()
@@ -302,7 +313,8 @@ abstract class AbstractKnowledgeGraph(
     open fun mapExecutionResult(request: QueryRequest, result: ExecutionResult): QueryResult {
         return QueryResult(
             data = result.getData<Map<String, Any>>(),
-            errors = result.errors?.map { error -> mapOf("message" to error.message) }
+            errors = result.errors?.map { ex -> JsonObject.mapFrom(ex).map },
+            extensions = result.extensions as? Map<String, Any>
         )
     }
 
@@ -335,6 +347,12 @@ abstract class AbstractKnowledgeGraph(
         unionType: GraphQLUnionType,
         context: Map<String, Any>
     ): TypeResolver
+
+    abstract fun provideInstrumentation(
+        podId: String,
+        context: Map<String, Any>,
+        atTimestamp: Instant?
+    ): Instrumentation
 
     /**
      * Get the type information for a specific pod (should be provided by the concrete implementation).
