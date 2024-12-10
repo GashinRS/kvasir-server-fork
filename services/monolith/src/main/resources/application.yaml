@@ -18,6 +18,11 @@ quarkus:
     store-schema-directory: ./openapi
 
 "%dev":
+  quarkus:
+    http:
+      cors:
+        ~: true
+        origins: http://localhost:3000,http://localhost:4200
   kvasir:
     bootstrap:
       pods:
