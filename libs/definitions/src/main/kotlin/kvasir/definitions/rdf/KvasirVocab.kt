@@ -36,6 +36,10 @@ object KvasirVocab {
     const val timestamp = "${baseUri}timestamp"
     const val versionId = "${baseUri}versionId"
     const val with = "${baseUri}with"
+    const val authConfiguration = "${baseUri}authConfiguration"
+    const val serverUrl = "${baseUri}serverUrl"
+    const val clientId = "${baseUri}clientId"
+    const val clientSecret = "${baseUri}clientSecret"
 }
 
 object KvasirNamedGraphs {

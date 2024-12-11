@@ -9,9 +9,11 @@ import io.quarkus.logging.Log
 import io.quarkus.runtime.StartupEvent
 import io.vertx.core.json.Json
 import jakarta.enterprise.event.Observes
+import kvasir.definitions.kg.AuthConfiguration
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodConfigurationProperty
 import kvasir.definitions.kg.PodStore
+import kvasir.definitions.rdf.KvasirVocab
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.config.inject.ConfigProperty
 
@@ -44,6 +46,11 @@ class Initializer(
                 Pod(
                     podId,
                     mapOf(
+                        KvasirVocab.authConfiguration to AuthConfiguration(
+                            podConfig.authConfiguration().serverUrl(),
+                            podConfig.authConfiguration().clientId(),
+                            podConfig.authConfiguration().clientSecret()
+                        ),
                         PodConfigurationProperty.DEFAULT_CONTEXT to Json.encode(podConfig.defaultContext()),
                         PodConfigurationProperty.AUTO_INGEST_RDF to podConfig.autoIngestRDF()
                     )

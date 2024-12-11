@@ -36,5 +36,10 @@
             <groupId>io.smallrye.reactive</groupId>
             <artifactId>smallrye-mutiny-vertx-kafka-client</artifactId>
         </dependency>
+        <dependency>
+            <groupId>kvasir-plugins</groupId>
+            <artifactId>keycloak-policy-agent</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 </project>

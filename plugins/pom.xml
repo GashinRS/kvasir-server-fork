@@ -18,6 +18,7 @@
         <module>clickhouse-knowledge-graph</module>
         <module>common-http-extensions</module>
         <module>kafka-channel-initializer</module>
+        <module>keycloak-policy-agent</module>
         <module>s3-reference-loader</module>
     </modules>
 

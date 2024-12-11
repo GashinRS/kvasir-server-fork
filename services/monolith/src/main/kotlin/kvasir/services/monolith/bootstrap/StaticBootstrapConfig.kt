@@ -14,9 +14,20 @@ interface StaticBootstrapConfig {
 interface StaticPodConfig {
     fun name(): String
 
+    fun authConfiguration(): AuthConfigurationConfig
+
     @WithDefault("false")
     @WithName("auto-ingest-rdf")
     fun autoIngestRDF(): Boolean
 
     fun defaultContext(): Map<String, String>
+}
+
+
+interface AuthConfigurationConfig {
+    fun serverUrl(): String
+
+    fun clientId(): String
+
+    fun clientSecret(): String
 }

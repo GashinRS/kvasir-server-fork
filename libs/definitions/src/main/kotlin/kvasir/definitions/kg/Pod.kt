@@ -36,6 +36,13 @@ data class Pod(
         return configuration[PodConfigurationProperty.AUTO_INGEST_RDF] as? Boolean == true
     }
 
+    @JsonIgnore
+    fun getAuthConfiguration(): AuthConfiguration? {
+        return configuration[KvasirVocab.authConfiguration]?.let {
+                JsonObject(it as Map<String, Any>).mapTo(AuthConfiguration::class.java)
+        }
+    }
+
 }
 
 object PodConfigurationProperty {
@@ -44,6 +51,15 @@ object PodConfigurationProperty {
     const val AUTO_INGEST_RDF = KvasirVocab.autoIngestRDF
 
 }
+
+data class AuthConfiguration(
+    @JsonProperty(KvasirVocab.serverUrl)
+    val serverUrl: String,
+    @JsonProperty(KvasirVocab.clientId)
+    val clientId: String,
+    @JsonProperty(KvasirVocab.clientSecret)
+    val clientSecret: String,
+)
 
 enum class PodEventType {
     CREATED,
