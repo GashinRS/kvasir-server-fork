@@ -42,6 +42,7 @@ class KeycloakPodAuthInitializer(
         // Create a realm for the pod
         keycloak.realms().create(RealmRepresentation().apply {
             this.realm = podName
+            this.isEnabled = true
         })
 
         keycloak.realm(podName).roles().create(RoleRepresentation().apply {
@@ -55,6 +56,7 @@ class KeycloakPodAuthInitializer(
             this.clientId = CLIENT_ID
             this.isServiceAccountsEnabled = true
             this.secret = secret
+            this.isDirectAccessGrantsEnabled = true
             this.authorizationServicesEnabled = true
             this.authorizationSettings = ResourceServerRepresentation().apply {
                 this.policyEnforcementMode = PolicyEnforcementMode.ENFORCING

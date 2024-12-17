@@ -9,8 +9,12 @@ import io.smallrye.mutiny.Uni
 import io.vertx.ext.web.RoutingContext
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.NotFoundException
+import jakarta.ws.rs.container.ContainerResponseContext
+import jakarta.ws.rs.core.Context
+import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.PodStore
 import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.jboss.resteasy.reactive.server.ServerResponseFilter
 import org.keycloak.representations.adapters.config.PolicyEnforcerConfig
 
 private val EXCLUDE_PATH_PREFIXES = setOf("/q/", "/favicon.ico")
@@ -24,9 +28,13 @@ class KvasirTenantConfigResolver(
     override fun resolve(
         routingContext: RoutingContext,
         requestContext: OidcRequestContext<OidcTenantConfig>
-    ): Uni<OidcTenantConfig>? {
-        val pathItems = routingContext.request().path().split('/').filterNot { it.isBlank() }
-        if (pathItems.isEmpty() || routingContext.request().path() in EXCLUDE_PATH_PREFIXES) {
+    ): Uni<OidcTenantConfig?> {
+        return getTenantConfig(routingContext.request().path())
+    }
+
+    private fun getTenantConfig(path: String): Uni<OidcTenantConfig?> {
+        val pathItems = path.split('/').filterNot { it.isBlank() }
+        if (pathItems.isEmpty() || path in EXCLUDE_PATH_PREFIXES) {
             return Uni.createFrom().nullItem()
         }
         val podName = pathItems.first()
@@ -36,15 +44,13 @@ class KvasirTenantConfigResolver(
             .onItem().ifNotNull().transformToUni { pod ->
                 Uni.createFrom().item(OidcTenantConfig().apply {
                     this.setTenantId(podName)
+                    this.setApplicationType(OidcTenantConfig.ApplicationType.SERVICE)
                     pod?.getAuthConfiguration()?.let { authConfig ->
                         this.setAuthServerUrl(authConfig.serverUrl)
                         this.setClientId(authConfig.clientId)
                         this.credentials.setSecret(authConfig.clientSecret)
                     }
-                }).map {
-                    println(it)
-                    it
-                }
+                })
             }
     }
 
