@@ -19,6 +19,16 @@ interface PodStore {
 
 }
 
+/**
+ * A PodAuthInitializer can be provided by a plugin to initialize the auth configuration for a new pod
+ * with the default authorization server (to streamline the process of creating a new pod).
+ */
+interface PodAuthInitializer {
+
+    fun initialize(podId: String, podName: String): Uni<AuthConfiguration>
+
+}
+
 data class Pod(
     @JsonProperty(JsonLdKeywords.id)
     val id: String,

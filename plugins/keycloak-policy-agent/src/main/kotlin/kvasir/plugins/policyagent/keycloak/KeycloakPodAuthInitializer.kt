@@ -1,0 +1,104 @@
+package kvasir.plugins.policyagent.keycloak
+
+import com.google.common.hash.Hashing
+import io.smallrye.mutiny.Uni
+import io.vertx.mutiny.core.Vertx
+import jakarta.enterprise.context.ApplicationScoped
+import jakarta.ws.rs.core.Response
+import kvasir.definitions.kg.AuthConfiguration
+import kvasir.definitions.kg.PodAuthInitializer
+import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.keycloak.admin.client.KeycloakBuilder
+import org.keycloak.representations.idm.ClientRepresentation
+import org.keycloak.representations.idm.RealmRepresentation
+import org.keycloak.representations.idm.RoleRepresentation
+import org.keycloak.representations.idm.authorization.PolicyEnforcementMode
+import org.keycloak.representations.idm.authorization.ResourcePermissionRepresentation
+import org.keycloak.representations.idm.authorization.ResourceServerRepresentation
+import org.keycloak.representations.idm.authorization.RolePolicyRepresentation
+import java.util.*
+
+private const val CLIENT_ID = "kvasir-server"
+private const val POD_OWNER_ROLE_NAME = "owner"
+private const val DEFAULT_RESOURCE_NAME = "Default Resource"
+private const val DEFAULT_POLICY_NAME = "Default Policy"
+private const val DEFAULT_PERMISSION_NAME = "Default Permission"
+
+@ApplicationScoped
+class KeycloakPodAuthInitializer(
+    private val vertx: Vertx,
+    @ConfigProperty(name = "quarkus.oidc.auth-server-url")
+    defaultRealmUri: String
+) : PodAuthInitializer {
+
+    private val keycloak = KeycloakBuilder.builder().serverUrl("http://localhost:8280").realm("master")
+        .clientId("admin-cli").grantType("password").username("admin").password("admin").build()
+    private val realmsBaseUri = defaultRealmUri.substringBeforeLast("/")
+
+    override fun initialize(
+        podId: String,
+        podName: String
+    ): Uni<AuthConfiguration> = vertx.executeBlocking {
+        // Create a realm for the pod
+        keycloak.realms().create(RealmRepresentation().apply {
+            this.realm = podName
+        })
+
+        keycloak.realm(podName).roles().create(RoleRepresentation().apply {
+            this.name = POD_OWNER_ROLE_NAME
+        })
+
+        val secret = Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8).toString()
+        // Create a client for the pod
+        keycloak.realm(podName).clients().create(ClientRepresentation().apply {
+            this.name = CLIENT_ID
+            this.clientId = CLIENT_ID
+            this.isServiceAccountsEnabled = true
+            this.secret = secret
+            this.authorizationServicesEnabled = true
+            this.authorizationSettings = ResourceServerRepresentation().apply {
+                this.policyEnforcementMode = PolicyEnforcementMode.ENFORCING
+            }
+        }).checkStatus()
+
+        val clientRepresentation = keycloak.realm(podName).clients().findByClientId(CLIENT_ID).first()
+        val clientResource = keycloak.realm(podName).clients().get(clientRepresentation.id)
+
+        val defaultResourceRepresentation =
+            clientResource.authorization().resources().findByName(DEFAULT_RESOURCE_NAME).first()
+
+        // Delete default policy
+        clientResource.authorization().policies().findByName(DEFAULT_POLICY_NAME)?.let {
+            clientResource.authorization().policies().policy(it.id).remove()
+        }
+
+        clientResource.authorization().policies().role().create(RolePolicyRepresentation().apply {
+            this.name = DEFAULT_POLICY_NAME
+            this.roles = setOf(RolePolicyRepresentation.RoleDefinition().apply {
+                this.id = keycloak.realm(podName).roles().list().find { it.name == POD_OWNER_ROLE_NAME }!!.id
+                this.isRequired = true
+            }
+            )
+        }).checkStatus()
+        val defaultPolicyRepresentation = clientResource.authorization().policies().findByName(DEFAULT_POLICY_NAME)
+
+        clientResource.authorization().permissions().resource().create(ResourcePermissionRepresentation().apply {
+            this.name = DEFAULT_PERMISSION_NAME
+            this.addResource(defaultResourceRepresentation.id)
+            this.addPolicy(defaultPolicyRepresentation.id)
+        }).checkStatus()
+
+        // Return the configuration
+        AuthConfiguration(
+            serverUrl = "$realmsBaseUri/$podName",
+            clientId = CLIENT_ID,
+            clientSecret = keycloak.realm(podName).clients().findByClientId(CLIENT_ID).first().secret
+        )
+    }
+}
+
+private fun Response.checkStatus() {
+    if (status !in 200 until 400) {
+        throw RuntimeException("Keycloak request failed with status $status: ${readEntity(String::class.java)}")
+    }
+}
