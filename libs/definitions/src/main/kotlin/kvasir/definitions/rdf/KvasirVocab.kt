@@ -40,6 +40,8 @@ object KvasirVocab {
     const val serverUrl = "${baseUri}serverUrl"
     const val clientId = "${baseUri}clientId"
     const val clientSecret = "${baseUri}clientSecret"
+    const val profile = "${baseUri}profile"
+    const val authServerUrl = "${baseUri}authServerUrl"
 }
 
 object KvasirNamedGraphs {

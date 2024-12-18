@@ -1,21 +1,26 @@
 package kvasir.plugins.policyagent.keycloak
 
+import io.quarkus.keycloak.pep.PolicyEnforcerResolver
 import io.quarkus.keycloak.pep.TenantPolicyConfigResolver
+import io.quarkus.keycloak.pep.runtime.KeycloakPolicyEnforcerAuthorizer
 import io.quarkus.keycloak.pep.runtime.KeycloakPolicyEnforcerTenantConfig
 import io.quarkus.oidc.OidcRequestContext
 import io.quarkus.oidc.OidcTenantConfig
 import io.quarkus.oidc.TenantConfigResolver
+import io.quarkus.security.identity.SecurityIdentity
+import io.quarkus.security.spi.runtime.BlockingSecurityExecutor
+import io.quarkus.vertx.http.runtime.security.HttpSecurityPolicy
+import io.quarkus.vertx.http.runtime.security.HttpSecurityPolicy.CheckResult
 import io.smallrye.mutiny.Uni
 import io.vertx.ext.web.RoutingContext
+import jakarta.annotation.Priority
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.inject.Singleton
 import jakarta.ws.rs.NotFoundException
-import jakarta.ws.rs.container.ContainerResponseContext
-import jakarta.ws.rs.core.Context
-import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.PodStore
 import org.eclipse.microprofile.config.inject.ConfigProperty
-import org.jboss.resteasy.reactive.server.ServerResponseFilter
 import org.keycloak.representations.adapters.config.PolicyEnforcerConfig
+import kotlin.jvm.optionals.getOrNull
 
 private val EXCLUDE_PATH_PREFIXES = setOf("/q/", "/favicon.ico")
 
@@ -63,16 +68,70 @@ class KvasirTenantPolicyConfigResolver() : TenantPolicyConfigResolver {
         tenantConfig: OidcTenantConfig?,
         requestContext: OidcRequestContext<KeycloakPolicyEnforcerTenantConfig>
     ): Uni<KeycloakPolicyEnforcerTenantConfig?> {
-        val tenantId = tenantConfig?.tenantId
+        val tenantId = tenantConfig?.tenantId?.getOrNull()?.takeIf { it != "Default" }
         return if (tenantId == null) {
             // Default policy config resolver
             Uni.createFrom().nullItem()
         } else {
             Uni.createFrom().item(
                 KeycloakPolicyEnforcerTenantConfig.builder()
-                    .enforcementMode(PolicyEnforcerConfig.EnforcementMode.ENFORCING).build()
+                    .paths("/$tenantId/.profile").enforcementMode(PolicyEnforcerConfig.EnforcementMode.DISABLED)
+                    .build()
             )
         }
+    }
+
+}
+
+@Priority(1001)
+@Singleton
+class FixedKeycloakPolicyEnforcerAuthorizer(
+    private val resolver: PolicyEnforcerResolver,
+    private val blockingExecutor: BlockingSecurityExecutor
+) : KeycloakPolicyEnforcerAuthorizer(), HttpSecurityPolicy {
+
+    companion object {
+        private const val POLICY_ENFORCER =
+            "io.quarkus.keycloak.pep.runtime.KeycloakPolicyEnforcerAuthorizer#POLICY_ENFORCER"
+    }
+
+    override fun checkPermission(
+        routingContext: RoutingContext,
+        identity: Uni<SecurityIdentity>,
+        requestContext: HttpSecurityPolicy.AuthorizationRequestContext
+    ): Uni<CheckResult> {
+        return identity.flatMap { identity ->
+            if (identity.isAnonymous) {
+                val tenantConfig = routingContext.get<OidcTenantConfig>(OidcTenantConfig::class.java.name)
+                resolver.resolvePolicyEnforcer(routingContext, tenantConfig)
+                    .flatMap { policyEnforcer ->
+                        routingContext.put(POLICY_ENFORCER, policyEnforcer)
+                        blockingExecutor.executeBlocking { policyEnforcer.pathMatcher.matches(routingContext.normalizedPath()) }
+                            .flatMap { pathConfig ->
+                                if (pathConfig != null && pathConfig.enforcementMode == PolicyEnforcerConfig.EnforcementMode.ENFORCING) {
+                                    CheckResult.deny()
+                                } else {
+                                    checkPermissionInternalMadeAccessible(routingContext, identity)
+                                }
+                            }
+                    }
+            } else {
+                checkPermissionInternalMadeAccessible(routingContext, identity)
+            }
+        }
+    }
+
+    private fun checkPermissionInternalMadeAccessible(
+        routingContext: RoutingContext,
+        securityIdentity: SecurityIdentity
+    ): Uni<HttpSecurityPolicy.CheckResult> {
+        val methodDef = KeycloakPolicyEnforcerAuthorizer::class.java.getDeclaredMethod(
+            "checkPermissionInternal",
+            RoutingContext::class.java,
+            SecurityIdentity::class.java
+        )
+        methodDef.isAccessible = true
+        return methodDef.invoke(this, routingContext, securityIdentity) as Uni<HttpSecurityPolicy.CheckResult>
     }
 
 }

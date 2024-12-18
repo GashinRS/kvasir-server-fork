@@ -7,6 +7,7 @@ import io.minio.SetBucketVersioningArgs
 import io.minio.messages.VersioningConfiguration
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
+import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.Response
@@ -18,6 +19,7 @@ import kvasir.definitions.kg.PodStore
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
@@ -68,8 +70,10 @@ class PodManagementApi(
 
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
-    fun list(): Uni<List<Pod>> {
-        return podStore.list()
+    fun list(): Uni<List<PodInfo>> {
+        return podStore.list().map { result ->
+            result.map { pod -> PodInfo(pod.id, "${pod.id}/.profile") }
+        }
     }
 
     @GET
@@ -80,6 +84,21 @@ class PodManagementApi(
         return podStore.getById(podId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transform { it!! }
+    }
+
+    @PermitAll
+    @GET
+    @Produces(JSON_LD_MEDIA_TYPE)
+    @Path("{podId}/.profile")
+    fun getProfile(@PathParam("podId") podId: String): Uni<PodPublicProfile> {
+        // This is a simple example of a profile endpoint that returns a public profile of the pod.
+        // Could fetch data from the KG, but for now, extracts some static info
+        val podId = uriInfo.absolutePath.toString().substringBeforeLast("/.profile")
+        return podStore.getById(podId)
+            .onItem().ifNull().failWith(NotFoundException("Pod not found"))
+            .onItem().ifNotNull().transform {
+                PodPublicProfile("${podId}/.profile", it!!.getAuthConfiguration()!!.serverUrl)
+            }
     }
 
     @PUT
@@ -119,4 +138,18 @@ data class RegisterPodInput(
 data class UpdatePodInput(
     @JsonProperty(KvasirVocab.configuration)
     val configuration: Map<String, Any>,
+)
+
+data class PodInfo(
+    @JsonProperty(JsonLdKeywords.id)
+    val id: String,
+    @JsonProperty(KvasirVocab.profile)
+    val profile: String
+)
+
+data class PodPublicProfile(
+    @JsonProperty(JsonLdKeywords.id)
+    val id: String,
+    @JsonProperty(KvasirVocab.authServerUrl)
+    val authServerUri: String
 )
