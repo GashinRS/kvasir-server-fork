@@ -1,5 +1,6 @@
 package kvasir.plugins.policyagent.keycloak
 
+import io.quarkus.arc.properties.IfBuildProperty
 import io.quarkus.keycloak.pep.PolicyEnforcerResolver
 import io.quarkus.keycloak.pep.TenantPolicyConfigResolver
 import io.quarkus.keycloak.pep.runtime.KeycloakPolicyEnforcerAuthorizer
@@ -13,7 +14,6 @@ import io.quarkus.vertx.http.runtime.security.HttpSecurityPolicy
 import io.quarkus.vertx.http.runtime.security.HttpSecurityPolicy.CheckResult
 import io.smallrye.mutiny.Uni
 import io.vertx.ext.web.RoutingContext
-import jakarta.annotation.Priority
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Singleton
 import jakarta.ws.rs.NotFoundException
@@ -83,8 +83,8 @@ class KvasirTenantPolicyConfigResolver() : TenantPolicyConfigResolver {
 
 }
 
-@Priority(1001)
 @Singleton
+@IfBuildProperty(name = "quarkus.keycloak.policy-enforcer.enable", stringValue = "true")
 class FixedKeycloakPolicyEnforcerAuthorizer(
     private val resolver: PolicyEnforcerResolver,
     private val blockingExecutor: BlockingSecurityExecutor
