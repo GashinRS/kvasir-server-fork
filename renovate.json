@@ -1,0 +1,47 @@
+{
+  "baseBrancches": ["master"],
+  "labels": ["renovate", "dependencies"],
+  "packageRules": [
+    {
+      "matchManagers": ["helm"],
+      "enabled": true,
+      "addLabels": ["dep::helm"]
+    },
+    {
+      "matchManagers": ["helmfile"],
+      "enabled": true,
+      "addLabels": ["dep::helm"],
+      "groupName": "Helmfile dependencies"
+    },
+    {
+      "matchCategories": ["docker"],
+      "enabled": true,
+      "addLabels": ["dep::docker"]
+    },
+    {
+      "matchManagers": ["maven", "maven-wrapper"],
+      "enabled": true,
+      "addLabels": ["dep::maven"]
+    },
+    {
+      "matchCategories": ["ci"],
+      "enabled": true,
+      "addLabels": ["dep::ci"]
+    },
+    {
+      "matchUpdateTypes": ["patch"],
+      "enabled": true,
+      "addLabels": ["update::patch"]
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "enabled": true,
+      "addLabels": ["update::minor"]
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "enabled": true,
+      "addLabels": ["update::major"]
+    }
+  ]
+}

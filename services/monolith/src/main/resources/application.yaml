@@ -15,7 +15,7 @@ quarkus:
   minio:
     devservices:
   smallrye-openapi:
-    store-schema-directory: ./openapi
+    store-schema-directory: target/openapi
 
 "%dev":
   quarkus:
