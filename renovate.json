@@ -1,6 +1,5 @@
 {
   "baseBranches": ["master"],
-  "labels": ["renovate", "dependencies"],
   "packageRules": [
     {
       "matchCategories": ["helm"],
@@ -10,7 +9,8 @@
     {
       "matchManagers": ["helmfile"],
       "enabled": true,
-      "groupName": "Helmfile dependencies"
+      "groupName": "Helmfile dependencies",
+      "addLabels": ["dep::helm"]
     },
     {
       "matchCategories": ["docker"],
@@ -30,17 +30,17 @@
     {
       "matchUpdateTypes": ["patch"],
       "enabled": true,
-      "addLabels": ["update::patch"]
+      "addLabels": ["renovate::patch"]
     },
     {
       "matchUpdateTypes": ["minor"],
       "enabled": true,
-      "addLabels": ["update::minor"]
+      "addLabels": ["renovate::minor"]
     },
     {
       "matchUpdateTypes": ["major"],
       "enabled": true,
-      "addLabels": ["update::major"]
+      "addLabels": ["renovate::major"]
     }
   ]
 }
