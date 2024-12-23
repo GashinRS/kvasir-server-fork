@@ -10,6 +10,7 @@ variables:
   MAVEN_CLI_OPTS: "--batch-mode"
   MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
   QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.stud.atlantis.ugent.be:5050/utils/docker/eclipse-temurin:21"
+  QUARKUS_CONTAINER_IMAGE_PUSH: "false"
 
 workflow:
   rules:
@@ -52,14 +53,16 @@ build:maven:
     paths:
       - .m2/repository/
     policy: pull-push
-#  services:
-#    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
-#      alias: docker
+  services:
+    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
+      alias: docker
   rules:
     - if: '$CI_COMMIT_TAG'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
     - changes: *mavenChanges
+      variables:
+        SKIP_TESTS: "-DskipTests"
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
@@ -68,21 +71,24 @@ build:maven:
     QUARKUS_CONTAINER_IMAGE_USERNAME: $CI_REGISTRY_USER
     QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
   script:
-    - ./mvnw $MAVEN_CLI_OPTS package -DskipTests -T 4
+    - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Dquarkus.container-image.create=$QUARKUS_CONTAINER_IMAGE_PUSH
   interruptible: true
-#  after_script:
-#    - awk -F,
-#      '{ instructions += $4 + $5; covered += $5 } END
-#      { print covered, "/", instructions, "instructions covered";
-#      print 100*covered/instructions, "% covered" }'
-#      build/jacoco-report/jacoco.csv
-#  coverage: '/(\d+\.\d+) % covered/'
-#  artifacts:
-#    paths:
-#      - build/jacoco-report/jacoco.xml
-#    reports:
-#      junit: "**/TEST-*.xml"
-#    when: always
+  after_script:
+    - awk -F,
+      '{ instructions += $4 + $5; covered += $5 } END
+      { print covered, "/", instructions, "instructions covered";
+      print 100*covered/instructions, "% covered (line coverage)" }'
+      target/coverage/jacoco.csv
+  coverage: '/(\d+\.\d+) % covered/'
+  artifacts:
+    paths:
+      - services/monolith/target/openapi
+    reports:
+      coverage_report:
+        coverage_format: jacoco
+        path: target/coverage/jacoco.xml
+      junit: "**/TEST-*.xml"
+    when: always
 
 #deploy-cnl:
 #  rules:
@@ -100,6 +106,7 @@ build:maven:
 
 
 build:writerside:
+  needs: [build:maven]
   stage: build
   rules:
     - if: '$CI_COMMIT_TAG'
