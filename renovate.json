@@ -1,16 +1,15 @@
 {
-  "baseBrancches": ["master"],
+  "baseBranches": ["master"],
   "labels": ["renovate", "dependencies"],
   "packageRules": [
     {
-      "matchManagers": ["helm"],
+      "matchCategories": ["helm"],
       "enabled": true,
       "addLabels": ["dep::helm"]
     },
     {
       "matchManagers": ["helmfile"],
       "enabled": true,
-      "addLabels": ["dep::helm"],
       "groupName": "Helmfile dependencies"
     },
     {
