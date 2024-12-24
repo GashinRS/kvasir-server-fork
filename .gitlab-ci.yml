@@ -71,7 +71,7 @@ build:maven:
     QUARKUS_CONTAINER_IMAGE_USERNAME: $CI_REGISTRY_USER
     QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
   script:
-    - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Dquarkus.container-image.create=$QUARKUS_CONTAINER_IMAGE_PUSH
+    - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
   interruptible: true
   after_script:
     - awk -F,
