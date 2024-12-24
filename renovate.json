@@ -15,7 +15,8 @@
     {
       "matchCategories": ["docker"],
       "enabled": true,
-      "addLabels": ["dep::docker"]
+      "addLabels": ["dep::docker"],
+      "groupName": "Docker images"
     },
     {
       "matchManagers": ["maven", "maven-wrapper"],
@@ -25,7 +26,8 @@
     {
       "matchCategories": ["ci"],
       "enabled": true,
-      "addLabels": ["dep::ci"]
+      "addLabels": ["dep::ci"],
+      "groupName": "CI dependencies"
     },
     {
       "matchUpdateTypes": ["patch"],
