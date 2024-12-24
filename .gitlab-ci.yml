@@ -6,7 +6,7 @@ variables:
   ALGOLIA_APP_NAME: '23BLLNEZ2S'
   ALGOLIA_INDEX_NAME: 'prod_KVASIR-NEXT'
   CONFIG_JSON_PRODUCT: 'kd'
-  CONFIG_JSON_VERSION: 'master'
+  CONFIG_JSON_VERSION: 'main'
   MAVEN_CLI_OPTS: "--batch-mode"
   MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
   QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.stud.atlantis.ugent.be:5050/utils/docker/eclipse-temurin:21"
