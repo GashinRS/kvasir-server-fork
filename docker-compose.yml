@@ -1,6 +1,6 @@
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12.1.1614
+    image: clickhouse/clickhouse-server:24.12.2.29
     ports:
       - "8123:8123"
       - "9000:9000"
