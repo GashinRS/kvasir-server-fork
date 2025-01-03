@@ -19,6 +19,7 @@ import org.keycloak.representations.idm.authorization.RolePolicyRepresentation
 import java.util.*
 
 private const val CLIENT_ID = "kvasir-server"
+private const val UI_CLIENT_ID = "kvasir-ui"
 private const val POD_OWNER_ROLE_NAME = "owner"
 private const val DEFAULT_RESOURCE_NAME = "Default Resource"
 private const val DEFAULT_POLICY_NAME = "Default Policy"
@@ -50,7 +51,8 @@ class KeycloakPodAuthInitializer(
         })
 
         val secret = Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8).toString()
-        // Create a client for the pod
+
+        // Create a confidential client for the pod
         keycloak.realm(podName).clients().create(ClientRepresentation().apply {
             this.name = CLIENT_ID
             this.clientId = CLIENT_ID
@@ -61,6 +63,19 @@ class KeycloakPodAuthInitializer(
             this.authorizationSettings = ResourceServerRepresentation().apply {
                 this.policyEnforcementMode = PolicyEnforcementMode.ENFORCING
             }
+        }).checkStatus()
+
+        // Create public UI client for the pod
+        keycloak.realm(podName).clients().create(ClientRepresentation().apply {
+            this.name = UI_CLIENT_ID
+            this.clientId = UI_CLIENT_ID
+            this.isServiceAccountsEnabled = false
+            this.isPublicClient = true
+            this.isDirectAccessGrantsEnabled = false
+            this.authorizationServicesEnabled = false
+            this.redirectUris = listOf<String>("http://localhost:4200/*");
+            this.webOrigins = listOf<String>("+");
+            this.attributes = mapOf<String,String>(Pair("pkce.code.challenge.method", "S256"))
         }).checkStatus()
 
         val clientRepresentation = keycloak.realm(podName).clients().findByClientId(CLIENT_ID).first()
