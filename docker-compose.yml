@@ -1,12 +1,12 @@
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12.2.29
+#    24.8 = LTS version
+    image: clickhouse/clickhouse-server:24.8.11.5
     ports:
       - "8123:8123"
       - "9000:9000"
     volumes:
       - 'clickhouse_data:/var/lib/clickhouse'
-      - './plugins/clickhouse-knowledge-graph/initdb:/docker-entrypoint-initdb.d'
       - './plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d'
     ulimits:
       nofile:

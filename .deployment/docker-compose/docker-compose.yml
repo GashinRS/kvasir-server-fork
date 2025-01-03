@@ -27,7 +27,8 @@ services:
         condition: service_healthy
 
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12.2.29
+#    24.8 = LTS version
+    image: clickhouse/clickhouse-server:24.8.11.5
     ports:
       - "8123:8123"
       # TCP port for ClickHouse (should not be required externally)
@@ -46,12 +47,13 @@ services:
       retries: 5
 
   minio:
-    image: docker.io/bitnami/minio:2024.12.18-debian-12-r0
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
     ports:
       - '9000:9000'
       - '9001:9001'
     volumes:
-      - 'minio_data:/bitnami/minio/data'
+      - 'minio_data:/data'
     environment:
       # Doubles as access key and secret key for the MinIO server
       - MINIO_ROOT_USER=kvasir

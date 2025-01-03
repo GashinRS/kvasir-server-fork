@@ -2,8 +2,6 @@
     <profiles>
         <default>
             <allow_experimental_dynamic_type>1</allow_experimental_dynamic_type>
-            <allow_suspicious_types_in_order_by>1</allow_suspicious_types_in_order_by>
-            <allow_suspicious_types_in_group_by>1</allow_suspicious_types_in_group_by>
         </default>
     </profiles>
 </clickhouse>
