@@ -10,8 +10,10 @@ import kvasir.definitions.kg.PodAuthInitializer
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.keycloak.admin.client.KeycloakBuilder
 import org.keycloak.representations.idm.ClientRepresentation
+import org.keycloak.representations.idm.CredentialRepresentation
 import org.keycloak.representations.idm.RealmRepresentation
 import org.keycloak.representations.idm.RoleRepresentation
+import org.keycloak.representations.idm.UserRepresentation
 import org.keycloak.representations.idm.authorization.PolicyEnforcementMode
 import org.keycloak.representations.idm.authorization.ResourcePermissionRepresentation
 import org.keycloak.representations.idm.authorization.ResourceServerRepresentation
@@ -46,9 +48,33 @@ class KeycloakPodAuthInitializer(
             this.isEnabled = true
         })
 
+        // Realm role
         keycloak.realm(podName).roles().create(RoleRepresentation().apply {
             this.name = POD_OWNER_ROLE_NAME
+        });
+
+        // Create default user (credentials: user:user)
+        keycloak.realm(podName).users().create(UserRepresentation().apply {
+            this.isEnabled = true;
+            this.username = podName.lowercase();
+            this.email = "$podName@example.org";
+            this.isEmailVerified = true
+            this.firstName = podName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            this.lastName = "Demo"
+            this.credentials = listOf(
+                CredentialRepresentation().apply {
+                    this.isTemporary = true;
+                    this.type = "password"
+                    this.value = podName.lowercase()
+                    this.userLabel = "Password"
+                }
+            )
         })
+
+        // Add ownerRole to User realm roles
+        val ownerRole = keycloak.realm(podName).roles().list().find { it.name == POD_OWNER_ROLE_NAME }
+        val defaultUser = keycloak.realm(podName).users().searchByUsername(podName.lowercase(), true).first()
+        keycloak.realm(podName).users().get(defaultUser.id).roles().realmLevel().add(listOf(ownerRole))
 
         val secret = Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8).toString()
 
@@ -75,7 +101,7 @@ class KeycloakPodAuthInitializer(
             this.authorizationServicesEnabled = false
             this.redirectUris = listOf<String>("http://localhost:4200/*");
             this.webOrigins = listOf<String>("+");
-            this.attributes = mapOf<String,String>(Pair("pkce.code.challenge.method", "S256"))
+            this.attributes = mapOf<String, String>(Pair("pkce.code.challenge.method", "S256"))
         }).checkStatus()
 
         val clientRepresentation = keycloak.realm(podName).clients().findByClientId(CLIENT_ID).first()
