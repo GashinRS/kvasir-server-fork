@@ -37,7 +37,7 @@ class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor
     ): TraversalControl {
         if (node is NamedNode<*> && node.name !in listOf("Query", "Mutation", "Subscription")) {
             val iri = resolveNameAsIri(node.name)
-            if (iri == null && !node.hasDirective("type")) {
+            if (iri == null && !node.hasDirective("class")) {
                 // Check if a type predicate is provided, otherwise throw exception
                 throw MissingSemanticContextException("No semantic context found or derivable for type '${node.name}' (${context.location})")
             }
@@ -58,21 +58,22 @@ class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor
         return super.visitFieldDefinition(node, context)
     }
 
-    override fun visitArgument(node: Argument, context: TraverserContext<Node<*>>): TraversalControl {
-        val parent = context.parentNode
-        when {
-            parent is Directive && parent.name in setOf("predicate", "type") -> {
-                if (node.name == "iri") {
-                    val value = (node.value as StringValue).value
-                    val iri = resolveNameAsIri(value, RDF_PREFIX_SEPARATOR)
-                    if (iri == null) {
-                        throw MissingSemanticContextException("No semantic context found or derivable for argument '${node.name}' (value: '$value') in directive '${parent.name}' (${node.sourceLocation})")
-                    }
-                }
-            }
-        }
-        return super.visitArgument(node, context)
-    }
+    // TODO: check if iri argument values are valid
+//    override fun visitArgument(node: Argument, context: TraverserContext<Node<*>>): TraversalControl {
+//        val parent = context.parentNode
+//        when {
+//            parent is Directive && parent.name in setOf("predicate", "type") -> {
+//                if (node.name == "iri") {
+//                    val value = (node.value as StringValue).value
+//                    val iri = resolveNameAsIri(value, RDF_PREFIX_SEPARATOR)
+//                    if (iri == null) {
+//                        throw MissingSemanticContextException("No semantic context found or derivable for argument '${node.name}' (value: '$value') in directive '${parent.name}' (${node.sourceLocation})")
+//                    }
+//                }
+//            }
+//        }
+//        return super.visitArgument(node, context)
+//    }
 }
 
 class MissingSemanticContextException(message: String) : IllegalArgumentException(message)

@@ -30,15 +30,11 @@ type Query {
     persons: [Person!]!
 }
 
-@class(iri: "http://schema.org/Person")
-type Person {
+type Person @class(iri: "http://schema.org/Person") {
     id: ID!
-    @predicate(iri: "http://schema.org/givenName")
-    givenName: String!
-    @predicate(iri: "http://schema.org/familyName")
-    familyName: String!
-    @predicate(iri: "http://schema.org/email")
-    email: [String!]
+    givenName: String! @predicate(iri: "http://schema.org/givenName")
+    familyName: String! @predicate(iri: "http://schema.org/familyName")
+    email: [String!] @predicate(iri: "http://schema.org/email")
 }
 ```
 
