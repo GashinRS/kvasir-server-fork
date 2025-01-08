@@ -9,15 +9,12 @@ import kvasir.definitions.kg.AuthConfiguration
 import kvasir.definitions.kg.PodAuthInitializer
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.keycloak.admin.client.KeycloakBuilder
-import org.keycloak.representations.idm.ClientRepresentation
-import org.keycloak.representations.idm.CredentialRepresentation
-import org.keycloak.representations.idm.RealmRepresentation
-import org.keycloak.representations.idm.RoleRepresentation
-import org.keycloak.representations.idm.UserRepresentation
+import org.keycloak.representations.idm.*
 import org.keycloak.representations.idm.authorization.PolicyEnforcementMode
 import org.keycloak.representations.idm.authorization.ResourcePermissionRepresentation
 import org.keycloak.representations.idm.authorization.ResourceServerRepresentation
 import org.keycloak.representations.idm.authorization.RolePolicyRepresentation
+import java.net.URI
 import java.util.*
 
 private const val CLIENT_ID = "kvasir-server"
@@ -34,7 +31,8 @@ class KeycloakPodAuthInitializer(
     defaultRealmUri: String
 ) : PodAuthInitializer {
 
-    private val keycloak = KeycloakBuilder.builder().serverUrl("http://localhost:8280").realm("master")
+    private val keycloakHostUrl = URI(defaultRealmUri).let { "${it.scheme}://${it.authority}" };
+    private val keycloak = KeycloakBuilder.builder().serverUrl(keycloakHostUrl).realm("master")
         .clientId("admin-cli").grantType("password").username("admin").password("admin").build()
     private val realmsBaseUri = defaultRealmUri.substringBeforeLast("/")
 
@@ -99,7 +97,7 @@ class KeycloakPodAuthInitializer(
             this.isPublicClient = true
             this.isDirectAccessGrantsEnabled = false
             this.authorizationServicesEnabled = false
-            this.redirectUris = listOf<String>("http://localhost:4200/*");
+            this.redirectUris = listOf<String>("http://localhost:4200/*", "http://localhost:3000/*", "http://localhost:8180/*");
             this.webOrigins = listOf<String>("+");
             this.attributes = mapOf<String, String>(Pair("pkce.code.challenge.method", "S256"))
         }).checkStatus()
