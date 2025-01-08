@@ -97,7 +97,7 @@ class KeycloakPodAuthInitializer(
             this.isPublicClient = true
             this.isDirectAccessGrantsEnabled = false
             this.authorizationServicesEnabled = false
-            this.redirectUris = listOf<String>("http://localhost:4200/*", "http://localhost:3000/*", "http://localhost:8180/*");
+            this.redirectUris = listOf<String>("http://localhost:4200/*", "http://localhost:3000/*", "http://localhost:8081/*");
             this.webOrigins = listOf<String>("+");
             this.attributes = mapOf<String, String>(Pair("pkce.code.challenge.method", "S256"))
         }).checkStatus()
