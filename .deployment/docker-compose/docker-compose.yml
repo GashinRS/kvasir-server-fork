@@ -25,6 +25,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
 
   clickhouse:
 #    24.8 = LTS version
@@ -78,8 +80,36 @@ services:
       timeout: 10s
       retries: 5
 
+  postgresql:
+    image: docker.io/bitnami/postgresql:latest
+    environment:
+      # ALLOW_EMPTY_PASSWORD is recommended only for development.
+      - ALLOW_EMPTY_PASSWORD=yes
+      - POSTGRESQL_USERNAME=bn_keycloak
+      - POSTGRESQL_DATABASE=bitnami_keycloak
+    volumes:
+      - 'postgresql_data:/bitnami/postgresql'
+
+  keycloak:
+    image: bitnami/keycloak:26.0.7
+    depends_on:
+      - postgresql
+    ports:
+      - "8280:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_EXTRA_ARGS: --import-realm
+    volumes:
+      - ./plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json:/opt/bitnami/keycloak/data/import/realm.json
+    healthcheck:
+      test: curl -f -I http://localhost:8080/realms/master/.well-known/openid-configuration
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   kvasir-ui:
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:latest
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.2.2
     pull_policy: always
     depends_on:
       - kvasir
@@ -92,4 +122,6 @@ volumes:
   clickhouse_data:
     driver: local
   minio_data:
+    driver: local
+  postgresql_data:
     driver: local
