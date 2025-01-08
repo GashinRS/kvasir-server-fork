@@ -7,15 +7,22 @@ import jakarta.annotation.Priority
 import jakarta.enterprise.event.Observes
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.specs.SYSTEM_DB
+import org.eclipse.microprofile.config.inject.ConfigProperty
 
-class ClickhouseInitializer(private val clickhouseClient: ClickhouseClient) {
+class ClickhouseInitializer(
+    private val clickhouseClient: ClickhouseClient,
+    @ConfigProperty(name = "kvasir.plugins.kg.clickhouse.init-db", defaultValue = "true")
+    private val initDb: Boolean
+) {
 
     fun init(@Observes @Priority(100) event: StartupEvent) {
-        Log.debug("Initializing Clickhouse schema for Kvasir system tables...")
-        createDatabase(SYSTEM_DB)
-            .chain { _ -> createPodSchema(SYSTEM_DB) }
-            .chain { _ -> createSliceSchema(SYSTEM_DB) }
-            .await().indefinitely()
+        if (initDb) {
+            Log.debug("Initializing Clickhouse schema for Kvasir system tables...")
+            createDatabase(SYSTEM_DB)
+                .chain { _ -> createPodSchema(SYSTEM_DB) }
+                .chain { _ -> createSliceSchema(SYSTEM_DB) }
+                .await().indefinitely()
+        }
     }
 
     fun initializePodSchema(podId: String): Uni<Void> {
