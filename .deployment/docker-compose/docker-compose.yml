@@ -18,6 +18,9 @@ services:
       - QUARKUS_MINIO_ACCESS_KEY=kvasir
       - QUARKUS_MINIO_SECRET_KEY=kvasirkvasir
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - QUARKUS_OIDC_AUTH_SERVER_URL=http://keycloak:8080/realms/quarkus
+      - QUARKUS_OIDC_CLIENT_ID=quarkus-app
+      - QUARKUS_OIDC_CREDENTIALS_SECRET=secret
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -101,7 +104,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_EXTRA_ARGS: --import-realm
     volumes:
-      - ./plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json:/opt/bitnami/keycloak/data/import/realm.json
+      - ../../plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json:/opt/bitnami/keycloak/data/import/quarkus-realm.json
     healthcheck:
       test: curl -f -I http://localhost:8080/realms/master/.well-known/openid-configuration
       interval: 30s
