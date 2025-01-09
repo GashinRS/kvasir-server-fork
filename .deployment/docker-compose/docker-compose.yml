@@ -3,22 +3,22 @@ services:
     # The Kvasir monolith bundles all Kvasir microservices into a single image (handy for development and testing)
     image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:latest
     pull_policy: always
-    ports:
-      - "8080:8080"
+#    ports:
+#      - "8080:8080"
     volumes:
       # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
       - './kvasir-config:/home/jboss/config'
     environment:
-      - KVASIR_KG_CLICKHOUSE_HOST=clickhouse
+      - KVASIR_KG_CLICKHOUSE_HOST=localhost
       - KVASIR_KG_CLICKHOUSE_PORT=8123
-      - KVASIR_SERVICES_STORAGE_S3_HOST=minio
+      - KVASIR_SERVICES_STORAGE_S3_HOST=localhost
       - KVASIR_SERVICES_STORAGE_S3_PORT=9000
-      - QUARKUS_MINIO_URL=http://minio:9000/
+      - QUARKUS_MINIO_URL=http://localhost:9000/
       - QUARKUS_MINIO_SECURE=false
       - QUARKUS_MINIO_ACCESS_KEY=kvasir
       - QUARKUS_MINIO_SECRET_KEY=kvasirkvasir
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - QUARKUS_OIDC_AUTH_SERVER_URL=http://keycloak:8080/realms/quarkus
+      - KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+      - QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8280/realms/quarkus
       - QUARKUS_OIDC_CLIENT_ID=quarkus-app
       - QUARKUS_OIDC_CREDENTIALS_SECRET=secret
     depends_on:
@@ -30,6 +30,8 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+    network_mode: host
+
 
   clickhouse:
 #    24.8 = LTS version
@@ -74,9 +76,11 @@ services:
       - redpanda
       - start
       - --kafka-addr internal://0.0.0.0:9092
-      - --advertise-kafka-addr internal://kafka:9092
+      - --advertise-kafka-addr internal://localhost:9092
       - --mode dev-container
     image: docker.redpanda.com/redpandadata/redpanda:v24.3.2
+    ports:
+      - "9092:9092"
     healthcheck:
       test: [ "CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'" ]
       interval: 30s

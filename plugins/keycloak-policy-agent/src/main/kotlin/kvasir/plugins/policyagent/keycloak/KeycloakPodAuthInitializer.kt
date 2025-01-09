@@ -39,8 +39,7 @@ class KeycloakPodAuthInitializer(
     override fun initialize(
         podId: String,
         podName: String
-    ): Uni<AuthConfiguration> = vertx.executeBlocking {
-        // Create a realm for the pod
+    ): Uni<AuthConfiguration> = vertx.executeBlocking { // Create a realm for the pod
         keycloak.realms().create(RealmRepresentation().apply {
             this.realm = podName
             this.isEnabled = true
