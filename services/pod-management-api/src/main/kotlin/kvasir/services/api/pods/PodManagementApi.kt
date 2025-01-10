@@ -31,7 +31,7 @@ class PodManagementApi(
     private val podStore: PodStore,
     private val minioClient: MinioAsyncClient,
     @Channel(Channels.POD_EVENT_PUBLISH) private val podEventEmitter: MutinyEmitter<PodEvent>,
-    private val uriInfo: UriInfo
+    private val uriInfo: UriInfo,
 ) {
 
     @POST
