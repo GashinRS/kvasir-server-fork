@@ -1,6 +1,7 @@
 package kvasir.plugins.policyagent.keycloak
 
 import com.google.common.hash.Hashing
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
@@ -8,6 +9,7 @@ import jakarta.ws.rs.core.Response
 import kvasir.definitions.kg.AuthConfiguration
 import kvasir.definitions.kg.PodAuthInitializer
 import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.jboss.resteasy.reactive.ClientWebApplicationException
 import org.keycloak.admin.client.KeycloakBuilder
 import org.keycloak.representations.idm.*
 import org.keycloak.representations.idm.authorization.PolicyEnforcementMode
@@ -40,7 +42,21 @@ class KeycloakPodAuthInitializer(
         podId: String,
         podName: String
     ): Uni<AuthConfiguration> = vertx.executeBlocking {
-        // Create a realm for the pod
+        // Try creating a realm
+        buildRealm(podName)
+
+        // Return the auth configuration regardless
+        AuthConfiguration(
+            serverUrl = "$realmsBaseUri/$podName",
+            clientId = CLIENT_ID,
+            clientSecret = keycloak.realm(podName).clients().findByClientId(CLIENT_ID).first().secret
+        )
+    }
+
+    /**
+     * Create a realm for the pod
+     */
+    private fun buildRealm(podName: String) = try {
         keycloak.realms().create(RealmRepresentation().apply {
             this.realm = podName
             this.isEnabled = true
@@ -74,7 +90,8 @@ class KeycloakPodAuthInitializer(
         val defaultUser = keycloak.realm(podName).users().searchByUsername(podName.lowercase(), true).first()
         keycloak.realm(podName).users().get(defaultUser.id).roles().realmLevel().add(listOf(ownerRole))
 
-        val secret = Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8).toString()
+        val secret =
+            Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8).toString()
 
         // Create a confidential client for the pod
         keycloak.realm(podName).clients().create(ClientRepresentation().apply {
@@ -97,7 +114,8 @@ class KeycloakPodAuthInitializer(
             this.isPublicClient = true
             this.isDirectAccessGrantsEnabled = false
             this.authorizationServicesEnabled = false
-            this.redirectUris = listOf<String>("http://localhost:4200/*", "http://localhost:3000/*", "http://localhost:8081/*");
+            this.redirectUris =
+                listOf<String>("http://localhost:4200/*", "http://localhost:3000/*", "http://localhost:8081/*");
             this.webOrigins = listOf<String>("+");
             this.attributes = mapOf<String, String>(Pair("pkce.code.challenge.method", "S256"))
         }).checkStatus()
@@ -128,13 +146,12 @@ class KeycloakPodAuthInitializer(
             this.addResource(defaultResourceRepresentation.id)
             this.addPolicy(defaultPolicyRepresentation.id)
         }).checkStatus()
-
-        // Return the configuration
-        AuthConfiguration(
-            serverUrl = "$realmsBaseUri/$podName",
-            clientId = CLIENT_ID,
-            clientSecret = keycloak.realm(podName).clients().findByClientId(CLIENT_ID).first().secret
-        )
+    } catch (ex: ClientWebApplicationException) {
+        if (409 == ex.response.status) {
+            Log.warn("Realm '$podName' already exists. Skipping realm creation...")
+        } else {
+            Log.error("Error creating realm '$podName!'", ex)
+        }
     }
 }
 
