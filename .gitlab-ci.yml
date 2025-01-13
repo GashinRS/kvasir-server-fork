@@ -9,8 +9,14 @@ variables:
   CONFIG_JSON_VERSION: 'main'
   MAVEN_CLI_OPTS: "--batch-mode"
   MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
   QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.stud.atlantis.ugent.be:5050/utils/docker/eclipse-temurin:21"
   QUARKUS_CONTAINER_IMAGE_PUSH: "false"
+  QUARKUS_CONTAINER_IMAGE_REGISTRY: $CI_REGISTRY
+  QUARKUS_CONTAINER_IMAGE_GROUP: $CI_PROJECT_PATH
+  QUARKUS_CONTAINER_IMAGE_USERNAME: $CI_REGISTRY_USER
+  QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
 
 workflow:
   rules:
@@ -63,13 +69,6 @@ build:maven:
     - changes: *mavenChanges
       variables:
         SKIP_TESTS: "-DskipTests"
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-    QUARKUS_CONTAINER_IMAGE_REGISTRY: $CI_REGISTRY
-    QUARKUS_CONTAINER_IMAGE_GROUP: $CI_PROJECT_PATH
-    QUARKUS_CONTAINER_IMAGE_USERNAME: $CI_REGISTRY_USER
-    QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
   script:
     - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
   interruptible: true
@@ -103,7 +102,6 @@ build:maven:
 #    - kubectl config view
 #  script:
 #    - kubectl config use-context ibcndevs/clusters:kvasir-cnl
-
 
 build:writerside:
   needs: [build:maven]
@@ -180,3 +178,45 @@ search:
       - algolia-update-index-log.txt
     expire_in: 1 week
   interruptible: false
+
+smoke_test:compose:
+  tags: [ "docker" ]
+  image: docker
+  stage: test
+  needs: [build:maven]
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+  services:
+    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
+      alias: docker
+  before_script:
+    - apk add --no-cache bash jq curl
+    - timeout=30
+    - start_time=$(date +%s)
+    - |
+      while ! docker info >/dev/null 2>&1; do
+        if [ $(( $(date +%s) - start_time )) -ge $timeout ]; then
+          echo "Timeout waiting for Docker daemon to be ready." >&2
+          exit 1
+        fi
+        sleep 1
+      done
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
+  script:
+    - cd .deployment/docker-compose
+    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$QUARKUS_CONTAINER_IMAGE_TAG%g" docker-compose.yml
+    - docker compose up -d --wait --quiet-pull --no-color
+    - docker ps -a
+    - tests/compose-smoke-test.sh
+  after_script:
+    - cd .deployment/docker-compose
+    - docker compose logs --no-color > compose-logs.txt
+    - docker compose down
+  artifacts:
+    paths:
+      - .deployment/docker-compose/compose-logs.txt
+      - .deployment/docker-compose/docker-compose.yml
+    expire_in: 1 week
+    when: on_failure
