@@ -19,6 +19,7 @@ import kvasir.definitions.reactive.toUni
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.util.*
+import java.util.concurrent.atomic.AtomicBoolean
 
 @ApplicationScoped
 class Initializer(
@@ -28,6 +29,8 @@ class Initializer(
     private val podStore: PodStore,
     private val podAuthInitializer: PodAuthInitializer
 ) {
+
+    private val initializationComplete = AtomicBoolean(false)
 
     fun init(
         @Observes event: StartupEvent,
@@ -41,7 +44,9 @@ class Initializer(
                     .chain { authConfig -> setupPod(podId, podConfig, authConfig) }
             }
             .concatenate()
-            .skipToLast().await().indefinitely()
+            .onCompletion().invoke { initializationComplete.set(true) }
+            .skipToLast().await()
+            .indefinitely()
     }
 
     private fun setupS3Bucket(podId: String): Uni<Void> {
@@ -96,4 +101,6 @@ class Initializer(
             )
         )
     }
+
+    fun isInitialized(): Boolean = initializationComplete.get()
 }

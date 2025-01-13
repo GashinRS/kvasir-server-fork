@@ -3,8 +3,6 @@ services:
     # The Kvasir monolith bundles all Kvasir microservices into a single image (handy for development and testing)
     image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:latest
     pull_policy: always
-#    ports:
-#      - "8080:8080"
     volumes:
       # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
       - './kvasir-config:/home/jboss/config'
@@ -21,6 +19,7 @@ services:
       - QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8280/realms/quarkus
       - QUARKUS_OIDC_CLIENT_ID=quarkus-app
       - QUARKUS_OIDC_CREDENTIALS_SECRET=secret
+#    entrypoint: ["sleep", "3600"] # debug
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -31,7 +30,11 @@ services:
       keycloak:
         condition: service_healthy
     network_mode: host
-
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9100/q/health/ready" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   clickhouse:
 #    24.8 = LTS version
@@ -42,7 +45,7 @@ services:
       #- "9000:9000"
     volumes:
       - 'clickhouse_data:/var/lib/clickhouse'
-      - './ch-config:/etc/clickhouse-server/users.d'
+      - '../../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d'
     ulimits:
       nofile:
         soft: 262144
@@ -110,7 +113,7 @@ services:
     volumes:
       - ../../plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json:/opt/bitnami/keycloak/data/import/quarkus-realm.json
     healthcheck:
-      test: curl -f -I http://localhost:8080/realms/master/.well-known/openid-configuration
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/realms/master/.well-known/openid-configuration" ]
       interval: 30s
       timeout: 10s
       retries: 5
