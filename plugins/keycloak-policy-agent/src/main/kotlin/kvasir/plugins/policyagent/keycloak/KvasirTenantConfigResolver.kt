@@ -40,7 +40,7 @@ class KvasirTenantConfigResolver(
 
     private fun getTenantConfig(path: String): Uni<OidcTenantConfig?> {
         val pathItems = path.split('/').filterNot { it.isBlank() }
-        if (pathItems.isEmpty() || path in EXCLUDE_PATH_PREFIXES) {
+        if (pathItems.isEmpty() || EXCLUDE_PATH_PREFIXES.any{path.startsWith(it)}) {
             return Uni.createFrom().nullItem()
         }
         val podName = pathItems.first()
