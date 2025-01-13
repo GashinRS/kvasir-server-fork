@@ -116,7 +116,7 @@ services:
       retries: 5
 
   kvasir-ui:
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.2.2
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.2.3
     pull_policy: always
     depends_on:
       - kvasir
