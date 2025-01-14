@@ -9,6 +9,7 @@
     <toc-element topic="What-is-Kvasir.md"/>
     <toc-element topic="Getting-started.md"/>
     <toc-element topic="Architecture.md"/>
+    <toc-element topic="Authentication.md"/>
     <toc-element topic="Usage.md">
         <toc-element topic="Knowledge-Graph.md">
             <toc-element topic="Changes.md"/>

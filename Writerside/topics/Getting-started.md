@@ -14,6 +14,11 @@ docker compose up -d
 This will automatically create a pod at `http://localhost:8080/alice` for you to play with.
 The settings for this pod can be modified via the file `application.yaml` in the `kvasir-config` folder.
 
+> Be sure to read the [Authentication](Authentication.md) section when you want to develop your own clients.
+{style="warning"}
+
+
+
 ## Running on Kubernetes
 (A guide will be added in the future)
 
