@@ -8,6 +8,7 @@ import kvasir.definitions.kg.SliceStore
 import kvasir.definitions.kg.SliceSummary
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.specs.SLICE_TABLE
+import kvasir.plugins.kg.clickhouse.specs.SYSTEM_DB
 import kvasir.plugins.kg.clickhouse.specs.SliceInsertRecordSpec
 import kvasir.plugins.kg.clickhouse.specs.SliceQuerySpec
 import kvasir.utils.shacl.RDF4JSHACLValidator
@@ -45,7 +46,7 @@ class ClickhouseSliceStore(private val clickhouseClient: ClickhouseClient) : Sli
     }
 
     override fun deleteById(podId: String, segmentId: String): Uni<Void> {
-        return clickhouseClient.execute("ALTER TABLE ${databaseFromPodId(podId)}.$SLICE_TABLE DELETE WHERE id = '$segmentId' AND pod_id = '$podId'")
+        return clickhouseClient.execute("ALTER TABLE $SLICE_TABLE DELETE WHERE id = '$segmentId' AND pod_id = '$podId'", SYSTEM_DB)
     }
 
     override fun loadFilterById(
