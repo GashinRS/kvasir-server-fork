@@ -18,6 +18,7 @@ import org.keycloak.representations.idm.authorization.ResourceServerRepresentati
 import org.keycloak.representations.idm.authorization.RolePolicyRepresentation
 import java.net.URI
 import java.util.*
+import kotlin.time.Duration
 
 private const val CLIENT_ID = "kvasir-server"
 private const val UI_CLIENT_ID = "kvasir-ui"
@@ -26,12 +27,18 @@ private const val DEFAULT_RESOURCE_NAME = "Default Resource"
 private const val DEFAULT_POLICY_NAME = "Default Policy"
 private const val DEFAULT_PERMISSION_NAME = "Default Permission"
 
+
 @ApplicationScoped
 class KeycloakPodAuthInitializer(
     private val vertx: Vertx,
     @ConfigProperty(name = "quarkus.oidc.auth-server-url")
     defaultRealmUri: String
 ) : PodAuthInitializer {
+
+    private val SSO_IDLE_LIFESPAN = Duration.parse("2h").inWholeSeconds.toInt();
+    private val SSO_MAX_LIFESPAN = Duration.parse("8h").inWholeSeconds.toInt();
+    private val ACCESS_TOKEN_LIFESPAN = Duration.parse("5m").inWholeSeconds.toInt();
+
 
     private val keycloakHostUrl = URI(defaultRealmUri).let { "${it.scheme}://${it.authority}" };
     private val keycloak = KeycloakBuilder.builder().serverUrl(keycloakHostUrl).realm("master")
@@ -60,6 +67,9 @@ class KeycloakPodAuthInitializer(
         keycloak.realms().create(RealmRepresentation().apply {
             this.realm = podName
             this.isEnabled = true
+            this.ssoSessionIdleTimeout = SSO_IDLE_LIFESPAN
+            this.ssoSessionMaxLifespan = SSO_MAX_LIFESPAN
+            this.accessTokenLifespan = ACCESS_TOKEN_LIFESPAN
         })
 
         // Realm role
