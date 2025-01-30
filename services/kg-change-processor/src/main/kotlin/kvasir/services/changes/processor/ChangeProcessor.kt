@@ -7,6 +7,7 @@ import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.messaging.Channels
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.eclipse.microprofile.reactive.messaging.Message
@@ -17,7 +18,7 @@ import kotlin.system.exitProcess
 @ApplicationScoped
 class ChangeProcessor(
     private val knowledgeGraph: KnowledgeGraph,
-    @Channel("change_requests_subscribe")
+    @Channel(Channels.CHANGE_REQUESTS_SUBSCRIBE)
     private val changeRequestsSubscriber: Multi<Message<ChangeRequest>>,
     @ConfigProperty(name = "kvasir.change-processor.commits.buffer-size", defaultValue = "100000")
     private val bufferSize: Int,

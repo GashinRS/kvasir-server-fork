@@ -5,9 +5,14 @@ import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Link
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.changes.ChangeHistoryRequest
+import kvasir.definitions.kg.changes.ChangeReport
+import kvasir.definitions.kg.changes.ChangeHistory
+import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
+import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.rdf.RDFTransformer
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
@@ -18,6 +23,7 @@ import java.util.*
 @Path("")
 @Tag(name = ApiDocTags.KG_CHANGES_API)
 class ChangeHistoryApi(
+    val changeHistory: ChangeHistory,
     val knowledgeGraph: KnowledgeGraph,
     val uriInfo: UriInfo
 ) {
@@ -31,7 +37,7 @@ class ChangeHistoryApi(
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<List<ChangeReport>>> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/changes")
-        return knowledgeGraph.listChanges(
+        return changeHistory.list(
             ChangeHistoryRequest(
                 podId = podId,
                 cursor = cursor.orElse(null),
@@ -67,16 +73,33 @@ class ChangeHistoryApi(
     @Path("{podId}/changes/{changeId}")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
-    fun getChangeReport(@PathParam("podId") podId: String, @PathParam("changeId") changeId: String): Uni<ChangeReport> {
+    fun getChangeReport(
+        @PathParam("podId") podId: String,
+        @PathParam("changeId") changeId: String
+    ): Uni<ChangeReport> {
+        val id = uriInfo.absolutePath.toString()
         val podId = uriInfo.absolutePath.toString().substringBefore("/changes")
-        return knowledgeGraph.getChange(
+        return changeHistory.get(
             ChangeHistoryRequest(
                 podId = podId,
-                changeRequestId = uriInfo.absolutePath.toString()
+                changeRequestId = id
             )
         )
             .onItem().ifNotNull().transform { it!! }
-            .onItem().ifNull().failWith(NotFoundException("No change report found!"))
+            .onItem().ifNull().switchTo {
+                try {
+                    val changeRequestId = ChangeRequestId.fromId(id)
+                    Uni.createFrom().item(
+                        ChangeReport(
+                            id,
+                            podId,
+                            listOf(ChangeReportStatusEntry(changeRequestId.timestamp(), ChangeStatusCode.QUEUED))
+                        )
+                    )
+                } catch (err: IllegalArgumentException) {
+                    Uni.createFrom().failure(NotFoundException("No change report found!"))
+                }
+            }
     }
 
     @Path("{podId}/changes/{changeId}/records")
@@ -90,7 +113,7 @@ class ChangeHistoryApi(
     ): Uni<RestResponse<ChangeRecords>> {
         val podId = uriInfo.absolutePath.toString().substringBefore("/changes")
         return knowledgeGraph.getChangeRecords(
-            ChangeHistoryRequest(
+            ChangeRecordRequest(
                 podId = podId,
                 changeRequestId = uriInfo.absolutePath.toString().substringBefore("/records"),
                 cursor = cursor.orElse(null),

@@ -145,5 +145,5 @@ data class QueryInputWithContext(
 
 internal fun throw404IfPodNotFound(podStore: PodStore, podId: String): Uni<Void> {
     return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId")).onItem()
-        .ifNotNull().transformToUni { Uni.createFrom().voidItem() }
+        .ifNotNull().transformToUni { _ -> Uni.createFrom().voidItem() }
 }

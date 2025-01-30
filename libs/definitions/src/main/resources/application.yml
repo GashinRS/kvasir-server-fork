@@ -11,23 +11,9 @@ mp:
         topic: outbox
         merge: true
         waitForWriteCompletion: false
-      slice_outbox_publish:
-        connector: smallrye-kafka
-        merge: true
-        waitForWriteCompletion: false
       storage_mutations_publish:
         connector: smallrye-kafka
         topic: storage.mutations
-        merge: true
-        waitForWriteCompletion: false
-      slice_events_publish:
-        connector: smallrye-kafka
-        topic: slice.events
-        merge: true
-        waitForWriteCompletion: false
-      pod_events_publish:
-        connector: smallrye-kafka
-        topic: pod.events
         merge: true
         waitForWriteCompletion: false
     incoming:
@@ -52,20 +38,6 @@ mp:
         auto:
           offset:
             reset: earliest
-      slice_events_subscribe:
-        connector: smallrye-kafka
-        topic: slice.events
-        broadcast: true
-        auto:
-          offset:
-            reset: earliest
-        pod_events_subscribe:
-            connector: smallrye-kafka
-            topic: pod.events
-            broadcast: true
-            auto:
-                offset:
-                reset: earliest
 
 "%dev":
    quarkus:

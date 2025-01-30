@@ -11,11 +11,13 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.PodStore
+import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.storage.StorageMutationEvent
 import kvasir.definitions.storage.StorageMutationEventType
+import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.eclipse.microprofile.reactive.messaging.Outgoing
@@ -32,8 +34,8 @@ class RDFStorageMutationListener(
     private val vertx: Vertx
 ) {
 
-    @Incoming("storage_mutations_subscribe")
-    @Outgoing("change_requests_publish")
+    @Incoming(Channels.STORAGE_MUTATIONS_SUBSCRIBE)
+    @Outgoing(Channels.CHANGE_REQUESTS_PUBLISH)
     fun consumeAndLog(storageMutationEvents: Multi<StorageMutationEvent>): Multi<ChangeRequest> {
         return storageMutationEvents
             .onItem().transformToUniAndConcatenate { event ->
@@ -82,7 +84,7 @@ class RDFStorageMutationListener(
             }
             .map { (event, _) ->
                 // Transform the object into a Kvasir change request
-                val id = event.externalObjectUri.substringBefore("/s3") + "/changes/" + UUID.randomUUID()
+                val id = ChangeRequestId.generate(event.externalObjectUri.substringBefore("/s3") + "/changes/").encode()
                 when (event.mutationType) {
                     StorageMutationEventType.PUT_OBJECT, StorageMutationEventType.COMPLETE_MULTIPART_UPLOAD, StorageMutationEventType.RESTORE_OBJECT -> ChangeRequest(
                         id = id,

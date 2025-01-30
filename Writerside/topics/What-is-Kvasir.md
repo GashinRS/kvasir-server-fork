@@ -11,7 +11,7 @@ and is currently in early prototype stage.
 
 ## Planned Features
 
-* **Scalable data backend** built using industry-proven technologies such as Kubernetes, Apache Kafka, Minio, etc.
+* **Scalable data backend** built using industry-proven technologies such as Kubernetes, Apache Kafka, Clickhouse, Minio, etc.
 * **Powerful APIs**: ingest, query, stream and export large amounts of data using a range of APIs, optimized for
   different use-cases. Retrieve structured data via an RDF-compatible GraphQL query engine, upload or download files via
   an S3-compatible API, or interface with time-series or other data streams via special purpose APIs.

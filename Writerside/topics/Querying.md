@@ -274,6 +274,134 @@ Returns:
 > **Tip**: you can refer to the annotated field using `it` in the filter directive. The filter expression in the
 > previous example can thus be abbreviated to `@filter(if: "it==Bob")`.
 
+## Sorting
+
+You can specify a sorting order for fields that return multiple results by providing an `orderBy` argument.
+Multiple sorting fields are supported, as well as modifying the ordering (ascending or descending) for each individual
+field.
+
+The `orderBy` argument expects a list of strings, with each entry referring to a **GraphQL field name** (and not the RDF
+property URI). To sort a specific field in descending order, prefix the field name with a `-` character.
+
+For example, the following query retrieves a list of persons, first ordered by `schema_email` and then
+`schema_givenName` in descending order:
+
+**POST** `http://localhost:8080/alice/query`
+
+```json
+{
+  "@context": {
+    "ex": "http://example.org/",
+    "schema": "http://schema.org/"
+  },
+  "query": "{ ex_Person(orderBy: [\"schema_email\", \"-schema_givenName\"]) { id schema_givenName schema_email } }"
+}
+```
+
+## Pagination
+
+Some GraphQL query paths may return a large number of results. Kvasir supports paginating through the results via a
+cursor-based mechanism. Each field that returns a collection has two additional system arguments: `pageSize` allows you
+to set the maximum size of the returned collection and `cursor` allows you to provide a cursor which points to the range
+of data to retrieve. When the query results do not contain the full result (the provided maximum `pageSize` was
+reached),
+the `extensions` part of the GraphQL response will contain a reference to the collection, with pagination information,
+such as cursors to the next and previous page, the total count of the collection, etc.
+
+For example the following query retrieves the first three entries for the `ex_Person` collection:
+
+```json
+{
+  "@context": {
+    "ex": "http://example.org/",
+    "schema": "http://schema.org/"
+  },
+  "query": "{ ex_Person(pageSize: 3) { id schema_givenName schema_email } }"
+}
+```
+
+Returns:
+
+```json
+{
+  "data": {
+    "ex_Person": [
+      {
+        "id": "http://example.org/alice",
+        "schema_givenName": [
+          "Alice"
+        ],
+        "schema_email": [
+          "alice@example.org"
+        ]
+      },
+      {
+        "id": "http://example.org/john",
+        "schema_givenName": [
+          "John"
+        ],
+        "schema_email": [
+          "jdoe@example.org"
+        ]
+      },
+      {
+        "id": "http://example.org/bob",
+        "schema_givenName": [
+          "Bob"
+        ],
+        "schema_email": [
+          "bob@example.org"
+        ]
+      }
+    ]
+  },
+  "errors": [],
+  "extensions": {
+    "pagination": [
+      {
+        "@id": "kvasir:qr-page-info:c4d9182b427cce57",
+        "path": "/ex_Person",
+        "class": "http://example.org/Person",
+        "totalCount": 4,
+        "next": "gaFvAw=="
+      }
+    ]
+  }
+}
+```
+
+The `next` cursor in `extensions.pagination` for the path `/ex_Person` can then be used to fetch the remaining results:
+
+```json
+{
+  "@context": {
+    "ex": "http://example.org/",
+    "schema": "http://schema.org/"
+  },
+  "query": "{ ex_Person(pageSize: 3, cursor: \"gaFvAw==\") { id schema_givenName schema_email } }"
+}
+```
+
+Returns:
+
+```json
+{
+  "data": {
+    "ex_Person": [
+      {
+        "id": "http://example.org/trudy",
+        "schema_givenName": [
+          "Trudy"
+        ],
+        "schema_email": [
+          "trudy@example.org"
+        ]
+      }
+    ]
+  }
+}
+```
+
 ## Time travel
 
 Since the Knowledge Graph retains a complete history of all changes, it is possible to query the state of the graph at a
@@ -295,6 +423,48 @@ For example, the following query retrieves the state of the Knowledge Graph at a
   },
   "query": "{ ex_Person { schema_givenName } }",
   "atChangeRequest": "http://localhost:8080/alice/changes/716131e7-a373-4f31-8b4f-fc37c5af19cc"
+}
+```
+
+## Reversing traversal
+
+Kvasir supports the JSON-LD `@reverse` keyword in the provided context for introducing reverse relationships,
+which can then be used for querying.
+
+For example: say we have some Person resources with an `ex:parent` relation to another person. By defining a relation
+`children` as the reverse of `ex:parent`, we can query the parents for a specific person as follows:
+
+**POST** `http://localhost:8080/alice/query`
+
+```json
+{
+  "@context": {
+    "ex": "http://example.org/",
+    "schema": "http://schema.org/",
+    "children": { "@reverse": "ex:parent" }
+  },
+  "query": "{ ex_Person(id: \"ex:trudy\") { children { id } } }"
+}
+```
+
+Returns:
+
+```json
+{
+  "data": {
+    "ex_Person": [
+      {
+        "children": [
+          {
+            "id": "http://example.org/bob"
+          },
+          {
+            "id": "http://example.org/alice"
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
