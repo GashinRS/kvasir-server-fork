@@ -1,7 +1,7 @@
 services:
   kvasir:
     # The Kvasir monolith bundles all Kvasir microservices into a single image (handy for development and testing)
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:0.3.1
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:0.2.0
     volumes:
       # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
       - "./kvasir-config:/home/jboss/config"
@@ -128,7 +128,7 @@ services:
       retries: 5
 
   kvasir-ui:
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.3.1
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.3.2
     depends_on:
       - kvasir
     ports:
