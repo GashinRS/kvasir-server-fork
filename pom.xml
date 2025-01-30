@@ -26,6 +26,7 @@
         <quarkus.platform.version>3.17.0</quarkus.platform.version>
         <quarkus.extensions.minio.version>3.7.7</quarkus.extensions.minio.version>
         <jackson.version>2.17.1</jackson.version>
+        <guava.version>33.4.0-jre</guava.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.0</surefire-plugin.version>
     </properties>
@@ -74,6 +75,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-openapi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>${guava.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.module</groupId>
@@ -136,9 +142,11 @@
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                             <maven.home>${maven.home}</maven.home>
-                            <quarkus.jacoco.data-file>${maven.multiModuleProjectDirectory}/target/jacoco.exec</quarkus.jacoco.data-file>
+                            <quarkus.jacoco.data-file>${maven.multiModuleProjectDirectory}/target/jacoco.exec
+                            </quarkus.jacoco.data-file>
                             <quarkus.jacoco.reuse-data-file>true</quarkus.jacoco.reuse-data-file>
-                            <quarkus.jacoco.report-location>${maven.multiModuleProjectDirectory}/target/coverage</quarkus.jacoco.report-location>
+                            <quarkus.jacoco.report-location>${maven.multiModuleProjectDirectory}/target/coverage
+                            </quarkus.jacoco.report-location>
                         </systemPropertyVariables>
                     </configuration>
                 </plugin>

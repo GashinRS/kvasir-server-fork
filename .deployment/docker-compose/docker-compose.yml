@@ -1,10 +1,10 @@
 services:
   kvasir:
     # The Kvasir monolith bundles all Kvasir microservices into a single image (handy for development and testing)
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:0.2.0
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:0.3.1
     volumes:
       # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
-      - './kvasir-config:/home/jboss/config'
+      - "./kvasir-config:/home/jboss/config"
     environment:
       - KVASIR_KG_CLICKHOUSE_HOST=localhost
       - KVASIR_KG_CLICKHOUSE_PORT=8123
@@ -18,7 +18,7 @@ services:
       - QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8280/realms/quarkus
       - QUARKUS_OIDC_CLIENT_ID=quarkus-app
       - QUARKUS_OIDC_CREDENTIALS_SECRET=secret
-#    entrypoint: ["sleep", "3600"] # debug
+    #    entrypoint: ["sleep", "3600"] # debug
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -30,27 +30,31 @@ services:
         condition: service_healthy
     network_mode: host
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9100/q/health/ready" ]
+      test: ["CMD", "curl", "-f", "http://localhost:9100/q/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 5
 
   clickhouse:
-#    24.8 = LTS version
+    #    24.8 = LTS version
     image: clickhouse/clickhouse-server:24.8.11.5
     ports:
       - "8123:8123"
       # TCP port for ClickHouse (should not be required externally)
       #- "9000:9000"
     volumes:
-      - 'clickhouse_data:/var/lib/clickhouse'
-      - '../../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d'
+      - "clickhouse_data:/var/lib/clickhouse"
+      - "../../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d"
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
     healthcheck:
-      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -59,16 +63,16 @@ services:
     image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
     command: server /data --console-address ":9001"
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - 'minio_data:/data'
+      - "minio_data:/data"
     environment:
       # Doubles as access key and secret key for the MinIO server
       - MINIO_ROOT_USER=kvasir
       - MINIO_ROOT_PASSWORD=kvasirkvasir
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -84,7 +88,7 @@ services:
     ports:
       - "9092:9092"
     healthcheck:
-      test: [ "CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'" ]
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -97,7 +101,7 @@ services:
       - POSTGRESQL_USERNAME=bn_keycloak
       - POSTGRESQL_DATABASE=bitnami_keycloak
     volumes:
-      - 'postgresql_data:/bitnami/postgresql'
+      - "postgresql_data:/bitnami/postgresql"
 
   keycloak:
     image: bitnami/keycloak:26.0.7
@@ -112,13 +116,19 @@ services:
     volumes:
       - ../../plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json:/opt/bitnami/keycloak/data/import/quarkus-realm.json
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/realms/master/.well-known/openid-configuration" ]
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:8080/realms/master/.well-known/openid-configuration",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
 
   kvasir-ui:
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.2.3
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.3.1
     depends_on:
       - kvasir
     ports:

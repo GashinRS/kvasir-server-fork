@@ -12,3 +12,7 @@ fun Multi<Void>.skipToLast(): Uni<Void> {
 fun <T> CompletableFuture<T>.toUni(): Uni<T> {
     return Uni.createFrom().completionStage(this)
 }
+
+fun <T> Iterable<T>.asMulti(): Multi<T> {
+    return Multi.createFrom().iterable(this)
+}

@@ -4,18 +4,17 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
-import com.github.jsonldjava.shaded.com.google.common.hash.Hashing
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
-import kvasir.definitions.kg.changeops.Assertion
+import kvasir.definitions.kg.changes.Assertion
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirNamedGraphs
 import kvasir.definitions.rdf.KvasirVocab
 import java.time.Instant
-import java.util.UUID
-import java.util.function.Predicate
+
+const val DEFAULT_PAGE_SIZE = 100
 
 interface KnowledgeGraph {
 
@@ -23,31 +22,12 @@ interface KnowledgeGraph {
 
     fun query(request: QueryRequest): Uni<QueryResult>
 
-    fun listChanges(request: ChangeHistoryRequest): Uni<PagedResult<ChangeReport>>
+    fun getChangeRecords(request: ChangeRecordRequest): Uni<PagedResult<ChangeRecord>>
 
-    fun getChange(request: ChangeHistoryRequest): Uni<ChangeReport?>
-
-    fun getChangeRecords(request: ChangeHistoryRequest): Uni<PagedResult<ChangeRecord>>
-
-    fun streamChangeRecords(request: ChangeHistoryRequest): Multi<ChangeRecord>
+    fun streamChangeRecords(request: ChangeRecordRequest): Multi<ChangeRecord>
 
     fun rollback(request: ChangeRollbackRequest): Uni<Void>
 
-}
-
-interface SliceStore {
-
-    fun persist(segment: Slice): Uni<Void>
-
-    fun list(podId: String): Uni<List<SliceSummary>>
-
-    fun getById(podId: String, segmentId: String): Uni<Slice?>
-
-    fun deleteById(podId: String, segmentId: String): Uni<Void>
-
-    fun loadFilterById(podId: String, segmentId: String): Uni<ChangeResultSliceFilter?>
-
-    fun loadAllFilters(podId: String): Uni<Set<ChangeResultSliceFilter>>
 }
 
 interface ReferenceLoader {
@@ -57,6 +37,7 @@ interface ReferenceLoader {
     fun loadReference(podOrSliceId: String, reference: Map<String, Any>): Multi<RDFStatement>
 }
 
+@GenerateNoArgConstructor
 data class ChangeRequest(
     /**
      * The unique identifier of the Change Request.
@@ -134,7 +115,17 @@ data class ChangeRequest(
     }
 }
 
-enum class ChangeResultCode {
+enum class ChangeStatusCode {
+    /**
+     * The Change Request was added to the processing queue
+     */
+    QUEUED,
+
+    /**
+     * The Change Request has been preprocessed by the configured preprocessing chain.
+     */
+    PREPROCESSED,
+
     /**
      * The Change Request was successfully applied.
      */
@@ -171,26 +162,6 @@ data class ChangeRollbackRequest(
     val changeRequestId: String
 )
 
-@JsonInclude(JsonInclude.Include.NON_DEFAULT)
-data class ChangeReport(
-    @JsonProperty(JsonLdKeywords.id)
-    val id: String,
-    @JsonProperty(KvasirVocab.podId)
-    val podId: String,
-    @JsonProperty(KvasirVocab.timestamp)
-    val timestamp: Instant,
-    @JsonProperty(KvasirVocab.resultCode)
-    val resultCode: ChangeResultCode,
-    @JsonProperty(KvasirVocab.sliceId)
-    val sliceId: String? = null,
-    @JsonProperty(KvasirVocab.nrOfInserts)
-    val nrOfInserts: Long = 0,
-    @JsonProperty(KvasirVocab.nrOfDeletes)
-    val nrOfDeletes: Long = 0,
-    @JsonProperty(KvasirVocab.errorMessage)
-    val errorMessage: String? = null
-)
-
 @GenerateNoArgConstructor
 data class QueryRequest(
     val context: Map<String, Any> = emptyMap(),
@@ -204,13 +175,10 @@ data class QueryRequest(
     val atChangeRequestId: String? = null
 )
 
-data class ChangeHistoryRequest(
+data class ChangeRecordRequest(
     val podId: String,
-    val sliceId: String? = null,
-    val fromTimestamp: Instant? = null,
-    val toTimestamp: Instant? = null,
-    val changeRequestId: String? = null,
-    val cursor: String? = null,
+    val changeRequestId: String,
+    var cursor: String? = null,
     val pageSize: Int = 100
 )
 
@@ -292,46 +260,6 @@ data class QueryResult(
     }
 }
 
-data class Slice(
-    @JsonProperty(JsonLdKeywords.id)
-    val id: String,
-    @JsonProperty(JsonLdKeywords.context)
-    val context: Map<String, Any>,
-    @JsonProperty(KvasirVocab.podId)
-    val podId: String,
-    @JsonProperty(KvasirVocab.name)
-    val name: String,
-    @JsonProperty(KvasirVocab.description)
-    val description: String,
-    @JsonProperty(KvasirVocab.schema)
-    val schema: String,
-    @JsonProperty(KvasirVocab.shacl)
-    val shacl: String,
-    @JsonProperty(KvasirVocab.targetGraphs)
-    val targetGraphs: Set<String> = emptySet()
-)
-
-data class SliceSummary(
-    @JsonProperty(JsonLdKeywords.id)
-    val id: String,
-    @JsonProperty(KvasirVocab.name)
-    val name: String,
-    @JsonProperty(KvasirVocab.description)
-    val description: String
-)
-
-enum class SliceEventType {
-    CREATED,
-    UPDATED,
-    DELETED
-}
-
-data class SliceEvent(
-    val podId: String,
-    val sliceId: String,
-    val eventType: SliceEventType
-)
-
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 data class RDFStatement(
     val subject: String,
@@ -349,6 +277,7 @@ data class ChangeRecord(
     val statement: RDFStatement
 )
 
+@GenerateNoArgConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class ChangeRecords(
     @JsonProperty(JsonLdKeywords.context)
@@ -367,12 +296,33 @@ enum class ChangeRecordType {
     INSERT, DELETE
 }
 
-interface ChangeResultSliceFilter : Predicate<List<Map<String, Any>>> {
 
-    fun podId(): String
+interface TypeRegistry {
 
-    fun sliceId(): String
+    fun getTypeInfo(podId: String): Uni<List<KGType>>
 
+}
+
+data class MetadataEntry(
+    val typeUri: String,
+    val propertyUri: String,
+    val propertyKind: KGPropertyKind,
+    val propertyRef: String
+)
+
+data class KGType(
+    val uri: String,
+    val properties: List<KGProperty>
+)
+
+data class KGProperty(
+    val uri: String,
+    val kind: KGPropertyKind,
+    val typeRefs: Set<String>
+)
+
+enum class KGPropertyKind {
+    Literal, IRI
 }
 
 data class PagedResult<T>(

@@ -6,31 +6,25 @@ import io.minio.MinioAsyncClient
 import io.minio.SetBucketVersioningArgs
 import io.minio.messages.VersioningConfiguration
 import io.smallrye.mutiny.Uni
-import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.PodEvent
-import kvasir.definitions.kg.PodEventType
 import kvasir.definitions.kg.PodStore
-import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
-import org.eclipse.microprofile.reactive.messaging.Channel
 
 @Tag(name = ApiDocTags.PODS_API)
 @Path((""))
 class PodManagementApi(
     private val podStore: PodStore,
     private val minioClient: MinioAsyncClient,
-    @Channel(Channels.POD_EVENT_PUBLISH) private val podEventEmitter: MutinyEmitter<PodEvent>,
     private val uriInfo: UriInfo
 ) {
 
@@ -62,7 +56,6 @@ class PodManagementApi(
                             )
                         }
                     }
-                    .chain { _ -> podEventEmitter.send(PodEvent(PodEventType.CREATED, input.name)) }
                     .map { Response.created(uriInfo.absolutePathBuilder.path(input.name).build()).build() }
             }
         }
@@ -111,7 +104,6 @@ class PodManagementApi(
                 Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build())
             } else {
                 podStore.persist(existingPod.copy(configuration = input.configuration))
-                    .chain { _ -> podEventEmitter.send(PodEvent(PodEventType.UPDATED, podId)) }
                     .map { Response.noContent().build() }
             }
         }
@@ -122,7 +114,6 @@ class PodManagementApi(
     fun delete(@PathParam("podId") podId: String): Uni<Response> {
         val podId = uriInfo.absolutePath.toString()
         return podStore.deleteById(podId)
-            .chain { _ -> podEventEmitter.send(PodEvent(PodEventType.DELETED, podId)) }
             .map { Response.noContent().build() }
     }
 

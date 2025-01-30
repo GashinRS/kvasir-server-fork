@@ -6,15 +6,7 @@ import graphql.schema.GraphQLScalarType
 import graphql.schema.idl.RuntimeWiring
 import graphql.schema.idl.SchemaGenerator
 import graphql.schema.idl.SchemaParser
-import kvasir.utils.graphql.innerType
-import kvasir.utils.graphql.isList
-import kvasir.utils.graphql.isOptional
-import kvasir.utils.graphql.isScalar
-import kvasir.utils.graphql.rdfDatatype
-import kvasir.utils.kg.KvasirNodeVisitor.Companion.GRAPHQL_NAME_PREFIX_SEPARATOR
-import kvasir.utils.kg.addKvasirDirectives
-import kvasir.utils.shacl.RDF4JSHACLValidator
-import kvasir.utils.shacl.SHACLValidationFailure
+import kvasir.utils.graphql.*
 import org.eclipse.rdf4j.model.IRI
 import org.eclipse.rdf4j.model.Model
 import org.eclipse.rdf4j.model.Statement
@@ -239,7 +231,7 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
         )
     }
 
-    private fun resolveNameAsIri(name: String, separator: String = GRAPHQL_NAME_PREFIX_SEPARATOR): String? {
+    private fun resolveNameAsIri(name: String, separator: String = KvasirNodeVisitor.GRAPHQL_NAME_PREFIX_SEPARATOR): String? {
         return context[name]?.toString() ?: name.takeIf { it.contains(separator) }?.let { prefixedName ->
             val (prefix, localName) = prefixedName.split(separator)
             context[prefix]?.let { prefixIri ->

@@ -5,27 +5,22 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.smallrye.reactive.messaging.kafka.KafkaRecord
-import jakarta.ws.rs.Consumes
-import jakarta.ws.rs.NotFoundException
-import jakarta.ws.rs.POST
-import jakarta.ws.rs.Path
-import jakarta.ws.rs.PathParam
+import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.ChangeRequest
-import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.PodStore
-import kvasir.definitions.kg.SliceStore
-import kvasir.definitions.kg.changeops.Assertion
+import kvasir.definitions.kg.changes.Assertion
+import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
-import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
+import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.shacl.RDF4JSHACLValidator
 import kvasir.utils.shacl.SHACLValidationFailure
 import org.apache.kafka.common.errors.RecordTooLargeException
@@ -35,14 +30,13 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import java.net.URI
-import java.util.UUID
+import java.util.*
 
 @Tag(name = ApiDocTags.KG_CHANGES_API)
 @Path("")
 class InboxApi(
     @Channel("change_requests_publish")
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
-    private val knowledgeGraph: KnowledgeGraph,
     private val sliceStore: SliceStore,
     private val podStore: PodStore
 ) {
@@ -170,7 +164,7 @@ data class ChangeRequestInput(
 
     fun toChangeRequest(podId: String, uriInfo: UriInfo, sliceId: String? = null): ChangeRequest {
         return ChangeRequest(
-            id = uriInfo.absolutePathBuilder.path(UUID.randomUUID().toString()).build().toString(),
+            id = ChangeRequestId.generate(uriInfo.absolutePath.toString()).encode(),
             context = context,
             podId = podId,
             sliceId = sliceId,
@@ -194,7 +188,7 @@ data class ChangeRequestInput(
         return mapOf("@id" to id).plus(entity.entries.filterNot { (key, _) -> key == "@id" }.associate { (key, value) ->
             key to when (key) {
                 JsonLdKeywords.reverse -> value.takeIf { it is Map<*, *> }
-                    ?.let { (it as Map<*, *>).mapValues { it.value?.let{ assignIdsMapValue(it, uriInfo) }} }
+                    ?.let { (it as Map<*, *>).mapValues { it.value?.let { assignIdsMapValue(it, uriInfo) } } }
                     ?: throw IllegalArgumentException("@reverse property must be a map")
 
                 else -> assignIdsMapValue(value, uriInfo)

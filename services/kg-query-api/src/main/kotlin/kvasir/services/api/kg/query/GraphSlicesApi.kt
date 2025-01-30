@@ -2,28 +2,31 @@ package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
-import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
-import kvasir.definitions.kg.*
-import kvasir.definitions.messaging.Channels
+import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.PodStore
+import kvasir.definitions.kg.QueryRequest
+import kvasir.definitions.kg.QueryResult
+import kvasir.definitions.kg.slices.Slice
+import kvasir.definitions.kg.slices.SliceStore
+import kvasir.definitions.kg.slices.SliceSummary
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
+import kvasir.utils.graphql.SchemaValidator
 import kvasir.utils.graphql2shacl.GraphQL2SHACL
-import kvasir.utils.kg.SchemaValidator
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
-import org.eclipse.microprofile.reactive.messaging.Channel
 import java.net.URI
 
 @Path("")
@@ -31,9 +34,7 @@ class GraphSlicesApi(
     private val sliceStore: SliceStore,
     private val podStore: PodStore,
     private val knowledgeGraph: KnowledgeGraph,
-    private val uriInfo: UriInfo,
-    @Channel(Channels.SLICE_EVENT_PUBLISH)
-    private val sliceEventEmitter: MutinyEmitter<SliceEvent>
+    private val uriInfo: UriInfo
 ) {
 
     @Tag(name = ApiDocTags.PODS_API)
@@ -77,7 +78,6 @@ class GraphSlicesApi(
                 try {
                     SchemaValidator.validateSchema(slice.schema, slice.context)
                     sliceStore.persist(slice)
-                        .chain { _ -> sliceEventEmitter.send(SliceEvent(podId, slice.id, SliceEventType.CREATED)) }
                         .map {
                             Response.created(URI.create(slice.id)).build()
                         }
@@ -118,7 +118,6 @@ class GraphSlicesApi(
         val sliceId = uriInfo.absolutePath.toString()
         return throw404IfPodNotFound(podStore, podId).chain { _ ->
             sliceStore.deleteById(podId, sliceId)
-                .chain { _ -> sliceEventEmitter.send(SliceEvent(podId, sliceId, SliceEventType.DELETED)) }
                 .map { Response.noContent().build() }
         }
     }

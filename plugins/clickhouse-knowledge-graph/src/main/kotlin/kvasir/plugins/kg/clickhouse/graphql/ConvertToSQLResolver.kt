@@ -23,34 +23,56 @@ import io.smallrye.mutiny.Multi
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
-import kvasir.definitions.rdf.*
-import kvasir.plugins.kg.clickhouse.OffsetBasedCursor
+import kvasir.baseimpl.kg.DefaultKnowledgeGraph
+import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.RDFSVocab
+import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
-import kvasir.plugins.kg.clickhouse.databaseFromPodId
 import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
+import kvasir.plugins.kg.clickhouse.specs.REVERSED_SORT_COLUMNS
 import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
 import kvasir.plugins.kg.clickhouse.utils.ClickhouseUtils
-import kvasir.utils.graphql.isList
-import kvasir.utils.kg.AbstractKnowledgeGraph
+import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
+import kvasir.utils.cursors.OffsetBasedCursor
+import kvasir.utils.graphql.*
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
 
 @ApplicationScoped
 class ConvertToSQLResolver(
     private val clickhouseClient: ClickhouseClient
-) {
+) : DatafetcherProvider {
 
-    fun getDatafetcher(
+    override fun getDatafetcher(
         podId: String,
         context: Map<String, Any>,
         atTimestamp: Instant?
     ): DataFetcher<Any> {
-        return object : DataFetcher<Any> {
-            override fun get(env: DataFetchingEnvironment): Any? {
-                val databaseName = databaseFromPodId(podId)
-                return if (env.executionStepInfo.path.parent.isRootPath) {
-                    // Handle entrypoints
+        return DataFetcher<Any> { env ->
+            val databaseName = databaseFromPodId(podId)
+            if (env.executionStepInfo.path.parent.isRootPath) {
+                // Handle entrypoints
+                val sqlConvertor = SQLConvertor(
+                    context,
+                    atTimestamp,
+                    databaseName,
+                    DATA_TABLE,
+                    env.field,
+                    env.fieldDefinition,
+                    env
+                )
+                val (sql, columns) = sqlConvertor.toSQL()
+                clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
+                    .convert().toCompletionStage()
+            } else {
+                val value = env.getFromSource<Any>(env.fieldDefinition.name)
+
+                // When the query expects a complex object, but only an id is provided (e.g. by a different storage backend)...
+                if (!isResultComplete(env, value)) {
+                    //... then the object should be loaded using a query
+                    // TODO: optimize using data loaders
                     val sqlConvertor = SQLConvertor(
                         context,
                         atTimestamp,
@@ -58,16 +80,18 @@ class ConvertToSQLResolver(
                         DATA_TABLE,
                         env.field,
                         env.fieldDefinition,
-                        env
+                        env,
+                        mode = SQLConvertorMode.GET_DATA,
+                        (if (value is Iterable<*>) value else listOf(value)).map {
+                            it as Map<String, Any>
+                            (it["_id"] ?: it["id"]) as String
+                        }
                     )
                     val (sql, columns) = sqlConvertor.toSQL()
                     clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
-                        .map { result ->
-                            result
-                        }
                         .convert().toCompletionStage()
                 } else {
-                    val value = env.getFromSource<Any>(env.fieldDefinition.name)
+                    // Else return the provided values (filtering nulls from collections)
                     when (value) {
                         is List<*> -> value.filterNotNull()
                         is JsonArray -> value.list.filterNotNull()
@@ -75,6 +99,23 @@ class ConvertToSQLResolver(
                     }
                 }
             }
+        }
+    }
+
+    private fun isResultComplete(env: DataFetchingEnvironment, value: Any?): Boolean {
+        return if (env.field.selectionSet != null) {
+            (if (value is Iterable<*>) value else listOf(value)).filterNotNull().all {
+                val valueMap = when (it) {
+                    is Map<*, *> -> it
+                    is JsonObject -> it.map
+                    else -> emptyMap()
+                }
+                // Check if all attributes are accounted
+                val selectedFields = env.field.selectionSet.selections.filterIsInstance<Field>().map { f -> f.name }
+                valueMap.keys.containsAll(selectedFields)
+            }
+        } else {
+            true
         }
     }
 
@@ -87,19 +128,20 @@ enum class SQLConvertorMode {
     COUNT
 }
 
-class SQLConvertor(
+open class SQLConvertor(
     val context: Map<String, Any>,
     val atTimestamp: Instant?,
-    database: String,
+    protected val database: String,
     table: String,
-    private val targetField: Field,
-    private val targetFieldDefinition: GraphQLFieldDefinition,
-    private val env: DataFetchingEnvironment,
-    private val mode: SQLConvertorMode = SQLConvertorMode.GET_DATA
+    protected val targetField: Field,
+    protected val targetFieldDefinition: GraphQLFieldDefinition,
+    protected val env: DataFetchingEnvironment,
+    protected val mode: SQLConvertorMode = SQLConvertorMode.GET_DATA,
+    protected val subjectSelectors: List<String>? = null
 ) {
 
-    private val tableRef = "$database.$table"
-    private val targetGraphFilterNode = getTargetGraphs()?.let { targetGraphs ->
+    protected val tableRef = "$database.$table"
+    protected val targetGraphFilterNode = getTargetGraphs()?.let { targetGraphs ->
         val node = ComparisonNode(
             RSQLOperators.IN,
             "graph",
@@ -108,7 +150,7 @@ class SQLConvertor(
         node
     }
 
-    fun toSQL(): SQLQuery {
+    open fun toSQL(): SQLQuery {
         val outputType = GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLDirectiveContainer
         val (pageSize, offset) = targetField.getPaginationInfo()
         val orderBy = orderByStatement(targetField, "_")
@@ -121,10 +163,11 @@ class SQLConvertor(
             getFQName(outputType, context).takeIf { it != RDFSVocab.Resource }?.let { typeFilter(listOf(it)) },
             getNodeFilter(targetField),
             getArgsFilter(targetField),
+            subjectSelectors?.let { ComparisonNode(RSQLOperators.IN, "id", it) }
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
             ?.let {
                 "WHERE ${
-                    GraphQLFilterVisitor2(context).visitNode(
+                    GraphQLFilterVisitor(context).visitNode(
                         SelectorReplacingFilterVisitor(
                             "id",
                             idField
@@ -182,7 +225,7 @@ class SQLConvertor(
         val (pageSize, offset) = field.getPaginationInfo()
         val joinField = "${name}_holder"
         val whereClause = listOfNotNull(
-            targetGraphFilterNode?.let { GraphQLFilterVisitor2(context).visitNode(it) },
+            targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
             "predicate = '${getFQName(fieldDefinition, context)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             context[JsonLdKeywords.language]?.let { "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
@@ -201,44 +244,47 @@ class SQLConvertor(
         parentJoinField: String
     ): String {
         val name = field.name
+        val reverse = fieldDefinition.getAppliedDirective("predicate").getArgument("reverse").getValue<Boolean>()
         val (pageSize, offset) = field.getPaginationInfo()
-        val joinField = "${name}_holder"
+        val joinFieldName = "${name}_holder"
         val (nestedFields) = getNestedFields(
             field,
             GraphQLTypeUtil.unwrapAll(fieldDefinition.type) as GraphQLFieldsContainer,
-            "object"
+            if (reverse) "subject" else "object"
         )
         val orderBy = orderByStatement(field, "$name['", "']")
         val whereClause = listOfNotNull(
-            targetGraphFilterNode?.let { GraphQLFilterVisitor2(context).visitNode(it) },
+            targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
             "predicate = '${getFQName(fieldDefinition, context)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
-            getNodeFilter(field)?.let { GraphQLFilterVisitor2(context).visitNode(it) },
+            getNodeFilter(field)?.let { GraphQLFilterVisitor(context).visitNode(it) },
             getArgsFilter(field)?.let {
-                GraphQLFilterVisitor2(context).visitNode(
+                GraphQLFilterVisitor(context).visitNode(
                     SelectorReplacingFilterVisitor(
                         "id",
-                        "object"
+                        if (reverse) "subject" else "object"
                     ).visitNode(it)
                 )
             }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
+
         val mappedFields =
             (listOf(
-                "'id'" to "object"
+                "'id'" to if (reverse) "subject::Dynamic" else "object"
             ) + nestedFields.map { "'${it.field.name}'" to "arrayDistinct(ARRAY_AGG(${it.field.name}))" })
                 .joinToString { (a, b) -> "$a,$b" }
-        return "${getJoinType(field)} (SELECT subject AS $joinField, map($mappedFields) as $name FROM $tableRef ${
+        val joinField = "${if (reverse) "object" else "subject"} AS $joinFieldName"
+        return "${getJoinType(field)} (SELECT $joinField, map($mappedFields) as $name FROM $tableRef ${
             nestedFields.joinToString(" ") { it.joinStatement }
         } $whereClause GROUP BY ${
-            SORT_COLUMNS.joinToString(
+            (if (reverse) REVERSED_SORT_COLUMNS else SORT_COLUMNS).joinToString(
                 prefix = "(",
                 postfix = ")"
             )
-        } $COLLAPSE_STATE_EXPR $orderBy LIMIT $offset, $pageSize BY subject) ${name}_join ON $parentJoinField = $joinField"
+        } $COLLAPSE_STATE_EXPR $orderBy LIMIT $offset, $pageSize BY ${if (reverse) "object" else "subject"}) ${name}_join ON $parentJoinField = $joinFieldName"
     }
 
-    private fun getTargetGraphs(): List<String>? {
+    protected fun getTargetGraphs(): List<String>? {
         val graphDirective = env.document.getDefinitionsOfType(OperationDefinition::class.java)
             .first { it.operation == OperationDefinition.Operation.QUERY }.directivesByName["graph"]?.firstOrNull()
         return graphDirective?.let { directive ->
@@ -252,17 +298,21 @@ class SQLConvertor(
         }
     }
 
-    private fun orderByStatement(field: Field, prefix: String = "", postFix: String = ""): String {
-        return (field.arguments.find { it.name == "orderBy" }?.value as? ArrayValue)?.values?.let { values ->
-            val fields = values.map { (it as StringValue).value }
+    protected fun orderByStatement(field: Field, prefix: String = "", postFix: String = ""): String {
+        val orderByValue = field.arguments.find { it.name == "orderBy" }?.value
+        return when (orderByValue) {
+            is ArrayValue -> orderByValue.values.map { (it as StringValue).value }
+            is StringValue -> listOf(orderByValue.value)
+            else -> emptyList()
+        }.takeIf { it.isNotEmpty() }?.let { fields ->
             "ORDER BY ${fields.joinToString { prefix + (if (it.startsWith("-")) "${it.substring(1)} DESC" else it.toString()) + postFix }} "
         } ?: ""
     }
 
-    private fun getJoinType(field: Field): String =
-        if (field.hasDirective(AbstractKnowledgeGraph.optionalDirective.name)) "LEFT JOIN" else "JOIN"
+    protected fun getJoinType(field: Field): String =
+        if (field.hasDirective(DefaultKnowledgeGraph.optionalDirective.name)) "LEFT JOIN" else "JOIN"
 
-    private fun getNestedFields(
+    protected fun getNestedFields(
         field: Field,
         outputDefinition: GraphQLFieldsContainer,
         parentJoinField: String
@@ -289,33 +339,41 @@ class SQLConvertor(
                 else -> emptyList()
             }
         }
-        return FieldInfo(processedFields.filterNot { it.field.name == "id" || it.field.name.startsWith("__") }
-            .map { (nestedField, typeFilter) ->
-                // TODO: handle typeFilters
-                SelectedField(
-                    nestedField, if (nestedField.selectionSet == null) {
-                        // Scalar field
-                        scalarFieldJoinStatement(
-                            nestedField,
-                            outputDefinition.getFieldDefinition(nestedField.name),
-                            parentJoinField
-                        )
-                    } else {
-                        // Relation field
-                        relationFieldJoinStatement(
-                            nestedField,
-                            outputDefinition.getFieldDefinition(nestedField.name),
-                            parentJoinField
-                        )
-                    }
-                )
-            })
+        return FieldInfo(
+            processedFields
+                .filterNot { it.field.name == "id" || it.field.name.startsWith("__") } // Ignore id and system fields
+                .filter {
+                    it.field.getDirectiveArg<StringValue>(
+                        "storage",
+                        "class"
+                    )?.value == null
+                } // Ignore fields that will be loaded from a different storage backend
+                .map { (nestedField, typeFilter) ->
+                    // TODO: handle typeFilters
+                    SelectedField(
+                        nestedField, if (nestedField.selectionSet == null) {
+                            // Scalar field
+                            scalarFieldJoinStatement(
+                                nestedField,
+                                outputDefinition.getFieldDefinition(nestedField.name),
+                                parentJoinField
+                            )
+                        } else {
+                            // Relation field
+                            relationFieldJoinStatement(
+                                nestedField,
+                                outputDefinition.getFieldDefinition(nestedField.name),
+                                parentJoinField
+                            )
+                        }
+                    )
+                })
     }
 
     // TODO: rewrite this quick and dirty implementation
-    private fun getArgsFilter(field: Field): Node? {
+    protected fun getArgsFilter(field: Field): Node? {
         val argFilters =
-            field.arguments.filter { it.name !in AbstractKnowledgeGraph.defaultRelationArguments.map { it.name } || it.name == "id" }
+            field.arguments.filter { it.name !in DefaultKnowledgeGraph.defaultRelationArguments.map { it.name } || it.name == "id" }
                 .map { argument ->
                     when (argument.value) {
                         is ArrayValue -> ComparisonNode(
@@ -364,7 +422,7 @@ class SQLConvertor(
     }
 
 
-    private fun unboxScalar(scalar: ScalarValue<*>): String {
+    protected fun unboxScalar(scalar: ScalarValue<*>): String {
         return when (scalar) {
             is StringValue -> scalar.value.toString()
             is BooleanValue -> scalar.isValue.toString()
@@ -373,12 +431,12 @@ class SQLConvertor(
         }
     }
 
-    private fun getNodeFilter(field: Field): Node? {
+    protected fun getNodeFilter(field: Field): Node? {
         val subFields = field.selectionSet?.selections?.flatMap {
             if (it is InlineFragment) it.selectionSet.selections else listOf(it)
         }?.filterIsInstance<Field>()?.filterNot { it.name == "id" }
         val filters = subFields?.mapNotNull { subField ->
-            subField.directives.firstOrNull { it.name == AbstractKnowledgeGraph.filterDirective.name }
+            subField.directives.firstOrNull { it.name == DefaultKnowledgeGraph.filterDirective.name }
                 ?.let { directive ->
                     val rsqlExpr = directive.getArgument("if")?.value?.let { (it as StringValue).value }
                         ?: throw IllegalArgumentException("Missing 'if' argument containing RSQL expression on filter directive")
@@ -391,12 +449,12 @@ class SQLConvertor(
         }
     }
 
-    private fun getFQName(name: String): String {
+    protected fun getFQName(name: String): String {
         return JsonLdHelper.getFQName(name, context, "_")?.takeIf { it != name }
             ?: throw IllegalArgumentException("No semantic context found for $name")
     }
 
-    private fun typeFilter(requiredTypes: List<String>): Node {
+    protected fun typeFilter(requiredTypes: List<String>): Node {
         return AndNode(
             listOf(
                 ComparisonNode(RSQLOperators.EQUAL, "predicate", listOf(RDFVocab.type)),
@@ -405,7 +463,7 @@ class SQLConvertor(
         )
     }
 
-    private fun getRelationshipFilter(): String? {
+    protected fun getRelationshipFilter(): String? {
         val targetSubject = env.getFromSource<Any>("id")
         val targetPredicate = getFQName(targetFieldDefinition, context)
         return targetSubject?.let { "subject IN (SELECT object FROM $tableRef WHERE subject = '$targetSubject' AND predicate = '$targetPredicate')" }
@@ -424,6 +482,7 @@ class PaginationInstrumentationState(
 
 }
 
+// Ook als injectable?
 class PaginationInstrumentation(
     val clickhouseClient: ClickhouseClient,
     val podId: String,
@@ -499,7 +558,7 @@ class PaginationInstrumentation(
                                     .hashString(path, Charsets.UTF_8)
                             }",
                             "path" to path,
-                            "parent" to env.getFromSource("id"),
+                            "parent" to env.getFromSource<String>("id"),
                             (if (env.executionStepInfo.path.parent.isRootPath) "class" else "predicate") to getFQName(
                                 env.fieldDefinition,
                                 context
@@ -527,30 +586,3 @@ data class SQLQuery(val sql: String, val columns: List<String>)
 
 data class FieldToJoin(val field: Field, val typeFilter: Node?)
 data class SelectedField(val field: Field, val joinStatement: String)
-
-private fun Field.getPaginationInfo(): Pair<Int, Long> {
-    val pageSize = (arguments.find { it.name == "pageSize" }?.value as? IntValue)?.value?.toInt()
-        ?: AbstractKnowledgeGraph.DEFAULT_PAGE_SIZE
-    val cursor = (arguments.find { it.name == "cursor" }?.value as? StringValue)?.value?.let {
-        OffsetBasedCursor.fromString(it)?.offset
-    } ?: 0L
-    return pageSize to cursor
-}
-
-private fun <T> DataFetchingEnvironment.getFromSource(key: String): T? {
-    val source = getSource<Any?>()
-    return when (source) {
-        is Map<*, *> -> source["_$key"] ?: source[key]
-        is JsonObject -> source.getValue(key)
-        else -> null
-    } as T?
-}
-
-private fun getFQName(node: GraphQLDirectiveContainer, context: Map<String, Any>): String {
-    return JsonLdHelper.getFQName(node.name, context, "_")?.takeIf { it != node.name }
-        ?: run {
-            node.getAppliedDirective("predicate")?.getArgument("iri")?.getValue<String>()
-                ?: node.getAppliedDirective("type")?.getArgument("iri")?.getValue<String>()
-
-        } ?: throw IllegalArgumentException("No semantic context found for ${node.name}")
-}

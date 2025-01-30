@@ -10,6 +10,7 @@ object XSDVocab {
     val integer = "${baseUri}integer"
     val long = "${baseUri}long"
     val double = "${baseUri}double"
+    val float = "${baseUri}float"
     val decimal = "${baseUri}decimal"
     val dateTime = "${baseUri}dateTime"
 

@@ -9,6 +9,7 @@ import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.utils.rdf.RDFTransformer
@@ -53,7 +54,7 @@ class StreamApi(
             .onItem()
             .transformToMultiAndConcatenate { msg ->
                 knowledgeGraph.streamChangeRecords(
-                    ChangeHistoryRequest(
+                    ChangeRecordRequest(
                         podId = msg.payload.podId,
                         changeRequestId = msg.payload.id
                     )

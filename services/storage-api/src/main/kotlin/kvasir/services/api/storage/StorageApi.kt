@@ -12,6 +12,7 @@ import io.vertx.ext.web.Router
 import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
+import kvasir.definitions.messaging.Channels
 import kvasir.definitions.storage.StorageMutationEvent
 import kvasir.definitions.storage.StorageMutationEventType
 import kvasir.utils.s3.S3Utils
@@ -174,7 +175,7 @@ class S3Interceptor(
 
 @ApplicationScoped
 class StorageMutationEmitterProvider(
-    @Channel("storage_mutations_publish")
+    @Channel(Channels.STORAGE_MUTATIONS_PUBLISH)
     private val storageMutationsEmitter: MutinyEmitter<StorageMutationEvent>
 ) {
     fun getEmitter(): MutinyEmitter<StorageMutationEvent> {

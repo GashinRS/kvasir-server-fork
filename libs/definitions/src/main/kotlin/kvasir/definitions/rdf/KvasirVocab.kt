@@ -1,7 +1,5 @@
 package kvasir.definitions.rdf
 
-import kvasir.definitions.rdf.KvasirVocab.baseUri
-
 object KvasirVocab {
 
     const val baseUri = "https://kvasir.discover.ilabt.imec.be/vocab#"
@@ -18,7 +16,7 @@ object KvasirVocab {
     const val defaultContext = "${baseUri}defaultContext"
     const val delete = "${baseUri}delete"
     const val description = "${baseUri}description"
-    const val errorMessage = "${baseUri}errorMessage"
+    const val message = "${baseUri}message"
     const val graph = "${baseUri}graph"
     const val insert = "${baseUri}insert"
     const val key = "${baseUri}key"
@@ -27,7 +25,8 @@ object KvasirVocab {
     const val nrOfInserts = "${baseUri}nrOfInserts"
     const val podId = "${baseUri}podId"
     const val query = "${baseUri}query"
-    const val resultCode = "${baseUri}resultCode"
+    const val statusCode = "${baseUri}statusCode"
+    const val statusEntry = "${baseUri}statusEntry"
     const val schema = "${baseUri}schema"
     const val shacl = "${baseUri}shacl"
     const val sliceId = "${baseUri}sliceId"
