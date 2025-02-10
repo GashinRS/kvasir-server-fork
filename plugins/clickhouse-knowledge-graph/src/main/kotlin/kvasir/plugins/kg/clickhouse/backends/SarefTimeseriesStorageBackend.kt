@@ -14,6 +14,8 @@ import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
+import kvasir.definitions.kg.graphql.ARG_CLASS_NAME
+import kvasir.definitions.kg.graphql.DIRECTIVE_STORAGE_NAME
 import kvasir.definitions.kg.timeseries.Observation
 import kvasir.definitions.rdf.SAREFVocab
 import kvasir.definitions.rdf.XSDVocab
@@ -217,9 +219,9 @@ class MatchingPathVisitor(rdfContext: Map<String, Any>) : KvasirNodeVisitor(rdfC
             // ... add a storage directive, so the KG resolver knows which backend to use for data fetching
             val transformedNode = node.transform {
                 it.directive(
-                    Directive.newDirective().name("storage")
+                    Directive.newDirective().name(DIRECTIVE_STORAGE_NAME)
                         .argument(
-                            Argument.newArgument().name("class")
+                            Argument.newArgument().name(ARG_CLASS_NAME)
                                 .value(StringValue.of(SarefTimeseriesStorageBackend::class.qualifiedName)).build()
                         ).build()
                 )

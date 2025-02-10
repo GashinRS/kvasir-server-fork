@@ -1,19 +1,27 @@
 package kvasir.baseimpl.kg
 
 import com.dashjoin.jsonata.Jsonata.jsonata
-import com.github.jsonldjava.core.JsonLdProcessor
-import com.github.jsonldjava.core.RDFDataset
 import io.quarkus.arc.All
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.changes.*
 import kvasir.definitions.kg.changes.ChangeProcessor
+import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
+import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
-import kvasir.definitions.rdf.*
+import kvasir.definitions.kg.exceptions.SHACLValidationException
+import kvasir.definitions.kg.slices.SliceStore
+import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.KvasirNamedGraphs
+import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.reactive.skipToLast
-import kvasir.utils.rdf.RDFLiteralUtils
+import kvasir.utils.rdf.RDFTransformer
+import kvasir.utils.shacl.GraphQL2SHACL
+import kvasir.utils.shacl.RDF4JSHACLValidator
+import kvasir.utils.shacl.SHACLValidationFailure
+import kvasir.utils.shacl.SHACLValidator
 import org.eclipse.microprofile.config.inject.ConfigProperty
 
 @ApplicationScoped
@@ -30,6 +38,7 @@ class EvaluateAssertions(
                 val q = QueryRequest(
                     context = request.context,
                     podId = request.podId,
+                    sliceId = request.sliceId,
                     query = assertion.queryStr
                 )
                 parent.query(q)
@@ -160,7 +169,7 @@ class MaterializeRecords(
             .chain { bindings ->
                 // Delete the specified records
                 val deleteJsonLd = materializeRecords(request, request.delete, bindings)
-                val deleteStatements = toStatements(deleteJsonLd)
+                val deleteStatements = RDFTransformer.toStatements(deleteJsonLd)
                 buffer.add(
                     deleteStatements.map {
                         ChangeRecord(
@@ -171,7 +180,7 @@ class MaterializeRecords(
                 )
                     .chain { _ ->
                         val insertJsonLd = materializeRecords(request, request.insert, bindings)
-                        val insertStatements = toStatements(insertJsonLd)
+                        val insertStatements = RDFTransformer.toStatements(insertJsonLd)
                         buffer.add(
                             insertStatements.map {
                                 ChangeRecord(
@@ -191,6 +200,7 @@ class MaterializeRecords(
             val q = QueryRequest(
                 context = request.context,
                 podId = request.podId,
+                sliceId = request.sliceId,
                 targetGraphs = setOf(),
                 query = request.with!!
             )
@@ -244,42 +254,45 @@ class MaterializeRecords(
             else -> throw InvalidTemplateException("Invalid template result: $transformedData")
         }
     }
+}
 
-    fun toStatements(graphDoc: Map<String, Any>): List<RDFStatement> {
-        val dataset = JsonLdProcessor.toRDF(graphDoc) as RDFDataset
-        return dataset.graphNames().flatMap { graph ->
-            dataset.getQuads(graph).map { quad ->
-                RDFStatement(
-                    subject = ensureValidAbsoluteIri(quad.subject.value),
-                    predicate = ensureValidAbsoluteIri(quad.predicate.value),
-                    `object` = if (quad.`object`.isLiteral) (quad.`object` as RDFDataset.Literal).let {
-                        RDFLiteralUtils.getCompatibleRawValue(
-                            it.value,
-                            it.datatype
-                        )
-                    } else ensureValidAbsoluteIri(
-                        quad.`object`.value
-                    ),
-                    graph = quad.graph?.value?.let { ensureValidAbsoluteIri(it) } ?: "",
-                    dataType = quad.`object`.datatype?.toString(),
-                    language = quad.`object`.language?.toString()
-                )
+@ApplicationScoped
+class SliceSHACLValidator(private val sliceStore: SliceStore) : ChangeProcessor {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+        return buffer.request.sliceId?.let { sliceId ->
+            // Load Slice schema
+            sliceStore.getById(buffer.request.podId, sliceId)
+                .chain { sliceSpec ->
+                    if (sliceSpec != null) {
+                        val shaclGen = GraphQL2SHACL(sliceSpec.schema, sliceSpec.context)
+                        val insertValidator = RDF4JSHACLValidator(shaclGen.getInsertSHACL())
+                        val deleteValidator = RDF4JSHACLValidator(shaclGen.getDeleteSHACL())
+                        // Validate inserts
+                        buffer.stream(ChangeRecordType.INSERT).validate(insertValidator)
+                            .chain { _ ->
+                                // Validate deletes
+                                buffer.stream(ChangeRecordType.DELETE).validate(deleteValidator)
+                            }
+                    } else {
+                        Uni.createFrom().voidItem()
+                    }
+                }
+        } ?: Uni.createFrom().voidItem()
+    }
+
+}
+
+// TODO: this should work for large collections of change records as well
+internal fun Multi<ChangeRecord>.validate(validator: SHACLValidator): Uni<Void> {
+    return this.collect().asSet().chain { records ->
+        try {
+            if(records.isNotEmpty()) {
+                validator.validate(records.map { it.statement })
             }
+            Uni.createFrom().voidItem()
+        } catch (e: SHACLValidationFailure) {
+            Uni.createFrom()
+                .failure(SHACLValidationException("Change request does not match the Slice input specification!", e))
         }
-    }
-
-    fun toStatements(docs: List<Map<String, Any>>): List<RDFStatement> {
-        val defaultStatements =
-            toStatements(mapOf(JsonLdKeywords.graph to docs.filterNot { it.containsKey(JsonLdKeywords.graph) }))
-        val namedGraphStatements =
-            docs.filter { it.containsKey(JsonLdKeywords.graph) }.flatMap { doc -> toStatements(doc) }
-        return defaultStatements + namedGraphStatements
-    }
-
-    private fun ensureValidAbsoluteIri(iri: String): String {
-        if (iri.indexOf(':') < 0) {
-            throw IllegalArgumentException("Not a valid (absolute) IRI: '$iri'")
-        }
-        return iri
     }
 }

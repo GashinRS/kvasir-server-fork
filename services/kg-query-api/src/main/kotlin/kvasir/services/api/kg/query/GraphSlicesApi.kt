@@ -3,7 +3,6 @@ package kvasir.services.api.kg.query
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
-import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
@@ -19,9 +18,8 @@ import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
-import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.graphql.SchemaValidator
-import kvasir.utils.graphql2shacl.GraphQL2SHACL
+import kvasir.utils.shacl.GraphQL2SHACL
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
@@ -46,9 +44,9 @@ class GraphSlicesApi(
         description = "List slices of the specified pod's Knowledge Graph."
     )
     fun listSlices(@PathParam("podId") podId: String): Uni<List<SliceSummary>> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        return throw404IfPodNotFound(podStore, podId).chain { _ ->
-            sliceStore.list(podId)
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        return getPodOrThrow404(podStore, fqPodId).chain { _ ->
+            sliceStore.list(fqPodId)
         }
     }
 
@@ -60,31 +58,18 @@ class GraphSlicesApi(
         summary = "Define a new slice of the KG.",
         description = "Define a new slice (subset) of the specified pod's Knowledge Graph, based on a GraphQL-LD schema."
     )
-    fun createSlice(@PathParam("podId") podId: String, input: SliceInput, @Context uriInfo: UriInfo): Uni<Response> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        return throw404IfPodNotFound(podStore, podId)
+    fun createSlice(@PathParam("podId") podId: String, input: SliceInput): Uni<Response> {
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val fqSliceId = uriInfo.absolutePathBuilder.path(input.name).build().toString()
+        return getPodOrThrow404(podStore, fqPodId)
             .chain { _ ->
-                // Generate shapes
-                val shacl = GraphQL2SHACL(input.schema, input.context).toSHACL()
-                val slice = input.toSlice(podId, shacl, uriInfo)
                 // A Slice with the same name should not exist
-                sliceStore.getById(podId, slice.id)
+                sliceStore.getById(fqPodId, fqSliceId)
                     .onItem().ifNotNull().failWith(ClientErrorException(Response.Status.CONFLICT))
-                    .onItem().ifNull().continueWith(slice)
+                    .onItem().ifNull().switchTo { validateAndPersistSlice(fqPodId, fqSliceId, input) }
             }
-            .chain { slice ->
-                slice!!
-                // Validate the schema
-                try {
-                    SchemaValidator.validateSchema(slice.schema, slice.context)
-                    sliceStore.persist(slice)
-                        .map {
-                            Response.created(URI.create(slice.id)).build()
-                        }
-                } catch (e: Throwable) {
-                    Uni.createFrom().failure(e)
-
-                }
+            .map { slice ->
+                Response.created(URI.create(slice!!.id)).build()
             }
     }
 
@@ -97,12 +82,31 @@ class GraphSlicesApi(
         description = "Retrieve a specific slice definition details."
     )
     fun getSlice(
-        @PathParam("podId") podId: String
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") sliceId: String
     ): Uni<Slice> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        return throw404IfPodNotFound(podStore, podId).chain { _ ->
-            sliceStore.getById(podId, uriInfo.absolutePath.toString())
-                .onItem().ifNull().failWith(NotFoundException("Slice not found"))
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val fqSliceId = uriInfo.absolutePath.toString()
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId)
+    }
+
+    @Tag(name = ApiDocTags.PODS_API)
+    @Path("{podId}/slices/{sliceId}")
+    @PUT
+    @Consumes(JSON_LD_MEDIA_TYPE)
+    @Operation(
+        summary = "Update a specific slice definition..",
+        description = "Update a specific slice definition details."
+    )
+    fun updateSlice(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") sliceId: String,
+        input: SliceInput,
+    ): Uni<Response> {
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val fqSliceId = uriInfo.absolutePath.toString()
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { _ ->
+            validateAndPersistSlice(fqPodId, fqSliceId, input).map { _ -> Response.noContent().build() }
         }
     }
 
@@ -113,11 +117,11 @@ class GraphSlicesApi(
         summary = "Delete a specific slice.",
         description = "Delete a specific slice of the specified pod's Knowledge Graph."
     )
-    fun deleteSlice(@PathParam("podId") podId: String): Uni<Response> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        val sliceId = uriInfo.absolutePath.toString()
-        return throw404IfPodNotFound(podStore, podId).chain { _ ->
-            sliceStore.deleteById(podId, sliceId)
+    fun deleteSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Uni<Response> {
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val fqSliceId = uriInfo.absolutePath.toString()
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { _ ->
+            sliceStore.deleteById(fqPodId, fqSliceId)
                 .map { Response.noContent().build() }
         }
     }
@@ -136,14 +140,10 @@ class GraphSlicesApi(
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
         input: QueryInputImpl,
     ): Uni<QueryResult> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        val sliceId = uriInfo.absolutePath.toString().substringBefore("/query")
-        return throw404IfPodNotFound(podStore, podId).chain { _ ->
-            sliceStore.getById(podId, sliceId)
-                .onItem().ifNull().failWith(NotFoundException("Slice not found"))
-                .onItem().ifNotNull().transformToUni { slice ->
-                    executeQuery(podId, slice!!, input)
-                }
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val fqSliceId = uriInfo.absolutePath.toString().substringBefore("/query")
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
+            executeQuery(fqPodId, slice, input)
         }
     }
 
@@ -162,35 +162,12 @@ class GraphSlicesApi(
         @PathParam("sliceId") sliceId: String,
         input: QueryInputImpl,
     ): Uni<Any> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        val sliceId = uriInfo.absolutePath.toString().substringBefore("/query")
-        return throw404IfPodNotFound(podStore, podId).chain { _ ->
-            sliceStore.getById(podId, sliceId)
-                .onItem().ifNull().failWith(NotFoundException("Slice not found"))
-                .onItem().ifNotNull().transformToUni { slice ->
-                    executeQuery(podId, slice!!, input).map {
-                        it.toJsonLD(slice.context)
-                    }
-                }
-        }
-    }
-
-    @Tag(name = ApiDocTags.PODS_API)
-    @GET
-    @Path("{podId}/slices/{sliceId}/shacl")
-    @Produces(RDFMediaTypes.TURTLE)
-    fun getSHACL(
-        @PathParam("podId") podId: String,
-        @PathParam("sliceId") sliceId: String
-    ): Uni<String> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices")
-        val sliceId = uriInfo.absolutePath.toString().substringBefore("/shacl")
-        return throw404IfPodNotFound(podStore, podId).chain { _ ->
-            sliceStore.getById(podId, sliceId)
-                .onItem().ifNull().failWith(NotFoundException("Slice not found"))
-                .onItem().ifNotNull().transform { slice ->
-                    slice!!.shacl
-                }
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val fqSliceId = uriInfo.absolutePath.toString().substringBefore("/query")
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
+            executeQuery(fqPodId, slice, input).map {
+                it.toJsonLD(slice.context)
+            }
         }
     }
 
@@ -204,6 +181,7 @@ class GraphSlicesApi(
             QueryRequest(
                 slice.context,
                 podId,
+                slice.id,
                 input.query,
                 input.variables,
                 input.operationName,
@@ -213,6 +191,19 @@ class GraphSlicesApi(
                 input.atChangeRequest
             )
         )
+    }
+
+    private fun validateAndPersistSlice(podId: String, sliceId: String, input: SliceInput): Uni<Slice> {
+        return try {
+            // Generate shapes
+            val shaclConvertor = GraphQL2SHACL(input.schema, input.context)
+            val slice = input.toSlice(podId, sliceId, shaclConvertor.hasMutations())
+            // Validate the schema
+            SchemaValidator.validateSchema(slice.schema, slice.context)
+            sliceStore.persist(slice).map { slice }
+        } catch (err: Throwable) {
+            Uni.createFrom().failure(err)
+        }
     }
 }
 
@@ -228,15 +219,15 @@ data class SliceInput(
     @JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 ) {
-    fun toSlice(podId: String, shacl: String, uriInfo: UriInfo): Slice {
+    fun toSlice(podId: String, sliceId: String, supportsChanges: Boolean): Slice {
         return Slice(
-            id = uriInfo.absolutePathBuilder.path(name).build().toString(),
+            id = sliceId,
             context = context,
             podId = podId,
             name = name,
             description = description,
             schema = schema,
-            shacl = shacl,
+            supportsChanges = supportsChanges,
             targetGraphs = targetGraphs
         )
     }

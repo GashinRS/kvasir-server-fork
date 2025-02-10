@@ -98,7 +98,9 @@ class PaginationInstrumentation(
             .merge().collect().asList()
             .map { pageData ->
                 executionResult.transform { result ->
-                    result.extensions(mapOf(EXTENSION_ID to pageData))
+                    if (pageData.isNotEmpty()) {
+                        result.extensions(mapOf(EXTENSION_ID to pageData))
+                    }
                 }
             }
             .convert().toCompletableFuture()

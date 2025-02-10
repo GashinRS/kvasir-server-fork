@@ -24,6 +24,8 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.baseimpl.kg.DefaultKnowledgeGraph
+import kvasir.baseimpl.kg.SchemaGenerator
+import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFSVocab
@@ -92,9 +94,11 @@ class ConvertToSQLResolver(
                         .convert().toCompletionStage()
                 } else {
                     // Else return the provided values (filtering nulls from collections)
-                    when (value) {
-                        is List<*> -> value.filterNotNull()
-                        is JsonArray -> value.list.filterNotNull()
+                    val returnList = env.fieldDefinition.type.isList()
+                    when {
+                        value is Iterable<*> && returnList -> value.filterNotNull()
+                        value is Iterable<*> -> value.firstOrNull()
+                        returnList -> listOf(value)
                         else -> value
                     }
                 }
@@ -161,7 +165,7 @@ open class SQLConvertor(
         val whereClause = listOfNotNull(
             targetGraphFilterNode,
             getFQName(outputType, context).takeIf { it != RDFSVocab.Resource }?.let { typeFilter(listOf(it)) },
-            getNodeFilter(targetField),
+            getNodeFilter(targetField, targetFieldDefinition),
             getArgsFilter(targetField),
             subjectSelectors?.let { ComparisonNode(RSQLOperators.IN, "id", it) }
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
@@ -244,7 +248,8 @@ open class SQLConvertor(
         parentJoinField: String
     ): String {
         val name = field.name
-        val reverse = fieldDefinition.getAppliedDirective("predicate").getArgument("reverse").getValue<Boolean>()
+        val reverse = fieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME).getArgument(ARG_REVERSE_NAME)
+            .getValue<Boolean>()
         val (pageSize, offset) = field.getPaginationInfo()
         val joinFieldName = "${name}_holder"
         val (nestedFields) = getNestedFields(
@@ -257,7 +262,7 @@ open class SQLConvertor(
             targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
             "predicate = '${getFQName(fieldDefinition, context)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
-            getNodeFilter(field)?.let { GraphQLFilterVisitor(context).visitNode(it) },
+            getNodeFilter(field, fieldDefinition)?.let { GraphQLFilterVisitor(context).visitNode(it) },
             getArgsFilter(field)?.let {
                 GraphQLFilterVisitor(context).visitNode(
                     SelectorReplacingFilterVisitor(
@@ -286,9 +291,9 @@ open class SQLConvertor(
 
     protected fun getTargetGraphs(): List<String>? {
         val graphDirective = env.document.getDefinitionsOfType(OperationDefinition::class.java)
-            .first { it.operation == OperationDefinition.Operation.QUERY }.directivesByName["graph"]?.firstOrNull()
+            .first { it.operation == OperationDefinition.Operation.QUERY }.directivesByName[DIRECTIVE_GRAPH_NAME]?.firstOrNull()
         return graphDirective?.let { directive ->
-            directive.getArgument("iri")?.value?.let { value ->
+            directive.getArgument(ARG_IRI_NAME)?.value?.let { value ->
                 when (value) {
                     is StringValue -> listOf(value.value)
                     is ArrayValue -> value.values.mapNotNull { (it as? StringValue)?.value }
@@ -299,7 +304,7 @@ open class SQLConvertor(
     }
 
     protected fun orderByStatement(field: Field, prefix: String = "", postFix: String = ""): String {
-        val orderByValue = field.arguments.find { it.name == "orderBy" }?.value
+        val orderByValue = field.arguments.find { it.name == ARG_ORDER_BY_NAME }?.value
         return when (orderByValue) {
             is ArrayValue -> orderByValue.values.map { (it as StringValue).value }
             is StringValue -> listOf(orderByValue.value)
@@ -310,7 +315,7 @@ open class SQLConvertor(
     }
 
     protected fun getJoinType(field: Field): String =
-        if (field.hasDirective(DefaultKnowledgeGraph.optionalDirective.name)) "LEFT JOIN" else "JOIN"
+        if (field.hasDirective(KvasirDirectives.optionalDirective.name)) "LEFT JOIN" else "JOIN"
 
     protected fun getNestedFields(
         field: Field,
@@ -341,11 +346,11 @@ open class SQLConvertor(
         }
         return FieldInfo(
             processedFields
-                .filterNot { it.field.name == "id" || it.field.name.startsWith("__") } // Ignore id and system fields
+                .filterNot { it.field.name == FIELD_ID_NAME || it.field.name.startsWith("__") } // Ignore id and system fields
                 .filter {
                     it.field.getDirectiveArg<StringValue>(
-                        "storage",
-                        "class"
+                        DIRECTIVE_STORAGE_NAME,
+                        ARG_CLASS_NAME
                     )?.value == null
                 } // Ignore fields that will be loaded from a different storage backend
                 .map { (nestedField, typeFilter) ->
@@ -373,7 +378,7 @@ open class SQLConvertor(
     // TODO: rewrite this quick and dirty implementation
     protected fun getArgsFilter(field: Field): Node? {
         val argFilters =
-            field.arguments.filter { it.name !in DefaultKnowledgeGraph.defaultRelationArguments.map { it.name } || it.name == "id" }
+            field.arguments.filter { it.name !in SchemaGenerator.defaultRelationArguments.map { it.name } || it.name == ARG_ID_NAME }
                 .map { argument ->
                     when (argument.value) {
                         is ArrayValue -> ComparisonNode(
@@ -431,20 +436,30 @@ open class SQLConvertor(
         }
     }
 
-    protected fun getNodeFilter(field: Field): Node? {
+    protected fun getNodeFilter(field: Field, fieldDefinition: GraphQLFieldDefinition): Node? {
         val subFields = field.selectionSet?.selections?.flatMap {
             if (it is InlineFragment) it.selectionSet.selections else listOf(it)
-        }?.filterIsInstance<Field>()?.filterNot { it.name == "id" }
-        val filters = subFields?.mapNotNull { subField ->
-            subField.directives.firstOrNull { it.name == DefaultKnowledgeGraph.filterDirective.name }
-                ?.let { directive ->
-                    val rsqlExpr = directive.getArgument("if")?.value?.let { (it as StringValue).value }
-                        ?: throw IllegalArgumentException("Missing 'if' argument containing RSQL expression on filter directive")
+        }?.filterIsInstance<Field>()?.filterNot { it.name == FIELD_ID_NAME }
+            ?.map { it to fieldDefinition.type.innerType<GraphQLFieldsContainer>().getFieldDefinition(it.name) }
+        val globalNodeFilter = if (env.executionStepInfo.path.parent.isRootPath) {
+            (field.getDirectiveArg<StringValue>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
+                ?: fieldDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
+                ?.let {
                     val rsqlParser = RSQLParser()
-                    rsqlParser.parse(rsqlExpr).accept(SelectorReplacingFilterVisitor(SELF_REF_SELECTOR, subField.name))
+                    rsqlParser.parse(it.value)
                 }
+        } else {
+            null
         }
-        return filters?.takeIf { it.isNotEmpty() }?.let {
+        val subFieldFilters = subFields?.map { (subField, subFieldDefinition) ->
+            (subField.getDirectiveArg<StringValue>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
+                ?: subFieldDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
+                ?.let {
+                    val rsqlParser = RSQLParser()
+                    rsqlParser.parse(it.value).accept(SelectorReplacingFilterVisitor(SELF_REF_SELECTOR, subField.name))
+                }
+        } ?: emptyList()
+        return (listOf(globalNodeFilter) + subFieldFilters).filterNotNull().takeIf { it.isNotEmpty() }?.let {
             if (it.size == 1) it.first() else AndNode(it)
         }
     }
@@ -464,118 +479,9 @@ open class SQLConvertor(
     }
 
     protected fun getRelationshipFilter(): String? {
-        val targetSubject = env.getFromSource<Any>("id")
+        val targetSubject = env.getFromSource<Any>(FIELD_ID_NAME)
         val targetPredicate = getFQName(targetFieldDefinition, context)
         return targetSubject?.let { "subject IN (SELECT object FROM $tableRef WHERE subject = '$targetSubject' AND predicate = '$targetPredicate')" }
-    }
-
-}
-
-class PaginationInstrumentationState(
-    val state: MutableMap<String, String> = mutableMapOf(),
-    val environments: MutableMap<String, DataFetchingEnvironment> = mutableMapOf()
-) : InstrumentationState {
-
-    fun addCountTarget(executionStepInfo: ExecutionStepInfo, countSql: String) {
-        state[executionStepInfo.path.toString()] = countSql
-    }
-
-}
-
-// Ook als injectable?
-class PaginationInstrumentation(
-    val clickhouseClient: ClickhouseClient,
-    val podId: String,
-    val context: Map<String, Any>,
-    val atTimestamp: Instant?
-) : SimplePerformantInstrumentation() {
-
-    companion object {
-        const val EXTENSION_ID = "pagination"
-    }
-
-    private val databaseName = databaseFromPodId(podId)
-
-    override fun createState(parameters: InstrumentationCreateStateParameters?): InstrumentationState? {
-        return PaginationInstrumentationState()
-    }
-
-    override fun beginFieldFetch(
-        parameters: InstrumentationFieldFetchParameters,
-        state: InstrumentationState
-    ): InstrumentationContext<in Any> {
-        state as PaginationInstrumentationState
-        state.environments[parameters.executionStepInfo.path.toString()] = parameters.environment
-        return SimpleInstrumentationContext.noOp()
-    }
-
-    override fun beginFieldCompletion(
-        parameters: InstrumentationFieldCompleteParameters,
-        state: InstrumentationState
-    ): InstrumentationContext<in Any> {
-        state as PaginationInstrumentationState
-        if (parameters.executionStepInfo.fieldDefinition.type.isList()) {
-            val env = state.environments[parameters.executionStepInfo.path.toString()]!!
-            val (pageSize, _) = env.field.getPaginationInfo()
-            val outputSize = ((parameters.fetchedValue as? FetchedValue)?.fetchedValue as? List<*>)?.size
-            if (outputSize != null && outputSize == pageSize) {
-                return object : SimpleInstrumentationContext<Any>() {
-                    override fun onCompleted(result: Any?, t: Throwable?) {
-                        val sqlConvertor = SQLConvertor(
-                            context,
-                            atTimestamp,
-                            databaseName,
-                            DATA_TABLE,
-                            env.field,
-                            env.fieldDefinition,
-                            env,
-                            SQLConvertorMode.COUNT
-                        )
-                        val (sql, _) = sqlConvertor.toSQL()
-                        state.addCountTarget(parameters.executionStepInfo, sql)
-                    }
-                }
-            }
-        }
-        return SimpleInstrumentationContext.noOp()
-    }
-
-    override fun instrumentExecutionResult(
-        executionResult: ExecutionResult,
-        parameters: InstrumentationExecutionParameters,
-        state: InstrumentationState
-    ): CompletableFuture<ExecutionResult> {
-        return Multi.createFrom().iterable((state as PaginationInstrumentationState).state.entries)
-            .onItem().transformToUni { (path, sql) ->
-                val env = state.environments[path]!!
-                val (pageSize, offset) = env.field.getPaginationInfo()
-                clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, listOf("totalCount")), sql)
-                    .map { result ->
-                        val totalCount = result[0]["totalCount"].toString().toLong()
-                        mapOf(
-                            JsonLdKeywords.id to "kvasir:qr-page-info:${
-                                Hashing.farmHashFingerprint64()
-                                    .hashString(path, Charsets.UTF_8)
-                            }",
-                            "path" to path,
-                            "parent" to env.getFromSource<String>("id"),
-                            (if (env.executionStepInfo.path.parent.isRootPath) "class" else "predicate") to getFQName(
-                                env.fieldDefinition,
-                                context
-                            ),
-                            "totalCount" to totalCount,
-                            "next" to if (offset + pageSize < totalCount) OffsetBasedCursor(offset + pageSize).encode() else null,
-                            "previous" to if (offset - pageSize >= 0) OffsetBasedCursor(offset - pageSize).encode() else null
-                        ).filterValues { it != null }
-                    }
-            }
-            .merge().collect().asList()
-            .map { pageData ->
-                executionResult.transform { result ->
-                    result.extensions(mapOf(EXTENSION_ID to pageData))
-                }
-            }
-            .convert().toCompletableFuture()
     }
 
 }

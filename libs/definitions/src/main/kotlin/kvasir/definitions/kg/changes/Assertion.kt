@@ -25,5 +25,3 @@ data class Assertion(
     )
     val queryStr: String
 )
-
-class ChangeAssertionException(message: String) : RuntimeException(message)
