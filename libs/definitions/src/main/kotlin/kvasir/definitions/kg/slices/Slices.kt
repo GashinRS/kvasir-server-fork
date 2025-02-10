@@ -29,8 +29,8 @@ data class Slice(
     val description: String,
     @JsonProperty(KvasirVocab.schema)
     val schema: String,
-    @JsonProperty(KvasirVocab.shacl)
-    val shacl: String,
+    @JsonProperty(KvasirVocab.supportsChanges)
+    val supportsChanges: Boolean = false,
     @JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 )

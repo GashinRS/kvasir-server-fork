@@ -26,6 +26,9 @@ import kvasir.definitions.kg.*
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
 import kvasir.definitions.kg.TypeRegistry
 import kvasir.definitions.kg.changes.*
+import kvasir.definitions.kg.exceptions.ChangeAssertionException
+import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
+import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.reactive.skipToLast
@@ -67,46 +70,10 @@ class DefaultKnowledgeGraph(
     private val changeRequestTxBufferFactory: ChangeRequestTxBufferFactory,
     private val pipelineConfig: ChangeRequestPipelineConfig,
     private val processors: Instance<ChangeProcessor>,
-    private val typeRegistry: TypeRegistry
+    private val typeRegistry: TypeRegistry,
+    @Channel(Channels.CHANGE_REQUESTS_PUBLISH)
+    private val changeRequestEmitter: MutinyEmitter<ChangeRequest>
 ) : KnowledgeGraph {
-
-    companion object {
-
-        val typeDirective = GraphQLDirective.newDirective().name("type").validLocations(
-            Introspection.DirectiveLocation.INTERFACE,
-            Introspection.DirectiveLocation.OBJECT
-        )
-            .argument(GraphQLArgument.newArgument().name("iri").type(GraphQLString).build()).build()
-        val predicateDirective =
-            GraphQLDirective.newDirective().name("predicate").validLocation(Introspection.DirectiveLocation.FIELD)
-                .argument(GraphQLArgument.newArgument().name("iri").type(GraphQLString).build())
-                .argument(GraphQLArgument.newArgument().name("reverse").type(GraphQLBoolean).build()).build()
-        val optionalDirective =
-            GraphQLDirective.newDirective().name("optional").validLocation(Introspection.DirectiveLocation.FIELD)
-                .build()
-        val filterDirective =
-            GraphQLDirective.newDirective().name("filter").validLocation(Introspection.DirectiveLocation.FIELD)
-                .argument(GraphQLArgument.newArgument().name("if").type(GraphQLString).build()).build()
-        val defaultRelationArguments = listOf(
-            GraphQLArgument.newArgument().name("id").type(GraphQLList.list(GraphQLID)).build(),
-            GraphQLArgument.newArgument().name("pageSize").type(GraphQLInt).defaultValueProgrammatic(DEFAULT_PAGE_SIZE)
-                .build(),
-            GraphQLArgument.newArgument().name("cursor").type(GraphQLString).build(),
-            GraphQLArgument.newArgument().name("orderBy").type(GraphQLList.list(GraphQLString)).build()
-        )
-        val graphDirective =
-            GraphQLDirective.newDirective().name("graph").validLocations(
-                Introspection.DirectiveLocation.QUERY
-            )
-                .argument(GraphQLArgument.newArgument().name("iri").type(GraphQLList.list(GraphQLString)).build())
-                .build()
-
-        val storageDirective = GraphQLDirective.newDirective().name("storage").validLocations(
-            Introspection.DirectiveLocation.FIELD
-        )
-            .argument(GraphQLArgument.newArgument().name("class").type(GraphQLString).build()).build()
-
-    }
 
     val defaultStorageBackend = (pipelineConfig.pipeline().find { it.defaultStorage() }?.let {
         processors.handles().find { backend -> backend.bean.beanClass.name == it.className() }
@@ -156,13 +123,13 @@ class DefaultKnowledgeGraph(
                 )
             }
             .onFailure(
-                InvalidTemplateException::class.java
+                InvalidChangeRequestException::class.java
             ).recoverWithUni { e ->
-                Log.warn("Failed to process change request due to invalid template expression: $request", e)
+                Log.warn("Invalid change request: $request", e)
                 logFailedChangeRequest(
                     request,
                     ChangeStatusCode.VALIDATION_ERROR,
-                    e.message ?: "Invalid template expression"
+                    e.message ?: "Invalid change request"
                 )
             }
             .onFailure().recoverWithUni { e ->
@@ -185,7 +152,7 @@ class DefaultKnowledgeGraph(
                 .map { (atTimestamp, generatedSchema) ->
                     val codeRegistry =
                         GraphQLCodeRegistry.newCodeRegistry()
-                            .defaultDataFetcher { _ -> buildDatafetcher(request.podId, request.context, atTimestamp) }
+                            .defaultDataFetcher { _ -> buildDatafetcher(request, atTimestamp) }
                     generatedSchema.unionTypes.forEach { unionType ->
                         codeRegistry.typeResolver(
                             unionType,
@@ -282,7 +249,7 @@ class DefaultKnowledgeGraph(
                 val dynamicWiringFactory = object : WiringFactory {
 
                     override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
-                        return buildDatafetcher(request.podId, request.context, atTimestamp)
+                        return buildDatafetcher(request, atTimestamp)
                     }
 
                     // TODO: provide type resolvers for union and interface types
@@ -315,8 +282,8 @@ class DefaultKnowledgeGraph(
     fun mapExecutionResult(request: QueryRequest, result: ExecutionResult): QueryResult {
         return QueryResult(
             data = result.getData<Map<String, Any>>(),
-            errors = result.errors?.map { ex -> JsonObject.mapFrom(ex).map },
-            extensions = result.extensions as? Map<String, Any>
+            errors = result.errors?.map { ex -> JsonObject.mapFrom(ex).map }?.takeIf { it.isNotEmpty() },
+            extensions = (result.extensions as? Map<String, Any>)?.takeIf { it.isNotEmpty() }
         )
     }
 
@@ -335,10 +302,12 @@ class DefaultKnowledgeGraph(
     }
 
     private fun buildDatafetcher(
-        podId: String,
-        context: Map<String, Any>,
+        request: QueryRequest,
         atTimestamp: Instant?
     ): DataFetcher<Any> {
+        val podId = request.podId
+        val context = request.context
+
         // Retrieve an ordered list of the available datafetchers (backends that do not provide a datafetcher are filtered out)
         val datafetcherMapping = pipelineConfig.pipeline().map { pipelineConfig ->
             processors.handles().find { it.bean.beanClass.name == pipelineConfig.className() }?.get()
@@ -353,13 +322,27 @@ class DefaultKnowledgeGraph(
             atTimestamp
         ) ?: throw RuntimeException("The default storage backend must provide a non-null datafetcher!")
 
+        val mutationHandler = MutationToChangeRequest(request)
+
         return DataFetcher { env ->
-            // Determine which datafetcher to use
-            val storageClass = env.getStorageClass()
-            if (storageClass != null) {
-                datafetcherMapping[storageClass]!!.get(env)
+            if (env.parentType.let { it is GraphQLNamedType && it.name == TYPE_MUTATION }) {
+                // Handle mutations
+                mutationHandler.add(env)
+                if (mutationHandler.isComplete(env)) {
+                    changeRequestEmitter.send(mutationHandler.getChangeRequest())
+                        .map { mutationHandler.changeRequestId }.convert().toCompletionStage()
+                } else {
+                    mutationHandler.changeRequestId
+                }
             } else {
-                defaultDatafetcher.get(env)
+                // Handle queries
+                // Determine which datafetcher to use
+                val storageClass = env.getStorageClass()
+                if (storageClass != null) {
+                    datafetcherMapping[storageClass]!!.get(env)
+                } else {
+                    defaultDatafetcher.get(env)
+                }
             }
         }
     }

@@ -166,6 +166,7 @@ data class ChangeRollbackRequest(
 data class QueryRequest(
     val context: Map<String, Any> = emptyMap(),
     val podId: String,
+    val sliceId: String? = null,
     val query: String,
     val variables: Map<String, Any>? = null,
     val operationName: String? = null,
@@ -287,9 +288,9 @@ data class ChangeRecords(
     @JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
     @JsonProperty(KvasirVocab.delete)
-    val deleted: Any?,
+    val deleted: Any? = null,
     @JsonProperty(KvasirVocab.insert)
-    val inserted: Any?
+    val inserted: Any? = null
 )
 
 enum class ChangeRecordType {

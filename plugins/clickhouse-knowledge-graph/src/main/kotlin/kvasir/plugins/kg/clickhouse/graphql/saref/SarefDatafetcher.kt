@@ -7,6 +7,9 @@ import graphql.language.InlineFragment
 import graphql.schema.*
 import io.vertx.core.json.JsonArray
 import jakarta.enterprise.context.ApplicationScoped
+import kvasir.definitions.kg.graphql.ARG_REVERSE_NAME
+import kvasir.definitions.kg.graphql.DIRECTIVE_PREDICATE_NAME
+import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.rdf.SAREFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.graphql.*
@@ -36,11 +39,11 @@ class SarefDatafetcher(
                 handle(env, context, atTimestamp, databaseName)
             } else if (isReverseLookup(env)) {
                 val relation = getFQName(env.fieldDefinition, context)
-                val target: String = env.getFromSource<String>("id")!!
+                val target: String = env.getFromSource<String>(FIELD_ID_NAME)!!
                 handle(env, context, atTimestamp, databaseName, relationFilter = relation to target)
             } else {
                 // Query for specific instance
-                val id = env.getFromSource<String>("id")
+                val id = env.getFromSource<String>(FIELD_ID_NAME)
                 if (id != null) {
                     handle(env, context, atTimestamp, databaseName, idFilter = listOf(id))
                 } else {
@@ -51,7 +54,8 @@ class SarefDatafetcher(
     }
 
     private fun isReverseLookup(env: DataFetchingEnvironment): Boolean {
-        return env.fieldDefinition.getAppliedDirective("predicate")?.getArgument("reverse")?.getValue<Boolean>() == true
+        return env.fieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
+            ?.getValue<Boolean>() == true
     }
 
     private fun handle(
@@ -65,7 +69,7 @@ class SarefDatafetcher(
         // Fetch SAREF special field names
         val sarefSpecialFields = env.mergedField.singleField.selectionSet?.let { selectionSet ->
             selectionSet.selections.filterIsInstance<Field>()
-                .filterNot { (it.name == "id" || it.name.startsWith("__")) }
+                .filterNot { (it.name == FIELD_ID_NAME || it.name.startsWith("__")) }
                 .filter { getFQName(it, context) in setOf(SAREFVocab.hasTimestamp, SAREFVocab.hasValue) }
                 .map { it.name }
         } ?: emptyList()
@@ -88,7 +92,7 @@ class SarefDatafetcher(
             .map { result ->
                 result.map { instance ->
                     instance.mapValues { (key, value) ->
-                        if (key != "id" && key !in sarefSpecialFields && value is JsonArray) {
+                        if (key != FIELD_ID_NAME && key !in sarefSpecialFields && value is JsonArray) {
                             value.map { RDFUtils.parseLabelValue(it as String) }
                         } else {
                             value
@@ -140,7 +144,7 @@ class TSQLConvertor(
                 is Field -> listOf(FieldToJoin(selection, null))
                 else -> emptyList()
             }
-        }.filterNot { it.field.name == "id" || it.field.name.startsWith("__") }
+        }.filterNot { it.field.name == FIELD_ID_NAME || it.field.name.startsWith("__") }
 
         val fieldExprs = processedFields
             .map { field ->
@@ -163,7 +167,7 @@ class TSQLConvertor(
             atTimestamp?.let { "change_request_ts <= '${ClickhouseUtils.convertInstant(it)}'" },
             idFilter?.takeIf { it.isNotEmpty() }?.let { "id IN (${it.joinToString()})" },
             relationFilter?.let { "series_id IN (SELECT series_id FROM $database.$TIME_SERIES_TABLE WHERE label_name_value = '${it.first}=${it.second}')" },
-            getNodeFilter(targetField)?.let { GraphQLFilterVisitor(context).visitNode(it) },
+            getNodeFilter(targetField, targetFieldDefinition)?.let { GraphQLFilterVisitor(context).visitNode(it) },
             getArgsFilter(targetField)?.let { GraphQLFilterVisitor(context).visitNode(it) }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
         // TODO: double select is a workaround for the filter statements to work (these cannot be aggregate expressions). Check if we can clean this up!

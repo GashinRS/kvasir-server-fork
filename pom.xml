@@ -27,6 +27,7 @@
         <quarkus.extensions.minio.version>3.7.7</quarkus.extensions.minio.version>
         <jackson.version>2.17.1</jackson.version>
         <guava.version>33.4.0-jre</guava.version>
+        <rdf4j.version>5.0.3</rdf4j.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.0</surefire-plugin.version>
     </properties>

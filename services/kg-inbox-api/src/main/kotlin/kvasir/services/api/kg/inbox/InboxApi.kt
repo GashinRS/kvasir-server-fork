@@ -7,7 +7,6 @@ import io.smallrye.reactive.messaging.MutinyEmitter
 import io.smallrye.reactive.messaging.kafka.KafkaRecord
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Context
-import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.ChangeRequest
@@ -21,8 +20,6 @@ import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.idgen.ChangeRequestId
-import kvasir.utils.shacl.RDF4JSHACLValidator
-import kvasir.utils.shacl.SHACLValidationFailure
 import org.apache.kafka.common.errors.RecordTooLargeException
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Schema
@@ -55,11 +52,11 @@ class InboxApi(
         uriInfo: UriInfo,
         input: ChangeRequestInput
     ): Uni<Response> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/changes")
-        return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found"))
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/changes")
+        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { pod ->
-                val changeCommand = input.toChangeRequest(podId, uriInfo)
-                changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
+                val changeCommand = input.toChangeRequest(fqPodId, uriInfo)
+                changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
                     .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
                     .onFailure(RecordTooLargeException::class.java)
                     .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
@@ -81,29 +78,20 @@ class InboxApi(
         uriInfo: UriInfo,
         input: ChangeRequestInput
     ): Uni<Response> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices/$sliceId/changes")
-        return sliceStore.getById(podId, sliceId)
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices/$sliceId/changes")
+        val fqSliceId = uriInfo.absolutePath.toString().substringBefore("/changes")
+        return sliceStore.getById(fqPodId, fqSliceId)
             .onItem().ifNull().failWith(NotFoundException("Slice not found"))
             .onItem().ifNotNull().transformToUni { slice ->
-                val changeCommand = input.toChangeRequest(podId, uriInfo, sliceId)
-                val validator = RDF4JSHACLValidator.fromTurtleString(slice!!.shacl)
-                try {
-                    // Validate plain inserts
-                    changeCommand.insert.filterIsInstance<Map<String, Any>>()
-                        .forEach { jsonLdInstance -> validator.validate(jsonLdInstance) }
-                    // Validate plain deletes
-                    changeCommand.delete.filterIsInstance<Map<String, Any>>()
-                        .forEach { jsonLdInstance -> validator.validate(jsonLdInstance) }
+                if (slice!!.supportsChanges) {
+                    val changeCommand = input.toChangeRequest(fqPodId, uriInfo, fqSliceId)
                     // Publish the change request
-                    changeEmitter.sendMessage(KafkaRecord.of(podId, changeCommand))
-                        .map { _ -> Response.accepted().build() }
+                    changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
+                        .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
                         .onFailure(RecordTooLargeException::class.java)
                         .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
-                } catch (e: SHACLValidationFailure) {
-                    Uni.createFrom().item(
-                        Response.status(Response.Status.BAD_REQUEST).entity(e.report)
-                            .header(HttpHeaders.CONTENT_TYPE, e.contentType).build()
-                    )
+                } else {
+                    Uni.createFrom().item(Response.status(Response.Status.METHOD_NOT_ALLOWED).build())
                 }
             }
     }

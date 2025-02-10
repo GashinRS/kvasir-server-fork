@@ -6,8 +6,13 @@ import kvasir.definitions.rdf.JsonLdHelper
 /**
  * Converts the RSQL expression of a GraphQL filter directive into SQL.
  */
-class GraphQLFilterVisitor(private val context: Map<String, Any>) :
+open class GraphQLFilterVisitor(private val context: Map<String, Any>) :
     NoArgRSQLVisitorAdapter<String>() {
+
+    companion object {
+        private val FIQL_WILDCARD_PATTERN = Regex("(?<!\\\\)\\*")
+    }
+
     override fun visit(and: AndNode): String {
         return and.joinToString(" AND ", "(", ")") { visitNode(it) }
     }
@@ -19,15 +24,18 @@ class GraphQLFilterVisitor(private val context: Map<String, Any>) :
     override fun visit(cmp: ComparisonNode): String {
         val arguments = cmp.arguments.map { toSQLValue(it) }
         val fieldPart = cmp.selector
-        return when (cmp.operator) {
-            RSQLOperators.EQUAL -> "$fieldPart = ${arguments[0]}"
-            RSQLOperators.NOT_EQUAL -> "${fieldPart.replace(" AND", " AND NOT")} = ${arguments[0]}"
-            RSQLOperators.GREATER_THAN -> "$fieldPart > ${arguments[0]}"
-            RSQLOperators.GREATER_THAN_OR_EQUAL -> "$fieldPart >= ${arguments[0]}"
-            RSQLOperators.LESS_THAN -> "$fieldPart < ${arguments[0]}"
-            RSQLOperators.LESS_THAN_OR_EQUAL -> "$fieldPart <= ${arguments[0]}"
-            RSQLOperators.IN -> "$fieldPart IN (${arguments.joinToString(", ")})"
-            RSQLOperators.NOT_IN -> "$fieldPart NOT IN (${arguments.joinToString(", ")})"
+        val op = cmp.operator
+        val pattern = parsePattern(cmp)
+        return when {
+            pattern != null -> pattern
+            op == RSQLOperators.EQUAL -> "$fieldPart = ${arguments[0]}"
+            op == RSQLOperators.NOT_EQUAL -> "${fieldPart.replace(" AND", " AND NOT")} = ${arguments[0]}"
+            op == RSQLOperators.GREATER_THAN -> "$fieldPart > ${arguments[0]}"
+            op == RSQLOperators.GREATER_THAN_OR_EQUAL -> "$fieldPart >= ${arguments[0]}"
+            op == RSQLOperators.LESS_THAN -> "$fieldPart < ${arguments[0]}"
+            op == RSQLOperators.LESS_THAN_OR_EQUAL -> "$fieldPart <= ${arguments[0]}"
+            op == RSQLOperators.IN -> "$fieldPart IN (${arguments.joinToString(", ")})"
+            op == RSQLOperators.NOT_IN -> "$fieldPart NOT IN (${arguments.joinToString(", ")})"
             else -> throw IllegalArgumentException("Unknown operator: ${cmp.operator}")
         }
     }
@@ -51,6 +59,23 @@ class GraphQLFilterVisitor(private val context: Map<String, Any>) :
                 val fqValue = JsonLdHelper.getFQName(value, context, ":") ?: value
                 "'$fqValue'"
             }
+        }
+    }
+
+    protected fun parsePattern(cmp: ComparisonNode): String? {
+        val pattern = cmp.arguments.firstOrNull()
+            ?.replace("%", "\\%")
+            ?.replace("_", "\\_")
+        return if (cmp.operator in setOf(
+                RSQLOperators.EQUAL,
+                RSQLOperators.NOT_EQUAL
+            ) && pattern?.let { FIQL_WILDCARD_PATTERN.containsMatchIn(it) } == true
+        ) {
+            val sign = if (cmp.operator == RSQLOperators.NOT_EQUAL) "NOT " else ""
+            val likePattern = FIQL_WILDCARD_PATTERN.replace(pattern, "%")
+            "${sign}ilike(toString(${cmp.selector}), '$likePattern')"
+        } else {
+            null
         }
     }
 }

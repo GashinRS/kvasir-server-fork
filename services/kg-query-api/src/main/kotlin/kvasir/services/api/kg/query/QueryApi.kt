@@ -6,6 +6,8 @@ import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.slices.Slice
+import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
@@ -73,6 +75,7 @@ class QueryApi(
         return QueryRequest(
             input.providedContext ?: pod.getDefaultContext(),
             pod.id,
+            null,
             input.query,
             input.variables,
             input.operationName,
@@ -143,7 +146,14 @@ data class QueryInputWithContext(
     val providedContext: Map<String, Any>? = null
 ) : QueryInput
 
-internal fun throw404IfPodNotFound(podStore: PodStore, podId: String): Uni<Void> {
-    return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId")).onItem()
-        .ifNotNull().transformToUni { _ -> Uni.createFrom().voidItem() }
+internal fun getPodOrThrow404(podStore: PodStore, podId: String): Uni<Pod> {
+    return podStore.getById(podId)
+        .onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+        .onItem().ifNotNull().transform { it!! }
+}
+
+internal fun getSliceOrThrow404(sliceStore: SliceStore, podId: String, sliceId: String): Uni<Slice> {
+    return sliceStore.getById(podId, sliceId)
+        .onItem().ifNull().failWith(NotFoundException("Slice not found: $sliceId"))
+        .onItem().ifNotNull().transform { it!! }
 }

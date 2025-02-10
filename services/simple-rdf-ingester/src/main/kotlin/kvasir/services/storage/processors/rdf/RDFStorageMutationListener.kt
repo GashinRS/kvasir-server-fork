@@ -84,7 +84,7 @@ class RDFStorageMutationListener(
             }
             .map { (event, _) ->
                 // Transform the object into a Kvasir change request
-                val id = ChangeRequestId.generate(event.externalObjectUri.substringBefore("/s3") + "/changes/").encode()
+                val id = ChangeRequestId.generate(event.externalObjectUri.substringBefore("/s3") + "/changes").encode()
                 when (event.mutationType) {
                     StorageMutationEventType.PUT_OBJECT, StorageMutationEventType.COMPLETE_MULTIPART_UPLOAD, StorageMutationEventType.RESTORE_OBJECT -> ChangeRequest(
                         id = id,

@@ -13,6 +13,7 @@ import kvasir.plugins.kg.clickhouse.specs.CHANGE_LOG_COLUMNS
 import kvasir.plugins.kg.clickhouse.specs.CHANGE_LOG_TABLE
 import kvasir.plugins.kg.clickhouse.specs.ChangelogInsertRecordSpec
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
+import kvasir.plugins.kg.clickhouse.utils.ClickhouseUtils
 import kvasir.plugins.kg.clickhouse.utils.MAX_PAGE_SIZE_CHANGE_REPORTS
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
 import kvasir.utils.cursors.OffsetBasedCursor
@@ -33,7 +34,7 @@ class ClickhouseChangeHistory(
                 databaseFromPodId(
                     request.podId
                 )
-            }.$CHANGE_LOG_TABLE ORDER BY (timestamp, id) DESC LIMIT ${pageSize + 1} OFFSET $offset"
+            }.$CHANGE_LOG_TABLE ${whereClause(request)} ORDER BY (timestamp, id) DESC LIMIT ${pageSize + 1} OFFSET $offset"
         return clickhouseClient.query(
             GenericQuerySpec(
                 databaseFromPodId(request.podId), CHANGE_LOG_TABLE,
@@ -49,13 +50,20 @@ class ClickhouseChangeHistory(
         }
     }
 
+    private fun whereClause(request: ChangeHistoryRequest) = listOfNotNull(
+        request.changeRequestId?.let { "id = '$it'" },
+        request.sliceId?.let { "slice_id = '$it'" },
+        request.fromTimestamp?.let { "timestamp >= ${ClickhouseUtils.convertInstant(it)}" },
+        request.toTimestamp?.let { "timestamp < ${ClickhouseUtils.convertInstant(it)}" },
+    ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ")
+
     override fun get(request: ChangeHistoryRequest): Uni<ChangeReport?> {
         val sql =
             "SELECT id, slice_id, timestamp, nr_of_inserts, nr_of_deletes, status_lines FROM ${
                 databaseFromPodId(
                     request.podId
                 )
-            }.$CHANGE_LOG_TABLE WHERE id = '${request.changeRequestId}'"
+            }.$CHANGE_LOG_TABLE ${whereClause(request)}"
         return clickhouseClient.query(
             GenericQuerySpec(
                 databaseFromPodId(request.podId), CHANGE_LOG_TABLE,

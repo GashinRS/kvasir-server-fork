@@ -5,14 +5,28 @@ import graphql.Scalars.*
 import graphql.language.*
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*
+import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
 import kvasir.definitions.kg.KGProperty
 import kvasir.definitions.kg.KGPropertyKind
 import kvasir.definitions.kg.KGType
+import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.*
 import kvasir.utils.graphql.innerType
 import kvasir.utils.graphql.isScalar
 
 class SchemaGenerator(private val types: List<KGType>, private val context: Map<String, Any>) {
+
+    companion object {
+
+        val defaultRelationArguments = listOf(
+            GraphQLArgument.newArgument().name(ARG_ID_NAME).type(GraphQLList.list(GraphQLID)).build(),
+            GraphQLArgument.newArgument().name(ARG_PAGE_SIZE_NAME).type(GraphQLInt)
+                .defaultValueProgrammatic(DEFAULT_PAGE_SIZE)
+                .build(),
+            GraphQLArgument.newArgument().name(ARG_CURSOR_NAME).type(GraphQLString).build(),
+            GraphQLArgument.newArgument().name(ARG_ORDER_BY_NAME).type(GraphQLList.list(GraphQLString)).build()
+        )
+    }
 
     val reversedRelations = context.filterValues { it is Map<*, *> && it.keys.contains(JsonLdKeywords.reverse) }
         .map { (it.value as Map<*, *>)[JsonLdKeywords.reverse] as String to it.key }.groupBy { it.first }
@@ -23,9 +37,16 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         val graphQLObjects = types.map { type ->
             generateGraphQLType(type)
         }
-        val rdfsResourceEntryPoint = GraphQLObjectType.newObject().name("rdfs_Resource")
+        val prefixedResourceName = graphqLCompatibleName(RDFSVocab.Resource, context)
+        val resourceTypeDirective = KvasirDirectives.classDirective.toAppliedDirective()
+        val rdfsResourceEntryPoint = GraphQLObjectType.newObject().name(prefixedResourceName)
+            .withAppliedDirective(resourceTypeDirective.transform { directiveBuilder ->
+                directiveBuilder.argument(resourceTypeDirective.getArgument(ARG_IRI_NAME).transform { argBuilder ->
+                    argBuilder.valueLiteral(StringValue.of(RDFSVocab.Resource))
+                })
+            })
             .fields(
-                (listOf(GraphQLFieldDefinition.newFieldDefinition().name("id").type(GraphQLID).build())
+                (listOf(GraphQLFieldDefinition.newFieldDefinition().name(FIELD_ID_NAME).type(GraphQLID).build())
                         + graphQLObjects.flatMap { it.fields })
                     .distinctBy { it.name }).build()
         val schema = GraphQLSchema.newSchema()
@@ -33,26 +54,25 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                 GraphQLObjectType.newObject().name("Query")
                     .fields((listOf(rdfsResourceEntryPoint) + graphQLObjects).map { type ->
                         GraphQLFieldDefinition.newFieldDefinition().name(type.name).type(GraphQLList.list(type))
-                            .arguments(DefaultKnowledgeGraph.defaultRelationArguments.plus(argumentsForType(type)))
+                            .arguments(
+                                if (type.name == prefixedResourceName) defaultRelationArguments else defaultRelationArguments.plus(
+                                    argumentsForType(type)
+                                )
+                            )
                             .build()
                     }).build()
             )
-            .additionalDirective(DefaultKnowledgeGraph.optionalDirective)
-            .additionalDirective(DefaultKnowledgeGraph.filterDirective)
-            .additionalDirective(DefaultKnowledgeGraph.typeDirective)
-            .additionalDirective(DefaultKnowledgeGraph.predicateDirective)
-            .additionalDirective(DefaultKnowledgeGraph.graphDirective)
-            .additionalDirective(DefaultKnowledgeGraph.storageDirective)
+            .additionalDirectives(KvasirDirectives.all)
         return SchemaGeneratorResult(schema, unionTypes)
     }
 
     private fun generateGraphQLType(type: KGType): GraphQLObjectType {
         val prefixedTypeName = graphqLCompatibleName(type.uri, context)
-        val idField = GraphQLFieldDefinition.newFieldDefinition().name("id").type(GraphQLID).build()
-        val typeDirective = DefaultKnowledgeGraph.typeDirective.toAppliedDirective()
+        val idField = GraphQLFieldDefinition.newFieldDefinition().name(FIELD_ID_NAME).type(GraphQLID).build()
+        val typeDirective = KvasirDirectives.classDirective.toAppliedDirective()
         return GraphQLObjectType.newObject().name(prefixedTypeName).description(type.uri)
             .withAppliedDirective(typeDirective.transform { directiveBuilder ->
-                directiveBuilder.argument(typeDirective.getArgument("iri").transform { argBuilder ->
+                directiveBuilder.argument(typeDirective.getArgument(ARG_IRI_NAME).transform { argBuilder ->
                     argBuilder.valueLiteral(
                         StringValue.of(type.uri)
                     )
@@ -73,27 +93,27 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
     ): GraphQLFieldDefinition {
         val prefixedProperty = overrideName ?: graphqLCompatibleName(property.uri, context)
         val propertyType = getGraphQLPropertyType(property, unionTypes, context)
-        val predicateDirective = DefaultKnowledgeGraph.predicateDirective.toAppliedDirective()
+        val predicateDirective = KvasirDirectives.predicateDirective.toAppliedDirective()
         val propertyBuilder = GraphQLFieldDefinition.newFieldDefinition()
             .withAppliedDirective(
                 predicateDirective.transform { directiveBuilder ->
                     directiveBuilder.argument(
-                        predicateDirective.getArgument("iri").transform { argBuilder ->
+                        predicateDirective.getArgument(ARG_IRI_NAME).transform { argBuilder ->
                             argBuilder.valueLiteral(
                                 StringValue.of(property.uri)
                             )
                         })
                         .argument(
-                            predicateDirective.getArgument("reverse").transform { argBuilder ->
+                            predicateDirective.getArgument(ARG_REVERSE_NAME).transform { argBuilder ->
                                 argBuilder.valueLiteral(BooleanValue.of(reverse))
                             }
                         )
                 }
             )
             .arguments(
-                if (KGPropertyKind.IRI == property.kind) DefaultKnowledgeGraph.defaultRelationArguments.plus(
+                if (KGPropertyKind.IRI == property.kind) defaultRelationArguments.plus(
                     argumentsForType(propertyType)
-                ) else DefaultKnowledgeGraph.defaultRelationArguments
+                ) else defaultRelationArguments
             )
             .name(prefixedProperty)
             .description(property.uri)
@@ -122,7 +142,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
             return emptyList()
         }
         return type.fieldDefinitions.map { field ->
-            val argType = if (field.type.isScalar()) field.type.innerType<GraphQLScalarType>() else GraphQLID
+            val argType = if (field.type.isScalar()) field.type.innerType() else GraphQLID
             GraphQLArgument.newArgument().name(field.name).type(GraphQLList.list(argType)).build()
         }
     }

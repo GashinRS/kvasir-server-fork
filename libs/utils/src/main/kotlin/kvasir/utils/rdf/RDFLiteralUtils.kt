@@ -1,6 +1,5 @@
 package kvasir.utils.rdf
 
-import com.github.jsonldjava.core.RDFDataset
 import kvasir.definitions.rdf.XSDVocab
 import java.time.Instant
 import java.time.format.DateTimeParseException
