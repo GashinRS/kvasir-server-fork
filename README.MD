@@ -8,7 +8,7 @@ The fastest way to get a dev server (with persistent storage) up and running is 
 
 In the **Docker Desktop** application, go to `Settings` (top right cogwheel icon) and check `Enable host networking` under the `Resources > Network` section.
 
-![docker_desktop.png](Writerside/images/docker_desktop.png)
+![docker_desktop.png](Writerside/images/docker_host_networking.png)
 
 ## Run docker compose
 

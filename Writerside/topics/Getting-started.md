@@ -4,15 +4,21 @@
 
 The fastest way to get a dev server (with persistent storage) up and running is to use Docker Compose.
 
-Clone [this repository](https://gitlab.ilabt.imec.be/kvasir/kvasir-server) and run the following commands:
+1. Make sure you install <a href="https://www.docker.com/products/docker-desktop/#:~:text=Download%20Docker%20Desktop" target="_blank">Docker Desktop</a> and enable **Docker host networking**:
+
+![](docker_host_networking.png)
+
+2. Now clone [this repository](https://gitlab.ilabt.imec.be/kvasir/kvasir-server) and run the following commands:
 
 ```bash
 cd .deployment/docker-compose
 docker compose up -d
 ```
 
-This will automatically create a pod at `http://localhost:8080/alice` for you to play with.
+3. This will automatically create a pod at <a href="http://localhost:8080/alice" target="_blank">http://localhost:8080/alice</a> for you to play with.
 The settings for this pod can be modified via the file `application.yaml` in the `kvasir-config` folder.
+
+4. You can view the [Kvasir UI](Kvasir-UI.md) at <a href="http://localhost:8081" target="_blank">http://localhost:8081</a> to play around with your pod. 
 
 > Be sure to read the [Authentication](Authentication.md) section when you want to develop your own clients.
 {style="warning"}

@@ -19,5 +19,6 @@
         </toc-element>
         <toc-element topic="Storage.md"/>
     </toc-element>
+    <toc-element topic="Kvasir-UI.md"/>
     <toc-element topic="API-Reference.md"/>
 </instance-profile>
