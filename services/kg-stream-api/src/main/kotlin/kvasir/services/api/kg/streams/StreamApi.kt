@@ -1,5 +1,6 @@
 package kvasir.services.api.kg.streams
 
+import io.quarkus.security.PermissionsAllowed
 import io.smallrye.mutiny.Multi
 import io.vertx.core.json.Json
 import io.vertx.mutiny.core.Vertx

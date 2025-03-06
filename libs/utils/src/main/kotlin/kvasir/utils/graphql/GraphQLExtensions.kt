@@ -6,6 +6,7 @@ import graphql.schema.idl.TypeDefinitionRegistry
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
 import kvasir.definitions.kg.graphql.KvasirDirectives
+import kvasir.definitions.kg.graphql.KvasirEnums
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.cursors.OffsetBasedCursor
 
@@ -47,7 +48,7 @@ fun Field.getPaginationInfo(): Pair<Int, Long> {
 fun <T> DataFetchingEnvironment.getFromSource(key: String): T? {
     val source = getSource<Any?>()
     return when (source) {
-        is Map<*, *> -> source["_$key"] ?: source[key]
+        is Map<*, *> -> source[key]
         is JsonObject -> source.getValue(key)
         else -> null
     } as T?
@@ -72,7 +73,14 @@ fun <T : Value<*>> GraphQLDirectiveContainer.getDirectiveArg(
 }
 
 fun TypeDefinitionRegistry.addKvasirDirectives() {
-    this.addAll(KvasirDirectives.all.map { directive ->
+    this.addAll(KvasirEnums.all.map { enum ->
+        EnumTypeDefinition.newEnumTypeDefinition()
+            .name(enum.name)
+            .enumValueDefinitions(enum.values.map { enumVal ->
+                EnumValueDefinition.newEnumValueDefinition().name(enumVal.name).build()
+            })
+            .build()
+    } + KvasirDirectives.all.map { directive ->
         DirectiveDefinition.newDirectiveDefinition()
             .name(directive.name)
             .directiveLocations(

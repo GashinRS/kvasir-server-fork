@@ -25,7 +25,7 @@ import kotlin.jvm.optionals.getOrNull
 private val EXCLUDE_PATH_PREFIXES = setOf("/q/", "/favicon.ico")
 
 @ApplicationScoped
-@IfBuildProperty(name = "quarkus.keycloak.policy-enforcer.enable", stringValue = "true")
+@IfBuildProperty(name = Constants.KEYCLOAK_POLICY_AGENT_ENABLED, stringValue = "true")
 class KvasirTenantConfigResolver(
     private val podStore: PodStore,
     @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
@@ -63,7 +63,7 @@ class KvasirTenantConfigResolver(
 }
 
 @ApplicationScoped
-@IfBuildProperty(name = "quarkus.keycloak.policy-enforcer.enable", stringValue = "true")
+@IfBuildProperty(name = Constants.KEYCLOAK_POLICY_AGENT_ENABLED, stringValue = "true")
 class KvasirTenantPolicyConfigResolver() : TenantPolicyConfigResolver {
     override fun resolve(
         routingContext: RoutingContext,
@@ -86,7 +86,7 @@ class KvasirTenantPolicyConfigResolver() : TenantPolicyConfigResolver {
 }
 
 @Singleton
-@IfBuildProperty(name = "quarkus.keycloak.policy-enforcer.enable", stringValue = "true")
+@IfBuildProperty(name = Constants.KEYCLOAK_POLICY_AGENT_ENABLED, stringValue = "true")
 class FixedKeycloakPolicyEnforcerAuthorizer(
     private val resolver: PolicyEnforcerResolver,
     private val blockingExecutor: BlockingSecurityExecutor

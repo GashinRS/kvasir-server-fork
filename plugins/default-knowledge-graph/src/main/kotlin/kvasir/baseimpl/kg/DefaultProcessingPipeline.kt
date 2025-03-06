@@ -41,7 +41,7 @@ class EvaluateAssertions(
                     sliceId = request.sliceId,
                     query = assertion.queryStr
                 )
-                parent.query(q)
+                parent.query(q).toUni()
                     .onFailure().recoverWithItem { err ->
                         QueryResult(
                             data = emptyMap(),
@@ -204,7 +204,7 @@ class MaterializeRecords(
                 targetGraphs = setOf(),
                 query = request.with!!
             )
-            kg.query(q)
+            kg.query(q).toUni()
                 .onFailure().recoverWithItem { err ->
                     QueryResult(
                         data = emptyMap(),

@@ -1,6 +1,7 @@
 package kvasir.plugins.policyagent.keycloak
 
 import com.google.common.hash.Hashing
+import io.quarkus.arc.properties.IfBuildProperty
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.vertx.mutiny.core.Vertx
@@ -29,6 +30,7 @@ private const val DEFAULT_PERMISSION_NAME = "Default Permission"
 
 
 @ApplicationScoped
+@IfBuildProperty(name = Constants.KEYCLOAK_POLICY_AGENT_ENABLED, stringValue = "true")
 class KeycloakPodAuthInitializer(
     private val vertx: Vertx,
     @ConfigProperty(name = "quarkus.oidc.auth-server-url")
@@ -39,7 +41,7 @@ class KeycloakPodAuthInitializer(
     private val SSO_MAX_LIFESPAN = Duration.parse("8h").inWholeSeconds.toInt();
     private val ACCESS_TOKEN_LIFESPAN = Duration.parse("5m").inWholeSeconds.toInt();
 
-
+    // TODO: why are these instances created manually?
     private val keycloakHostUrl = URI(defaultRealmUri).let { "${it.scheme}://${it.authority}" };
     private val keycloak = KeycloakBuilder.builder().serverUrl(keycloakHostUrl).realm("master")
         .clientId("admin-cli").grantType("password").username("admin").password("admin").build()

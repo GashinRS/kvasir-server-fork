@@ -9,7 +9,7 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>default-knowledge-graph</artifactId>
+    <artifactId>uma-policy-agent</artifactId>
 
     <dependencies>
         <dependency>
@@ -18,9 +18,20 @@
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-jwt</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-jwt-build</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.smallrye.reactive</groupId>
-            <artifactId>mutiny-rxjava3</artifactId>
+            <artifactId>smallrye-mutiny-vertx-web-client</artifactId>
         </dependency>
     </dependencies>
-
 </project>

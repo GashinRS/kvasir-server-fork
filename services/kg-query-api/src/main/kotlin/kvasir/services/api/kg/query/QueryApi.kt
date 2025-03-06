@@ -1,6 +1,8 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import io.quarkus.security.PermissionsAllowed
+import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
@@ -25,7 +27,8 @@ const val QUERY_API_PATH = "/query"
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
     private val podStore: PodStore,
-    private val uriInfo: UriInfo
+    private val uriInfo: UriInfo,
+    private val securityIdentity: SecurityIdentity
 ) {
 
     @Path("{podId}$QUERY_API_PATH")
@@ -43,7 +46,7 @@ class QueryApi(
         return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input)
-                knowledgeGraph.query(req)
+                knowledgeGraph.query(req).toUni()
             }
     }
 
@@ -64,7 +67,7 @@ class QueryApi(
                 val req = parseInput(pod!!, input)
                 knowledgeGraph.query(req).map {
                     it.toJsonLD(req.context)
-                }
+                }.toUni()
             }
     }
 

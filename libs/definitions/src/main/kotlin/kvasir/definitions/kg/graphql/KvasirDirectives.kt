@@ -97,6 +97,19 @@ object KvasirDirectives {
         .argument(GraphQLArgument.newArgument().name(ARG_CLASS_NAME).type(GraphQLString).build()).build()
 
     /**
+     * When defining subscriptions: specify a trigger event for the subscription.
+     * If no directive is specified, the trigger event is based on the return type and the field suffix.
+     */
+    val triggerDirective = GraphQLDirective.newDirective().name(DIRECTIVE_TRIGGER_NAME).validLocations(
+        Introspection.DirectiveLocation.FIELD_DEFINITION
+    )
+        .argument(GraphQLArgument.newArgument().name(ARG_TYPE_NAME).type(KvasirEnums.triggerTypeEnum))
+        .argument(GraphQLArgument.newArgument().name(ARG_SUBJECT_NAME).type(GraphQLList.list(GraphQLString)))
+        .argument(GraphQLArgument.newArgument().name(ARG_PREDICATE_NAME).type(GraphQLList.list(GraphQLString)))
+        .argument(GraphQLArgument.newArgument().name(ARG_OBJECT_NAME).type(GraphQLList.list(GraphQLString)))
+        .build()
+
+    /**
      * Collection of the Kvasir directives
      */
     val all = setOf(
@@ -106,6 +119,7 @@ object KvasirDirectives {
         optionalDirective,
         filterDirective,
         storageDirective,
-        graphDirective
+        graphDirective,
+        triggerDirective
     )
 }
