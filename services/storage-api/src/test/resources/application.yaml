@@ -1,6 +1,12 @@
 '%test':
   kvasir:
     base-uri: http://localhost:8081
+    plugins:
+      policy-agent:
+        keycloak:
+          enabled: false
+        solid-uma:
+          enabled: false
     bootstrap:
       pods:
         - name: test

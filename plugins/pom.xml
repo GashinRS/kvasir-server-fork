@@ -20,6 +20,7 @@
         <module>keycloak-policy-agent</module>
         <module>s3-reference-loader</module>
         <module>default-knowledge-graph</module>
+        <module>uma-policy-agent</module>
     </modules>
 
     <build>

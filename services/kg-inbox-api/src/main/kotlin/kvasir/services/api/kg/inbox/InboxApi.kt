@@ -2,6 +2,8 @@ package kvasir.services.api.kg.inbox
 
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonProperty
+import io.quarkus.security.StringPermission
+import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.smallrye.reactive.messaging.kafka.KafkaRecord
@@ -35,7 +37,8 @@ class InboxApi(
     @Channel("change_requests_publish")
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
     private val sliceStore: SliceStore,
-    private val podStore: PodStore
+    private val podStore: PodStore,
+    private val securityIdentity: SecurityIdentity
 ) {
 
     @Path("{podId}/changes")
@@ -53,7 +56,8 @@ class InboxApi(
         input: ChangeRequestInput
     ): Uni<Response> {
         val fqPodId = uriInfo.absolutePath.toString().substringBefore("/changes")
-        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found"))
+        return checkPermissions(input).chain { _ -> podStore.getById(fqPodId) }
+            .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val changeCommand = input.toChangeRequest(fqPodId, uriInfo)
                 changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
@@ -80,7 +84,7 @@ class InboxApi(
     ): Uni<Response> {
         val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices/$sliceId/changes")
         val fqSliceId = uriInfo.absolutePath.toString().substringBefore("/changes")
-        return sliceStore.getById(fqPodId, fqSliceId)
+        return checkPermissions(input).chain { _ -> sliceStore.getById(fqPodId, fqSliceId) }
             .onItem().ifNull().failWith(NotFoundException("Slice not found"))
             .onItem().ifNotNull().transformToUni { slice ->
                 if (slice!!.supportsChanges) {
@@ -94,6 +98,25 @@ class InboxApi(
                     Uni.createFrom().item(Response.status(Response.Status.METHOD_NOT_ALLOWED).build())
                 }
             }
+    }
+
+    private fun checkPermissions(input: ChangeRequestInput): Uni<Void> {
+//        return Uni.combine().all().unis<Boolean>(
+//            listOfNotNull(
+//                input.insert.takeIf { it.isNotEmpty() }
+//                    ?.let { securityIdentity.checkPermission(StringPermission(PermissionScopes.WRITE)) },
+//                input.delete.takeIf { it.isNotEmpty() }
+//                    ?.let { securityIdentity.checkPermission(StringPermission(PermissionScopes.DELETE)) }
+//            ))
+//            .withUni { results ->
+//                if (!results.all { it as Boolean }) {
+//                    Uni.createFrom().failure(ForbiddenException())
+//                } else {
+//                    Uni.createFrom().voidItem()
+//                }
+//            }
+        // Implement via a provider of the configured policy-agent. So this can work generically.
+        return Uni.createFrom().voidItem()
     }
 
 }

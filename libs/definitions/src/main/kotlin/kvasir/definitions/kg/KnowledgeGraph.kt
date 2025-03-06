@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
+import graphql.schema.DataFetcher
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
@@ -20,14 +21,13 @@ interface KnowledgeGraph {
 
     fun process(request: ChangeRequest): Uni<Void>
 
-    fun query(request: QueryRequest): Uni<QueryResult>
+    fun query(request: QueryRequest): Multi<QueryResult>
 
     fun getChangeRecords(request: ChangeRecordRequest): Uni<PagedResult<ChangeRecord>>
 
     fun streamChangeRecords(request: ChangeRecordRequest): Multi<ChangeRecord>
 
     fun rollback(request: ChangeRollbackRequest): Uni<Void>
-
 }
 
 interface ReferenceLoader {

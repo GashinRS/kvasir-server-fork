@@ -5,6 +5,7 @@ import io.minio.MakeBucketArgs
 import io.minio.MinioAsyncClient
 import io.minio.SetBucketVersioningArgs
 import io.minio.messages.VersioningConfiguration
+import io.quarkus.security.PermissionsAllowed
 import io.smallrye.mutiny.Uni
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.*
@@ -28,6 +29,7 @@ class PodManagementApi(
     private val uriInfo: UriInfo
 ) {
 
+    @PermitAll
     @POST
     @Consumes(JSON_LD_MEDIA_TYPE)
     fun register(@Context uriInfo: UriInfo, input: RegisterPodInput): Uni<Response> {
@@ -61,6 +63,7 @@ class PodManagementApi(
         }
     }
 
+    @PermitAll
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
     fun list(): Uni<List<PodInfo>> {

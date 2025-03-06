@@ -1,15 +1,24 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import graphql.language.Document
+import graphql.parser.Parser
+import graphql.parser.antlr.GraphqlParser
+import io.quarkus.security.PermissionsAllowed
+import io.quarkus.security.identity.SecurityIdentity
+import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
+import jakarta.ws.rs.sse.OutboundSseEvent
+import jakarta.ws.rs.sse.Sse
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.PodStore
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
+import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.kg.slices.SliceSummary
@@ -25,14 +34,18 @@ import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import org.jboss.resteasy.reactive.RestStreamElementType
 import java.net.URI
+import kotlin.jvm.optionals.getOrNull
 
 @Path("")
 class GraphSlicesApi(
     private val sliceStore: SliceStore,
     private val podStore: PodStore,
     private val knowledgeGraph: KnowledgeGraph,
-    private val uriInfo: UriInfo
+    private val uriInfo: UriInfo,
+    private val securityIdentity: SecurityIdentity,
+    private val sse: Sse
 ) {
 
     @Tag(name = ApiDocTags.PODS_API)
@@ -126,7 +139,6 @@ class GraphSlicesApi(
         }
     }
 
-    @Tag(name = ApiDocTags.KG_QUERYING_API)
     @POST
     @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
@@ -143,7 +155,27 @@ class GraphSlicesApi(
         val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
         val fqSliceId = uriInfo.absolutePath.toString().substringBefore("/query")
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
-            executeQuery(fqPodId, slice, input)
+            executeQuery(fqPodId, slice, input).toUni()
+        }
+    }
+
+    @POST
+    @Path("{podId}/slices/{sliceId}/query")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @Operation(
+        summary = "Retrieve data from a specific subset of the KG.",
+        description = "Query a predefined slice of the specified pod's Knowledge Graph using GraphQL."
+    )
+    fun streamVirtual(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
+        input: QueryInputImpl,
+    ): Multi<OutboundSseEvent> {
+        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
+        val fqSliceId = uriInfo.absolutePath.toString().substringBefore("/query")
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).onItem().transformToMulti { slice ->
+            executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
         }
     }
 
@@ -165,7 +197,7 @@ class GraphSlicesApi(
         val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
         val fqSliceId = uriInfo.absolutePath.toString().substringBefore("/query")
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
-            executeQuery(fqPodId, slice, input).map {
+            executeQuery(fqPodId, slice, input).toUni().map {
                 it.toJsonLD(slice.context)
             }
         }
@@ -175,7 +207,10 @@ class GraphSlicesApi(
         podId: String,
         slice: Slice,
         input: QueryInputImpl
-    ): Uni<QueryResult> {
+    ): Multi<QueryResult> {
+        // Parse query document
+        val queryDoc = Parser.parse(input.query)
+
         // Execute the query
         return knowledgeGraph.query(
             QueryRequest(

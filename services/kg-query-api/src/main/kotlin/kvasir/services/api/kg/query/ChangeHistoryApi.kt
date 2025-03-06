@@ -1,6 +1,9 @@
 package kvasir.services.api.kg.query
 
+import io.quarkus.security.PermissionsAllowed
+import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
+import jakarta.annotation.security.RolesAllowed
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Link
 import jakarta.ws.rs.core.Response
@@ -27,7 +30,8 @@ import java.util.*
 class ChangeHistoryApi(
     val changeHistory: ChangeHistory,
     val knowledgeGraph: KnowledgeGraph,
-    val uriInfo: UriInfo
+    val uriInfo: UriInfo,
+    private val securityIdentity: SecurityIdentity
 ) {
 
     @Path("{podId}/changes")
@@ -146,7 +150,6 @@ class ChangeHistoryApi(
                 }
             }
     }
-
 
     @Path("{podId}/changes/{changeId}/records")
     @GET

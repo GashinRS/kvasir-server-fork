@@ -1,4 +1,10 @@
 kvasir:
+  plugins:
+    policy-agent:
+      keycloak:
+        enabled: true
+      solid-uma:
+        enabled: false
   services:
     storage:
       s3:

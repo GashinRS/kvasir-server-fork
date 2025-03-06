@@ -19,6 +19,8 @@ shape).
 
 ## Defining a Slice
 
+### Query type
+
 A slice is defined by a set of criteria that determine which resources are included in the slice. These criteria can be
 specified using a GraphQL schema, annotated with Kvasir directives to fully qualify the graph elements, or to express
 additional constraints.
@@ -65,7 +67,7 @@ type schema_Person {
 }
 ```
 
-### Data restrictions
+#### Data restrictions
 
 To further restrict the data retrievable via the Slice, use the [`@filter` directive](Querying.md#filters) similarly to
 how you would narrow down results for a Query. The filters associated with the Slice schema are combined with those in
@@ -88,7 +90,7 @@ type schema_Person {
 }
 ```
 
-### Describing mutations
+### Mutation type
 
 A Slice can specify mutations (insertions, deletions) that can be applied using the
 standard [GraphQL Mutation Type and input types](https://graphql.org/learn/mutations/). However, there are a couple of
@@ -129,7 +131,7 @@ input PersonInput @class(iri: "schema:Person") {
 This example allows clients with write-access to the Slice, to add or remove Persons, which must a `givenName`,
 `familyName` and zero or multiple email addresses.
 
-### Input type constraints
+#### Input type constraints
 
 Just like the `@filter` directive can be used to limit the view-aspect of a Slice, Kvasir supports modeling constraints
 for the possible mutation input data via the `@shape` directive. This directive is inspired
@@ -168,7 +170,54 @@ input PersonInput @class(iri: "schema:Person") {
 }
 ```
 
-### Registering the definition
+### Subscription type
+
+A Slice can specify GraphQL subscriptions that are triggered by specific events occurring on
+the [Changes event stream](Changes.md#streaming-changes) of the Pod's Knowledge Graph. Each field defined within the
+Subscription type for the Slice, represents such a trigger, allowing the client to be notified of specific changes,
+receiving the requested data selection as a "real-time" update.
+
+A trigger is represented by the following components:
+
+| Component Name | Description                                                                                                                                              | Default value                                     |
+|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------|
+| type           | There are two types of basic triggers: those reacting to data insertions (`INSERT`) and those reacting to data deletions (`DELETE`).                     | n/a                                               |
+| subject        | List of URIs of the specific subjects the trigger reacts to. Change records with a subject represented in this list may activate the trigger.            | n/a (optional property)                           |
+| predicate      | List of URIs of the specific predicates the trigger reacts to. Change records with a predicate represented in this list may activate the trigger.        | `http://www.w3.org/1999/02/22-rdf-syntax-ns#type` |
+| object         | List of URIs or literals of the specific objects the trigger reacts to. Change records with an object represented in this list may activate the trigger. | The output type of the Subscription field         |
+
+These components can be defined manually by annotating the subscription fields with an `@trigger` directive. If no such
+annotation is found, Kvasir assumes the trigger should react to data being added or deleted of a specific type,
+determined by the output type of the Subscription field. When the subscription field ends in `Added` or `Inserted`, the
+type `INSERT` is assumed. If the fields ends in `Removed` or `Deleted`, the trigger type `DELETE` is assumed.
+
+For example: we can allow Slice clients to subscribe to instances of Person being added or removed from the Knowledge
+Graph, by defining the following Subscription type:
+
+```graphql
+type Subcription {
+  onPersonAdded: Person!
+  onPersonRemoved: Person!
+}
+```
+
+This definition relies on the Kvasir default trigger settings, to have more control, we can use the `@trigger`
+directive. For example: say we also want to allow Clients to subscribe to acquaintances being added to a Person (based
+on the `ex:knows` relation).
+
+```graphql
+type Subscription {
+  onPersonAdded: Person!
+  onPersonRemoved: Person!
+  onAcquaintanceAdded: Person! @trigger(type: INSERTED, predicate: "ex:knows")
+}
+```
+
+Just as with mutations, this approach to subscriptions and streaming data, allows the Kvasir framework to automatically
+provide an implementation based on the provided schema, with a certain degree of flexibility, while limiting the
+conceptual complexity.
+
+## Registering the definition
 
 To register the Slice, post the definition to the `/slices` endpoint of the Pod:
 
@@ -221,7 +270,8 @@ For example, to retrieve all persons from the `PersonDemoSlice`, you can send a 
 
 ### Mutations on a Slice
 
-When enabled, a Slice can also expose a Changes API, allowing mutations on the Slice. The mutations are restricted by
+When enabled, a Slice can also expose a Changes API (at `/{podId}/slices/{sliceId}/changes`), allowing mutations on the
+Slice. The mutations are restricted by
 the pre-defined schema, ensuring that only resources that match the criteria of the Slice can be created, updated or
 deleted.
 
@@ -236,3 +286,19 @@ For example, to add a Person, you can send a `POST` request to the `query` endpo
 }
 ```
 
+### Subscriptions on a Slice
+
+If a Slice defines a Subscription Type, clients can subscribe to insertion or deletion events using the GraphQL
+interface.
+
+For example, to subscribe to the name and email of Persons being inserted, you can send a `POST` request with the
+`Accept: text/event-stream` header to the `query` endpoint:
+
+```json
+{
+  "query": "subscription { onPersonInserted { id schema_givenName schema_familyName schema_email } }"
+}
+```
+
+This will return a Server-Sent-Event (SSE) response in which GraphQL query result instances will be streamed, each time
+a Person is inserted. Make sure your GraphQL client can handle SSE as a transport protocol for GraphQL subscriptions.

@@ -3,9 +3,10 @@ package kvasir.baseimpl.kg
 import graphql.ExecutionInput
 import graphql.ExecutionResult
 import graphql.GraphQL
-import graphql.Scalars.*
+import graphql.GraphqlErrorHelper
 import graphql.TypeResolutionEnvironment
-import graphql.introspection.Introspection
+import graphql.execution.AbortExecutionException
+import graphql.execution.SubscriptionExecutionStrategy
 import graphql.language.AstPrinter
 import graphql.parser.Parser
 import graphql.schema.*
@@ -23,12 +24,11 @@ import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.exceptions.InvalidTemplateException
-import kvasir.definitions.kg.TypeRegistry
 import kvasir.definitions.kg.changes.*
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.graphql.TYPE_MUTATION
+import kvasir.definitions.kg.graphql.TYPE_SUBSCRIPTION
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.reactive.skipToLast
@@ -36,8 +36,10 @@ import kvasir.utils.cursors.OffsetBasedCursor
 import kvasir.utils.graphql.addKvasirDirectives
 import kvasir.utils.graphql.getStorageClass
 import kvasir.utils.idgen.ChangeRequestId
+import mutiny.zero.flow.adapters.AdaptersToFlow
 import org.dataloader.DataLoaderRegistry
 import org.eclipse.microprofile.reactive.messaging.Channel
+import org.reactivestreams.Publisher
 import java.time.Instant
 
 @ConfigMapping(prefix = "kvasir.changes.processing")
@@ -72,7 +74,8 @@ class DefaultKnowledgeGraph(
     private val processors: Instance<ChangeProcessor>,
     private val typeRegistry: TypeRegistry,
     @Channel(Channels.CHANGE_REQUESTS_PUBLISH)
-    private val changeRequestEmitter: MutinyEmitter<ChangeRequest>
+    private val changeRequestEmitter: MutinyEmitter<ChangeRequest>,
+    private val streamingDatafetcherFactory: StreamingDatafetcherFactory
 ) : KnowledgeGraph {
 
     val defaultStorageBackend = (pipelineConfig.pipeline().find { it.defaultStorage() }?.let {
@@ -143,7 +146,7 @@ class DefaultKnowledgeGraph(
             .onItem().transformToUni { report -> outboxEmitter.send(report) }
     }
 
-    override fun query(request: QueryRequest): Uni<QueryResult> {
+    override fun query(request: QueryRequest): Multi<QueryResult> {
         val subscribeToExecutableSchema = if (request.predefinedSchema != null) {
             setupPredefinedSchema(request)
         } else {
@@ -162,13 +165,14 @@ class DefaultKnowledgeGraph(
                     generatedSchema.schemaBuilder.codeRegistry(codeRegistry.build()).build()
                 }
         }
-        return subscribeToExecutableSchema.chain { executableSchema ->
+        return subscribeToExecutableSchema.onItem().transformToMulti { executableSchema ->
             val storageBackends = pipelineConfig.pipeline().map { pipelineConfig ->
                 processors.handles().find { it.bean.beanClass.name == pipelineConfig.className() }?.get()
                     ?: throw RuntimeException("Storage backend '${pipelineConfig.className()}' not found!")
             }.filterIsInstance<StorageBackend>()
                 .associateBy { it::class.qualifiedName } + mapOf(null to defaultStorageBackend)
             val build = GraphQL.newGraphQL(executableSchema)
+                .subscriptionExecutionStrategy(SubscriptionExecutionStrategy())
                 .instrumentation(
                     PaginationInstrumentation(
                         storageBackends,
@@ -191,7 +195,21 @@ class DefaultKnowledgeGraph(
                         .build()
                 )
             )
-                .map { result -> mapExecutionResult(request, result) }
+                .onItem().transformToMulti { result ->
+                    when (result.getData<Any>()) {
+                        is Publisher<*> -> Multi.createFrom()
+                            .publisher<ExecutionResult>(AdaptersToFlow.publisher(result.getData()))
+                            .map { mapExecutionResult(request, it) }
+                            .onFailure().recoverWithItem { err ->
+                                mapExecutionResult(
+                                    request,
+                                    ExecutionResult.newExecutionResult().addError(AbortExecutionException(err)).build()
+                                )
+                            }
+
+                        else -> Multi.createFrom().item(mapExecutionResult(request, result))
+                    }
+                }
         }
     }
 
@@ -301,9 +319,10 @@ class DefaultKnowledgeGraph(
         return processedQuery
     }
 
-    private fun buildDatafetcher(
+    fun buildDatafetcher(
         request: QueryRequest,
-        atTimestamp: Instant?
+        atTimestamp: Instant? = null,
+        routeToSubscriptionHandler: Boolean = true
     ): DataFetcher<Any> {
         val podId = request.podId
         val context = request.context
@@ -323,25 +342,35 @@ class DefaultKnowledgeGraph(
         ) ?: throw RuntimeException("The default storage backend must provide a non-null datafetcher!")
 
         val mutationHandler = MutationToChangeRequest(request)
+        val streamingHandler = streamingDatafetcherFactory.createDatafetcher(request)
 
         return DataFetcher { env ->
-            if (env.parentType.let { it is GraphQLNamedType && it.name == TYPE_MUTATION }) {
-                // Handle mutations
-                mutationHandler.add(env)
-                if (mutationHandler.isComplete(env)) {
-                    changeRequestEmitter.send(mutationHandler.getChangeRequest())
-                        .map { mutationHandler.changeRequestId }.convert().toCompletionStage()
-                } else {
-                    mutationHandler.changeRequestId
+            when {
+                routeToSubscriptionHandler && env.parentType.let { it is GraphQLNamedType && it.name == TYPE_SUBSCRIPTION } -> {
+                    // Handle subscriptions
+                    streamingHandler.get(env)
                 }
-            } else {
-                // Handle queries
-                // Determine which datafetcher to use
-                val storageClass = env.getStorageClass()
-                if (storageClass != null) {
-                    datafetcherMapping[storageClass]!!.get(env)
-                } else {
-                    defaultDatafetcher.get(env)
+
+                env.parentType.let { it is GraphQLNamedType && it.name == TYPE_MUTATION } -> {
+                    // Handle mutations
+                    mutationHandler.add(env)
+                    if (mutationHandler.isComplete(env)) {
+                        changeRequestEmitter.send(mutationHandler.getChangeRequest())
+                            .map { mutationHandler.changeRequestId }.convert().toCompletionStage()
+                    } else {
+                        mutationHandler.changeRequestId
+                    }
+                }
+
+                else -> {
+                    // Handle queries
+                    // Determine which datafetcher to use
+                    val storageClass = env.getStorageClass()
+                    if (storageClass != null) {
+                        datafetcherMapping[storageClass]!!.get(env)
+                    } else {
+                        defaultDatafetcher.get(env)
+                    }
                 }
             }
         }

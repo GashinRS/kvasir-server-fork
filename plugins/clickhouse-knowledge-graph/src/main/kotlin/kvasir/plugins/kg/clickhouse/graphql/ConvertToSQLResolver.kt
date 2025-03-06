@@ -1,29 +1,15 @@
 package kvasir.plugins.kg.clickhouse.graphql
 
-import com.google.common.hash.Hashing
 import cz.jirutka.rsql.parser.RSQLParser
 import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
-import graphql.ExecutionResult
-import graphql.execution.ExecutionStepInfo
-import graphql.execution.FetchedValue
-import graphql.execution.instrumentation.InstrumentationContext
-import graphql.execution.instrumentation.InstrumentationState
-import graphql.execution.instrumentation.SimpleInstrumentationContext
-import graphql.execution.instrumentation.SimplePerformantInstrumentation
-import graphql.execution.instrumentation.parameters.InstrumentationCreateStateParameters
-import graphql.execution.instrumentation.parameters.InstrumentationExecutionParameters
-import graphql.execution.instrumentation.parameters.InstrumentationFieldCompleteParameters
-import graphql.execution.instrumentation.parameters.InstrumentationFieldFetchParameters
 import graphql.language.*
 import graphql.schema.*
-import io.smallrye.mutiny.Multi
-import io.vertx.core.json.JsonArray
+import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
-import kvasir.baseimpl.kg.DefaultKnowledgeGraph
 import kvasir.baseimpl.kg.SchemaGenerator
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JsonLdHelper
@@ -37,10 +23,8 @@ import kvasir.plugins.kg.clickhouse.specs.REVERSED_SORT_COLUMNS
 import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
 import kvasir.plugins.kg.clickhouse.utils.ClickhouseUtils
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
-import kvasir.utils.cursors.OffsetBasedCursor
 import kvasir.utils.graphql.*
 import java.time.Instant
-import java.util.concurrent.CompletableFuture
 
 @ApplicationScoped
 class ConvertToSQLResolver(
@@ -54,6 +38,7 @@ class ConvertToSQLResolver(
     ): DataFetcher<Any> {
         return DataFetcher<Any> { env ->
             val databaseName = databaseFromPodId(podId)
+            val returnList = env.fieldDefinition.type.isList()
             if (env.executionStepInfo.path.parent.isRootPath) {
                 // Handle entrypoints
                 val sqlConvertor = SQLConvertor(
@@ -67,7 +52,9 @@ class ConvertToSQLResolver(
                 )
                 val (sql, columns) = sqlConvertor.toSQL()
                 clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
-                    .convert().toCompletionStage()
+                    .map { result ->
+                        result.map { instance -> instance.mapKeys { e -> e.key.removePrefix("_") } }
+                    }
             } else {
                 val value = env.getFromSource<Any>(env.fieldDefinition.name)
 
@@ -86,23 +73,25 @@ class ConvertToSQLResolver(
                         mode = SQLConvertorMode.GET_DATA,
                         (if (value is Iterable<*>) value else listOf(value)).map {
                             it as Map<String, Any>
-                            (it["_id"] ?: it["id"]) as String
+                            it[FIELD_ID_NAME] as String
                         }
                     )
                     val (sql, columns) = sqlConvertor.toSQL()
                     clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
-                        .convert().toCompletionStage()
+                        .map { result ->
+                            result.map { instance -> instance.mapKeys { e -> e.key.removePrefix("_") } }
+                        }
                 } else {
-                    // Else return the provided values (filtering nulls from collections)
-                    val returnList = env.fieldDefinition.type.isList()
-                    when {
-                        value is Iterable<*> && returnList -> value.filterNotNull()
-                        value is Iterable<*> -> value.firstOrNull()
-                        returnList -> listOf(value)
-                        else -> value
-                    }
+                    Uni.createFrom().item(value)
                 }
-            }
+            }.map { output ->
+                when {
+                    output is Iterable<*> && returnList -> output.filterNotNull()
+                    output is Iterable<*> -> output.firstOrNull()
+                    returnList -> listOf(output)
+                    else -> output
+                }
+            }.convert().toCompletionStage()
         }
     }
 
@@ -291,7 +280,9 @@ open class SQLConvertor(
 
     protected fun getTargetGraphs(): List<String>? {
         val graphDirective = env.document.getDefinitionsOfType(OperationDefinition::class.java)
-            .first { it.operation == OperationDefinition.Operation.QUERY }.directivesByName[DIRECTIVE_GRAPH_NAME]?.firstOrNull()
+            .firstOrNull { it.operation == OperationDefinition.Operation.QUERY }?.directivesByName?.get(
+                DIRECTIVE_GRAPH_NAME
+            )?.firstOrNull()
         return graphDirective?.let { directive ->
             directive.getArgument(ARG_IRI_NAME)?.value?.let { value ->
                 when (value) {

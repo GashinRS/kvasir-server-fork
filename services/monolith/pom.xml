@@ -19,11 +19,6 @@
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>keycloak-policy-agent</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-        </dependency>
-        <dependency>
             <groupId>kvasir-services</groupId>
             <artifactId>kg-change-processor</artifactId>
             <version>1.0.0-SNAPSHOT</version>
