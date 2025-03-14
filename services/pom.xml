@@ -28,6 +28,7 @@
         <module>pod-management-api</module>
         <module>simple-rdf-ingester</module>
         <module>storage-api</module>
+        <module>init-service</module>
     </modules>
 
     <dependencies>

@@ -1,7 +1,7 @@
 package kvasir.services.monolith.health
 
 import jakarta.enterprise.context.ApplicationScoped
-import kvasir.services.monolith.bootstrap.Initializer
+import kvasir.services.init.Initializer
 import org.eclipse.microprofile.health.HealthCheck
 import org.eclipse.microprofile.health.HealthCheckResponse
 import org.eclipse.microprofile.health.Readiness

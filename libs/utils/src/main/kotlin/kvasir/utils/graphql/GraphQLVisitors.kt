@@ -10,6 +10,10 @@ import graphql.language.StringValue
 import graphql.language.TypeDefinition
 import graphql.util.TraversalControl
 import graphql.util.TraverserContext
+import kvasir.definitions.kg.graphql.ENUM_TRIGGER_TYPE_NAME
+import kvasir.definitions.kg.graphql.TYPE_MUTATION
+import kvasir.definitions.kg.graphql.TYPE_QUERY
+import kvasir.definitions.kg.graphql.TYPE_SUBSCRIPTION
 
 abstract class KvasirNodeVisitor(protected val providedContext: Map<String, Any>) : NodeVisitorStub() {
 
@@ -30,12 +34,15 @@ abstract class KvasirNodeVisitor(protected val providedContext: Map<String, Any>
 
 class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor(providedContext) {
 
+    companion object {
+        val IGNORE_TYPES = setOf(TYPE_QUERY, TYPE_MUTATION, TYPE_SUBSCRIPTION, ENUM_TRIGGER_TYPE_NAME)
+    }
 
     override fun visitTypeDefinition(
         node: TypeDefinition<*>,
         context: TraverserContext<Node<*>>
     ): TraversalControl {
-        if (node is NamedNode<*> && node.name !in listOf("Query", "Mutation", "Subscription")) {
+        if (node is NamedNode<*> && node.name !in IGNORE_TYPES) {
             val iri = resolveNameAsIri(node.name)
             if (iri == null && !node.hasDirective("class")) {
                 // Check if a type predicate is provided, otherwise throw exception
@@ -48,7 +55,7 @@ class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor
     override fun visitFieldDefinition(node: FieldDefinition, context: TraverserContext<Node<*>>): TraversalControl? {
         val parent = context.parentNode
         // Naming of the field does not matter when at root level
-        if (node.name != "id" && parent is NamedNode && parent.name !in listOf("Query", "Mutation", "Subscription")) {
+        if (node.name != "id" && parent is NamedNode && parent.name !in IGNORE_TYPES) {
             val iri = resolveNameAsIri(node.name)
             if (iri == null && !node.hasDirective("predicate")) {
                 // Check if a predicate is provided, otherwise throw exception

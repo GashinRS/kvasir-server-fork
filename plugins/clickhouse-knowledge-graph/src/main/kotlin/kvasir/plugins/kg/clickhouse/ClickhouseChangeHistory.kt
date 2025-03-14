@@ -55,7 +55,7 @@ class ClickhouseChangeHistory(
         request.sliceId?.let { "slice_id = '$it'" },
         request.fromTimestamp?.let { "timestamp >= ${ClickhouseUtils.convertInstant(it)}" },
         request.toTimestamp?.let { "timestamp < ${ClickhouseUtils.convertInstant(it)}" },
-    ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ")
+    ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
 
     override fun get(request: ChangeHistoryRequest): Uni<ChangeReport?> {
         val sql =

@@ -29,7 +29,11 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
     }
 
     val reversedRelations = context.filterValues { it is Map<*, *> && it.keys.contains(JsonLdKeywords.reverse) }
-        .map { (it.value as Map<*, *>)[JsonLdKeywords.reverse] as String to it.key }.groupBy { it.first }
+        .map {
+            val reversePredicate = (it.value as Map<*, *>)[JsonLdKeywords.reverse] as String
+            (JsonLdHelper.getFQName(reversePredicate, context) ?: reversePredicate) to it.key
+        }
+        .groupBy { it.first }
         .mapValues { targetNames -> targetNames.value.map { it.second } }
     val unionTypes = mutableSetOf<GraphQLUnionType>()
 

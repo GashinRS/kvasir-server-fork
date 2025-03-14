@@ -9,6 +9,7 @@ import io.smallrye.mutiny.Uni
 import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
+import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.PodStore
 import kvasir.definitions.messaging.Channels
@@ -21,7 +22,6 @@ import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.eclipse.microprofile.reactive.messaging.Outgoing
-import java.util.*
 
 /**
  * Processor that listens for storage mutations on files that contain RDF data
@@ -80,7 +80,9 @@ class RDFStorageMutationListener(
             }
             .filter { (_, headers) ->
                 // Only process objects that are RDF data
-                RDFMediaTypes.supportedTypes.contains(headers[HttpHeaders.CONTENT_TYPE])
+                val contentType =
+                    MediaType.valueOf(headers[HttpHeaders.CONTENT_TYPE]).let { "${it.type}/${it.subtype}" }
+                RDFMediaTypes.supportedTypes.contains(contentType)
             }
             .map { (event, _) ->
                 // Transform the object into a Kvasir change request

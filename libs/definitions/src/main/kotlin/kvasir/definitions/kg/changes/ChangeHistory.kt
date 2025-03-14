@@ -67,7 +67,13 @@ data class ChangeReport(
     val nrOfDeletes: Long = 0,
     @JsonProperty(KvasirVocab.message)
     val errorMessage: String? = null
-)
+) {
+
+    fun getLatestStatus(): ChangeReportStatusEntry? {
+        return statusEntry.maxByOrNull { it.timestamp }
+    }
+
+}
 
 data class ChangeReportStatusEntry(
     @JsonProperty(KvasirVocab.timestamp) val timestamp: Instant,

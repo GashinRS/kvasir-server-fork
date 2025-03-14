@@ -18,6 +18,8 @@
     <modules>
         <module>definitions</module>
         <module>utils</module>
+        <module>test-utils</module>
+        <module>clickhouse-test-utils</module>
     </modules>
 
     <build>

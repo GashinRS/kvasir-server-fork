@@ -1,5 +1,6 @@
 package kvasir.definitions.kg.graphql
 
+const val TYPE_QUERY = "Query"
 const val TYPE_MUTATION = "Mutation"
 const val TYPE_SUBSCRIPTION = "Subscription"
 

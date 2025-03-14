@@ -1,0 +1,8 @@
+kvasir:
+  services:
+    storage:
+      s3:
+        host: localhost
+        port: ${quarkus.minio.port}
+        access-key: ${quarkus.minio.access-key}
+        secret-key: ${quarkus.minio.secret-key}

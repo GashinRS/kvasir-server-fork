@@ -1,4 +1,4 @@
-package kvasir.services.monolith.bootstrap
+package kvasir.services.init
 
 import io.minio.BucketExistsArgs
 import io.minio.MakeBucketArgs
@@ -12,14 +12,17 @@ import io.smallrye.mutiny.Uni
 import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
+import jakarta.enterprise.inject.Instance
 import kvasir.definitions.kg.*
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.reactive.skipToLast
 import kvasir.definitions.reactive.toUni
+import kvasir.plugins.kg.clickhouse.ClickhouseInitializer
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.jvm.optionals.getOrNull
 
 @ApplicationScoped
 class Initializer(
@@ -27,7 +30,8 @@ class Initializer(
     private val baseUri: String,
     private val minioClient: MinioAsyncClient,
     private val podStore: PodStore,
-    private val podAuthInitializer: PodAuthInitializer
+    private val dbInitializer: ClickhouseInitializer,
+    private val podAuthInitializer: Instance<PodAuthInitializer>
 ) {
 
     private val initializationComplete = AtomicBoolean(false)
@@ -36,17 +40,21 @@ class Initializer(
         @Observes event: StartupEvent,
         config: StaticBootstrapConfig,
     ) {
-        Multi.createFrom().iterable(config.pods())
-            .onItem().transformToUni { podConfig ->
-                val podId = "${baseUri}${podConfig.name()}"
-                setupS3Bucket(podId)
-                    .chain { _ -> setupAuth(podId, podConfig.name(), podConfig.authConfiguration()) }
-                    .chain { authConfig -> setupPod(podId, podConfig, authConfig) }
-            }
-            .concatenate()
-            .onCompletion().invoke { initializationComplete.set(true) }
-            .skipToLast().await()
-            .indefinitely()
+        // Init system db
+        dbInitializer.init()
+            .chain { _ ->
+                // Init pods based on config
+                Multi.createFrom().iterable(config.pods())
+                    .onItem().transformToUni { podConfig ->
+                        val podId = "${baseUri}${podConfig.name()}"
+                        setupS3Bucket(podId)
+                            .chain { _ -> setupAuth(podId, podConfig.name(), podConfig.authConfiguration()) }
+                            .chain { authConfig -> setupPod(podId, podConfig, authConfig) }
+                    }
+                    .concatenate()
+                    .onCompletion().invoke { initializationComplete.set(true) }
+                    .skipToLast()
+            }.await().indefinitely()
     }
 
     private fun setupS3Bucket(podId: String): Uni<Void> {
@@ -73,28 +81,30 @@ class Initializer(
         podId: String,
         podName: String,
         suppliedAuthConfig: Optional<AuthConfigurationConfig>
-    ): Uni<AuthConfiguration> {
-        return if (suppliedAuthConfig.isEmpty) {
+    ): Uni<AuthConfiguration?> {
+        return if (suppliedAuthConfig.isEmpty && podAuthInitializer.isResolvable) {
             Log.debug("Initializing auth configuration for pod '$podId'")
-            podAuthInitializer.initialize(podId, podName)
+            podAuthInitializer.get().initialize(podId, podName).map { it }
         } else {
-            Uni.createFrom().item(
-                AuthConfiguration(
-                    suppliedAuthConfig.get().serverUrl(),
-                    suppliedAuthConfig.get().clientId(),
-                    suppliedAuthConfig.get().clientSecret()
+            suppliedAuthConfig.getOrNull()?.let { authConfig ->
+                Uni.createFrom().item(
+                    AuthConfiguration(
+                        authConfig.serverUrl(),
+                        authConfig.clientId(),
+                        authConfig.clientSecret()
+                    )
                 )
-            )
+            } ?: Uni.createFrom().nullItem()
         }
     }
 
-    private fun setupPod(podId: String, podConfig: StaticPodConfig, authConfig: AuthConfiguration): Uni<Void> {
+    private fun setupPod(podId: String, podConfig: StaticPodConfig, authConfig: AuthConfiguration?): Uni<Void> {
         Log.debug("Initializing database entry for pod '$podId'")
         return podStore.persist(
             Pod(
                 podId,
                 listOfNotNull(
-                    KvasirVocab.authConfiguration to authConfig,
+                    authConfig?.let { KvasirVocab.authConfiguration to authConfig },
                     PodConfigurationProperty.DEFAULT_CONTEXT to Json.encode(podConfig.defaultContext()),
                     PodConfigurationProperty.AUTO_INGEST_RDF to podConfig.autoIngestRDF()
                 ).toMap()
