@@ -7,6 +7,7 @@ import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
+import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.kg.ReferenceLoader
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -52,7 +53,8 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
     }
 
     private fun parseLang(resp: GetObjectResponse): RDFFormat {
-        return when (val contentType = resp.headers()[HttpHeaders.CONTENT_TYPE]) {
+        return when (val contentType =
+            MediaType.valueOf(resp.headers()[HttpHeaders.CONTENT_TYPE]).let { "${it.type}/${it.subtype}" }) {
             "text/turtle" -> RDFFormat.TURTLE
             "text/n3" -> RDFFormat.N3
             "application/n-triples" -> RDFFormat.NTRIPLES

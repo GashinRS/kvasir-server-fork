@@ -40,7 +40,9 @@ class MutationToChangeRequest(private val request: QueryRequest) {
     }
 
     fun isComplete(env: DataFetchingEnvironment): Boolean {
-        return (env.parentType as GraphQLObjectType).fields.size == mutationFields.size
+        val totalOps = env.document.definitions.filterIsInstance<OperationDefinition>()
+            .firstOrNull { it.operation == OperationDefinition.Operation.MUTATION }?.selectionSet?.selections?.size
+        return totalOps == mutationFields.size
     }
 
     fun getChangeRequest(): ChangeRequest {

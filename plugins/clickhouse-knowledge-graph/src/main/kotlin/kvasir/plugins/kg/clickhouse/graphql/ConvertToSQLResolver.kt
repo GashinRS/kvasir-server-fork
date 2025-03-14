@@ -335,8 +335,28 @@ open class SQLConvertor(
                 else -> emptyList()
             }
         }
+        val includedFieldNames = processedFields.map { it.field.name }.toSet()
+        val availableFields = outputDefinition.fieldDefinitions.map { it.name }.toSet()
+        // Fetch fields not in the selection but have predefined filters defined in the schema.
+        val predefinedFilterFields = outputDefinition.fieldDefinitions.filter { fieldDef ->
+            !includedFieldNames.contains(fieldDef.name) && fieldDef.getDirective(
+                "filter"
+            ) != null
+        }
+            .map {
+                val addField = Field.newField().name(it.name).build()
+                FieldToJoin(addField, null)
+            }
+        // Fetch fields referenced in argument filters that are not present in the selection.
+        val argFilterFields =
+            field.arguments.filter { arg -> availableFields.contains(arg.name) && !includedFieldNames.contains(arg.name) }
+                .map {
+                    val addField = Field.newField().name(it.name).build()
+                    FieldToJoin(addField, null)
+                }
+        val allProcessedFields = processedFields + predefinedFilterFields + argFilterFields
         return FieldInfo(
-            processedFields
+            allProcessedFields
                 .filterNot { it.field.name == FIELD_ID_NAME || it.field.name.startsWith("__") } // Ignore id and system fields
                 .filter {
                     it.field.getDirectiveArg<StringValue>(
@@ -428,10 +448,25 @@ open class SQLConvertor(
     }
 
     protected fun getNodeFilter(field: Field, fieldDefinition: GraphQLFieldDefinition): Node? {
-        val subFields = field.selectionSet?.selections?.flatMap {
+        val subFields = ((field.selectionSet?.selections?.flatMap {
             if (it is InlineFragment) it.selectionSet.selections else listOf(it)
         }?.filterIsInstance<Field>()?.filterNot { it.name == FIELD_ID_NAME }
-            ?.map { it to fieldDefinition.type.innerType<GraphQLFieldsContainer>().getFieldDefinition(it.name) }
+            ?.map { it to fieldDefinition.type.innerType<GraphQLFieldsContainer>().getFieldDefinition(it.name) })
+            ?: emptyList())
+
+        val includedFieldNames = subFields.map { it.first.name }.toSet()
+        // Fetch fields not in the selection but have predefined filters defined in the schema
+        val allSubFields =
+            subFields + (fieldDefinition.type.innerType<GraphQLObjectType>()).fieldDefinitions.filter { fieldDef ->
+                !includedFieldNames.contains(
+                    fieldDef.name
+                ) && fieldDef.getDirective("filter") != null
+            }
+                .map {
+                    val addField = Field.newField().name(it.name).build()
+                    addField to it
+                }
+
         val globalNodeFilter = if (env.executionStepInfo.path.parent.isRootPath) {
             (field.getDirectiveArg<StringValue>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
                 ?: fieldDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
@@ -442,14 +477,14 @@ open class SQLConvertor(
         } else {
             null
         }
-        val subFieldFilters = subFields?.map { (subField, subFieldDefinition) ->
+        val subFieldFilters = allSubFields.map { (subField, subFieldDefinition) ->
             (subField.getDirectiveArg<StringValue>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
                 ?: subFieldDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
                 ?.let {
                     val rsqlParser = RSQLParser()
                     rsqlParser.parse(it.value).accept(SelectorReplacingFilterVisitor(SELF_REF_SELECTOR, subField.name))
                 }
-        } ?: emptyList()
+        }
         return (listOf(globalNodeFilter) + subFieldFilters).filterNotNull().takeIf { it.isNotEmpty() }?.let {
             if (it.size == 1) it.first() else AndNode(it)
         }

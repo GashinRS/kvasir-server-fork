@@ -1,29 +1,22 @@
 package kvasir.plugins.kg.clickhouse
 
 import io.quarkus.logging.Log
-import io.quarkus.runtime.StartupEvent
 import io.smallrye.mutiny.Uni
-import jakarta.annotation.Priority
-import jakarta.enterprise.event.Observes
+import jakarta.enterprise.context.ApplicationScoped
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.specs.SYSTEM_DB
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
-import org.eclipse.microprofile.config.inject.ConfigProperty
 
+@ApplicationScoped
 class ClickhouseInitializer(
-    private val clickhouseClient: ClickhouseClient,
-    @ConfigProperty(name = "kvasir.plugins.kg.clickhouse.init-db", defaultValue = "true")
-    private val initDb: Boolean
+    private val clickhouseClient: ClickhouseClient
 ) {
 
-    fun init(@Observes @Priority(100) event: StartupEvent) {
-        if (initDb) {
-            Log.debug("Initializing Clickhouse schema for Kvasir system tables...")
-            createDatabase(SYSTEM_DB)
-                .chain { _ -> createPodSchema(SYSTEM_DB) }
-                .chain { _ -> createSliceSchema(SYSTEM_DB) }
-                .await().indefinitely()
-        }
+    fun init(): Uni<Void> {
+        Log.debug("Initializing Clickhouse schema for Kvasir system tables...")
+        return createDatabase(SYSTEM_DB)
+            .chain { _ -> createPodSchema(SYSTEM_DB) }
+            .chain { _ -> createSliceSchema(SYSTEM_DB) }
     }
 
     fun initializePodSchema(podId: String): Uni<Void> {

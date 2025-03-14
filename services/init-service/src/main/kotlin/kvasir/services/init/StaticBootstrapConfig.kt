@@ -1,4 +1,4 @@
-package kvasir.services.monolith.bootstrap
+package kvasir.services.init
 
 import io.smallrye.config.ConfigMapping
 import io.smallrye.config.WithConverter
