@@ -6,6 +6,11 @@ buildSrc/.gradle
 buildSrc/build
 cache
 
+# Maven
+.kotlin
+**/target
+.m2
+
 ### Java ###
 # Compiled class file
 *.class
@@ -33,5 +38,3 @@ load-tests/results
 # Ignore Helmsman temporary directory
 .helmsman-tmp
 *.drawio.bkp
-.kotlin
-**/target

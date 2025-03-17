@@ -29,7 +29,7 @@
         <guava.version>33.4.0-jre</guava.version>
         <rdf4j.version>5.0.3</rdf4j.version>
         <skipITs>true</skipITs>
-        <surefire-plugin.version>3.5.0</surefire-plugin.version>
+        <surefire-plugin.version>3.5.2</surefire-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -138,11 +138,9 @@
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                             <maven.home>${maven.home}</maven.home>
-                            <quarkus.jacoco.data-file>${maven.multiModuleProjectDirectory}/target/jacoco.exec
-                            </quarkus.jacoco.data-file>
+                            <quarkus.jacoco.data-file>${maven.multiModuleProjectDirectory}/target/jacoco.exec</quarkus.jacoco.data-file>
                             <quarkus.jacoco.reuse-data-file>true</quarkus.jacoco.reuse-data-file>
-                            <quarkus.jacoco.report-location>${maven.multiModuleProjectDirectory}/target/coverage
-                            </quarkus.jacoco.report-location>
+                            <quarkus.jacoco.report-location>${maven.multiModuleProjectDirectory}/target/coverage</quarkus.jacoco.report-location>
                         </systemPropertyVariables>
                     </configuration>
                 </plugin>
