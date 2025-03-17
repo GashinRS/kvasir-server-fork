@@ -23,7 +23,9 @@ class ChangeProcessor(
     @ConfigProperty(name = "kvasir.change-processor.commits.buffer-size", defaultValue = "100000")
     private val bufferSize: Int,
     @ConfigProperty(name = "kvasir.change-processor.commits.max-delay-ms", defaultValue = "1000")
-    private val maxDelayMs: Long
+    private val maxDelayMs: Long,
+    @ConfigProperty(name = "kvasir.change-processor.shutdown-on-error", defaultValue = "true")
+    private val shutdownOnError: Boolean
 ) {
 
     @Startup
@@ -41,7 +43,9 @@ class ChangeProcessor(
             }
             .onFailure().invoke { err ->
                 Log.error("Error in change processor, shutting down.", err)
-                exitProcess(1)
+                if (shutdownOnError) {
+                    exitProcess(1)
+                }
             }
             .onSubscription().invoke { _ -> Log.debug("Subscribed to change request processing flow!") }
             .subscribe()
