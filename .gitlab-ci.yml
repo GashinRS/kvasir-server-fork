@@ -7,8 +7,23 @@ variables:
   ALGOLIA_INDEX_NAME: 'prod_KVASIR-NEXT'
   CONFIG_JSON_PRODUCT: 'kd'
   CONFIG_JSON_VERSION: 'main'
-  MAVEN_CLI_OPTS: "--batch-mode"
-  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  MAVEN_CLI_OPTS: >-
+    --batch-mode
+    --errors
+    --fail-at-end
+    --show-version
+    -DinstallAtEnd=true
+    -DdeployAtEnd=true
+    -Dstyle.color=always
+  MAVEN_OPTS: >-
+    -Dhttps.protocols=TLSv1.2
+    -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository
+    -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN
+    -Dorg.slf4j.simpleLogger.showDateTime=true
+    -Djava.awt.headless=true
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:HeapDumpPath=target/
+    -XX:ErrorFile=target/hs_err_pid%p.log
   DOCKER_HOST: tcp://docker:2375
   DOCKER_TLS_CERTDIR: ""
   QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.ilabt.imec.be:4567/obelisk/packages/eclipse-temurin:21.0.6_7-jre-noble"
@@ -24,8 +39,8 @@ workflow:
   rules:
     - if: $CI_COMMIT_TAG
       variables:
-        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_TAG"
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "latest"
+        IMAGE_TAG: "$CI_COMMIT_TAG"
+        IMAGE_ADDITIONAL_TAGS: "latest"
         QUARKUS_CONTAINER_IMAGE_PUSH: "true"
 
     #    Ignore Draft MRs
@@ -33,10 +48,9 @@ workflow:
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       variables: &commitBranchVersions
-        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
+        IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+        IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
         QUARKUS_CONTAINER_IMAGE_PUSH: "true"
-        QUARKUS_JIB_PLATFORMS: "linux/amd64,linux/arm64/v8"
     #   Don't trigger branch pipeline when there is an open MR
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
@@ -49,13 +63,13 @@ workflow:
   - "**/pom.xml"
 
 stages:
-  - build
   - test
+  - package
   - deploy
   - search
 
 build:maven:
-  stage: build
+  stage: test
   image: $JDK_IMAGE
   tags: [ "cache", "docker" ]
   cache:
@@ -63,6 +77,7 @@ build:maven:
     paths:
       - .m2/repository/
     policy: pull-push
+    when: always
   services:
     - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
       alias: docker
@@ -74,7 +89,7 @@ build:maven:
       variables:
         SKIP_TESTS: "-DskipTests"
   script:
-    - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
+    - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Dquarkus.container-image.push=false
   interruptible: true
   after_script:
     - awk -F,
@@ -85,13 +100,48 @@ build:maven:
   coverage: '/(\d+\.\d+) % covered/'
   artifacts:
     paths:
-      - services/monolith/target/openapi
+      - "**/target"
     reports:
       coverage_report:
         coverage_format: jacoco
         path: target/coverage/jacoco.xml
       junit: "**/TEST-*.xml"
     when: always
+
+package:maven:
+  stage: package
+  needs: [build:maven]
+  image: $JDK_IMAGE
+  tags: [ "cache" ]
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .m2/repository/
+    policy: pull-push
+  parallel:
+    matrix:
+      - KVASIR_PLUGINS__POLICY_AGENT__KEYCLOAK_ENABLED: "true"
+        KVASIR_PLUGINS__POLICY_AGENT__UMA_ENABLED: "false"
+        QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-keycloak
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_TAG},${IMAGE_ADDITIONAL_TAGS},${IMAGE_ADDITIONAL_TAGS}-keycloak
+      - KVASIR_PLUGINS__POLICY_AGENT__KEYCLOAK_ENABLED: "false"
+        KVASIR_PLUGINS__POLICY_AGENT__UMA_ENABLED: "true"
+        QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-uma
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-uma
+      - KVASIR_PLUGINS__POLICY_AGENT__KEYCLOAK_ENABLED: "false"
+        KVASIR_PLUGINS__POLICY_AGENT__UMA_ENABLED: "false"
+        QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-noauth
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-noauth
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+  script:
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests install -Dquarkus.container-image.push=true
+  interruptible: true
+  artifacts:
+    paths:
+      - "**/target/*.jar"
 
 #deploy-cnl:
 #  rules:
@@ -109,7 +159,7 @@ build:maven:
 
 build:writerside:
   needs: [build:maven]
-  stage: build
+  stage: test
   rules:
     - if: '$CI_COMMIT_TAG'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -184,8 +234,7 @@ search:
 smoke_test:compose:
   tags: [ "docker" ]
   image: docker
-  stage: test
-  needs: [build:maven]
+  stage: deploy
   rules:
     - if: '$CI_COMMIT_TAG'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -208,7 +257,7 @@ smoke_test:compose:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - cd .deployment/docker-compose
-    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$QUARKUS_CONTAINER_IMAGE_TAG%g" docker-compose.yml
+    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$IMAGE_TAG%g" docker-compose.yml
     - docker compose up -d --wait --quiet-pull --no-color
     - docker ps -a
     - tests/compose-smoke-test.sh
