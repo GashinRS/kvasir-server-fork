@@ -1,37 +1,61 @@
-<!-- Generated using [git-cliff](https://git-cliff.org/) -->
-
 # Changelog
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
 
-## [0.2.0](https://gitlab.com/kvasir/kvasir-server/compare/0.1.10..0.2.0) - 2025-01-13
+## [0.4.0](https://gitlab.com/kvasir/kvasir-server/compare/0.3.0..0.4.0) - 2025-03-17
 
-### Bug Fixes
+### Documentation
 
-- 409 on reboot when realm already exists, no longer crashes kvasir - ([7a53fc2](https://gitlab.com/kvasir/kvasir-server/commit/7a53fc27dce6343431b6aba1cca4fdc9b66fea77)) - tdupont
+- Added docs for Kvasir UI - ([dbdf8e5](https://gitlab.com/kvasir/kvasir-server/commit/dbdf8e5838d0b05a32e6770b897be02703d02e78)) - Thomas Dupont
 
 ### Features
 
-- Add basic health checks + monolith pod init readinessCheck - ([595e987](https://gitlab.com/kvasir/kvasir-server/commit/595e9879e1d91ef18a209292eaa19676e89f91d2)) - Jasper Vaneessen
+- GraphQL subscription support - ([b010e0f](https://gitlab.com/kvasir/kvasir-server/commit/b010e0f4122c8c398d9d909d2a3c23397f94c950)) - Wannes Kerckhove
+- exception behaviour for change processor is now configurable (shutdown on failure remains the default) - ([5e8560b](https://gitlab.com/kvasir/kvasir-server/commit/5e8560be066562a983d3af63bff34918c7ea6964)) - Wannes Kerckhove
 
 ### Miscellaneous Chores
 
-- **(Compose)**: run Kvasir in host networking mode - ([ad55314](https://gitlab.com/kvasir/kvasir-server/commit/ad553147dcf0f610fef292be2375b8ce1dc88323)) - tdupont
-- Docs updated and code cleanup - ([168cee0](https://gitlab.com/kvasir/kvasir-server/commit/168cee08356dde09a600a35fcb448d21d7febf2c)) - tdupont
+- **(compose)** add postgres healthcheck - ([2c6ba0e](https://gitlab.com/kvasir/kvasir-server/commit/2c6ba0ee7b1c7573d8e0ea48fedb5a4df3145a25)) - Jasper Vaneessen
+- **(compose)** pin PostgreSQL and Keycloak images versions - ([f8c30c6](https://gitlab.com/kvasir/kvasir-server/commit/f8c30c6b049b85f66986458448e7c134aabb3605)) - Jasper Vaneessen
+- update ui to 0.3.4 (fix s3 special prefix chars) - ([5e95e49](https://gitlab.com/kvasir/kvasir-server/commit/5e95e49f543734fbd0fa77236263c81699920d63)) - tdupont
 
 ### Tests
 
-- **(Compose)** test profile and overview pages + overwrite image version - ([75cbdf6](https://gitlab.com/kvasir/kvasir-server/commit/75cbdf61ae81a98b4e50608b9f58f159bec09197)) - Jasper Vaneessen
-
-### Build
-
-- Prefer IPv4 - ([11f0588](https://gitlab.com/kvasir/kvasir-server/commit/11f058870f1cbf13b1b6fd45941158ac47f67c48)) - Jasper Vaneessen
+- Added basic unit tests for the main services - ([f169cbe](https://gitlab.com/kvasir/kvasir-server/commit/f169cbee5a2183f0720e19be94f73d0c2ba9a814)) - Wannes Kerckhove
 
 ### Ci
 
-- Add smoke test for compose - ([f343f08](https://gitlab.com/kvasir/kvasir-server/commit/f343f08dafe8ab7b97823088aded7807b819b056)) - Jasper Vaneessen
+- integrate multi platform builds (ARM support) - ([438782e](https://gitlab.com/kvasir/kvasir-server/commit/438782eca721cd62ace9cd77e0d5424523e91108)) - Jasper Vaneessen
+- parallel builds for different policy enforcers - ([a7435ec](https://gitlab.com/kvasir/kvasir-server/commit/a7435ecc9476291f85337bbc637635798a759768)) - Jasper Vaneessen
+
+---
+
+## [0.3.0](https://gitlab.com/kvasir/kvasir-server/compare/0.1.10..0.3.0) - 2025-02-13
+
+### Bug Fixes
+
+- 409 on reboot when realm already exists, no longer crashes kvasir - ([fe83e94](https://gitlab.com/kvasir/kvasir-server/commit/fe83e94d699acc58825011264e518bfe58d1b749)) - tdupont
+- everything under /q/ is reachable again in dev mode - ([bfa5db2](https://gitlab.com/kvasir/kvasir-server/commit/bfa5db2a327ecd12576dcececba4f67cd29f4787)) - tdupont
+- delete slices targets to correct table again - ([616dd8d](https://gitlab.com/kvasir/kvasir-server/commit/616dd8d2cabf175e066c7b15c6bd58bec066c7a9)) - tdupont
+
+### Documentation
+
+- Added authentication docs - ([ed3c44b](https://gitlab.com/kvasir/kvasir-server/commit/ed3c44b79e94daee6a3c0f55a4bd2a5e6909a8a2)) - tdupont
+
+### Features
+
+- add SmallRye health checks to all services + readiness check for monolith initialization - ([90c92f0](https://gitlab.com/kvasir/kvasir-server/commit/90c92f00f28ffdbe822613e04f753954b92c25ff)) - Jasper Vaneessen
+- set more sensible auth timeout values - ([936cb1f](https://gitlab.com/kvasir/kvasir-server/commit/936cb1ffdd5e30437645e1da2d1933a25ff5445e)) - tdupont
+- [**breaking**]introduced Custom data backends (incl. SAREF timeseries PoC) - ([43f9b2f](https://gitlab.com/kvasir/kvasir-server/commit/43f9b2fbd3d5ad3d6d865de8cbbf57e8a5ef6209)) - Wannes Kerckhove
+
+### Miscellaneous Chores
+
+- **(compose)** run kvasir in host networking mode - ([ad55314](https://gitlab.com/kvasir/kvasir-server/commit/ad553147dcf0f610fef292be2375b8ce1dc88323)) - tdupont
+- **(compose)** pin kvasir and kvasir-ui versions - ([571d1eb](https://gitlab.com/kvasir/kvasir-server/commit/571d1ebb64b97c1d9a152269eb2817d962459dd2)) - Jasper Vaneessen
+- update changelog - ([5d8db89](https://gitlab.com/kvasir/kvasir-server/commit/5d8db89e559c5a881b0690be4a4b29704f59604a)) - Jasper Vaneessen
+- update ui to 0.3.3 - ([2b0bbd2](https://gitlab.com/kvasir/kvasir-server/commit/2b0bbd2f61812c2ab78b31790299f87476f13c6b)) - Thomas Dupont
 
 ---
 
@@ -39,16 +63,17 @@ All notable changes to this project will be documented in this file. See [conven
 
 ### Bug Fixes
 
-- Set cors for dev - ([020ca33](https://gitlab.com/kvasir/kvasir-server/commit/020ca332d4814ea54a90c18814519b1c59744804)) - Thomas Dupont
-- Allow suspicious types (CH) and use minio/minio image - ([e4eef5a](https://gitlab.com/kvasir/kvasir-server/commit/e4eef5a89c4230c6580ef1f8c4e43e9c3424d1ab)) - Jasper Vaneessen
-- Added missing quarkus auth permission config - ([73ba618](https://gitlab.com/kvasir/kvasir-server/commit/73ba618d49298c3f06bb22959f91d2a7889596b3)) - Wannes Kerckhove
+- set cors for dev - ([020ca33](https://gitlab.com/kvasir/kvasir-server/commit/020ca332d4814ea54a90c18814519b1c59744804)) - Thomas Dupont
+- allow suspicious types (CH) and use minio/minio image - ([e4eef5a](https://gitlab.com/kvasir/kvasir-server/commit/e4eef5a89c4230c6580ef1f8c4e43e9c3424d1ab)) - Jasper Vaneessen
+- added missing quarkus auth permission config - ([73ba618](https://gitlab.com/kvasir/kvasir-server/commit/73ba618d49298c3f06bb22959f91d2a7889596b3)) - Wannes Kerckhove
 - Fixed some issues with Keycloak client init - ([0fcdadf](https://gitlab.com/kvasir/kvasir-server/commit/0fcdadf2232079d4737b92e3b9c39decb83cf1fe)) - Wannes Kerckhove
-- Fixed KeycloakPolicyEnforcerAuthorizer should not be active in CDI when keycloak policy-enforcer is disabled - ([ef2f99d](https://gitlab.com/kvasir/kvasir-server/commit/ef2f99d666f45c3657db8c3834813be991f757fd)) - Wannes Kerckhove
+- FixedKeycloakPolicyEnforcerAuthorizer should not be active in CDI when keycloak policy-enforcer is disabled - ([ef2f99d](https://gitlab.com/kvasir/kvasir-server/commit/ef2f99d666f45c3657db8c3834813be991f757fd)) - Wannes Kerckhove
 - refer to new path of quarkus-realm.json - ([413a2ea](https://gitlab.com/kvasir/kvasir-server/commit/413a2eae8ed61391de6d135b6e7180d74511a73b)) - Thomas Dupont
 - Fixed Slice creation failing (and updated wrong example in docs) - ([959a083](https://gitlab.com/kvasir/kvasir-server/commit/959a083393e64c335a50ec3bcec58ef0ba0f2ed0)) - Wannes Kerckhove
 - Fixed disabling policy-enforcer not working properly. Policy-enforcer is now disabled by default when running tests - ([4089c75](https://gitlab.com/kvasir/kvasir-server/commit/4089c75d3406ce39e633d9c0db97e51f04a03543)) - Wannes Kerckhove
 - removed hardcoded url references to keycloak and ui - ([70f14cd](https://gitlab.com/kvasir/kvasir-server/commit/70f14cdc1c89358d7add430a916350f1edfb4c71)) - Thomas Dupont
 - added missing keycloak config to docker compose (deployment) - ([54ab1f5](https://gitlab.com/kvasir/kvasir-server/commit/54ab1f50602798553f03dd4d7766d4d4c3450529)) - Thomas Dupont
+- ui redirect uri port set to 8081 - ([a96242d](https://gitlab.com/kvasir/kvasir-server/commit/a96242d8db8f6e4b9d694d0948e200c077686226)) - Thomas Dupont
 
 ### Features
 
@@ -61,8 +86,10 @@ All notable changes to this project will be documented in this file. See [conven
 ### Miscellaneous Chores
 
 - **(dependencies)** update docker image dependencies (devservices+compose) and pin exact versions - ([0a8ce9c](https://gitlab.com/kvasir/kvasir-server/commit/0a8ce9c17deeb5e5b0d47f20cb2f92f67be4650d)) - Jasper Vaneessen
+- **(deps)** update docker images - ([506ce62](https://gitlab.com/kvasir/kvasir-server/commit/506ce62ca81c7f23616c4c35d6663cce128d1ccf)) - Jasper Vaneessen
 - **(renovate)** group CI and Docker categories - ([6d50315](https://gitlab.com/kvasir/kvasir-server/commit/6d50315438a6ef9c98f64a8b3e7cbf1b60d7760d)) - Jasper Vaneessen
-- **(renovate)** update renovate config - ([643bc50](https://gitlab.com/kvasir/kvasir-server/commit/643bc503124ffc307b3fd0af954a5fd2fc6d57f9)) - Jasper Vaneessen
+- fix renovate - ([21bd702](https://gitlab.com/kvasir/kvasir-server/commit/21bd702b8dea3f882bf7e4231d9bcf66a330f553)) - Jasper Vaneessen
+- update renovate config - ([643bc50](https://gitlab.com/kvasir/kvasir-server/commit/643bc503124ffc307b3fd0af954a5fd2fc6d57f9)) - Jasper Vaneessen
 - add changelog - ([b7cc599](https://gitlab.com/kvasir/kvasir-server/commit/b7cc59985549266ff535a8c50ab34c3faca25aaf)) - Jasper Vaneessen
 - master to main - ([f46ed3c](https://gitlab.com/kvasir/kvasir-server/commit/f46ed3c7729c77b4e1bb84c1762ec2b5b383dbf8)) - Jasper Vaneessen
 - follow CH LTS version 24.8 - ([43f2c62](https://gitlab.com/kvasir/kvasir-server/commit/43f2c6272164d06813d319edcfd94bedb68fed79)) - Jasper Vaneessen
@@ -77,6 +104,14 @@ All notable changes to this project will be documented in this file. See [conven
 
 - update maven and CI for testing and image deployment - ([4bebea8](https://gitlab.com/kvasir/kvasir-server/commit/4bebea851eebadc364afa2c23e2522c636bdccff)) - Jasper Vaneessen
 - fixing missing CH dependency in storage-api - ([b7beb44](https://gitlab.com/kvasir/kvasir-server/commit/b7beb44420aef44c2afd806d224b8dbb4af7ae47)) - Wannes Kerckhove
+
+### Busy
+
+- Working on Keycloak integration - ([cfa1c63](https://gitlab.com/kvasir/kvasir-server/commit/cfa1c63aaf2786845fb617d2421a49312cb1cf9c)) - Wannes Kerckhove
+
+### Ci
+
+- fix quarkus image push property - ([375d36a](https://gitlab.com/kvasir/kvasir-server/commit/375d36af81b22c3676712173c91fff686246643e)) - Jasper Vaneessen
 
 ---
 
