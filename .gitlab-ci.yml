@@ -214,11 +214,13 @@ smoke_test:compose:
     - tests/compose-smoke-test.sh
   after_script:
     - cd .deployment/docker-compose
+    - docker ps -a > compose-ps.txt
     - docker compose logs --no-color > compose-logs.txt
     - docker compose down
   artifacts:
     paths:
       - .deployment/docker-compose/compose-logs.txt
       - .deployment/docker-compose/docker-compose.yml
+      - .deployment/docker-compose/compose-ps.txt
     expire_in: 1 week
     when: on_failure

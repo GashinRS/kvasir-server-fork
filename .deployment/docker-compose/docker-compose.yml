@@ -94,7 +94,7 @@ services:
       retries: 5
 
   postgresql:
-    image: docker.io/bitnami/postgresql:latest
+    image: docker.io/bitnami/postgresql:16.6.0
     environment:
       # ALLOW_EMPTY_PASSWORD is recommended only for development.
       - ALLOW_EMPTY_PASSWORD=yes
@@ -117,7 +117,7 @@ services:
       retries: 5
 
   keycloak:
-    image: bitnami/keycloak:26.0.7
+    image: bitnami/keycloak:26.1.4
     depends_on:
       - postgresql
     ports:
