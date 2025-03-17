@@ -102,6 +102,19 @@ services:
       - POSTGRESQL_DATABASE=bitnami_keycloak
     volumes:
       - "postgresql_data:/bitnami/postgresql"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "bn_keycloak",
+          "-d",
+          "bitnami_keycloak",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   keycloak:
     image: bitnami/keycloak:26.0.7

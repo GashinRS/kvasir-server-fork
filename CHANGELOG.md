@@ -1,8 +1,11 @@
+<!-- Generated using [git-cliff](https://git-cliff.org/) -->
+
 # Changelog
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
+
 ## [0.2.0](https://gitlab.com/kvasir/kvasir-server/compare/0.1.10..0.2.0) - 2025-01-13
 
 ### Bug Fixes
@@ -31,6 +34,7 @@ All notable changes to this project will be documented in this file. See [conven
 - Add smoke test for compose - ([f343f08](https://gitlab.com/kvasir/kvasir-server/commit/f343f08dafe8ab7b97823088aded7807b819b056)) - Jasper Vaneessen
 
 ---
+
 ## [0.1.10](https://gitlab.com/kvasir/kvasir-server/compare/0.1.9..0.1.10) - 2025-01-08
 
 ### Bug Fixes
@@ -48,7 +52,7 @@ All notable changes to this project will be documented in this file. See [conven
 
 ### Features
 
--  [**breaking**]Cursor-paging for the GraphQL API, expanded JSON-LD content negotiation for the GraphQL API - ([8e602b7](https://gitlab.com/kvasir/kvasir-server/commit/8e602b712187c7509a3ee164d1edc3d30967c9d8)) - Wannes Kerckhove
+- [**breaking**]Cursor-paging for the GraphQL API, expanded JSON-LD content negotiation for the GraphQL API - ([8e602b7](https://gitlab.com/kvasir/kvasir-server/commit/8e602b712187c7509a3ee164d1edc3d30967c9d8)) - Wannes Kerckhove
 - setup per pod Keycloak realms automatically in dev mode - ([79bef46](https://gitlab.com/kvasir/kvasir-server/commit/79bef461cf908bc1088f60ecb90d09d1a7d036aa)) - Wannes Kerckhove
 - proposal for public pod overview and public profile - ([d89a20f](https://gitlab.com/kvasir/kvasir-server/commit/d89a20fb2b5a62afb3917bbf5e6edf93a0a6c842)) - Wannes Kerckhove
 - add kvasir-ui client generation to keycloak pod auth init - ([d5bce68](https://gitlab.com/kvasir/kvasir-server/commit/d5bce6816fc055fee9dc8bb0a6c07632410d4db2)) - tdupont
@@ -75,6 +79,7 @@ All notable changes to this project will be documented in this file. See [conven
 - fixing missing CH dependency in storage-api - ([b7beb44](https://gitlab.com/kvasir/kvasir-server/commit/b7beb44420aef44c2afd806d224b8dbb4af7ae47)) - Wannes Kerckhove
 
 ---
+
 ## [0.1.9](https://gitlab.com/kvasir/kvasir-server/compare/0.1.8..0.1.9) - 2024-12-05
 
 ### Bug Fixes
@@ -88,6 +93,7 @@ All notable changes to this project will be documented in this file. See [conven
 - Changes API now supports the JSON-LD '@reverse' keyword - ([d8942d7](https://gitlab.com/kvasir/kvasir-server/commit/d8942d7905981af18f374dd1018cece70e415269)) - Wannes Kerckhove
 
 ---
+
 ## [0.1.8](https://gitlab.com/kvasir/kvasir-server/compare/0.1.7..0.1.8) - 2024-12-03
 
 ### Bug Fixes
@@ -103,6 +109,7 @@ All notable changes to this project will be documented in this file. See [conven
 - remove static set ALGOLIA_KEY (purely rely on CI/CD vars) - ([c3aba16](https://gitlab.com/kvasir/kvasir-server/commit/c3aba16f76ce544226190fdfd4dfb5bca7571e5c)) - Jasper Vaneessen
 
 ---
+
 ## [0.1.7](https://gitlab.com/kvasir/kvasir-server/compare/0.1.6..0.1.7) - 2024-11-28
 
 ### Bug Fixes
@@ -145,6 +152,7 @@ All notable changes to this project will be documented in this file. See [conven
 - add needs to test:writerside - ([d5e99ff](https://gitlab.com/kvasir/kvasir-server/commit/d5e99ff1da55d3dd33b776724462386125ff9f61)) - Jasper Vaneessen
 
 ---
+
 ## [0.1.6](https://gitlab.com/kvasir/kvasir-server/compare/0.1.5-preview..0.1.6) - 2024-11-25
 
 ### Bug Fixes
@@ -152,6 +160,7 @@ All notable changes to this project will be documented in this file. See [conven
 - possible fix for S3 delete hanging - ([58fe8a8](https://gitlab.com/kvasir/kvasir-server/commit/58fe8a89a31c93d8f25f7b77bb7a6a18ae6cd26a)) - Wannes Kerckhove
 
 ---
+
 ## [0.1.5-preview](https://gitlab.com/kvasir/kvasir-server/compare/0.1.4-preview..0.1.5-preview) - 2024-11-25
 
 ### Bug Fixes
@@ -159,6 +168,7 @@ All notable changes to this project will be documented in this file. See [conven
 - CORS handler should also allow all when not running in dev-mode (by default) - ([e2f1689](https://gitlab.com/kvasir/kvasir-server/commit/e2f1689239f1812e6bb3065fe27fc9fc9179eeb4)) - Wannes Kerckhove
 
 ---
+
 ## [0.1.4-preview](https://gitlab.com/kvasir/kvasir-server/compare/0.1.3-preview..0.1.4-preview) - 2024-11-25
 
 ### Bug Fixes
@@ -181,6 +191,7 @@ All notable changes to this project will be documented in this file. See [conven
 - working on totalCount implementation - ([f5a509a](https://gitlab.com/kvasir/kvasir-server/commit/f5a509a88ff7840d1f4ea2d0580be753dcfcaa67)) - Wannes Kerckhove
 
 ---
+
 ## [0.1.3-preview](https://gitlab.com/kvasir/kvasir-server/compare/0.1.2-preview..0.1.3-preview) - 2024-11-20
 
 ### Bug Fixes
@@ -207,6 +218,7 @@ All notable changes to this project will be documented in this file. See [conven
 - added a docker-compose deployment folder - ([171f4e8](https://gitlab.com/kvasir/kvasir-server/commit/171f4e8dadb262c297ff0fa5ae487d4a9d824d74)) - Wannes Kerckhove
 
 ---
+
 ## [0.1.2-preview](https://gitlab.com/kvasir/kvasir-server/compare/0.1.1-preview..0.1.2-preview) - 2024-11-19
 
 ### Ci
@@ -214,6 +226,7 @@ All notable changes to this project will be documented in this file. See [conven
 - Quick fix for docker rate limit - ([9e235fe](https://gitlab.com/kvasir/kvasir-server/commit/9e235fec5962893962ce8ad2e45c7bb923134e0c)) - Wannes Kerckhove
 
 ---
+
 ## [0.1.1-preview](https://gitlab.com/kvasir/kvasir-server/compare/0.1.0-preview..0.1.1-preview) - 2024-11-19
 
 ### Bug Fixes
@@ -221,6 +234,7 @@ All notable changes to this project will be documented in this file. See [conven
 - fixed prefix name for Clickhouse config - ([421ccf8](https://gitlab.com/kvasir/kvasir-server/commit/421ccf8e51c4b2bd81b2a02cb36f75af858d8521)) - Wannes Kerckhove
 
 ---
+
 ## [0.1.0-preview] - 2024-11-19
 
 ### Bug Fixes
