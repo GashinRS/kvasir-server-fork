@@ -13,12 +13,16 @@ import io.quarkus.security.spi.runtime.BlockingSecurityExecutor
 import io.quarkus.vertx.http.runtime.security.HttpSecurityPolicy
 import io.quarkus.vertx.http.runtime.security.HttpSecurityPolicy.CheckResult
 import io.smallrye.mutiny.Uni
+import io.vertx.core.http.HttpHeaders
 import io.vertx.ext.web.RoutingContext
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Singleton
 import jakarta.ws.rs.NotFoundException
+import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.PodStore
 import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.jboss.resteasy.reactive.server.core.request.AcceptHeaders
+import org.keycloak.common.util.MimeTypeUtil
 import org.keycloak.representations.adapters.config.PolicyEnforcerConfig
 import kotlin.jvm.optionals.getOrNull
 
@@ -102,6 +106,9 @@ class FixedKeycloakPolicyEnforcerAuthorizer(
         identity: Uni<SecurityIdentity>,
         requestContext: HttpSecurityPolicy.AuthorizationRequestContext
     ): Uni<CheckResult> {
+        if (routingContext.parsedHeaders().accept().any{ MediaType.TEXT_HTML == it.value() }) {
+            return CheckResult.permit()
+        }
         return identity.flatMap { identity ->
             if (identity.isAnonymous) {
                 val tenantConfig = routingContext.get<OidcTenantConfig>(OidcTenantConfig::class.java.name)

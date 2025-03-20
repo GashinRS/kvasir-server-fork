@@ -30,6 +30,7 @@ quarkus:
         ~: true
         origins: http://localhost:3000,http://localhost:4200
   kvasir:
+    webclient-uri: http://localhost:4200/_ui
     bootstrap:
       pods:
         - name: alice

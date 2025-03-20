@@ -10,7 +10,9 @@ import io.smallrye.mutiny.Uni
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Context
+import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
+import jakarta.ws.rs.core.UriBuilder
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStore
@@ -19,14 +21,19 @@ import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.utils.s3.S3Utils
+import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import org.jboss.resteasy.reactive.RestResponse
+import java.net.URI
 
 @Tag(name = ApiDocTags.PODS_API)
 @Path((""))
 class PodManagementApi(
     private val podStore: PodStore,
     private val minioClient: MinioAsyncClient,
-    private val uriInfo: UriInfo
+    private val uriInfo: UriInfo,
+    @ConfigProperty(name = "kvasir.webclient-uri")
+    private val webclientUri: URI,
 ) {
 
     @PermitAll
@@ -80,6 +87,19 @@ class PodManagementApi(
         return podStore.getById(podId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transform { it!! }
+    }
+
+    @GET
+    @Consumes(MediaType.TEXT_HTML)
+    @Path("{podId}")
+    fun getHtml(@PathParam("podId") podId: String, @Context uriInfo: UriInfo): Uni<Response> {
+        val fullPodId = uriInfo.absolutePath.toString()
+        return podStore.getById(fullPodId)
+            .onItem().ifNull().failWith(NotFoundException("Pod not found"))
+            .onItem().ifNotNull().transform {
+                val uiUri = UriBuilder.fromUri(webclientUri).path("/force-session/${podId}").build()
+                RestResponse.temporaryRedirect<Void>(uiUri).toResponse()
+            }
     }
 
     @PermitAll
