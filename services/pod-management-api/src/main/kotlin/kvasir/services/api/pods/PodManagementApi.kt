@@ -15,6 +15,7 @@ import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriBuilder
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.Pod
+import kvasir.definitions.kg.PodAuthInitializer
 import kvasir.definitions.kg.PodStore
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
@@ -35,6 +36,7 @@ class PodManagementApi(
     private val uriInfo: UriInfo,
     @ConfigProperty(name = "kvasir.webclient-uri")
     private val webclientUri: Optional<URI>,
+    private val podAuthInitializer: PodAuthInitializer
 ) {
 
     @PermitAll
@@ -47,24 +49,40 @@ class PodManagementApi(
             if (existingPod != null) {
                 Uni.createFrom().item(Response.status(Response.Status.CONFLICT).build())
             } else {
-                podStore.persist(Pod(podId, input.configuration))
+                // Initialize auth config with policy enforcement provider (if no config specified)
+                if (!input.configuration.containsKey(KvasirVocab.authConfiguration)) {
+                    podAuthInitializer.initialize(podId, input.name)
+                } else {
+                    Uni.createFrom().nullItem()
+                }
+                    .chain { authConfig ->
+                        val config =
+                            if (authConfig != null) input.configuration.plus(KvasirVocab.authConfiguration to authConfig) else input.configuration
+                        podStore.persist(Pod(podId, config))
+                    }
                     .chain { _ ->
                         // Initialize a new S3 bucket for the pod
                         Uni.createFrom().completionStage(
                             minioClient.makeBucket(
                                 MakeBucketArgs.builder().bucket(S3Utils.getBucket(podId)).build()
                             )
-                        ).chain { _ ->
-                            // Enable versioning for the bucket
-                            Uni.createFrom().completionStage(
-                                minioClient.setBucketVersioning(
-                                    SetBucketVersioningArgs.builder()
-                                        .bucket(S3Utils.getBucket(podId))
-                                        .config(VersioningConfiguration(VersioningConfiguration.Status.ENABLED, true))
-                                        .build()
+                        )
+                            .chain { _ ->
+                                // Enable versioning for the bucket
+                                Uni.createFrom().completionStage(
+                                    minioClient.setBucketVersioning(
+                                        SetBucketVersioningArgs.builder()
+                                            .bucket(S3Utils.getBucket(podId))
+                                            .config(
+                                                VersioningConfiguration(
+                                                    VersioningConfiguration.Status.ENABLED,
+                                                    true
+                                                )
+                                            )
+                                            .build()
+                                    )
                                 )
-                            )
-                        }
+                            }
                     }
                     .map { Response.created(uriInfo.absolutePathBuilder.path(input.name).build()).build() }
             }
