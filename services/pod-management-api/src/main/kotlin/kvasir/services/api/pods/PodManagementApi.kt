@@ -25,6 +25,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.jboss.resteasy.reactive.RestResponse
 import java.net.URI
+import java.util.Optional
 
 @Tag(name = ApiDocTags.PODS_API)
 @Path((""))
@@ -33,7 +34,7 @@ class PodManagementApi(
     private val minioClient: MinioAsyncClient,
     private val uriInfo: UriInfo,
     @ConfigProperty(name = "kvasir.webclient-uri")
-    private val webclientUri: URI,
+    private val webclientUri: Optional<URI>,
 ) {
 
     @PermitAll
@@ -90,15 +91,19 @@ class PodManagementApi(
     }
 
     @GET
-    @Consumes(MediaType.TEXT_HTML)
+    @Produces(MediaType.TEXT_HTML)
     @Path("{podId}")
     fun getHtml(@PathParam("podId") podId: String, @Context uriInfo: UriInfo): Uni<Response> {
         val fullPodId = uriInfo.absolutePath.toString()
         return podStore.getById(fullPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
-            .onItem().ifNotNull().transform {
-                val uiUri = UriBuilder.fromUri(webclientUri).path("/force-session/${podId}").build()
-                RestResponse.temporaryRedirect<Void>(uiUri).toResponse()
+            .onItem().ifNotNull().transformToUni { item ->
+                if (webclientUri.isPresent) {
+                    val uiUri = UriBuilder.fromUri(webclientUri.get()).path("/force-session/${podId}").build()
+                    Uni.createFrom().item(RestResponse.seeOther<Void>(uiUri).toResponse())
+                } else {
+                    get(podId).map { Response.ok(it, JSON_LD_MEDIA_TYPE).build() }
+                }
             }
     }
 

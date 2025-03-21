@@ -1,6 +1,3 @@
-kvasir:
-  webclient-uri: ${kvasir.base-uri}/_ui
-
 mp:
   messaging:
     outgoing:
