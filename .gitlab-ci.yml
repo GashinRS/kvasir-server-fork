@@ -65,6 +65,7 @@ workflow:
 stages:
   - test
   - package
+  - verify
   - deploy
   - search
 
@@ -120,16 +121,16 @@ package:maven:
     policy: pull-push
   parallel:
     matrix:
-      - KVASIR_PLUGINS__POLICY_AGENT__KEYCLOAK_ENABLED: "true"
-        KVASIR_PLUGINS__POLICY_AGENT__UMA_ENABLED: "false"
+      - KEYCLOAK_POLICY_ENFORCER: "true"
+        UMA_POLICY_ENFORCER: "false"
         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-keycloak
         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_TAG},${IMAGE_ADDITIONAL_TAGS},${IMAGE_ADDITIONAL_TAGS}-keycloak
-      - KVASIR_PLUGINS__POLICY_AGENT__KEYCLOAK_ENABLED: "false"
-        KVASIR_PLUGINS__POLICY_AGENT__UMA_ENABLED: "true"
+      - KEYCLOAK_POLICY_ENFORCER: "false"
+        UMA_POLICY_ENFORCER: "true"
         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-uma
         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-uma
-      - KVASIR_PLUGINS__POLICY_AGENT__KEYCLOAK_ENABLED: "false"
-        KVASIR_PLUGINS__POLICY_AGENT__UMA_ENABLED: "false"
+      - KEYCLOAK_POLICY_ENFORCER: "false"
+        UMA_POLICY_ENFORCER: "false"
         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-noauth
         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-noauth
   rules:
@@ -138,24 +139,12 @@ package:maven:
     - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
   script:
     - ./mvnw $MAVEN_CLI_OPTS -DskipTests install -Dquarkus.container-image.push=true
+        -Dkvasir.plugins.policy-agent.keycloak.enabled=$KEYCLOAK_POLICY_ENFORCER
+        -Dkvasir.plugins.policy-agent.uma.enabled=$UMA_POLICY_ENFORCER
   interruptible: true
   artifacts:
     paths:
       - "**/target/*.jar"
-
-#deploy-cnl:
-#  rules:
-#    - if: '$CI_COMMIT_TAG'
-#    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-#    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
-#    - changes: *mavenChanges
-#  cache: []
-#  stage: deploy
-#  image: dtzar/helm-kubectl:3.15.4
-#  before_script:
-#    - kubectl config view
-#  script:
-#    - kubectl config use-context ibcndevs/clusters:kvasir-cnl
 
 build:writerside:
   needs: [build:maven]
@@ -213,7 +202,7 @@ pages:
   interruptible: false
 
 search:
-  stage: search
+  stage: deploy
   rules:
     # Never run when the ALGOLIA_KEY is not set
     - when: never
@@ -234,7 +223,7 @@ search:
 smoke_test:compose:
   tags: [ "docker" ]
   image: docker
-  stage: deploy
+  stage: verify
   rules:
     - if: '$CI_COMMIT_TAG'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
