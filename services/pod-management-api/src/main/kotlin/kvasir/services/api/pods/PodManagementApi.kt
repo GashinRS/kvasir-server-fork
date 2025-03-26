@@ -8,6 +8,7 @@ import io.minio.messages.VersioningConfiguration
 import io.quarkus.security.PermissionsAllowed
 import io.smallrye.mutiny.Uni
 import jakarta.annotation.security.PermitAll
+import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Context
 import jakarta.ws.rs.core.MediaType
@@ -36,7 +37,7 @@ class PodManagementApi(
     private val uriInfo: UriInfo,
     @ConfigProperty(name = "kvasir.webclient-uri")
     private val webclientUri: Optional<URI>,
-    private val podAuthInitializer: PodAuthInitializer
+    private val podAuthInitializer: Instance<PodAuthInitializer>
 ) {
 
     @PermitAll
@@ -51,7 +52,7 @@ class PodManagementApi(
             } else {
                 // Initialize auth config with policy enforcement provider (if no config specified)
                 if (!input.configuration.containsKey(KvasirVocab.authConfiguration)) {
-                    podAuthInitializer.initialize(podId, input.name)
+                    podAuthInitializer.get().initialize(podId, input.name).map { it }
                 } else {
                     Uni.createFrom().nullItem()
                 }
