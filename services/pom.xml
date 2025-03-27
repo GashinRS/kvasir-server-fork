@@ -80,30 +80,7 @@
 
     <profiles>
         <profile>
-            <id>push-images</id>
-            <activation>
-                <property>
-                    <name>quarkus.container-image.push</name>
-                    <value>true</value>
-                </property>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>${quarkus.platform.group-id}</groupId>
-                        <artifactId>quarkus-maven-plugin</artifactId>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-        <profile>
-            <id>build-images</id>
-            <activation>
-                <property>
-                    <name>quarkus.container-image.build</name>
-                    <value>true</value>
-                </property>
-            </activation>
+            <id>services</id>
             <build>
                 <plugins>
                     <plugin>
