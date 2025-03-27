@@ -90,7 +90,7 @@ build:maven:
       variables:
         SKIP_TESTS: "-DskipTests"
   script:
-    - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Dquarkus.container-image.push=false
+    - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Pservices
   interruptible: true
   after_script:
     - awk -F,
@@ -138,7 +138,8 @@ package:maven:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
   script:
-    - ./mvnw $MAVEN_CLI_OPTS -DskipTests install -Dquarkus.container-image.push=true
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests install -Pservices
+        -Dquarkus.container-image.push=true
         -Dkvasir.plugins.policy-agent.keycloak.enabled=$KEYCLOAK_POLICY_ENFORCER
         -Dkvasir.plugins.policy-agent.uma.enabled=$UMA_POLICY_ENFORCER
   interruptible: true
