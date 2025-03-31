@@ -1,12 +1,15 @@
 package kvasir.utils.graphql
 
 import graphql.language.*
+import graphql.scalars.ExtendedScalars
 import graphql.schema.*
 import graphql.schema.idl.TypeDefinitionRegistry
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
+import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.kg.graphql.KvasirDirectives
 import kvasir.definitions.kg.graphql.KvasirEnums
+import kvasir.definitions.kg.graphql.KvasirTypes
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.cursors.OffsetBasedCursor
 
@@ -36,6 +39,13 @@ fun GraphQLScalarType.rdfDatatype(): String {
     }
 }
 
+/**
+ * Returns true if the type is an interface or union type, otherwise false.
+ */
+fun GraphQLOutputType.isAbstract(): Boolean {
+    return GraphQLTypeUtil.unwrapAll(this).let { it is GraphQLInterfaceType || it is GraphQLUnionType }
+}
+
 fun Field.getPaginationInfo(): Pair<Int, Long> {
     val pageSize = (arguments.find { it.name == "pageSize" }?.value as? IntValue)?.value?.toInt()
         ?: DEFAULT_PAGE_SIZE
@@ -43,6 +53,15 @@ fun Field.getPaginationInfo(): Pair<Int, Long> {
         OffsetBasedCursor.fromString(it)?.offset
     } ?: 0L
     return pageSize to cursor
+}
+
+fun Field.aliasOrName(): String {
+    // Never alias ID (this would mess up a lot of internal logic)
+    return if (this.name == FIELD_ID_NAME) {
+        this.name
+    } else {
+        this.alias ?: this.name
+    }
 }
 
 fun <T> DataFetchingEnvironment.getFromSource(key: String): T? {
@@ -72,29 +91,57 @@ fun <T : Value<*>> GraphQLDirectiveContainer.getDirectiveArg(
     return this.getAppliedDirective(name)?.getArgument(argName)?.argumentValue?.value?.let { it as T }
 }
 
-fun TypeDefinitionRegistry.addKvasirDirectives() {
-    this.addAll(KvasirEnums.all.map { enum ->
+fun TypeDefinitionRegistry.addKvasirBuiltins() {
+    this.add(ScalarTypeDefinition.newScalarTypeDefinition().name("JSON").build())
+    this.addAll(KvasirTypes.all.map { type ->
+        when (type) {
+            is GraphQLInterfaceType -> convertInterface(type)
+            is GraphQLObjectType -> convertObject(type)
+            else -> throw RuntimeException("Kvasir built-in setup does not support '${type::class.simpleName}'")
+        }
+    } + KvasirEnums.all.map { enum ->
         EnumTypeDefinition.newEnumTypeDefinition()
             .name(enum.name)
             .enumValueDefinitions(enum.values.map { enumVal ->
                 EnumValueDefinition.newEnumValueDefinition().name(enumVal.name).build()
             })
             .build()
-    } + KvasirDirectives.all.map { directive ->
-        DirectiveDefinition.newDirectiveDefinition()
-            .name(directive.name)
-            .directiveLocations(
-                directive.validLocations()
-                    .map { location -> DirectiveLocation.newDirectiveLocation().name(location.name).build() })
-            .repeatable(directive.isRepeatable)
-            .inputValueDefinitions(directive.arguments.map { argument ->
-                InputValueDefinition.newInputValueDefinition()
-                    .name(argument.name)
-                    .type(convertType(argument.type))
-                    .build()
-            })
-            .build()
-    })
+    } + KvasirDirectives.all.map { convertDirective(it) })
+}
+
+private fun convertInterface(type: GraphQLInterfaceType): InterfaceTypeDefinition {
+    return InterfaceTypeDefinition.newInterfaceTypeDefinition()
+        .name(type.name)
+        .implementz(type.interfaces.map { TypeName.newTypeName(it.name).build() })
+        .definitions(type.fieldDefinitions.map(::convertField))
+        .build()
+}
+
+private fun convertObject(type: GraphQLObjectType): ObjectTypeDefinition {
+    return ObjectTypeDefinition.newObjectTypeDefinition()
+        .name(type.name)
+        .implementz(type.interfaces.map { TypeName.newTypeName(it.name).build() })
+        .fieldDefinitions(type.fieldDefinitions.map(::convertField))
+        .build()
+}
+
+private fun convertField(field: GraphQLFieldDefinition): FieldDefinition {
+    return FieldDefinition.newFieldDefinition()
+        .name(field.name)
+        .type(convertType(field.type))
+        .inputValueDefinitions(field.arguments.map(::convertArgument))
+        .build()
+}
+
+private fun convertDirective(directive: GraphQLDirective): DirectiveDefinition {
+    return DirectiveDefinition.newDirectiveDefinition()
+        .name(directive.name)
+        .directiveLocations(
+            directive.validLocations()
+                .map { location -> DirectiveLocation.newDirectiveLocation().name(location.name).build() })
+        .repeatable(directive.isRepeatable)
+        .inputValueDefinitions(directive.arguments.map(::convertArgument))
+        .build()
 }
 
 private fun convertType(type: GraphQLType): Type<*> {
@@ -106,4 +153,11 @@ private fun convertType(type: GraphQLType): Type<*> {
         type is GraphQLNamedType -> TypeName.newTypeName().name(type.name).build()
         else -> throw IllegalArgumentException("Unsupported GraphQL type $type")
     }
+}
+
+private fun convertArgument(argument: GraphQLArgument): InputValueDefinition {
+    return InputValueDefinition.newInputValueDefinition()
+        .name(argument.name)
+        .type(convertType(argument.type))
+        .build()
 }

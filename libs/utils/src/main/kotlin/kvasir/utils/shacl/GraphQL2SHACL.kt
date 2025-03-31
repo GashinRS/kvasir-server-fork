@@ -2,12 +2,9 @@ package kvasir.utils.shacl
 
 import graphql.language.IntValue
 import graphql.language.StringValue
-import graphql.schema.GraphQLInputObjectField
-import graphql.schema.GraphQLInputObjectType
-import graphql.schema.GraphQLScalarType
-import graphql.schema.idl.RuntimeWiring
-import graphql.schema.idl.SchemaGenerator
-import graphql.schema.idl.SchemaParser
+import graphql.scalars.ExtendedScalars
+import graphql.schema.*
+import graphql.schema.idl.*
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.utils.graphql.*
@@ -28,8 +25,33 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
     private val shapeDocBaseIri = "kvasir:shapes:${UUID.randomUUID()}:"
 
     private val graphQLSchema = run {
-        typeRegistry.addKvasirDirectives()
-        SchemaGenerator().makeExecutableSchema(typeRegistry, RuntimeWiring.newRuntimeWiring().build())
+        typeRegistry.addKvasirBuiltins()
+        val dynamicWiringFactory = object : WiringFactory {
+
+            override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
+                return DataFetcher { null }
+            }
+
+            override fun providesTypeResolver(environment: InterfaceWiringEnvironment): Boolean {
+                return true
+            }
+
+            override fun getTypeResolver(environment: InterfaceWiringEnvironment): TypeResolver {
+                return RDFClassTypeResolver
+            }
+
+            override fun providesTypeResolver(environment: UnionWiringEnvironment): Boolean {
+                return true
+            }
+
+            override fun getTypeResolver(environment: UnionWiringEnvironment): TypeResolver {
+                return RDFClassTypeResolver
+            }
+
+        }
+        val runtimeWiring =
+            RuntimeWiring.newRuntimeWiring().scalar(ExtendedScalars.Json).wiringFactory(dynamicWiringFactory).build()
+        SchemaGenerator().makeExecutableSchema(typeRegistry, runtimeWiring)
     }
 
     private val typeToShapes = graphQLSchema.allTypesAsList.filterIsInstance<GraphQLInputObjectType>()

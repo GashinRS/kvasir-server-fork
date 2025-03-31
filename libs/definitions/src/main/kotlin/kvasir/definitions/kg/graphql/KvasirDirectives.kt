@@ -75,7 +75,11 @@ object KvasirDirectives {
      */
     val filterDirective =
         GraphQLDirective.newDirective().name(DIRECTIVE_FILTER_NAME)
-            .validLocations(Introspection.DirectiveLocation.FIELD_DEFINITION, Introspection.DirectiveLocation.FIELD)
+            .validLocations(
+                Introspection.DirectiveLocation.FIELD_DEFINITION,
+                Introspection.DirectiveLocation.FIELD,
+                Introspection.DirectiveLocation.INLINE_FRAGMENT
+            )
             .argument(GraphQLArgument.newArgument().name(ARG_IF_NAME).type(GraphQLString).build()).build()
 
     /**

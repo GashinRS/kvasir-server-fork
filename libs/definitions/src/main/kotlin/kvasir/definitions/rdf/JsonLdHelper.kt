@@ -3,6 +3,8 @@ package kvasir.definitions.rdf
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 
+typealias JSONObject = Map<String, Any>
+
 const val JSON_LD_MEDIA_TYPE = "application/ld+json"
 
 object JsonLdKeywords {
@@ -13,15 +15,16 @@ object JsonLdKeywords {
     const val reverse = "@reverse"
     const val language = "@language"
     const val vocab = "@vocab"
+    const val value = "@value"
 }
 
 object JsonLdHelper {
 
-    fun toCompactFQForm(doc: Map<String, Any>, options: JsonLdOptions = JsonLdOptions()): Map<String, Any> {
+    fun toCompactFQForm(doc: JSONObject, options: JsonLdOptions = JsonLdOptions()): Map<String, Any> {
         return JsonLdProcessor.compact(JsonLdProcessor.expand(doc), emptyMap<String, Any>(), options)
     }
 
-    fun compactUri(uri: String, context: Map<String, Any>, separator: String = ":"): String {
+    fun compactUri(uri: String, context: JSONObject, separator: String = ":"): String {
         val compactedString = JsonLdProcessor.compact(mapOf(uri to uri), context, JsonLdOptions())
             .filter { it.key != "@context" }.keys.first()
         return if (compactedString == uri) {
@@ -38,12 +41,32 @@ object JsonLdHelper {
     /**
      * Returns the fully qualified name of a prefixed name. Or null if the name is prefixed but the prefix is unknown.
      */
-    fun getFQName(name: String, context: Map<String, Any>, separator: String = ":"): String? {
+    fun getFQName(name: String, context: JSONObject, separator: String = ":"): String? {
         return if (!name.contains(separator)) {
             name
         } else {
             val (prefix, localName) = name.split(separator, limit = 2)
             context[prefix]?.let { ns -> "$ns$localName" }
+        }
+    }
+}
+
+fun <T> JSONObject.getJsonArray(key: String): List<T>? {
+    return this[key]?.let { result ->
+        when (result) {
+            is List<*> -> result as List<T>
+            is Iterable<*> -> (result as Iterable<T>).toList()
+            else -> throw IllegalArgumentException("Cannot convert value for key '$key' to List, value is: '$result'")
+        }
+    }
+}
+
+fun JSONObject.getJsonObject(key: String): JSONObject? {
+    return this[key]?.let { result ->
+        if (result is Map<*, *>) {
+            result as JSONObject
+        } else {
+            throw IllegalArgumentException("Cannot convert value for key '$key' to Map, value is: '$result'")
         }
     }
 }

@@ -67,6 +67,13 @@ type schema_Person {
 }
 ```
 
+> The Kvasir system types `RDFNode`, `Resource` and `BoxedLiteral` are available to use in your schema. We could e.g.
+> let `schema_Person` implement the `Resource` interface, to access common functionality such as relation discovery.
+> See [](Querying.md#common-supertypes) for more information.
+>
+> (Future revision may automatically extend the provided types with `Resource` as a supertype)
+> {style="tip"}
+
 #### Data restrictions
 
 To further restrict the data retrievable via the Slice, use the [`@filter` directive](Querying.md#filters) similarly to

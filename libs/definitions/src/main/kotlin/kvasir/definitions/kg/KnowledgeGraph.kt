@@ -4,15 +4,12 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
-import graphql.schema.DataFetcher
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.changes.Assertion
-import kvasir.definitions.rdf.JsonLdHelper
-import kvasir.definitions.rdf.JsonLdKeywords
-import kvasir.definitions.rdf.KvasirNamedGraphs
-import kvasir.definitions.rdf.KvasirVocab
+import kvasir.definitions.kg.graphql.*
+import kvasir.definitions.rdf.*
 import java.time.Instant
 
 const val DEFAULT_PAGE_SIZE = 100
@@ -231,28 +228,40 @@ data class QueryResult(
     private fun transform(graphQLData: Any?, context: Map<String, Any>): Any? {
         return when (graphQLData) {
             null -> null
-            is Map<*, *> -> graphQLData.mapKeys { e ->
-                val key = e.key as String
-                if (key == "id") {
-                    return@mapKeys JsonLdKeywords.id
-                }
-                if (key == "__typename") {
-                    return@mapKeys JsonLdKeywords.type
-                }
-                val keyPrefix = key.substringBefore("_")
-                if (context.contains(keyPrefix)) {
-                    key.replaceFirst(keyPrefix.plus("_"), context[keyPrefix] as String)
+            is Map<*, *> -> {
+                val transformedMap = graphQLData
+                    .mapValues { (key, value) ->
+                        if (key == FIELD_TYPENAME_NAME) {
+                            JsonLdHelper.getFQName(value as String, context, "_")
+                        } else {
+                            transform(value!!, context)
+                        }
+                    }
+                    .mapKeys { e ->
+                        val key = e.key as String
+                        if(key == TYPE_RESOURCE) {
+                            return@mapKeys RDFSVocab.Resource
+                        }
+                        if (key == FIELD_ID_NAME) {
+                            return@mapKeys JsonLdKeywords.id
+                        }
+                        if (key == FIELD_TYPES_NAME || key == FIELD_TYPENAME_NAME) {
+                            return@mapKeys JsonLdKeywords.type
+                        }
+                        val keyPrefix = key.substringBefore("_")
+                        if (context.contains(keyPrefix)) {
+                            key.replaceFirst(keyPrefix.plus("_"), context[keyPrefix] as String)
+                        } else {
+                            key
+                        }
+                    }
+                if (transformedMap.containsKey(FIELD_RAW_RDF_NAME)) {
+                    val rawRDF = transformedMap[FIELD_RAW_RDF_NAME] as Map<String, Any>
+                    transformedMap.minus(FIELD_RAW_RDF_NAME).plus(rawRDF)
                 } else {
-                    key
+                    transformedMap
                 }
             }
-                .mapValues { (key, value) ->
-                    if (key == JsonLdKeywords.type) {
-                        JsonLdHelper.getFQName(value as String, context, "_")
-                    } else {
-                        transform(value!!, context)
-                    }
-                }
 
             is Collection<*> -> graphQLData.map { transform(it!!, context) }
 
@@ -318,13 +327,17 @@ data class KGType(
 
 data class KGProperty(
     val uri: String,
-    val kind: KGPropertyKind,
-    val typeRefs: Set<String>
+    val typeRefs: Set<KGTypeReference>
 )
 
 enum class KGPropertyKind {
     Literal, IRI
 }
+
+data class KGTypeReference(
+    val kind: KGPropertyKind,
+    val name: String
+)
 
 data class PagedResult<T>(
     val items: List<T>,

@@ -120,12 +120,16 @@ class KGTypeQuerySpec(database: String) :
     override fun fromRecord(record: ClickhouseRecord): KGType {
         return KGType(
             uri = record.getString(0),
-            properties = record.getJsonArray(1).map { it as JsonArray }.groupBy { it.getString(0) }
+            properties = record.getJsonArray(1).map { it as JsonArray }
+                .groupBy { it.getString(0) }
                 .map { (property, records) ->
                     KGProperty(
                         uri = property,
-                        kind = if (records.any { it.getString(1) == KGPropertyKind.IRI.name }) KGPropertyKind.IRI else KGPropertyKind.Literal,
-                        typeRefs = records.map { it.getString(2) }.toSet()
+                        typeRefs = records.map { record ->
+                            val kind = KGPropertyKind.valueOf(record.getString(1))
+                            val typeName = record.getString(2)
+                            KGTypeReference(kind, typeName)
+                        }.toSet()
                     )
                 }
         )

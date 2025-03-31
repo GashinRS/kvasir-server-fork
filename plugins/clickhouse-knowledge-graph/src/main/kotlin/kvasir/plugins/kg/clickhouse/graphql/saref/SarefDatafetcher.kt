@@ -167,7 +167,11 @@ class TSQLConvertor(
             atTimestamp?.let { "change_request_ts <= '${ClickhouseUtils.convertInstant(it)}'" },
             idFilter?.takeIf { it.isNotEmpty() }?.let { "id IN (${it.joinToString()})" },
             relationFilter?.let { "series_id IN (SELECT series_id FROM $database.$TIME_SERIES_TABLE WHERE label_name_value = '${it.first}=${it.second}')" },
-            getNodeFilter(targetField, targetFieldDefinition)?.let { GraphQLFilterVisitor(context).visitNode(it) },
+            getNodeFilter(
+                targetField,
+                targetFieldDefinition,
+                targetFieldDefinition.type.innerType()
+            )?.let { GraphQLFilterVisitor(context).visitNode(it) },
             getArgsFilter(targetField)?.let { GraphQLFilterVisitor(context).visitNode(it) }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
         // TODO: double select is a workaround for the filter statements to work (these cannot be aggregate expressions). Check if we can clean this up!

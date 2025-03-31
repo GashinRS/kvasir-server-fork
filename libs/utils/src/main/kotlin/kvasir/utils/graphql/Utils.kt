@@ -1,12 +1,15 @@
 package kvasir.utils.graphql
 
+import graphql.TypeResolutionEnvironment
 import graphql.language.Field
 import graphql.language.StringValue
 import graphql.schema.GraphQLDirectiveContainer
-import kvasir.definitions.kg.graphql.ARG_IRI_NAME
-import kvasir.definitions.kg.graphql.DIRECTIVE_CLASS_NAME
-import kvasir.definitions.kg.graphql.DIRECTIVE_PREDICATE_NAME
+import graphql.schema.GraphQLObjectType
+import graphql.schema.TypeResolver
+import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.getJsonArray
+import kvasir.utils.json.convertToJsonMap
 
 fun getFQName(node: GraphQLDirectiveContainer, context: Map<String, Any>): String {
     return JsonLdHelper.getFQName(node.name, context, "_")?.takeIf { it != node.name }
@@ -24,4 +27,28 @@ fun getFQName(field: Field, context: Map<String, Any>): String {
                 ?: field.getDirectiveArg<StringValue>(DIRECTIVE_CLASS_NAME, ARG_IRI_NAME)?.value
                     ?.let { JsonLdHelper.getFQName(it, context) ?: it }
         } ?: throw IllegalArgumentException("No semantic context found for ${field.name}")
+}
+
+object RDFClassTypeResolver : TypeResolver {
+    override fun getType(env: TypeResolutionEnvironment): GraphQLObjectType {
+        val target = convertToJsonMap(env.getObject())
+        return (target[FIELD_TYPENAME_NAME] as String?)?.let {
+            env.schema.getObjectType(it)
+        } ?: run {
+            // When no explicit __typename was set, use the _types field to access the RDF classes for this instance and select the first entry
+            val fqClassNames = target.getJsonArray<String>(FIELD_TYPES_NAME) ?: emptyList()
+            if (fqClassNames.isNotEmpty()) {
+                val fqClassName = fqClassNames.min()
+                env.schema.allTypesAsList.filterIsInstance<GraphQLObjectType>().find { objectType ->
+                    objectType.getDirectiveArg<StringValue>(
+                        DIRECTIVE_CLASS_NAME,
+                        ARG_IRI_NAME
+                    )?.value == fqClassName
+                } ?: KvasirTypes.BoxedLiteral
+            } else {
+                // Default to BoxedLiteral
+                KvasirTypes.BoxedLiteral
+            }
+        }
+    }
 }

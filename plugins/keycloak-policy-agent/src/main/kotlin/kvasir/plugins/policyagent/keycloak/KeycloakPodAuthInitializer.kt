@@ -34,7 +34,12 @@ private const val DEFAULT_PERMISSION_NAME = "Default Permission"
 class KeycloakPodAuthInitializer(
     private val vertx: Vertx,
     @ConfigProperty(name = "quarkus.oidc.auth-server-url")
-    defaultRealmUri: String
+    defaultRealmUri: String,
+    @ConfigProperty(
+        name = "kvasir.plugins.policy-agent.keycloak.realm-initializer.request-password-reset",
+        defaultValue = "true"
+    )
+    private val requestPasswordReset: Boolean
 ) : PodAuthInitializer {
 
     private val SSO_IDLE_LIFESPAN = Duration.parse("2h").inWholeSeconds.toInt();
@@ -89,7 +94,7 @@ class KeycloakPodAuthInitializer(
             this.lastName = "Demo"
             this.credentials = listOf(
                 CredentialRepresentation().apply {
-                    this.isTemporary = true;
+                    this.isTemporary = requestPasswordReset
                     this.type = "password"
                     this.value = podName.lowercase()
                     this.userLabel = "Password"

@@ -12,8 +12,10 @@ import kvasir.definitions.kg.changes.ChangeHistoryRequest
 import kvasir.definitions.rdf.RDFMediaTypes
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import io.restassured.RestAssured.given
+import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.rdf.JSONObject
 import java.time.Duration
 import kotlin.math.roundToLong
 
@@ -36,6 +38,22 @@ class TestHelpers(
 
     fun getPodUri(podId: String = TestConstants.TEST_POD_1_ID): String {
         return "${baseUri.removeSuffix("/")}/$podId"
+    }
+
+    fun queryKGViaHTTP(
+        q: Any,
+        podUri: String = getPodUri(TestConstants.TEST_POD_1_ID),
+        context: JSONObject? = null,
+        sliceUri: String? = null
+    ): QueryResult {
+        val requestUri = "${sliceUri ?: podUri}/query"
+        return given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(q)
+            .post(requestUri)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
     }
 
     /**

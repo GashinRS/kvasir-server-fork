@@ -7,7 +7,7 @@ object SchemaValidator {
 
     fun validateSchema(schema: String, context: Map<String, Any>) {
         val parsedSchema = SchemaParser().parse(schema)
-        parsedSchema.addKvasirDirectives()
+        parsedSchema.addKvasirBuiltins()
         val checkContextVisitor = CheckContextVisitor(context)
         parsedSchema.types().forEach { (_, type) ->
             AstTransformer().transform(type, checkContextVisitor)

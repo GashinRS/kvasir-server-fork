@@ -10,17 +10,16 @@ import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryResult
-import kvasir.definitions.kg.graphql.FIELD_ID_NAME
+import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.*
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.test.clickhouse.ClickhouseTestResource
 import kvasir.utils.test.commons.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import java.util.Comparator
 
 @QuarkusTest
 @TestHTTPEndpoint(QueryApi::class)
@@ -250,7 +249,6 @@ class QueryApiTest {
     }
 
     @Test
-    @Order(7)
     fun testTravelInverse() {
         val parentPerson = personData.random()
         val children = personData.shuffled().filter { it[JsonLdKeywords.id] != parentPerson[JsonLdKeywords.id] }.take(3)
@@ -369,6 +367,98 @@ class QueryApiTest {
             children.map { it[JsonLdKeywords.id] }.toSet(),
             retrievedChildIds.map { it[FIELD_ID_NAME] }.toSet()
         )
+    }
+
+    @Test
+    fun testSystemFields() {
+        // Use Resource entrypoint to find all resources and their associated types
+        var q = QueryInputWithContext(
+            """
+            {
+              Resource {
+                id
+                _types
+              }
+            }
+        """.trimIndent(), providedContext = TestConstants.CONTEXT
+        )
+
+        var result = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(q)
+            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        var returnedResources = result.getDataField<List<Map<String, Any>>>("Resource")!!
+        assertEquals(
+            personData.map { it[JsonLdKeywords.id] }.toSet(),
+            returnedResources.map { it[FIELD_ID_NAME] }.toSet()
+        )
+        assertTrue(returnedResources.all { it[FIELD_TYPES_NAME] == listOf(ExampleVocab.Person) })
+
+        // Use dynamic fields such as _relations, _predicates and _object without referencing a specific type
+        val selectedPerson = personData.random()
+        q = q.copy(
+            query = """
+            {
+              Resource(id: "${selectedPerson[JsonLdKeywords.id]}") {
+                id
+                _relations(id: "${ExampleVocab.Person}")
+                _predicates
+                _object(predicate: "${SchemaVocab.givenName}") {
+                    _rawRDF
+                }
+              }
+            }
+        """.trimIndent()
+        )
+
+        result = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(q)
+            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        var returnedResource = result.getDataField<List<Map<String, Any>>>("Resource")!!.first()
+        assertEquals(selectedPerson[JsonLdKeywords.id], returnedResource[FIELD_ID_NAME])
+        assertEquals(listOf(RDFVocab.type), returnedResource[FIELD_RELATIONS_NAME])
+        assertEquals(
+            setOf(RDFVocab.type, SchemaVocab.givenName, SchemaVocab.familyName, SchemaVocab.email),
+            (returnedResource[FIELD_PREDICATES_NAME] as List<Any>).toSet()
+        )
+        assertEquals(
+            mapOf(
+                JsonLdKeywords.value to selectedPerson[SchemaVocab.givenName],
+                JsonLdKeywords.type to XSDVocab.string
+            ),
+            (returnedResource[FIELD_OBJECT_NAME] as List<Map<String, Any>>).first()[FIELD_RAW_RDF_NAME]
+        )
+
+        // Use an inline Fragment to access a Person via Resource
+        q = q.copy(
+            """
+            {
+              Resource(id: "${selectedPerson[JsonLdKeywords.id]}") {
+                id
+                ... on ex_Person {
+                  so_givenName
+                }
+              }
+            }
+        """.trimIndent()
+        )
+        result = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(q)
+            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        returnedResource = result.getDataField<List<Map<String, Any>>>("Resource")!!.first()
+        assertEquals(selectedPerson[JsonLdKeywords.id], returnedResource[FIELD_ID_NAME])
+        assertEquals(listOf(selectedPerson[SchemaVocab.givenName]), returnedResource["so_givenName"])
     }
 
 }
