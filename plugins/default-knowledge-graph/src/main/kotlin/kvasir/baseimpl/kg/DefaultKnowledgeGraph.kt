@@ -3,17 +3,13 @@ package kvasir.baseimpl.kg
 import graphql.ExecutionInput
 import graphql.ExecutionResult
 import graphql.GraphQL
-import graphql.GraphqlErrorHelper
-import graphql.TypeResolutionEnvironment
 import graphql.execution.AbortExecutionException
 import graphql.execution.SubscriptionExecutionStrategy
 import graphql.language.AstPrinter
 import graphql.parser.Parser
+import graphql.scalars.ExtendedScalars
 import graphql.schema.*
-import graphql.schema.idl.FieldWiringEnvironment
-import graphql.schema.idl.RuntimeWiring
-import graphql.schema.idl.SchemaParser
-import graphql.schema.idl.WiringFactory
+import graphql.schema.idl.*
 import io.quarkus.logging.Log
 import io.smallrye.config.ConfigMapping
 import io.smallrye.config.WithDefault
@@ -27,13 +23,14 @@ import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.*
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
+import kvasir.definitions.kg.graphql.KvasirTypes
 import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.kg.graphql.TYPE_SUBSCRIPTION
 import kvasir.definitions.messaging.Channels
-import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.reactive.skipToLast
 import kvasir.utils.cursors.OffsetBasedCursor
-import kvasir.utils.graphql.addKvasirDirectives
+import kvasir.utils.graphql.RDFClassTypeResolver
+import kvasir.utils.graphql.addKvasirBuiltins
 import kvasir.utils.graphql.getStorageClass
 import kvasir.utils.idgen.ChangeRequestId
 import mutiny.zero.flow.adapters.AdaptersToFlow
@@ -156,12 +153,8 @@ class DefaultKnowledgeGraph(
                     val codeRegistry =
                         GraphQLCodeRegistry.newCodeRegistry()
                             .defaultDataFetcher { _ -> buildDatafetcher(request, atTimestamp) }
-                    generatedSchema.unionTypes.forEach { unionType ->
-                        codeRegistry.typeResolver(
-                            unionType,
-                            RDFClassTypeResolver(request.context)
-                        )
-                    }
+                    codeRegistry.typeResolver(KvasirTypes.Resource, RDFClassTypeResolver)
+                    codeRegistry.typeResolver(KvasirTypes.RDFNode, RDFClassTypeResolver)
                     generatedSchema.schemaBuilder.codeRegistry(codeRegistry.build()).build()
                 }
         }
@@ -263,17 +256,33 @@ class DefaultKnowledgeGraph(
         return getRequestedStateAtTimestamp(request)
             .map { atTimestamp ->
                 val typeDefinitionRegistry = SchemaParser().parse(request.predefinedSchema)
-                typeDefinitionRegistry.addKvasirDirectives()
+                typeDefinitionRegistry.addKvasirBuiltins()
                 val dynamicWiringFactory = object : WiringFactory {
 
                     override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
                         return buildDatafetcher(request, atTimestamp)
                     }
 
-                    // TODO: provide type resolvers for union and interface types
+                    override fun providesTypeResolver(environment: InterfaceWiringEnvironment): Boolean {
+                        return true
+                    }
+
+                    override fun getTypeResolver(environment: InterfaceWiringEnvironment): TypeResolver {
+                        return RDFClassTypeResolver
+                    }
+
+                    override fun providesTypeResolver(environment: UnionWiringEnvironment): Boolean {
+                        return true
+                    }
+
+                    override fun getTypeResolver(environment: UnionWiringEnvironment): TypeResolver {
+                        return RDFClassTypeResolver
+                    }
 
                 }
-                val runtimeWiring = RuntimeWiring.newRuntimeWiring().wiringFactory(dynamicWiringFactory).build()
+                val runtimeWiring =
+                    RuntimeWiring.newRuntimeWiring().scalar(ExtendedScalars.Json).wiringFactory(dynamicWiringFactory)
+                        .build()
                 val executableSchema =
                     graphql.schema.idl.SchemaGenerator().makeExecutableSchema(typeDefinitionRegistry, runtimeWiring)
                 executableSchema
@@ -395,15 +404,3 @@ class DefaultKnowledgeGraph(
     }
 
 }
-
-class RDFClassTypeResolver(private val context: Map<String, Any>) : TypeResolver {
-    override fun getType(env: TypeResolutionEnvironment): GraphQLObjectType {
-        val target = env.getObject<Target>()
-        // TODO: Implement type resolution, for now just return the first type in the list
-        val prefixedTypeName = JsonLdHelper.compactUri(target.types.first(), context, "_")
-        return env.schema.getObjectType(prefixedTypeName)
-    }
-}
-
-data class Target(val id: String, val types: List<String>)
-

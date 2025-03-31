@@ -226,3 +226,68 @@ Returns:
   }
 }
 ```
+
+### Limitations
+
+The SAREF implementation serves as a proof-of-concept for a feature set that could be expanded upon in future revisions.
+The current framework offers a clear method for transforming and directing data to the appropriate storage backends.
+However, integrating multiple storage backends into a unified querying mechanism using GraphQL is more complex.
+Currently, there are some abstractions in place that help extend the generic GraphQL query resolver, allowing for the
+reuse of much of the base functionality. Nevertheless, there are certain limitations:
+
+E.g. filter statements on fields that cross the boundaries of storage backends, may not always work as expected.
+
+For example:
+
+```GraphQL
+{
+  saref_Measurement {
+    id
+    saref_hasTimestamp
+    saref_hasValue
+    saref_measurementMadeBy {
+      id @filter(if: "it==ex:Sensor1")
+      rdfs_label
+    }
+  }
+}
+```
+
+Will not return the desired result of having a list of measurements, limited to the ones produced by `ex:Sensor1`. This
+because the filter will only be processed after the TSDB storage backend was queried, having no impact on the result.
+Similarly, it would not be possible to filter on label, as this data is not available in the TSDB.
+
+To filter by sensor, you could however write:
+
+```GraphQL
+{
+  saref_Measurement {
+    id
+    saref_hasTimestamp
+    saref_hasValue
+    saref_measurementMadeBy @filter(if: "it==ex:Sensor1") {
+      id
+      rdfs_label
+    }
+  }
+}
+```
+
+Or:
+
+```GraphQL
+{
+  saref_Measurement(saref_measurementMadeBy: "ex:Sensor1") {
+    id
+    saref_hasTimestamp
+    saref_hasValue
+    saref_measurementMadeBy {
+      id
+      rdfs_label
+    }
+  }
+}
+```
+
+Note that the initial example not working, does not mean this cannot be done, but it is not a priority for us in the
+current scope.

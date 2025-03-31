@@ -1,19 +1,9 @@
 package kvasir.utils.graphql
 
-import graphql.language.Argument
-import graphql.language.Directive
-import graphql.language.FieldDefinition
-import graphql.language.NamedNode
-import graphql.language.Node
-import graphql.language.NodeVisitorStub
-import graphql.language.StringValue
-import graphql.language.TypeDefinition
+import graphql.language.*
 import graphql.util.TraversalControl
 import graphql.util.TraverserContext
-import kvasir.definitions.kg.graphql.ENUM_TRIGGER_TYPE_NAME
-import kvasir.definitions.kg.graphql.TYPE_MUTATION
-import kvasir.definitions.kg.graphql.TYPE_QUERY
-import kvasir.definitions.kg.graphql.TYPE_SUBSCRIPTION
+import kvasir.definitions.kg.graphql.*
 
 abstract class KvasirNodeVisitor(protected val providedContext: Map<String, Any>) : NodeVisitorStub() {
 
@@ -35,7 +25,7 @@ abstract class KvasirNodeVisitor(protected val providedContext: Map<String, Any>
 class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor(providedContext) {
 
     companion object {
-        val IGNORE_TYPES = setOf(TYPE_QUERY, TYPE_MUTATION, TYPE_SUBSCRIPTION, ENUM_TRIGGER_TYPE_NAME)
+        val IGNORE_TYPES = setOf(TYPE_QUERY, TYPE_MUTATION, TYPE_SUBSCRIPTION, ENUM_TRIGGER_TYPE_NAME, TYPE_RDF_NODE, TYPE_RESOURCE, TYPE_BOXED_LITERAL)
     }
 
     override fun visitTypeDefinition(

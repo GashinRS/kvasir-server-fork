@@ -30,6 +30,11 @@ quarkus:
         ~: true
         origins: http://localhost:3000,http://localhost:4200
   kvasir:
+    plugins:
+      policy-agent:
+        keycloak:
+          realm-initializer:
+            request-password-reset: false
     webclient-uri: http://localhost:4200/_ui
     bootstrap:
       pods:

@@ -7,6 +7,7 @@ import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
 import graphql.language.*
 import graphql.schema.*
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
@@ -24,7 +25,9 @@ import kvasir.plugins.kg.clickhouse.specs.SORT_COLUMNS
 import kvasir.plugins.kg.clickhouse.utils.ClickhouseUtils
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
 import kvasir.utils.graphql.*
+import kvasir.utils.json.convertToJsonMap
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
 
 @ApplicationScoped
 class ConvertToSQLResolver(
@@ -39,29 +42,9 @@ class ConvertToSQLResolver(
         return DataFetcher<Any> { env ->
             val databaseName = databaseFromPodId(podId)
             val returnList = env.fieldDefinition.type.isList()
-            if (env.executionStepInfo.path.parent.isRootPath) {
-                // Handle entrypoints
-                val sqlConvertor = SQLConvertor(
-                    context,
-                    atTimestamp,
-                    databaseName,
-                    DATA_TABLE,
-                    env.field,
-                    env.fieldDefinition,
-                    env
-                )
-                val (sql, columns) = sqlConvertor.toSQL()
-                clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
-                    .map { result ->
-                        result.map { instance -> instance.mapKeys { e -> e.key.removePrefix("_") } }
-                    }
-            } else {
-                val value = env.getFromSource<Any>(env.fieldDefinition.name)
-
-                // When the query expects a complex object, but only an id is provided (e.g. by a different storage backend)...
-                if (!isResultComplete(env, value)) {
-                    //... then the object should be loaded using a query
-                    // TODO: optimize using data loaders
+            try {
+                (if (env.executionStepInfo.path.parent.isRootPath) {
+                    // Handle entrypoints
                     val sqlConvertor = SQLConvertor(
                         context,
                         atTimestamp,
@@ -69,30 +52,86 @@ class ConvertToSQLResolver(
                         DATA_TABLE,
                         env.field,
                         env.fieldDefinition,
-                        env,
-                        mode = SQLConvertorMode.GET_DATA,
-                        (if (value is Iterable<*>) value else listOf(value)).map {
-                            it as Map<String, Any>
-                            it[FIELD_ID_NAME] as String
-                        }
+                        env
                     )
                     val (sql, columns) = sqlConvertor.toSQL()
                     clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
                         .map { result ->
-                            result.map { instance -> instance.mapKeys { e -> e.key.removePrefix("_") } }
+                            val instances = result.map { instance -> instance.mapKeys { e -> e.key.removePrefix("_") } }
+                            if (env.fieldType.isAbstract()) handleFragments(env, instances, context) else instances
                         }
+                } else if (env.fieldType.isAbstract()) {
+                    val target = env.getFromSource<Iterable<Any>>(env.field.aliasOrName())!!
+                    Uni.createFrom().item(handleFragments(env, target, context))
+                } else if (env.field.name == "_rawRDF") {
+                    val record =
+                        (env.getFromSource<Iterable<Any>>(env.field.aliasOrName())!!.first() as Iterable<Any>).toList()
+                    val rawValue = record[0]
+                    val datatype = (record[1] as String).takeIf { it.isNotBlank() }
+                    Uni.createFrom().item(
+                        when {
+                            datatype != null -> mapOf(JsonLdKeywords.value to rawValue, JsonLdKeywords.type to datatype)
+                            else -> mapOf(JsonLdKeywords.id to rawValue)
+                        }
+                    )
                 } else {
-                    Uni.createFrom().item(value)
-                }
-            }.map { output ->
-                when {
-                    output is Iterable<*> && returnList -> output.filterNotNull()
-                    output is Iterable<*> -> output.firstOrNull()
-                    returnList -> listOf(output)
-                    else -> output
-                }
-            }.convert().toCompletionStage()
+                    val value = env.getFromSource<Any>(env.field.aliasOrName())
+
+                    // When the query expects a complex object, but only an id is provided (e.g. by a different storage backend)...
+                    if (!isResultComplete(env, value)) {
+                        //... then the object should be loaded using a query
+                        // TODO: optimize using data loaders
+                        val sqlConvertor = SQLConvertor(
+                            context,
+                            atTimestamp,
+                            databaseName,
+                            DATA_TABLE,
+                            env.field,
+                            env.fieldDefinition,
+                            env,
+                            mode = SQLConvertorMode.GET_DATA,
+                            (if (value is Iterable<*>) value else listOf(value)).map {
+                                it as Map<String, Any>
+                                it[FIELD_ID_NAME] as String
+                            }
+                        )
+                        val (sql, columns) = sqlConvertor.toSQL()
+                        clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
+                            .map { result ->
+                                result.map { instance -> instance.mapKeys { e -> e.key.removePrefix("_") } }
+                            }
+                    } else {
+                        Uni.createFrom().item(value)
+                    }
+                }).map { output ->
+                    when {
+                        output is Iterable<*> && returnList -> output.filterNotNull()
+                        output is Iterable<*> -> output.firstOrNull()
+                        returnList -> listOf(output)
+                        else -> output
+                    }
+                }.convert().toCompletionStage()
+            } catch (err: Throwable) {
+                Log.warn("Error while resolving GraphQL query.", err)
+                CompletableFuture.failedStage<Any>(err)
+            }
         }
+    }
+
+    private fun handleFragments(env: DataFetchingEnvironment, value: Any?, context: Map<String, Any>): Any {
+        val target = if (value is Iterable<*>) value else listOf(value)
+        val result = target.filterNotNull().map { result ->
+            val obj = convertToJsonMap(result)
+
+            val selectedFragment = obj.keys.sorted().firstOrNull { it.startsWith("__fragment_") }
+                ?.let { fragmentKey -> obj[fragmentKey] as Iterable<Any> }?.first()
+            if (selectedFragment != null) {
+                obj.filterNot { it.key.startsWith("__fragment") }.plus(convertToJsonMap(selectedFragment))
+            } else {
+                obj
+            }
+        }
+        return result
     }
 
     private fun isResultComplete(env: DataFetchingEnvironment, value: Any?): Boolean {
@@ -104,7 +143,8 @@ class ConvertToSQLResolver(
                     else -> emptyMap()
                 }
                 // Check if all attributes are accounted
-                val selectedFields = env.field.selectionSet.selections.filterIsInstance<Field>().map { f -> f.name }
+                val selectedFields =
+                    env.field.selectionSet.selections.filterIsInstance<Field>().map { f -> f.aliasOrName() }
                 valueMap.keys.containsAll(selectedFields)
             }
         } else {
@@ -154,7 +194,7 @@ open class SQLConvertor(
         val whereClause = listOfNotNull(
             targetGraphFilterNode,
             getFQName(outputType, context).takeIf { it != RDFSVocab.Resource }?.let { typeFilter(listOf(it)) },
-            getNodeFilter(targetField, targetFieldDefinition),
+            getNodeFilter(targetField, targetFieldDefinition, targetFieldDefinition.type.innerType()),
             getArgsFilter(targetField),
             subjectSelectors?.let { ComparisonNode(RSQLOperators.IN, "id", it) }
         ).takeIf { it.isNotEmpty() }?.let { if (it.size == 1) it.first() else AndNode(it) }
@@ -170,15 +210,15 @@ open class SQLConvertor(
             } ?: ""
         val (nestedFields) = getNestedFields(
             targetField,
-            GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLFieldsContainer,
+            targetFieldDefinition,
             idField
         )
         val projection =
             (
                     listOf("subject AS $idField") + nestedFields.map {
-                        val baseFieldProj = "arrayDistinct(ARRAY_AGG(${it.field.name}))"
-                        (if (it.field.selectionSet != null) "arrayFilter(x -> notEmpty(x), $baseFieldProj)" else baseFieldProj)
-                            .plus(" AS _${it.field.name}")
+                        val baseFieldProj = "arrayDistinct(ARRAY_AGG(${it.fieldName}))"
+                        (if (it.nested) "arrayFilter(x -> notEmpty(x), $baseFieldProj)" else baseFieldProj)
+                            .plus(" AS _${it.fieldName}")
                     }
                     ).joinToString()
         return when (mode) {
@@ -187,7 +227,7 @@ open class SQLConvertor(
                     "SELECT $projection FROM $tableRef ${
                         nestedFields.joinToString(" ") { it.joinStatement }
                     } $whereClause GROUP BY subject $orderBy LIMIT $offset, $pageSize",
-                    listOf(idField) + nestedFields.map { "_${it.field.name}" }
+                    listOf(idField) + nestedFields.map { "_${it.fieldName}" }
                 )
             }
 
@@ -211,19 +251,49 @@ open class SQLConvertor(
 
     fun scalarFieldJoinStatement(
         field: Field,
-        fieldDefinition: GraphQLFieldDefinition,
-        parentJoinField: String
+        fieldDefinition: GraphQLFieldDefinition?,
+        parentJoinField: String,
+        overrideJoinType: String? = null
     ): String {
-        val name = field.name
+        val name = field.aliasOrName()
         val (pageSize, offset) = field.getPaginationInfo()
         val joinField = "${name}_holder"
+
+        // Implement Handling for special scalar fields e.g. _types, _relations, _predicates
+        val (targetFilter, targetSelector) = when (field.name) {
+            FIELD_TYPES_NAME -> "predicate = '${RDFVocab.type}'" to "object"
+            FIELD_RELATIONS_NAME -> {
+                val idFilter = getArgsFilter(field)?.let {
+                    val expr = GraphQLFilterVisitor(context).visitNode(
+                        SelectorReplacingFilterVisitor(
+                            "id",
+                            "object"
+                        ).visitNode(it)
+                    )
+                    " AND $expr"
+                } ?: ""
+                "datatype = '' and language = ''$idFilter" to "predicate"
+            }
+
+            FIELD_PREDICATES_NAME -> {
+                null to "predicate"
+            }
+
+            else -> {
+                // Normal behaviour: filter by predicate
+                val predicate = getPredicateForField(field, fieldDefinition!!)
+                "predicate = '$predicate'" to "object"
+            }
+        }
+
         val whereClause = listOfNotNull(
             targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
-            "predicate = '${getFQName(fieldDefinition, context)}'",
+            targetFilter,
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             context[JsonLdKeywords.language]?.let { "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
-        return "${getJoinType(field)} (SELECT subject AS $joinField, object AS $name FROM $tableRef $whereClause GROUP BY ${
+        val joinType = overrideJoinType ?: getJoinType(field)
+        return "$joinType (SELECT subject AS $joinField, $targetSelector AS $name FROM $tableRef $whereClause GROUP BY ${
             SORT_COLUMNS.joinToString(
                 prefix = "(",
                 postfix = ")"
@@ -231,27 +301,62 @@ open class SQLConvertor(
         } $COLLAPSE_STATE_EXPR LIMIT $offset, $pageSize BY subject) ${name}_join ON $parentJoinField = $joinField"
     }
 
+    fun rawRDFFieldJoinStatement(
+        parentField: Field,
+        parentFieldDefinition: GraphQLFieldDefinition,
+        parentJoinField: String
+    ): String {
+        val name = "_rawRDF"
+        val (pageSize, offset) = parentField.getPaginationInfo()
+        val reverse = parentFieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
+            ?.getValue<Boolean>() ?: false
+        val joinFieldName = "${name}_holder"
+        val selector = if (parentJoinField == "_id") {
+            // Select by type
+            val fqType = getFQName(parentField, context)
+            "(predicate = '${RDFVocab.type}' AND object = '$fqType')"
+        } else {
+            // Select by predicate
+            "predicate = '${getPredicateForField(parentField, parentFieldDefinition)}'"
+        }
+        val whereClause = listOfNotNull(
+            targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
+            selector,
+            atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" }
+        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
+
+        val joinField = "${if (reverse) "object" else "subject"} AS $joinFieldName"
+        val valueExpr = "${if (reverse) "[subject, '', '']" else "[object, datatype, language]"} AS $name"
+        return "${getJoinType(parentField)} (SELECT $joinField, $valueExpr FROM $tableRef $whereClause GROUP BY ${
+            (if (reverse) REVERSED_SORT_COLUMNS else SORT_COLUMNS).joinToString(
+                prefix = "(",
+                postfix = ")"
+            )
+        } $COLLAPSE_STATE_EXPR LIMIT $offset, $pageSize BY ${if (reverse) "object" else "subject"}) ${name}_join ON $parentJoinField = $joinFieldName"
+    }
+
     fun relationFieldJoinStatement(
         field: Field,
         fieldDefinition: GraphQLFieldDefinition,
         parentJoinField: String
     ): String {
-        val name = field.name
-        val reverse = fieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME).getArgument(ARG_REVERSE_NAME)
-            .getValue<Boolean>()
+        val name = field.aliasOrName()
+        val outputType = fieldDefinition.type.innerType<GraphQLFieldsContainer>()
+        val reverse = fieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
+            ?.getValue<Boolean>() ?: false
         val (pageSize, offset) = field.getPaginationInfo()
         val joinFieldName = "${name}_holder"
         val (nestedFields) = getNestedFields(
             field,
-            GraphQLTypeUtil.unwrapAll(fieldDefinition.type) as GraphQLFieldsContainer,
+            fieldDefinition,
             if (reverse) "subject" else "object"
         )
         val orderBy = orderByStatement(field, "$name['", "']")
         val whereClause = listOfNotNull(
             targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
-            "predicate = '${getFQName(fieldDefinition, context)}'",
+            "predicate = '${getPredicateForField(field, fieldDefinition)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
-            getNodeFilter(field, fieldDefinition)?.let { GraphQLFilterVisitor(context).visitNode(it) },
+            getNodeFilter(field, fieldDefinition, outputType)?.let { GraphQLFilterVisitor(context).visitNode(it) },
             getArgsFilter(field)?.let {
                 GraphQLFilterVisitor(context).visitNode(
                     SelectorReplacingFilterVisitor(
@@ -265,7 +370,7 @@ open class SQLConvertor(
         val mappedFields =
             (listOf(
                 "'id'" to if (reverse) "subject::Dynamic" else "object"
-            ) + nestedFields.map { "'${it.field.name}'" to "arrayDistinct(ARRAY_AGG(${it.field.name}))" })
+            ) + nestedFields.map { "'${it.fieldName}'" to "arrayDistinct(ARRAY_AGG(${it.fieldName}))" })
                 .joinToString { (a, b) -> "$a,$b" }
         val joinField = "${if (reverse) "object" else "subject"} AS $joinFieldName"
         return "${getJoinType(field)} (SELECT $joinField, map($mappedFields) as $name FROM $tableRef ${
@@ -276,6 +381,56 @@ open class SQLConvertor(
                 postfix = ")"
             )
         } $COLLAPSE_STATE_EXPR $orderBy LIMIT $offset, $pageSize BY ${if (reverse) "object" else "subject"}) ${name}_join ON $parentJoinField = $joinFieldName"
+    }
+
+    fun fragmentJoinStatement(
+        fragment: InlineFragment,
+        parentField: Field,
+        parentFieldDefinition: GraphQLFieldDefinition,
+        parentJoinField: String
+    ): String {
+        val name = "__fragment_${fragment.typeCondition.name}"
+        val outputType: GraphQLFieldsContainer = env.graphQLSchema.getTypeAs(fragment.typeCondition.name)
+        val joinFieldName = "${name}_holder"
+        val (pageSize, offset) = parentField.getPaginationInfo()
+        val (nestedFields) = getNestedFields(
+            fragment,
+            parentFieldDefinition,
+            "subject",
+            outputType,
+            false
+        )
+        val orderBy = orderByStatement(parentField, "$name['", "']")
+        val whereClause = listOfNotNull(
+            "subject IN (SELECT subject FROM $tableRef WHERE predicate = '${RDFVocab.type}' AND object = '${
+                getFQName(
+                    fragment.typeCondition.name
+                )
+            }')",
+            targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
+            atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
+            getNodeFilter(
+                fragment,
+                parentFieldDefinition,
+                outputType
+            )?.let { GraphQLFilterVisitor(context).visitNode(it) }
+        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
+
+        val mappedFields =
+            (listOf(
+                "'id'" to "subject::Dynamic",
+                "'__typename'" to "'${fragment.typeCondition.name}'"
+            ) + nestedFields.map { "'${it.fieldName}'" to "arrayDistinct(ARRAY_AGG(${it.fieldName}))" })
+                .joinToString { (a, b) -> "$a,$b" }
+        val joinField = "subject AS $joinFieldName"
+        return "JOIN (SELECT $joinField, map($mappedFields) as $name FROM $tableRef ${
+            nestedFields.joinToString(" ") { it.joinStatement }
+        } $whereClause GROUP BY ${
+            SORT_COLUMNS.joinToString(
+                prefix = "(",
+                postfix = ")"
+            )
+        } $COLLAPSE_STATE_EXPR $orderBy LIMIT $offset, $pageSize BY subject) ${name}_join ON $parentJoinField = $joinFieldName"
     }
 
     protected fun getTargetGraphs(): List<String>? {
@@ -305,96 +460,128 @@ open class SQLConvertor(
         } ?: ""
     }
 
-    protected fun getJoinType(field: Field): String =
+    protected fun getJoinType(field: DirectivesContainer<*>): String =
         if (field.hasDirective(KvasirDirectives.optionalDirective.name)) "LEFT JOIN" else "JOIN"
 
     protected fun getNestedFields(
-        field: Field,
-        outputDefinition: GraphQLFieldsContainer,
-        parentJoinField: String
+        field: SelectionSetContainer<*>,
+        fieldDefinition: GraphQLFieldDefinition,
+        parentJoinField: String,
+        selectedOutputType: GraphQLFieldsContainer? = null,
+        includeTypes: Boolean = true
     ): FieldInfo {
-        val processedFields = field.selectionSet.selections.flatMap { selection ->
-            when (selection) {
-                is InlineFragment -> {
-                    val requiredType = getFQName(selection.typeCondition.name)
-                    selection.selectionSet.selections.filterIsInstance<Field>()
-                        .map { FieldToJoin(it, typeFilter(listOf(requiredType))) }
+        val outputDefinition: GraphQLCompositeType = selectedOutputType ?: fieldDefinition.type.innerType()
+        val allProcessedFields =
+            if (outputDefinition is GraphQLInterfaceType || outputDefinition is GraphQLObjectType) {
+                val fieldDefinitions = when (outputDefinition) {
+                    is GraphQLObjectType -> outputDefinition.fieldDefinitions
+                    is GraphQLInterfaceType -> outputDefinition.fieldDefinitions
+                    else -> emptyList()
                 }
-
-                is FragmentSpread -> {
-                    // Fragment spread, lookup FragmentDefinition...
-                    val fragmentDefinition = env.fragmentsByName[selection.name]
-                        ?: throw IllegalArgumentException("Fragment definition for '${selection.name}' not found")
-                    //... and treat included selection set as fields, but with an additional type condition
-                    val requiredType = getFQName(fragmentDefinition.typeCondition.name)
-                    fragmentDefinition.selectionSet.selections.filterIsInstance<Field>()
-                        .map { FieldToJoin(it, typeFilter(listOf(requiredType))) }
+                val processedFields = field.selectionSet.selections.filterIsInstance<Field>()
+                val includedFieldNames = processedFields.map { it.name }.toSet()
+                val availableFields = fieldDefinitions.map { it.name }.toSet()
+                // Fetch fields not in the selection but have predefined filters defined in the schema.
+                val predefinedFilterFields = fieldDefinitions.filter { fieldDef ->
+                    !includedFieldNames.contains(fieldDef.name) && fieldDef.getDirective(
+                        "filter"
+                    ) != null
                 }
-
-                is Field -> listOf(FieldToJoin(selection, null))
-                else -> emptyList()
-            }
-        }
-        val includedFieldNames = processedFields.map { it.field.name }.toSet()
-        val availableFields = outputDefinition.fieldDefinitions.map { it.name }.toSet()
-        // Fetch fields not in the selection but have predefined filters defined in the schema.
-        val predefinedFilterFields = outputDefinition.fieldDefinitions.filter { fieldDef ->
-            !includedFieldNames.contains(fieldDef.name) && fieldDef.getDirective(
-                "filter"
-            ) != null
-        }
-            .map {
-                val addField = Field.newField().name(it.name).build()
-                FieldToJoin(addField, null)
-            }
-        // Fetch fields referenced in argument filters that are not present in the selection.
-        val argFilterFields =
-            field.arguments.filter { arg -> availableFields.contains(arg.name) && !includedFieldNames.contains(arg.name) }
-                .map {
-                    val addField = Field.newField().name(it.name).build()
-                    FieldToJoin(addField, null)
+                    .map { Field.newField().name(it.name).build() }
+                // Fetch fields referenced in argument filters that are not present in the selection.
+                val argFilterFields =
+                    if (field is Field) field.arguments.filter { arg ->
+                        availableFields.contains(arg.name) && !includedFieldNames.contains(
+                            arg.name
+                        )
+                    }
+                        .map { Field.newField().name(it.name).build() } else emptyList()
+                (processedFields + predefinedFilterFields + argFilterFields).filterNot {
+                    it.name == FIELD_ID_NAME || it.name == "_types" || it.name.startsWith("__")
                 }
-        val allProcessedFields = processedFields + predefinedFilterFields + argFilterFields
-        return FieldInfo(
-            allProcessedFields
-                .filterNot { it.field.name == FIELD_ID_NAME || it.field.name.startsWith("__") } // Ignore id and system fields
-                .filter {
-                    it.field.getDirectiveArg<StringValue>(
-                        DIRECTIVE_STORAGE_NAME,
-                        ARG_CLASS_NAME
-                    )?.value == null
-                } // Ignore fields that will be loaded from a different storage backend
-                .map { (nestedField, typeFilter) ->
-                    // TODO: handle typeFilters
-                    SelectedField(
-                        nestedField, if (nestedField.selectionSet == null) {
-                            // Scalar field
+                    .filter {
+                        it.getDirectiveArg<StringValue>(
+                            DIRECTIVE_STORAGE_NAME,
+                            ARG_CLASS_NAME
+                        )?.value == null
+                    } // Ignore fields that will be loaded from a different storage backend
+                    .map { nestedField ->
+                        val nestedFieldDefinition = fieldDefinitions.find { it.name == nestedField.name }
+                            ?: throw RuntimeException("Unexpected error: could not find definition for nested field '${nestedField.name}'")
+                        SelectedField(
+                            nestedField.aliasOrName(),
+                            nestedField.selectionSet != null,
+                            if (nestedField.selectionSet == null) {
+                                if (nestedField.name == "_rawRDF") {
+                                    // Special _rawRDF scalar handling
+                                    rawRDFFieldJoinStatement(
+                                        field as Field,
+                                        fieldDefinition,
+                                        if (parentJoinField == "_id") parentJoinField else "subject"
+                                    )
+                                } else {
+                                    // Scalar field
+                                    scalarFieldJoinStatement(
+                                        nestedField,
+                                        nestedFieldDefinition,
+                                        parentJoinField
+                                    )
+                                }
+                            } else {
+                                // Relation field
+                                relationFieldJoinStatement(
+                                    nestedField,
+                                    nestedFieldDefinition,
+                                    parentJoinField
+                                )
+                            }
+                        )
+                    }
+            } else {
+                emptyList()
+            }.plus(
+                if (includeTypes) {
+                    listOf(
+                        SelectedField(
+                            "_types",
+                            false,
                             scalarFieldJoinStatement(
-                                nestedField,
-                                outputDefinition.getFieldDefinition(nestedField.name),
-                                parentJoinField
+                                Field.newField("_types").build(),
+                                null,
+                                parentJoinField,
+                                "LEFT JOIN"
                             )
-                        } else {
-                            // Relation field
-                            relationFieldJoinStatement(
-                                nestedField,
-                                outputDefinition.getFieldDefinition(nestedField.name),
-                                parentJoinField
-                            )
-                        }
+                        )
                     )
-                })
+                } else {
+                    emptyList()
+                }
+            )
+
+        //val fragmentParentJoinField = if (parentJoinField == "_id") parentJoinField else "subject"
+        val processedFragments = field.selectionSet.selections.filterIsInstance<InlineFragment>().map { fragment ->
+            SelectedField(
+                "__fragment_${fragment.typeCondition.name}",
+                true,
+                fragmentJoinStatement(fragment, field as Field, fieldDefinition, parentJoinField)
+            )
+        }
+        return FieldInfo(allProcessedFields + processedFragments)
     }
 
     // TODO: rewrite this quick and dirty implementation
     protected fun getArgsFilter(field: Field): Node? {
+        val aliases = field.selectionSet?.selections?.filterIsInstance<Field>()?.filter { it.alias != null }
+            ?.associate { it.name to it.alias } ?: emptyMap()
         val argFilters =
-            field.arguments.filter { it.name !in SchemaGenerator.defaultRelationArguments.map { it.name } || it.name == ARG_ID_NAME }
+            field.arguments.filter { it.name !in KvasirTypes.defaultRelationArguments.map { it.name } || it.name == ARG_ID_NAME }
+                .filterNot { field.name == FIELD_OBJECT_NAME && it.name == ARG_PREDICATE_NAME } // Why filter out these arguments?
                 .map { argument ->
+                    val argFilterName = aliases[argument.name] ?: argument.name
                     when (argument.value) {
                         is ArrayValue -> ComparisonNode(
                             RSQLOperators.IN,
-                            argument.name,
+                            argFilterName,
                             (argument.value as ArrayValue).values.flatMap {
                                 if (it is VariableReference) {
                                     val value = env.variables[it.name]!!
@@ -413,13 +600,13 @@ open class SQLConvertor(
                             if (value is List<*>) {
                                 ComparisonNode(
                                     RSQLOperators.IN,
-                                    argument.name,
+                                    argFilterName,
                                     value.map { it.toString() }
                                 )
                             } else {
                                 ComparisonNode(
                                     RSQLOperators.EQUAL,
-                                    argument.name,
+                                    argFilterName,
                                     listOf(value.toString())
                                 )
                             }
@@ -427,7 +614,7 @@ open class SQLConvertor(
 
                         else -> ComparisonNode(
                             RSQLOperators.EQUAL,
-                            argument.name,
+                            argFilterName,
                             listOf(unboxScalar(argument.value as ScalarValue<*>))
                         )
                     }
@@ -447,17 +634,20 @@ open class SQLConvertor(
         }
     }
 
-    protected fun getNodeFilter(field: Field, fieldDefinition: GraphQLFieldDefinition): Node? {
-        val subFields = ((field.selectionSet?.selections?.flatMap {
-            if (it is InlineFragment) it.selectionSet.selections else listOf(it)
-        }?.filterIsInstance<Field>()?.filterNot { it.name == FIELD_ID_NAME }
-            ?.map { it to fieldDefinition.type.innerType<GraphQLFieldsContainer>().getFieldDefinition(it.name) })
+    protected fun getNodeFilter(
+        target: SelectionSetContainer<*>,
+        targetDefinition: GraphQLFieldDefinition,
+        outputType: GraphQLFieldsContainer
+    ): Node? {
+        val subFields = ((target.selectionSet?.selections?.filterIsInstance<Field>()
+            ?.filterNot { it.name == FIELD_ID_NAME || it.name.startsWith("__") }
+            ?.map { it to outputType.getFieldDefinition(it.name) })
             ?: emptyList())
 
         val includedFieldNames = subFields.map { it.first.name }.toSet()
         // Fetch fields not in the selection but have predefined filters defined in the schema
         val allSubFields =
-            subFields + (fieldDefinition.type.innerType<GraphQLObjectType>()).fieldDefinitions.filter { fieldDef ->
+            subFields + outputType.fieldDefinitions.filter { fieldDef ->
                 !includedFieldNames.contains(
                     fieldDef.name
                 ) && fieldDef.getDirective("filter") != null
@@ -467,12 +657,20 @@ open class SQLConvertor(
                     addField to it
                 }
 
+        target as DirectivesContainer<*>
         val globalNodeFilter = if (env.executionStepInfo.path.parent.isRootPath) {
-            (field.getDirectiveArg<StringValue>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
-                ?: fieldDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
+            (target.getDirectiveArg<StringValue>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
+                ?: targetDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
                 ?.let {
                     val rsqlParser = RSQLParser()
-                    rsqlParser.parse(it.value)
+                    val parsedFilter = rsqlParser.parse(it.value)
+                    val aliasedIdField = target.selectionSet?.selections?.filterIsInstance<Field>()
+                        ?.find { it.name == FIELD_ID_NAME && it.alias != null }
+                    if (aliasedIdField != null) {
+                        parsedFilter.accept(SelectorReplacingFilterVisitor(aliasedIdField.alias, FIELD_ID_NAME))
+                    } else {
+                        parsedFilter
+                    }
                 }
         } else {
             null
@@ -482,7 +680,8 @@ open class SQLConvertor(
                 ?: subFieldDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
                 ?.let {
                     val rsqlParser = RSQLParser()
-                    rsqlParser.parse(it.value).accept(SelectorReplacingFilterVisitor(SELF_REF_SELECTOR, subField.name))
+                    rsqlParser.parse(it.value)
+                        .accept(SelectorReplacingFilterVisitor(SELF_REF_SELECTOR, subField.aliasOrName()))
                 }
         }
         return (listOf(globalNodeFilter) + subFieldFilters).filterNotNull().takeIf { it.isNotEmpty() }?.let {
@@ -510,6 +709,22 @@ open class SQLConvertor(
         return targetSubject?.let { "subject IN (SELECT object FROM $tableRef WHERE subject = '$targetSubject' AND predicate = '$targetPredicate')" }
     }
 
+    protected fun getPredicateForField(field: Field, fieldDefinition: GraphQLFieldDefinition): String {
+        return if (fieldDefinition.name == FIELD_OBJECT_NAME) {
+            val predicateArg = field.arguments.find { it.name == ARG_PREDICATE_NAME }!!
+            val predicateName = if (predicateArg.value is VariableReference) {
+                val value = env.variables[(predicateArg.value as VariableReference).name]!!
+                value
+            } else {
+                unboxScalar(predicateArg.value as ScalarValue<*>)
+            } as String
+            JsonLdHelper.getFQName(predicateName, context, ":")?.takeIf { it != predicateName }
+                ?: predicateName
+        } else {
+            getFQName(fieldDefinition, context)
+        }
+    }
+
 }
 
 data class FieldInfo(val fieldSelection: List<SelectedField>)
@@ -517,4 +732,4 @@ data class FieldInfo(val fieldSelection: List<SelectedField>)
 data class SQLQuery(val sql: String, val columns: List<String>)
 
 data class FieldToJoin(val field: Field, val typeFilter: Node?)
-data class SelectedField(val field: Field, val joinStatement: String)
+data class SelectedField(val fieldName: String, val nested: Boolean, val joinStatement: String)

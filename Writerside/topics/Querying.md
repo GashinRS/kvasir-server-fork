@@ -31,8 +31,10 @@ as the main querying mechanism[^1] for the following reasons:
 
 ## Basic usage
 
-The top-level field in the query represents the type of resource you want to retrieve. E.g. The following query
-retrieves all resources of the type `http://example.org/Person` that have a name and an email address:
+The top-level field in the query represents the type of resource you want to retrieve. The exact GraphQL schema for your
+pod is auto-generated, based on the inserted content, see [](#auto-generated-schema) for more details.
+E.g. The following query retrieves all resources of the type `http://example.org/Person` that have a name and an email
+address:
 
 **POST** `http://localhost:8080/alice/query`
 
@@ -73,23 +75,6 @@ Response body:
       }
     ]
   }
-}
-```
-
-Use the RDF parent class `rdfs:Resource` to retrieve all resources, regardless of their type. This is useful if you
-don't know the type of the resources, but you know which specific properties you are looking for. For example, the
-following query retrieves all resources that have a name and an email address:
-
-**POST** `http://localhost:8080/alice/query`
-
-```json
-{
-  "@context": {
-    "Resource": "http://www.w3.org/2000/01/rdf-schema#Resource",
-    "name": "http://schema.org/givenName",
-    "email": "http://schema.org/email"
-  },
-  "query": "{ Resource { name email } }"
 }
 ```
 
@@ -274,7 +259,7 @@ Returns:
 > **Tip**: you can refer to the annotated field using `it` in the filter directive. The filter expression in the
 > previous example can thus be abbreviated to `@filter(if: "it==Bob")`.
 
-## Sorting
+### Sorting
 
 You can specify a sorting order for fields that return multiple results by providing an `orderBy` argument.
 Multiple sorting fields are supported, as well as modifying the ordering (ascending or descending) for each individual
@@ -298,7 +283,7 @@ For example, the following query retrieves a list of persons, first ordered by `
 }
 ```
 
-## Pagination
+### Pagination
 
 Some GraphQL query paths may return a large number of results. Kvasir supports paginating through the results via a
 cursor-based mechanism. Each field that returns a collection has two additional system arguments: `pageSize` allows you
@@ -402,7 +387,7 @@ Returns:
 }
 ```
 
-## Time travel
+### Time travel
 
 Since the Knowledge Graph retains a complete history of all changes, it is possible to query the state of the graph at a
 specific point in time. This is done by adding a field to the request body:
@@ -426,7 +411,7 @@ For example, the following query retrieves the state of the Knowledge Graph at a
 }
 ```
 
-## Reversing traversal
+### Reversing traversal
 
 Kvasir supports the JSON-LD `@reverse` keyword in the provided context for introducing reverse relationships,
 which can then be used for querying.
@@ -441,7 +426,9 @@ For example: say we have some Person resources with an `ex:parent` relation to a
   "@context": {
     "ex": "http://example.org/",
     "schema": "http://schema.org/",
-    "children": { "@reverse": "ex:parent" }
+    "children": {
+      "@reverse": "ex:parent"
+    }
   },
   "query": "{ ex_Person(id: \"ex:trudy\") { children { id } } }"
 }
@@ -464,6 +451,36 @@ Returns:
         ]
       }
     ]
+  }
+}
+```
+
+### Type selection
+
+For example, querying people a Person knows that are also musicians:
+
+```graphql
+{
+  ex_Person {
+    id
+    ex_knows {
+      ... on ex_Musician {
+        id
+      }
+    }
+  }
+}
+``` 
+
+Alternatively, you can also use the special field `_types` (see also [Resource](#resource-implements-rdfnode)):
+
+```graphql
+{
+  ex_Person {
+    id
+    ex_knows @filter(if:"_types==ex:Musician") {
+      id
+    }
   }
 }
 ```
@@ -524,12 +541,8 @@ Returns:
 }
 ```
 
-> Beware that the field name used in the query, or possible aliases, no longer have an effect on the output, as this is
-> now purely based on the predicate IRIs and the context supplied in the request.
-> {style="warning"}
-
-> This feature cannot be used with introspection queries, as the introspection mechanism does not return Linked-Data.
-> Our aim is to support this with a feature update, while still adhering to the GraphQL specification.
+> When using GraphQL aliases in JSON-LD output mode, make sure to include these aliases in your context (or use prefixed
+> names).
 > {style="warning"}
 
 <seealso>
@@ -538,5 +551,181 @@ Returns:
     </category>
 </seealso>
 
+## Auto-generated schema
+
+A GraphQL interface is defined by its schema, which is typically authored upfront in SDL, or generated based on the
+programmatic definitions of the various types and fields. What makes Kvasir different, is that we don't know beforehand
+what data will be available for querying. A GraphQL schema for the entire KG is auto-generated based on the data that is
+inserted via [](Changes.md). Although only accepting RDF data, which has the benefit of being contextually qualified,
+helps with generating a usable schema, it is not always possible to deduct the full structure of the incoming data.
+
+**The automated schema generation for the KG is a best effort approach, with the goal of allowing users to quickly
+explore the entire content.** If a specific structure is required, we refer to [](Slices.md).
+
+Some limitations include:
+
+* If type information is spread out over multiple change requests (e.g. change request 1 adds a relation between
+  resources A and B, while change request 2 adds type information for resource B), Kvasir may not be aware of detailed
+  type information. Users can assist the schema generation by inserting important type information via concrete
+  instances in a single insert batch.
+* Kvasir does not assume any vocabularies, shapes or ontologies to apply[^2]. This means e.g. that we will associate
+  predicates used for a specific Resource, with all RDF classes the Resource is an instance of.
+* Complex type hierarchies are automatically abstracted away via common supertypes such as `RDFNode` and `Resource` (see
+  [next section](#common-supertypes)). It is than up to the user to have knowledge of which subtypes are available for a
+  specific relation (although the GraphQL interface provides introspection and discovery mechanisms).
+
+## Common supertypes
+
+### `RDFNode`
+
+A common interface for representing values that can either be a Resource or a Literal. Exposes a single field `_rawRDF`,
+which allows accessing the raw RDF representation of the instance.
+
+E.g. the IRI when the node is a Resource: `{ "@id": "http://example.org/alice>" }`
+E.g. a JSON-LD object instance representing a Literal value when the node is a Literal:
+
+```json
+{
+  "@value": "1024",
+  "@type": "http://www.w3.org/2001/XMLSchema#integer"
+}
+```
+
+### `Resource` _implements `RDFNode`_
+
+Common supertype for representing RDF resources. Exposes an `id` field (IRI of the Resource) and a number of utility
+fields that can be used for exploration.
+
+Use `_relations` to discover relations between Resources, for example:
+
+```graphql
+{
+  ex_Person(id: "ex:alice") {
+    _relations(id: "ex:bob")
+  }
+}
+```
+
+Returns:
+
+```json
+{
+  "data": {
+    "ex_Person": [
+      {
+        "_relations": [
+          "http://example.org/knows"
+        ]
+      }
+    ]
+  }
+}
+
+```
+
+Use `_predicates` to get a list of predicates a Resources uses.
+
+Use `_types` to get a list of the RDF classes the Resource is an instance of.
+
+Use `_object` to force retrieving the value for a specific predicate, without it being explicitly being a part of the
+auto-generated schema.
+
+For example, get the email address of Alice, via the Resource entry-point:
+
+```GRAPHQL
+{
+  Resource(id: "ex:alice") {
+    _object(predicate: "schema:givenName") {
+      _rawRDF
+    }
+  }
+}
+```
+
+Returns:
+
+```JSON
+{
+  "data": {
+    "Resource": [
+      {
+        "_object": [
+          {
+            "_rawRDF": {
+              "@type": "http://www.w3.org/2001/XMLSchema#string",
+              "@value": "Alice"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### `BoxedLiteral` _implements `RDFNode`_
+
+This type represents a boxed literal, can be useful to use in combination with the RDFNode supertype, in order to
+support fields which can either have Resources or literals as values.
+
+Example:
+
+```GraphQL
+{
+  ex_Musician {
+    id
+    ex_plays {
+      _rawRDF
+    }
+  }
+}
+```
+
+Returns:
+
+```JSON
+{
+  "data": {
+    "ex_Musician": [
+      {
+        "id": "http://example.org/alice",
+        "ex_plays": [
+          {
+            "_rawRDF": {
+              "@id": "http://example.org/guitar"
+            }
+          }
+        ]
+      },
+      {
+        "id": "http://example.org/john",
+        "ex_plays": [
+          {
+            "_rawRDF": {
+              "@type": "http://www.w3.org/2001/XMLSchema#string",
+              "@value": "piano"
+            }
+          }
+        ]
+      },
+      {
+        "id": "http://example.org/trudy",
+        "ex_plays": [
+          {
+            "_rawRDF": {
+              "@type": "http://www.w3.org/2001/XMLSchema#integer",
+              "@value": "234"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 [^1]: The architecture of Kvasir is designed to be modular and flexible, so it is possible to add additional query
 mechanisms in the future, if needed.
+
+[^2]: In regard to the full KG. When requesting changes to a Slice via the Changes API, SHACL Shape restrictions may
+apply!

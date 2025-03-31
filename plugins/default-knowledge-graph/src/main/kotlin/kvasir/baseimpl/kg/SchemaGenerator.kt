@@ -5,28 +5,13 @@ import graphql.Scalars.*
 import graphql.language.*
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*
-import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
-import kvasir.definitions.kg.KGProperty
-import kvasir.definitions.kg.KGPropertyKind
-import kvasir.definitions.kg.KGType
+import kvasir.definitions.kg.*
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.*
 import kvasir.utils.graphql.innerType
 import kvasir.utils.graphql.isScalar
 
 class SchemaGenerator(private val types: List<KGType>, private val context: Map<String, Any>) {
-
-    companion object {
-
-        val defaultRelationArguments = listOf(
-            GraphQLArgument.newArgument().name(ARG_ID_NAME).type(GraphQLList.list(GraphQLID)).build(),
-            GraphQLArgument.newArgument().name(ARG_PAGE_SIZE_NAME).type(GraphQLInt)
-                .defaultValueProgrammatic(DEFAULT_PAGE_SIZE)
-                .build(),
-            GraphQLArgument.newArgument().name(ARG_CURSOR_NAME).type(GraphQLString).build(),
-            GraphQLArgument.newArgument().name(ARG_ORDER_BY_NAME).type(GraphQLList.list(GraphQLString)).build()
-        )
-    }
 
     val reversedRelations = context.filterValues { it is Map<*, *> && it.keys.contains(JsonLdKeywords.reverse) }
         .map {
@@ -35,46 +20,37 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         }
         .groupBy { it.first }
         .mapValues { targetNames -> targetNames.value.map { it.second } }
-    val unionTypes = mutableSetOf<GraphQLUnionType>()
 
     fun process(): SchemaGeneratorResult {
         val graphQLObjects = types.map { type ->
             generateGraphQLType(type)
         }
-        val prefixedResourceName = graphqLCompatibleName(RDFSVocab.Resource, context)
-        val resourceTypeDirective = KvasirDirectives.classDirective.toAppliedDirective()
-        val rdfsResourceEntryPoint = GraphQLObjectType.newObject().name(prefixedResourceName)
-            .withAppliedDirective(resourceTypeDirective.transform { directiveBuilder ->
-                directiveBuilder.argument(resourceTypeDirective.getArgument(ARG_IRI_NAME).transform { argBuilder ->
-                    argBuilder.valueLiteral(StringValue.of(RDFSVocab.Resource))
-                })
-            })
-            .fields(
-                (listOf(GraphQLFieldDefinition.newFieldDefinition().name(FIELD_ID_NAME).type(GraphQLID).build())
-                        + graphQLObjects.flatMap { it.fields })
-                    .distinctBy { it.name }).build()
         val schema = GraphQLSchema.newSchema()
             .query(
                 GraphQLObjectType.newObject().name("Query")
-                    .fields((listOf(rdfsResourceEntryPoint) + graphQLObjects).map { type ->
-                        GraphQLFieldDefinition.newFieldDefinition().name(type.name).type(GraphQLList.list(type))
-                            .arguments(
-                                if (type.name == prefixedResourceName) defaultRelationArguments else defaultRelationArguments.plus(
-                                    argumentsForType(type)
-                                )
-                            )
-                            .build()
-                    }).build()
+                    .fields(
+                        // Generate entry-points
+                        (listOf(KvasirTypes.Resource) + graphQLObjects).filterIsInstance<GraphQLNamedOutputType>()
+                            .map { type ->
+                                GraphQLFieldDefinition.newFieldDefinition().name(type.name).type(GraphQLList.list(type))
+                                    .arguments(
+                                        if (type.name == TYPE_RESOURCE) KvasirTypes.defaultRelationArguments else KvasirTypes.defaultRelationArguments.plus(
+                                            argumentsForType(type)
+                                        )
+                                    )
+                                    .build()
+                            }).build()
             )
+            .additionalType(KvasirTypes.BoxedLiteral)
             .additionalDirectives(KvasirDirectives.all)
-        return SchemaGeneratorResult(schema, unionTypes)
+        return SchemaGeneratorResult(schema)
     }
 
     private fun generateGraphQLType(type: KGType): GraphQLObjectType {
         val prefixedTypeName = graphqLCompatibleName(type.uri, context)
-        val idField = GraphQLFieldDefinition.newFieldDefinition().name(FIELD_ID_NAME).type(GraphQLID).build()
         val typeDirective = KvasirDirectives.classDirective.toAppliedDirective()
         return GraphQLObjectType.newObject().name(prefixedTypeName).description(type.uri)
+            .withInterfaces(KvasirTypes.Resource, KvasirTypes.RDFNode)
             .withAppliedDirective(typeDirective.transform { directiveBuilder ->
                 directiveBuilder.argument(typeDirective.getArgument(ARG_IRI_NAME).transform { argBuilder ->
                     argBuilder.valueLiteral(
@@ -84,7 +60,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
             }
             )
             .fields(
-                listOf(idField) + type.properties.map { property ->
+                KvasirTypes.commonResourceFields + type.properties.map { property ->
                     generateGraphQLProperty(property)
                 } + generateReverseProperties(type)
             ).build()
@@ -96,7 +72,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         overrideName: String? = null
     ): GraphQLFieldDefinition {
         val prefixedProperty = overrideName ?: graphqLCompatibleName(property.uri, context)
-        val propertyType = getGraphQLPropertyType(property, unionTypes, context)
+        val propertyType = getGraphQLPropertyType(property, context)
         val predicateDirective = KvasirDirectives.predicateDirective.toAppliedDirective()
         val propertyBuilder = GraphQLFieldDefinition.newFieldDefinition()
             .withAppliedDirective(
@@ -115,9 +91,9 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                 }
             )
             .arguments(
-                if (KGPropertyKind.IRI == property.kind) defaultRelationArguments.plus(
+                if (property.typeRefs.any { it.kind == KGPropertyKind.IRI }) KvasirTypes.defaultRelationArguments.plus(
                     argumentsForType(propertyType)
-                ) else defaultRelationArguments
+                ) else KvasirTypes.defaultRelationArguments
             )
             .name(prefixedProperty)
             .description(property.uri)
@@ -128,9 +104,9 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
     private fun generateReverseProperties(type: KGType): List<GraphQLFieldDefinition> {
         // Find and generate reverse properties
         return types.flatMap { t -> t.properties.map { t to it } }
-            .filter { it.second.typeRefs.contains(type.uri) && reversedRelations.containsKey(it.second.uri) }
+            .filter { it.second.typeRefs.any { it.name == type.uri } && reversedRelations.containsKey(it.second.uri) }
             .flatMap { (t, p) ->
-                val reverseProperty = KGProperty(p.uri, p.kind, setOf(t.uri))
+                val reverseProperty = KGProperty(p.uri, setOf(KGTypeReference(KGPropertyKind.IRI, t.uri)))
                 reversedRelations[p.uri]!!.map { reverseName ->
                     generateGraphQLProperty(
                         reverseProperty,
@@ -145,7 +121,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         if (type !is GraphQLObjectType) {
             return emptyList()
         }
-        return type.fieldDefinitions.map { field ->
+        return type.fieldDefinitions.filterNot { it.name.startsWith("_") }.map { field ->
             val argType = if (field.type.isScalar()) field.type.innerType() else GraphQLID
             GraphQLArgument.newArgument().name(field.name).type(GraphQLList.list(argType)).build()
         }
@@ -153,12 +129,11 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
 
     private fun getGraphQLPropertyType(
         property: KGProperty,
-        unionTypes: MutableSet<GraphQLUnionType>,
         context: Map<String, Any>
     ): GraphQLOutputType {
         val outputTypes = property.typeRefs.map { typeRef ->
-            when (property.kind) {
-                KGPropertyKind.Literal -> when (typeRef) {
+            when (typeRef.kind) {
+                KGPropertyKind.Literal -> when (typeRef.name) {
                     XSDVocab.boolean -> GraphQLBoolean
                     XSDVocab.int, XSDVocab.integer, XSDVocab.long -> GraphQLInt
                     XSDVocab.double, XSDVocab.decimal, XSDVocab.float -> GraphQLFloat
@@ -168,30 +143,25 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                 } as GraphQLOutputType
 
                 KGPropertyKind.IRI -> {
-                    val propertyTypeName = graphqLCompatibleName(typeRef, context)
-                    GraphQLTypeReference.typeRef(propertyTypeName)
+                    GraphQLTypeReference.typeRef(
+                        if (typeRef.name == RDFSVocab.Resource) {
+                            TYPE_RESOURCE
+                        } else {
+                            graphqLCompatibleName(typeRef.name, context)
+                        }
+                    )
                 }
 
-                else -> throw IllegalArgumentException("Unsupported property kind: ${property.kind}")
+                else -> throw IllegalArgumentException("Unsupported property kind: ${typeRef.kind}")
             }
         }
         return if (outputTypes.size > 1) {
             if (outputTypes.any { it is GraphQLScalarType }) {
-                // If there are scalar types in the union, use JSON
-                ExtendedScalars.Json
+                // If there are scalar types in the union, use the generic RDFNode type (which can be a boxed literal or a Resource).
+                GraphQLTypeReference.typeRef(TYPE_RDF_NODE)
             } else {
-                val graphQLOutputTypeReferences = outputTypes.filterIsInstance<GraphQLTypeReference>()
-                val unionName = graphQLOutputTypeReferences.joinToString("Or") { it.name }
-                if (unionTypes.none { it.name == unionName }) {
-                    val unionType = GraphQLUnionType.newUnionType()
-                        .name(unionName)
-                        .possibleTypes(*graphQLOutputTypeReferences.toTypedArray())
-                        .build()
-                    unionTypes.add(unionType)
-                    unionType
-                } else {
-                    GraphQLTypeReference.typeRef(unionName)
-                }
+                // Else use the generic Resource type. If more specific typing is required, clients should use the Slices feature!
+                GraphQLTypeReference.typeRef(TYPE_RESOURCE)
             }
         } else {
             outputTypes.first()
@@ -220,4 +190,4 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
 
 }
 
-data class SchemaGeneratorResult(val schemaBuilder: GraphQLSchema.Builder, val unionTypes: Set<GraphQLUnionType>)
+data class SchemaGeneratorResult(val schemaBuilder: GraphQLSchema.Builder)
