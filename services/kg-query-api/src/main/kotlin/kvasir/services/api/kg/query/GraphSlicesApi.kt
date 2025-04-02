@@ -8,20 +8,19 @@ import io.quarkus.security.PermissionsAllowed
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
+import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriInfo
 import jakarta.ws.rs.sse.OutboundSseEvent
 import jakarta.ws.rs.sse.Sse
-import kvasir.definitions.kg.KnowledgeGraph
-import kvasir.definitions.kg.PodStore
-import kvasir.definitions.kg.QueryRequest
-import kvasir.definitions.kg.QueryResult
+import kvasir.definitions.kg.*
 import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.kg.slices.SliceSummary
+import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
@@ -34,6 +33,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestStreamElementType
 import java.net.URI
 import kotlin.jvm.optionals.getOrNull
@@ -45,7 +45,9 @@ class GraphSlicesApi(
     private val knowledgeGraph: KnowledgeGraph,
     private val uriInfo: UriInfo,
     private val securityIdentity: SecurityIdentity,
-    private val sse: Sse
+    private val sse: Sse,
+    @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
+    private val lifeCycleEventEmitter: MutinyEmitter<LifeCycleEvent>
 ) {
 
     @Tag(name = ApiDocTags.PODS_API)
@@ -81,8 +83,18 @@ class GraphSlicesApi(
                     .onItem().ifNotNull().failWith(ClientErrorException(Response.Status.CONFLICT))
                     .onItem().ifNull().switchTo { validateAndPersistSlice(fqPodId, fqSliceId, input) }
             }
-            .map { slice ->
-                Response.created(URI.create(slice!!.id)).build()
+            .chain { _ ->
+                // Emit life-cycle event
+                lifeCycleEventEmitter.send(
+                    LifeCycleEvent(
+                        type = LifeCycleEventType.SLICE_CREATED,
+                        podId = fqPodId,
+                        sliceId = fqSliceId
+                    )
+                )
+            }
+            .map { _ ->
+                Response.created(URI.create(fqSliceId)).build()
             }
     }
 
@@ -119,7 +131,18 @@ class GraphSlicesApi(
         val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices")
         val fqSliceId = uriInfo.absolutePath.toString()
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { _ ->
-            validateAndPersistSlice(fqPodId, fqSliceId, input).map { _ -> Response.noContent().build() }
+            validateAndPersistSlice(fqPodId, fqSliceId, input)
+                .chain { _ ->
+                    // Emit life-cycle event
+                    lifeCycleEventEmitter.send(
+                        LifeCycleEvent(
+                            type = LifeCycleEventType.SLICE_UPDATED,
+                            podId = fqPodId,
+                            sliceId = fqSliceId
+                        )
+                    )
+                }
+                .map { _ -> Response.noContent().build() }
         }
     }
 
@@ -135,6 +158,16 @@ class GraphSlicesApi(
         val fqSliceId = uriInfo.absolutePath.toString()
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { _ ->
             sliceStore.deleteById(fqPodId, fqSliceId)
+                .chain { _ ->
+                    // Emit life-cycle event
+                    lifeCycleEventEmitter.send(
+                        LifeCycleEvent(
+                            type = LifeCycleEventType.SLICE_DELETED,
+                            podId = fqPodId,
+                            sliceId = fqSliceId
+                        )
+                    )
+                }
                 .map { Response.noContent().build() }
         }
     }
@@ -220,7 +253,6 @@ class GraphSlicesApi(
                 input.query,
                 input.variables,
                 input.operationName,
-                slice.targetGraphs,
                 slice.schema,
                 input.atTimestamp,
                 input.atChangeRequest

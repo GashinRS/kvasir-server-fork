@@ -7,6 +7,13 @@
            enabled: false
          solid-uma:
            enabled: false
+     services:
+       storage:
+         s3:
+           host: localhost
+           port: ${quarkus.minio.port}
+           access-key: ${quarkus.minio.access-key}
+           secret-key: ${quarkus.minio.secret-key}
      bootstrap:
        pods:
          - name: test1

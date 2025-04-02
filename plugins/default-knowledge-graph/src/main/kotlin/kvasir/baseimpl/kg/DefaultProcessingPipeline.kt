@@ -201,7 +201,6 @@ class MaterializeRecords(
                 context = request.context,
                 podId = request.podId,
                 sliceId = request.sliceId,
-                targetGraphs = setOf(),
                 query = request.with!!
             )
             kg.query(q).toUni()

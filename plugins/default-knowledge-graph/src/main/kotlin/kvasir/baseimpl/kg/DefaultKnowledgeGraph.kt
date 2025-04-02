@@ -16,6 +16,7 @@ import io.smallrye.config.WithDefault
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
+import io.vertx.core.eventbus.EventBus
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
@@ -38,6 +39,7 @@ import org.dataloader.DataLoaderRegistry
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.reactivestreams.Publisher
 import java.time.Instant
+import java.util.UUID
 
 @ConfigMapping(prefix = "kvasir.changes.processing")
 interface ChangeRequestPipelineConfig {
@@ -72,7 +74,10 @@ class DefaultKnowledgeGraph(
     private val typeRegistry: TypeRegistry,
     @Channel(Channels.CHANGE_REQUESTS_PUBLISH)
     private val changeRequestEmitter: MutinyEmitter<ChangeRequest>,
-    private val streamingDatafetcherFactory: StreamingDatafetcherFactory
+    @Channel(Channels.QUERY_REQUESTS_PUBLISH)
+    private val queryRequestEventEmitter: MutinyEmitter<QueryRequestEvent>,
+    private val streamingDatafetcherFactory: StreamingDatafetcherFactory,
+    private val eventBus: EventBus
 ) : KnowledgeGraph {
 
     val defaultStorageBackend = (pipelineConfig.pipeline().find { it.defaultStorage() }?.let {
@@ -144,6 +149,8 @@ class DefaultKnowledgeGraph(
     }
 
     override fun query(request: QueryRequest): Multi<QueryResult> {
+        val requestTimestamp = Instant.now()
+        val requestId = "urn:kvasir:queries:${UUID.randomUUID()}"
         val subscribeToExecutableSchema = if (request.predefinedSchema != null) {
             setupPredefinedSchema(request)
         } else {
@@ -188,6 +195,33 @@ class DefaultKnowledgeGraph(
                         .build()
                 )
             )
+                .chain { result ->
+                    // First emit query request event (for auditing purposes)
+                    val resultCode =
+                        if (result.errors?.isNotEmpty() == true) QueryRequestStatusCode.FAILED else QueryRequestStatusCode.COMPLETED
+                    queryRequestEventEmitter.send(
+                        QueryRequestEvent.fromQueryRequest(
+                            requestId,
+                            request,
+                            resultCode,
+                            if (resultCode == QueryRequestStatusCode.FAILED) result.errors.first().message else null,
+                            requestTimestamp
+                        )
+                    ).map { result }
+                }
+                .onFailure().recoverWithUni { err ->
+                    // Emit failed query request event
+                    queryRequestEventEmitter.send(
+                        QueryRequestEvent.fromQueryRequest(
+                            requestId,
+                            request,
+                            QueryRequestStatusCode.FAILED,
+                            err.message,
+                            requestTimestamp
+                        )
+                    )
+                        .chain { _ -> Uni.createFrom().failure(err) }
+                }
                 .onItem().transformToMulti { result ->
                     when (result.getData<Any>()) {
                         is Publisher<*> -> Multi.createFrom()

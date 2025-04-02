@@ -16,8 +16,8 @@ import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
-import kvasir.definitions.storage.StorageMutationEvent
-import kvasir.definitions.storage.StorageMutationEventType
+import kvasir.definitions.storage.StorageEvent
+import kvasir.definitions.storage.StorageEventType
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.reactive.messaging.Incoming
@@ -34,21 +34,21 @@ class RDFStorageMutationListener(
     private val vertx: Vertx
 ) {
 
-    @Incoming(Channels.STORAGE_MUTATIONS_SUBSCRIBE)
+    @Incoming(Channels.STORAGE_EVENTS_SUBSCRIBE)
     @Outgoing(Channels.CHANGE_REQUESTS_PUBLISH)
-    fun consumeAndLog(storageMutationEvents: Multi<StorageMutationEvent>): Multi<ChangeRequest> {
-        return storageMutationEvents
+    fun consumeAndLog(storageEvents: Multi<StorageEvent>): Multi<ChangeRequest> {
+        return storageEvents
             .onItem().transformToUniAndConcatenate { event ->
                 podStore.getById(event.podId).map { event to (it?.getAutoIngestRDF() == true) }
             }
-            .filter { (_, autoIngestEnabled) -> autoIngestEnabled }
+            .filter { (event, autoIngestEnabled) -> autoIngestEnabled && event.type.mutation }
             .map { (event, _) -> event }
             .onItem()
             .transformToUniAndConcatenate { event ->
                 val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
 
                 // If the operation is of type DELETE_OBJECT, we need to look up the version previous to the deletion
-                if (event.mutationType == StorageMutationEventType.DELETE_OBJECT) {
+                if (event.type == StorageEventType.DELETE_OBJECT) {
                     vertx.executeBlocking {
                         val versions: List<io.minio.Result<Item>> = minioClient.listObjects(
                             ListObjectsArgs.builder().bucket(bucketId).prefix(event.objectId)
@@ -87,8 +87,8 @@ class RDFStorageMutationListener(
             .map { (event, _) ->
                 // Transform the object into a Kvasir change request
                 val id = ChangeRequestId.generate(event.externalObjectUri.substringBefore("/s3") + "/changes").encode()
-                when (event.mutationType) {
-                    StorageMutationEventType.PUT_OBJECT, StorageMutationEventType.COMPLETE_MULTIPART_UPLOAD, StorageMutationEventType.RESTORE_OBJECT -> ChangeRequest(
+                when (event.type) {
+                    StorageEventType.PUT_OBJECT, StorageEventType.COMPLETE_MULTIPART_UPLOAD, StorageEventType.RESTORE_OBJECT -> ChangeRequest(
                         id = id,
                         podId = event.podId,
                         insertFromRefs = listOf(
@@ -101,7 +101,7 @@ class RDFStorageMutationListener(
                         deleteFromRefs = emptyList()
                     )
 
-                    StorageMutationEventType.DELETE_OBJECT -> ChangeRequest(
+                    StorageEventType.DELETE_OBJECT -> ChangeRequest(
                         id = id,
                         podId = event.podId,
                         insertFromRefs = emptyList(),
@@ -113,6 +113,8 @@ class RDFStorageMutationListener(
                             )
                         )
                     )
+
+                    else -> throw IllegalStateException("Unsupported storage event type: ${event.type}")
                 }
             }
     }
