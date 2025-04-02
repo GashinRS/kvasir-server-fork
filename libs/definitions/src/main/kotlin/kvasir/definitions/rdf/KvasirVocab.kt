@@ -29,6 +29,7 @@ object KvasirVocab {
     const val statusEntry = "${baseUri}statusEntry"
     const val schema = "${baseUri}schema"
     const val shacl = "${baseUri}shacl"
+    const val type = "${baseUri}type"
     const val sliceId = "${baseUri}sliceId"
     const val totalCount = "${baseUri}totalCount"
     const val targetGraphs = "${baseUri}targetGraphs"
@@ -42,6 +43,14 @@ object KvasirVocab {
     const val profile = "${baseUri}profile"
     const val authServerUrl = "${baseUri}authServerUrl"
     const val supportsChanges = "${baseUri}supportChanges"
+    const val variables = "${baseUri}variables"
+    const val operationName = "${baseUri}operationName"
+    const val atTimestamp = "${baseUri}atTimestamp"
+    const val atChangeRequestId = "${baseUri}atChangeRequestId"
+    const val objectId = "${baseUri}objectId"
+    const val externalObjectUri = "${baseUri}externalObjectUri"
+    const val internalObjectUri = "${baseUri}internalObjectUri"
+    const val mutationType = "${baseUri}mutationType"
 }
 
 object KvasirNamedGraphs {

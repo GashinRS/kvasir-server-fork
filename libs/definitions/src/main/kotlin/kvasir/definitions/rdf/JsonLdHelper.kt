@@ -2,6 +2,8 @@ package kvasir.definitions.rdf
 
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
+import io.vertx.core.json.Json
+import io.vertx.core.json.JsonObject
 
 typealias JSONObject = Map<String, Any>
 
@@ -20,7 +22,7 @@ object JsonLdKeywords {
 
 object JsonLdHelper {
 
-    fun toCompactFQForm(doc: JSONObject, options: JsonLdOptions = JsonLdOptions()): Map<String, Any> {
+    fun toCompactFQForm(doc: JSONObject, options: JsonLdOptions = JsonLdOptions()): JSONObject {
         return JsonLdProcessor.compact(JsonLdProcessor.expand(doc), emptyMap<String, Any>(), options)
     }
 
@@ -48,6 +50,15 @@ object JsonLdHelper {
             val (prefix, localName) = name.split(separator, limit = 2)
             context[prefix]?.let { ns -> "$ns$localName" }
         }
+    }
+
+    fun encode(any: Any, context: JSONObject): JSONObject {
+        val effectiveContext = if (!context.values.contains(KvasirVocab.baseUri)) {
+            context.plus(KvasirVocab.context)
+        } else {
+            context
+        }
+        return JsonLdProcessor.compact(JsonObject.mapFrom(any).map, effectiveContext, JsonLdOptions())
     }
 }
 

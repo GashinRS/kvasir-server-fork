@@ -13,17 +13,19 @@ import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import kvasir.definitions.messaging.Channels
-import kvasir.definitions.storage.StorageMutationEvent
-import kvasir.definitions.storage.StorageMutationEventType
+import kvasir.definitions.storage.StorageEvent
+import kvasir.definitions.storage.StorageEventType
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
 import uk.co.lucasweb.aws.v4.signer.Signer
 import uk.co.lucasweb.aws.v4.signer.credentials.AwsCredentials
 import java.net.URI
+import java.time.Instant
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.*
 
 internal const val HEADER_X_AMZ_CONTENT_SHA256 = "x-amz-content-sha256"
 internal const val HEADER_X_AMZ_DATE = "x-amz-date"
@@ -70,7 +72,7 @@ class S3Interceptor(
     private val s3AccessKey: String,
     @ConfigProperty(name = "kvasir.services.storage.s3.secret-key")
     private val s3SecretKey: String,
-    private val storageMutationEmitterProvider: StorageMutationEmitterProvider,
+    private val storageEventEmitterProvider: StorageMutationEmitterProvider,
 ) : ProxyInterceptor {
 
     companion object {
@@ -112,24 +114,26 @@ class S3Interceptor(
         val resp = context.response()
         // Hack to remove access-control-allow-origin header that Minio handler internally puts here
         resp.headers().remove("access-control-allow-origin")
-        val mutationType = determineMutationType(context)
+        val operationType = determineOperationType(context)
         return context.sendResponse().compose {
             UniHelper.toFuture(
-                if (resp.statusCode in 200..399 && mutationType != null) {
+                if (resp.statusCode in 200..399 && operationType != null) {
                     val podId = context.request().proxiedRequest().getParam("podId")
                     val sliceId = context.request().proxiedRequest().getParam("sliceId")
                     val bucket = sliceId?.let { S3Utils.getBucket("$baseUri$podId/slices/$it") }
                         ?: S3Utils.getBucket("$baseUri$podId")
-                    val event = StorageMutationEvent(
+                    val event = StorageEvent(
+                        id = "urn:kvasir:storage-events:${UUID.randomUUID()}",
+                        timestamp = Instant.now(),
                         podId = "$baseUri$podId",
                         sliceId = sliceId?.let { "$baseUri$podId/slices/$it" },
                         objectId = context.request().uri.substringAfter("/$bucket/").substringBefore("?"),
                         externalObjectUri = context.request().proxiedRequest().absoluteURI(),
                         internalStorageUri = "http://$s3Host:$s3Port${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),
-                        mutationType = mutationType
+                        type = operationType
                     )
-                    storageMutationEmitterProvider.getEmitter().send(event).replaceWithVoid()
+                    storageEventEmitterProvider.getEmitter().send(event).replaceWithVoid()
                 } else {
                     Uni.createFrom().voidItem()
                 }
@@ -159,13 +163,15 @@ class S3Interceptor(
     }
 
     // TODO: Implement the determineMutationType method properly
-    private fun determineMutationType(context: ProxyContext): StorageMutationEventType? {
+    private fun determineOperationType(context: ProxyContext): StorageEventType? {
         val method = context.request().method.name()
         return when {
-            method == "PUT" -> StorageMutationEventType.PUT_OBJECT
-            method == "DELETE" -> StorageMutationEventType.DELETE_OBJECT
+            method == "GET" -> StorageEventType.GET_OBJECT
+            method == "HEAD" -> StorageEventType.GET_OBJECT_METADATA
+            method == "PUT" -> StorageEventType.PUT_OBJECT
+            method == "DELETE" -> StorageEventType.DELETE_OBJECT
             method == "POST" && context.request().proxiedRequest().params()
-                .contains("uploadId") -> StorageMutationEventType.COMPLETE_MULTIPART_UPLOAD
+                .contains("uploadId") -> StorageEventType.COMPLETE_MULTIPART_UPLOAD
 
             else -> null
         }
@@ -175,10 +181,10 @@ class S3Interceptor(
 
 @ApplicationScoped
 class StorageMutationEmitterProvider(
-    @Channel(Channels.STORAGE_MUTATIONS_PUBLISH)
-    private val storageMutationsEmitter: MutinyEmitter<StorageMutationEvent>
+    @Channel(Channels.STORAGE_EVENTS_PUBLISH)
+    private val storageMutationsEmitter: MutinyEmitter<StorageEvent>
 ) {
-    fun getEmitter(): MutinyEmitter<StorageMutationEvent> {
+    fun getEmitter(): MutinyEmitter<StorageEvent> {
         return storageMutationsEmitter
     }
 }

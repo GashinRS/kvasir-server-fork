@@ -1,6 +1,5 @@
 package kvasir.services.api.kg.streams
 
-import io.quarkus.security.PermissionsAllowed
 import io.smallrye.mutiny.Multi
 import io.vertx.core.json.Json
 import io.vertx.mutiny.core.Vertx
@@ -8,16 +7,24 @@ import io.vertx.mutiny.kafka.client.consumer.KafkaConsumer
 import jakarta.ws.rs.GET
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
+import jakarta.ws.rs.QueryParam
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocTags
+import kvasir.definitions.rdf.JSONObject
+import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.KvasirVocab
+import kvasir.definitions.storage.StorageEvent
 import kvasir.utils.rdf.RDFTransformer
 import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
+import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import org.eclipse.microprofile.reactive.messaging.Channel
 import org.eclipse.microprofile.reactive.messaging.Message
 import org.jboss.resteasy.reactive.RestStreamElementType
-import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import org.jboss.resteasy.reactive.server.spi.ServerRequestContext
 import java.time.Duration
 import java.util.*
 
@@ -41,16 +48,42 @@ class StreamApi(
     )
     private val bufferingMaxDelayMs: Long,
     @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
-    private val baseUri: String
+    private val baseUri: String,
+    @Channel(Channels.QUERY_REQUESTS_SUBSCRIBE)
+    private val queryRequestsSubscriber: Multi<QueryRequestEvent>,
+    @Channel(Channels.LIFECYCLE_EVENTS_SUBSCRIBE)
+    private val lifecycleEventsSubscriber: Multi<LifeCycleEvent>,
+    @Channel(Channels.STORAGE_EVENTS_SUBSCRIBE)
+    private val storageMutationSubscriber: Multi<StorageEvent>,
+    private val requestContext: ServerRequestContext,
+    @ConfigProperty(name = "kvasir.streaming.resume-token-http-header-name", defaultValue = "X-Kvasir-Resume-Token")
+    private val resumeTokenHeaderName: String
 ) {
 
     @Path("{podId}/changes")
     @GET
     @RestStreamElementType(MediaType.APPLICATION_JSON)
-    fun stream(@PathParam("podId") podIdParam: String): Multi<ChangeRecords> {
+    fun stream(
+        @PathParam("podId") podIdParam: String,
+        @QueryParam("resumeToken") @Parameter(
+            description = "The HTTP response of this operation includes a resume token as a HTTP Response header (`X-Kvasir-Resume-Token`). Use the value of this header to continue streaming from when the client was disconnected. This feature allows clients to handle temporary connection interruptions",
+            required = false
+        )
+        resumeToken: Optional<String>,
+        @QueryParam("receiveBacklog") @Parameter(
+            description = "Whether or not the client should receive all data points currently in the Kvasir buffer (`true`), or start streaming data points that are being added from the moment the connection is established (`false`, default).",
+            required = false
+        )
+        receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
+    ): Multi<ChangeRecords> {
         val podId = "$baseUri$podIdParam"
-        val consumerId = UUID.randomUUID().toString()
-        return streamFrom(Channels.OUTBOX_TOPIC, ChangeReport::class.java, consumerId)
+        val streamId = resumeToken.orElse(UUID.randomUUID().toString())
+        requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
+        return streamFrom(
+            Channels.OUTBOX_TOPIC, ChangeReport::class.java, "sse-consumer-$streamId",
+            receiveBacklog.orElse(false),
+            true
+        )
             .filter { msg -> msg.payload.podId == podId }
             .onItem()
             .transformToMultiAndConcatenate { msg ->
@@ -80,11 +113,88 @@ class StreamApi(
             .onItem().disjoint<ChangeRecords>()
     }
 
-    @Path("{podId}/slices/{sliceId}/stream")
+    @Path("{podId}/query-events")
     @GET
     @RestStreamElementType(MediaType.APPLICATION_JSON)
-    fun streamSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Multi<Map<String, Any>> {
-        TODO()
+    fun streamQueryEvents(
+        @PathParam("podId") podIdParam: String,
+        @QueryParam("resumeToken") @Parameter(
+            description = "The HTTP response of this operation includes a resume token as a HTTP Response header (`X-Kvasir-Resume-Token`). Use the value of this header to continue streaming from when the client was disconnected. This feature allows clients to handle temporary connection interruptions",
+            required = false
+        )
+        resumeToken: Optional<String>,
+        @QueryParam("receiveBacklog") @Parameter(
+            description = "Whether or not the client should receive all event currently in the buffer (`true`), or start streaming events that are being added from the moment the connection is established (`false`, default).",
+            required = false
+        )
+        receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
+    ): Multi<JSONObject> {
+        val fqPodId = "$baseUri$podIdParam"
+        val streamId = resumeToken.orElse(UUID.randomUUID().toString())
+        requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
+        return streamFrom(
+            Channels.QUERY_REQUESTS_TOPIC, QueryRequestEvent::class.java, "sse-consumer-$streamId",
+            receiveBacklog.orElse(false),
+            true
+        )
+            .filter { it.payload.podId == fqPodId }
+            .map { event -> JsonLdHelper.encode(event.payload, event.payload.context) }
+    }
+
+    @Path("{podId}/life-cycle-events")
+    @GET
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    fun streamLifeCycleEvents(
+        @PathParam("podId") podIdParam: String,
+        @QueryParam("resumeToken") @Parameter(
+            description = "The HTTP response of this operation includes a resume token as a HTTP Response header (`X-Kvasir-Resume-Token`). Use the value of this header to continue streaming from when the client was disconnected. This feature allows clients to handle temporary connection interruptions",
+            required = false
+        )
+        resumeToken: Optional<String>,
+        @QueryParam("receiveBacklog") @Parameter(
+            description = "Whether or not the client should receive all event currently in the buffer (`true`), or start streaming events that are being added from the moment the connection is established (`false`, default).",
+            required = false
+        )
+        receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
+    ): Multi<JSONObject> {
+        val fqPodId = "$baseUri$podIdParam"
+        val streamId = resumeToken.orElse(UUID.randomUUID().toString())
+        requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
+        return streamFrom(
+            Channels.LIFECYCLE_EVENTS_TOPIC, LifeCycleEvent::class.java, "sse-consumer-$streamId",
+            receiveBacklog.orElse(false),
+            true
+        )
+            .filter { it.payload.podId == fqPodId }
+            .map { event -> JsonLdHelper.encode(event.payload, event.payload.context) }
+    }
+
+    @Path("{podId}/s3-events")
+    @GET
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    fun streamStorageMutationEvents(
+        @PathParam("podId") podIdParam: String,
+        @QueryParam("resumeToken") @Parameter(
+            description = "The HTTP response of this operation includes a resume token as a HTTP Response header (`X-Kvasir-Resume-Token`). Use the value of this header to continue streaming from when the client was disconnected. This feature allows clients to handle temporary connection interruptions",
+            required = false
+        )
+        resumeToken: Optional<String>,
+        @QueryParam("receiveBacklog") @Parameter(
+            description = "Whether or not the client should receive all event currently in the buffer (`true`), or start streaming events that are being added from the moment the connection is established (`false`, default).",
+            required = false
+        )
+        receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
+    ): Multi<JSONObject> {
+        val fqPodId = "$baseUri$podIdParam"
+        val streamId = resumeToken.orElse(UUID.randomUUID().toString())
+        requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
+        return streamFrom(
+            Channels.STORAGE_EVENTS_TOPIC, StorageEvent::class.java, "sse-consumer-$streamId",
+            receiveBacklog.orElse(false),
+            true
+        )
+            .filter { it.payload.podId == fqPodId }
+            .map { event -> JsonLdHelper.encode(event.payload, KvasirVocab.context) }
     }
 
     private fun <T> streamFrom(
