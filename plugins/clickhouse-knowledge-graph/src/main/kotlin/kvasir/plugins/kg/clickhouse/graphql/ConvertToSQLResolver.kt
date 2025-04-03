@@ -123,13 +123,15 @@ class ConvertToSQLResolver(
         val result = target.filterNotNull().map { result ->
             val obj = convertToJsonMap(result)
 
-            val selectedFragment = obj.keys.sorted().firstOrNull { it.startsWith("__fragment_") }
-                ?.let { fragmentKey -> obj[fragmentKey] as Iterable<Any> }?.first()
-            if (selectedFragment != null) {
-                obj.filterNot { it.key.startsWith("__fragment") }.plus(convertToJsonMap(selectedFragment))
-            } else {
-                obj
-            }
+            // Obj without fragment wrappers, plus...
+            obj.filterNot { it.key.startsWith("__fragment") }
+                .plus(
+                    // The fragment values
+                    obj.keys.sorted()
+                        .filter { it.startsWith("__fragment_") }
+                        .mapNotNull { fragmentKey -> (obj[fragmentKey] as Iterable<Any>).firstOrNull() }
+                        .flatMap { fragmentValue -> convertToJsonMap(fragmentValue).toList() }
+                )
         }
         return result
     }
@@ -387,7 +389,8 @@ open class SQLConvertor(
         fragment: InlineFragment,
         parentField: Field,
         parentFieldDefinition: GraphQLFieldDefinition,
-        parentJoinField: String
+        parentJoinField: String,
+        optional: Boolean
     ): String {
         val name = "__fragment_${fragment.typeCondition.name}"
         val outputType: GraphQLFieldsContainer = env.graphQLSchema.getTypeAs(fragment.typeCondition.name)
@@ -423,7 +426,8 @@ open class SQLConvertor(
             ) + nestedFields.map { "'${it.fieldName}'" to "arrayDistinct(ARRAY_AGG(${it.fieldName}))" })
                 .joinToString { (a, b) -> "$a,$b" }
         val joinField = "subject AS $joinFieldName"
-        return "JOIN (SELECT $joinField, map($mappedFields) as $name FROM $tableRef ${
+        val joinType = if (optional) "LEFT JOIN" else "JOIN"
+        return "$joinType (SELECT $joinField, map($mappedFields) as $name FROM $tableRef ${
             nestedFields.joinToString(" ") { it.joinStatement }
         } $whereClause GROUP BY ${
             SORT_COLUMNS.joinToString(
@@ -558,12 +562,18 @@ open class SQLConvertor(
                 }
             )
 
-        //val fragmentParentJoinField = if (parentJoinField == "_id") parentJoinField else "subject"
-        val processedFragments = field.selectionSet.selections.filterIsInstance<InlineFragment>().map { fragment ->
+        val inlineFragments = field.selectionSet.selections.filterIsInstance<InlineFragment>()
+        val processedFragments = inlineFragments.map { fragment ->
             SelectedField(
                 "__fragment_${fragment.typeCondition.name}",
                 true,
-                fragmentJoinStatement(fragment, field as Field, fieldDefinition, parentJoinField)
+                fragmentJoinStatement(
+                    fragment,
+                    field as Field,
+                    fieldDefinition,
+                    parentJoinField,
+                    allProcessedFields.isNotEmpty() || inlineFragments.size > 1
+                )
             )
         }
         return FieldInfo(allProcessedFields + processedFragments)
