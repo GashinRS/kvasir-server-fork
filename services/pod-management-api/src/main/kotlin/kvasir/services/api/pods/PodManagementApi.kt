@@ -5,19 +5,15 @@ import io.minio.MakeBucketArgs
 import io.minio.MinioAsyncClient
 import io.minio.SetBucketVersioningArgs
 import io.minio.messages.VersioningConfiguration
-import io.quarkus.security.PermissionsAllowed
 import io.smallrye.mutiny.Uni
+import io.smallrye.reactive.messaging.MutinyEmitter
+import io.vertx.core.eventbus.EventBus
 import jakarta.annotation.security.PermitAll
 import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
-import jakarta.ws.rs.core.Context
-import jakarta.ws.rs.core.MediaType
-import jakarta.ws.rs.core.Response
-import jakarta.ws.rs.core.UriBuilder
-import jakarta.ws.rs.core.UriInfo
-import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.PodAuthInitializer
-import kvasir.definitions.kg.PodStore
+import jakarta.ws.rs.core.*
+import kvasir.definitions.kg.*
+import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -25,9 +21,10 @@ import kvasir.definitions.rdf.KvasirVocab
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestResponse
 import java.net.URI
-import java.util.Optional
+import java.util.*
 
 @Tag(name = ApiDocTags.PODS_API)
 @Path((""))
@@ -37,7 +34,10 @@ class PodManagementApi(
     private val uriInfo: UriInfo,
     @ConfigProperty(name = "kvasir.webclient-uri")
     private val webclientUri: Optional<URI>,
-    private val podAuthInitializer: Instance<PodAuthInitializer>
+    private val podAuthInitializer: Instance<PodAuthInitializer>,
+    @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
+    private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
+    private val eventBus: EventBus
 ) {
 
     @PermitAll
@@ -84,6 +84,10 @@ class PodManagementApi(
                                     )
                                 )
                             }
+                    }
+                    .chain { _ ->
+                        // Emit life-cycle event
+                        lifecycleEventEmitter.send(LifeCycleEvent(type = LifeCycleEventType.POD_CREATED, podId = podId))
                     }
                     .map { Response.created(uriInfo.absolutePathBuilder.path(input.name).build()).build() }
             }
@@ -151,6 +155,10 @@ class PodManagementApi(
                 Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build())
             } else {
                 podStore.persist(existingPod.copy(configuration = input.configuration))
+                    .chain { _ ->
+                        // Emit life-cycle event
+                        lifecycleEventEmitter.send(LifeCycleEvent(type = LifeCycleEventType.POD_UPDATED, podId = podId))
+                    }
                     .map { Response.noContent().build() }
             }
         }
@@ -161,6 +169,10 @@ class PodManagementApi(
     fun delete(@PathParam("podId") podId: String): Uni<Response> {
         val podId = uriInfo.absolutePath.toString()
         return podStore.deleteById(podId)
+            .chain { _ ->
+                // Emit life-cycle event
+                lifecycleEventEmitter.send(LifeCycleEvent(type = LifeCycleEventType.POD_DELETED, podId = podId))
+            }
             .map { Response.noContent().build() }
     }
 

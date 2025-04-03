@@ -167,7 +167,6 @@ data class QueryRequest(
     val query: String,
     val variables: Map<String, Any>? = null,
     val operationName: String? = null,
-    val targetGraphs: Set<String> = emptySet(),
     val predefinedSchema: String? = null,
     val atTimestamp: Instant? = null,
     val atChangeRequestId: String? = null
@@ -239,7 +238,7 @@ data class QueryResult(
                     }
                     .mapKeys { e ->
                         val key = e.key as String
-                        if(key == TYPE_RESOURCE) {
+                        if (key == TYPE_RESOURCE) {
                             return@mapKeys RDFSVocab.Resource
                         }
                         if (key == FIELD_ID_NAME) {
@@ -306,6 +305,65 @@ enum class ChangeRecordType {
     INSERT, DELETE
 }
 
+enum class QueryRequestStatusCode {
+    COMPLETED, FAILED
+}
+
+@GenerateNoArgConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class QueryRequestEvent(
+    @JsonProperty(JsonLdKeywords.id)
+    val id: String,
+    @JsonProperty(KvasirVocab.timestamp)
+    val timestamp: Instant,
+    @JsonProperty(JsonLdKeywords.context)
+    val context: Map<String, Any> = emptyMap(),
+    @JsonProperty(KvasirVocab.statusCode)
+    val statusCode: QueryRequestStatusCode,
+    @JsonProperty(KvasirVocab.podId)
+    val podId: String,
+    @JsonProperty(KvasirVocab.sliceId)
+    val sliceId: String? = null,
+    @JsonProperty(KvasirVocab.query)
+    val query: String,
+    @JsonProperty(KvasirVocab.variables)
+    val variables: Map<String, Any>? = null,
+    @JsonProperty(KvasirVocab.operationName)
+    val operationName: String? = null,
+    @JsonProperty(KvasirVocab.atTimestamp)
+    val atTimestamp: Instant? = null,
+    @JsonProperty(KvasirVocab.atChangeRequestId)
+    val atChangeRequestId: String? = null,
+    @JsonProperty(KvasirVocab.message)
+    val errorMessage: String? = null
+) {
+    companion object {
+
+        fun fromQueryRequest(
+            queryId: String,
+            queryRequest: QueryRequest,
+            resultCode: QueryRequestStatusCode,
+            errorMessage: String? = null,
+            timestamp: Instant = Instant.now(),
+        ): QueryRequestEvent {
+            return QueryRequestEvent(
+                id = queryId,
+                timestamp = timestamp,
+                context = queryRequest.context,
+                statusCode = resultCode,
+                podId = queryRequest.podId,
+                sliceId = queryRequest.sliceId,
+                query = queryRequest.query,
+                variables = queryRequest.variables,
+                operationName = queryRequest.operationName,
+                atTimestamp = queryRequest.atTimestamp ?: timestamp.takeIf { queryRequest.atChangeRequestId == null },
+                atChangeRequestId = queryRequest.atChangeRequestId,
+                errorMessage = errorMessage
+            )
+        }
+
+    }
+}
 
 interface TypeRegistry {
 

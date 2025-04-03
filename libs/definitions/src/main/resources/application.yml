@@ -11,9 +11,19 @@ mp:
         topic: outbox
         merge: true
         waitForWriteCompletion: false
-      storage_mutations_publish:
+      storage_events_publish:
         connector: smallrye-kafka
-        topic: storage.mutations
+        topic: storage.events
+        merge: true
+        waitForWriteCompletion: false
+      query_requests_publish:
+        connector: smallrye-kafka
+        topic: query.requests
+        merge: true
+        waitForWriteCompletion: false
+      lifecycle_events_publish:
+        connector: smallrye-kafka
+        topic: lifecycle.events
         merge: true
         waitForWriteCompletion: false
     incoming:
@@ -31,22 +41,35 @@ mp:
         auto:
           offset:
             reset: earliest
-      storage_mutations_subscribe:
+      storage_events_subscribe:
         connector: smallrye-kafka
-        topic: storage.mutations
+        topic: storage.events
         broadcast: true
         auto:
           offset:
             reset: earliest
-
+      query_requests_subscribe:
+        connector: smallrye-kafka
+        topic: query.requests
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest
+      lifecycle_events_subscribe:
+        connector: smallrye-kafka
+        topic: lifecycle.events
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest
 "%dev":
-   quarkus:
-     log:
-       level: INFO
-       category:
-         "kvasir":
-           level: DEBUG
-           min-level: DEBUG
+  quarkus:
+    log:
+      level: INFO
+      category:
+        "kvasir":
+          level: DEBUG
+          min-level: DEBUG
 
 "%test":
   quarkus:

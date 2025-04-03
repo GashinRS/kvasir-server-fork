@@ -82,7 +82,6 @@ class QueryApi(
             input.query,
             input.variables,
             input.operationName,
-            input.targetGraphs,
             atTimestamp = input.atTimestamp,
             atChangeRequestId = input.atChangeRequest
         )
