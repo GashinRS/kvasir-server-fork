@@ -1,5 +1,6 @@
 package kvasir.utils.http
 
+import graphql.schema.idl.errors.SchemaProblem
 import io.quarkus.logging.Log
 import io.vertx.core.json.DecodeException
 import io.vertx.core.json.JsonObject
@@ -28,6 +29,14 @@ class ExceptionMappers {
     fun mapBadRequestException(ex: BadRequestException): Response {
         return Response.status(400).entity(
             JsonObject().put("error", "Bad request!")
+                .put("message", ex.message)
+        ).build()
+    }
+
+    @ServerExceptionMapper
+    fun mapGraphQLSchemaProblem(ex: SchemaProblem): Response {
+        return Response.status(400).entity(
+            JsonObject().put("error", "The provided GraphQL schema is invalid!")
                 .put("message", ex.message)
         ).build()
     }
