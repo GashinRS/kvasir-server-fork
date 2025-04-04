@@ -37,7 +37,7 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
             }
 
             override fun getTypeResolver(environment: InterfaceWiringEnvironment): TypeResolver {
-                return RDFClassTypeResolver
+                return RDFClassTypeResolver(context)
             }
 
             override fun providesTypeResolver(environment: UnionWiringEnvironment): Boolean {
@@ -45,7 +45,7 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
             }
 
             override fun getTypeResolver(environment: UnionWiringEnvironment): TypeResolver {
-                return RDFClassTypeResolver
+                return RDFClassTypeResolver(context)
             }
 
         }

@@ -4,6 +4,7 @@ import cz.jirutka.rsql.parser.RSQLParser
 import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
+import cz.jirutka.rsql.parser.ast.OrNode
 import cz.jirutka.rsql.parser.ast.RSQLOperators
 import graphql.language.*
 import graphql.schema.*
@@ -186,7 +187,7 @@ open class SQLConvertor(
     }
 
     open fun toSQL(): SQLQuery {
-        val outputType = GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLDirectiveContainer
+        val outputType = GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLOutputType
         val (pageSize, offset) = targetField.getPaginationInfo()
         val orderBy = orderByStatement(targetField, "_")
         val idField = when (mode) {
@@ -195,7 +196,7 @@ open class SQLConvertor(
         }
         val whereClause = listOfNotNull(
             targetGraphFilterNode,
-            getFQName(outputType, context).takeIf { it != RDFSVocab.Resource }?.let { typeFilter(listOf(it)) },
+            outputType.takeIf { !KvasirTypes.all.contains(it) }?.let { typeFilter(it) },
             getNodeFilter(targetField, targetFieldDefinition, targetFieldDefinition.type.innerType()),
             getArgsFilter(targetField),
             subjectSelectors?.let { ComparisonNode(RSQLOperators.IN, "id", it) }
@@ -348,23 +349,30 @@ open class SQLConvertor(
             ?.getValue<Boolean>() ?: false
         val (pageSize, offset) = field.getPaginationInfo()
         val joinFieldName = "${name}_holder"
+        // The effective subject for this relation field is the object of the parent field, but this changes when the relation is reversed.
+        val relSubj = if (reverse) "subject" else "object"
         val (nestedFields) = getNestedFields(
             field,
             fieldDefinition,
-            if (reverse) "subject" else "object"
+            relSubj
         )
         val orderBy = orderByStatement(field, "$name['", "']")
         val whereClause = listOfNotNull(
             targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
             "predicate = '${getPredicateForField(field, fieldDefinition)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
+            fieldDefinition.type.innerType<GraphQLOutputType>().takeIf { !KvasirTypes.all.contains(it) }
+                ?.let {
+                    "$relSubj IN (SELECT subject FROM $tableRef WHERE ${
+                        GraphQLFilterVisitor(
+                            context
+                        ).visitNode(typeFilter(it))
+                    })"
+                },
             getNodeFilter(field, fieldDefinition, outputType)?.let { GraphQLFilterVisitor(context).visitNode(it) },
             getArgsFilter(field)?.let {
                 GraphQLFilterVisitor(context).visitNode(
-                    SelectorReplacingFilterVisitor(
-                        "id",
-                        if (reverse) "subject" else "object"
-                    ).visitNode(it)
+                    SelectorReplacingFilterVisitor("id", relSubj).visitNode(it)
                 )
             }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
@@ -704,11 +712,16 @@ open class SQLConvertor(
             ?: throw IllegalArgumentException("No semantic context found for $name")
     }
 
-    protected fun typeFilter(requiredTypes: List<String>): Node {
+    protected fun typeFilter(requiredType: GraphQLOutputType): Node {
+        val matchTypes = when (requiredType) {
+            is GraphQLInterfaceType -> env.graphQLSchema.getImplementations(requiredType)
+            is GraphQLUnionType -> requiredType.types
+            else -> listOf(requiredType)
+        }.map { getFQName(it as GraphQLDirectiveContainer, context) }
         return AndNode(
             listOf(
                 ComparisonNode(RSQLOperators.EQUAL, "predicate", listOf(RDFVocab.type)),
-                ComparisonNode(RSQLOperators.IN, "object", requiredTypes)
+                ComparisonNode(RSQLOperators.IN, "object", matchTypes)
             )
         )
     }

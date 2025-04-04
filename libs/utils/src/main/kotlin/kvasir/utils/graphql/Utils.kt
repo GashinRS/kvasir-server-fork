@@ -7,6 +7,7 @@ import graphql.schema.GraphQLDirectiveContainer
 import graphql.schema.GraphQLObjectType
 import graphql.schema.TypeResolver
 import kvasir.definitions.kg.graphql.*
+import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.getJsonArray
 import kvasir.utils.json.convertToJsonMap
@@ -29,21 +30,21 @@ fun getFQName(field: Field, context: Map<String, Any>): String {
         } ?: throw IllegalArgumentException("No semantic context found for ${field.name}")
 }
 
-object RDFClassTypeResolver : TypeResolver {
+class RDFClassTypeResolver(private val context: JSONObject) : TypeResolver {
     override fun getType(env: TypeResolutionEnvironment): GraphQLObjectType {
         val target = convertToJsonMap(env.getObject())
         return (target[FIELD_TYPENAME_NAME] as String?)?.let {
             env.schema.getObjectType(it)
         } ?: run {
             // When no explicit __typename was set, use the _types field to access the RDF classes for this instance and select the first entry
-            val fqClassNames = target.getJsonArray<String>(FIELD_TYPES_NAME) ?: emptyList()
+            val fqClassNames = target.getJsonArray<String?>(FIELD_TYPES_NAME)?.filterNotNull() ?: emptyList()
             if (fqClassNames.isNotEmpty()) {
                 val fqClassName = fqClassNames.min()
                 env.schema.allTypesAsList.filterIsInstance<GraphQLObjectType>().find { objectType ->
-                    objectType.getDirectiveArg<StringValue>(
+                    (objectType.getDirectiveArg<StringValue>(
                         DIRECTIVE_CLASS_NAME,
                         ARG_IRI_NAME
-                    )?.value == fqClassName
+                    )?.value ?: JsonLdHelper.getFQName(objectType.name, context, "_")) == fqClassName
                 } ?: KvasirTypes.BoxedLiteral
             } else {
                 // Default to BoxedLiteral

@@ -160,8 +160,8 @@ class DefaultKnowledgeGraph(
                     val codeRegistry =
                         GraphQLCodeRegistry.newCodeRegistry()
                             .defaultDataFetcher { _ -> buildDatafetcher(request, atTimestamp) }
-                    codeRegistry.typeResolver(KvasirTypes.Resource, RDFClassTypeResolver)
-                    codeRegistry.typeResolver(KvasirTypes.RDFNode, RDFClassTypeResolver)
+                    codeRegistry.typeResolver(KvasirTypes.Resource, RDFClassTypeResolver(request.context))
+                    codeRegistry.typeResolver(KvasirTypes.RDFNode, RDFClassTypeResolver(request.context))
                     generatedSchema.schemaBuilder.codeRegistry(codeRegistry.build()).build()
                 }
         }
@@ -302,7 +302,7 @@ class DefaultKnowledgeGraph(
                     }
 
                     override fun getTypeResolver(environment: InterfaceWiringEnvironment): TypeResolver {
-                        return RDFClassTypeResolver
+                        return RDFClassTypeResolver(request.context)
                     }
 
                     override fun providesTypeResolver(environment: UnionWiringEnvironment): Boolean {
@@ -310,7 +310,7 @@ class DefaultKnowledgeGraph(
                     }
 
                     override fun getTypeResolver(environment: UnionWiringEnvironment): TypeResolver {
-                        return RDFClassTypeResolver
+                        return RDFClassTypeResolver(request.context)
                     }
 
                 }

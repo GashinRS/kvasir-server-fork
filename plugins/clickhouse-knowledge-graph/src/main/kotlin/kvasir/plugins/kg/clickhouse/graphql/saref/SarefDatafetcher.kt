@@ -124,11 +124,12 @@ class TSQLConvertor(
         val (pageSize, offset) = targetField.getPaginationInfo()
         val orderBy = orderByStatement(targetField)
         val processedFields = targetField.selectionSet.selections.flatMap { selection ->
+            // Revise fragment handling (cfr. main SQLConvertor implementation)
             when (selection) {
                 is InlineFragment -> {
-                    val requiredType = getFQName(selection.typeCondition.name)
+                    val requiredType = env.graphQLSchema.getType(selection.typeCondition.name) as GraphQLOutputType
                     selection.selectionSet.selections.filterIsInstance<Field>()
-                        .map { FieldToJoin(it, typeFilter(listOf(requiredType))) }
+                        .map { FieldToJoin(it, typeFilter(requiredType)) }
                 }
 
                 is FragmentSpread -> {
@@ -136,9 +137,10 @@ class TSQLConvertor(
                     val fragmentDefinition = env.fragmentsByName[selection.name]
                         ?: throw IllegalArgumentException("Fragment definition for '${selection.name}' not found")
                     //... and treat included selection set as fields, but with an additional type condition
-                    val requiredType = getFQName(fragmentDefinition.typeCondition.name)
+                    val requiredType =
+                        env.graphQLSchema.getType(fragmentDefinition.typeCondition.name) as GraphQLOutputType
                     fragmentDefinition.selectionSet.selections.filterIsInstance<Field>()
-                        .map { FieldToJoin(it, typeFilter(listOf(requiredType))) }
+                        .map { FieldToJoin(it, typeFilter(requiredType)) }
                 }
 
                 is Field -> listOf(FieldToJoin(selection, null))
