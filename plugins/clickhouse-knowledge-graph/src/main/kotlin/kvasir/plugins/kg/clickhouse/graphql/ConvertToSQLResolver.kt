@@ -362,11 +362,12 @@ open class SQLConvertor(
             "predicate = '${getPredicateForField(field, fieldDefinition)}'",
             atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" },
             fieldDefinition.type.innerType<GraphQLOutputType>().takeIf { !KvasirTypes.all.contains(it) }
+                ?.let { typeFilter(it) }
                 ?.let {
                     "$relSubj IN (SELECT subject FROM $tableRef WHERE ${
                         GraphQLFilterVisitor(
                             context
-                        ).visitNode(typeFilter(it))
+                        ).visitNode(it)
                     })"
                 },
             getNodeFilter(field, fieldDefinition, outputType)?.let { GraphQLFilterVisitor(context).visitNode(it) },
@@ -712,18 +713,22 @@ open class SQLConvertor(
             ?: throw IllegalArgumentException("No semantic context found for $name")
     }
 
-    protected fun typeFilter(requiredType: GraphQLOutputType): Node {
+    protected fun typeFilter(requiredType: GraphQLOutputType): Node? {
         val matchTypes = when (requiredType) {
             is GraphQLInterfaceType -> env.graphQLSchema.getImplementations(requiredType)
             is GraphQLUnionType -> requiredType.types
             else -> listOf(requiredType)
         }.map { getFQName(it as GraphQLDirectiveContainer, context) }
-        return AndNode(
-            listOf(
-                ComparisonNode(RSQLOperators.EQUAL, "predicate", listOf(RDFVocab.type)),
-                ComparisonNode(RSQLOperators.IN, "object", matchTypes)
+        return if (matchTypes.isNotEmpty()) {
+            AndNode(
+                listOf(
+                    ComparisonNode(RSQLOperators.EQUAL, "predicate", listOf(RDFVocab.type)),
+                    ComparisonNode(RSQLOperators.IN, "object", matchTypes)
+                )
             )
-        )
+        } else {
+            null
+        }
     }
 
     protected fun getRelationshipFilter(): String? {
