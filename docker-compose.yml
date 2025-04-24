@@ -4,7 +4,6 @@ services:
     image: altinity/clickhouse-server:24.8.14.10459.altinitystable
     ports:
       - "8123:8123"
-      - "9000:9000"
     volumes:
       - "clickhouse_data:/var/lib/clickhouse"
       - "./plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d"
@@ -18,7 +17,21 @@ services:
     ports:
       - "3000:4200"
     pull_policy: build
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - "minio_data:/data"
+    environment:
+      # Doubles as access key and secret key for the MinIO server
+      - MINIO_ROOT_USER=kvasir
+      - MINIO_ROOT_PASSWORD=kvasirkvasir
 
 volumes:
   clickhouse_data:
+    driver: local
+  minio_data:
     driver: local
