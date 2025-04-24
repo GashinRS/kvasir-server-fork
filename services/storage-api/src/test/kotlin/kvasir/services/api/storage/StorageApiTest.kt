@@ -7,6 +7,7 @@ import io.restassured.RestAssured.given
 import io.restassured.RestAssured.`when`
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import kvasir.definitions.config.KvasirConfig
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -23,7 +24,7 @@ class StorageApiTest {
     lateinit var minioClient: MinioClient
 
     @Inject
-    @ConfigProperty(name = "kvasir.base-uri")
+    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY)
     lateinit var baseUri: String
 
     @Test

@@ -13,6 +13,7 @@ import kvasir.definitions.rdf.RDFMediaTypes
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import io.restassured.RestAssured.given
 import jakarta.ws.rs.core.MediaType
+import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.rdf.JSONObject
@@ -30,7 +31,7 @@ private val TERMINAL_STATES = setOf(
 
 @ApplicationScoped
 class TestHelpers(
-    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8081/")
+    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = "http://localhost:8081/")
     val baseUri: String,
     val changeHistory: Instance<ChangeHistory>,
     val kg: Instance<KnowledgeGraph>

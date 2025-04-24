@@ -17,6 +17,8 @@ import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.storage.StorageEvent
+import kvasir.utils.http.KvasirUriInfo
+import kvasir.utils.http.getParentUri
 import kvasir.utils.rdf.RDFTransformer
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
@@ -47,8 +49,7 @@ class StreamApi(
         defaultValue = "1000"
     )
     private val bufferingMaxDelayMs: Long,
-    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
-    private val baseUri: String,
+    private val uriInfo: KvasirUriInfo,
     @Channel(Channels.QUERY_REQUESTS_SUBSCRIBE)
     private val queryRequestsSubscriber: Multi<QueryRequestEvent>,
     @Channel(Channels.LIFECYCLE_EVENTS_SUBSCRIBE)
@@ -76,7 +77,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<ChangeRecords> {
-        val podId = "$baseUri$podIdParam"
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(
@@ -84,7 +85,7 @@ class StreamApi(
             receiveBacklog.orElse(false),
             true
         )
-            .filter { msg -> msg.payload.podId == podId }
+            .filter { msg -> msg.payload.podId == fqPodId }
             .onItem()
             .transformToMultiAndConcatenate { msg ->
                 knowledgeGraph.streamChangeRecords(
@@ -98,7 +99,7 @@ class StreamApi(
             .map { buffer ->
                 buffer.groupBy { it.changeRequestId }.map { (changeRequestId, records) ->
                     ChangeRecords(
-                        mapOf("kss" to baseUri),
+                        mapOf("kss" to KvasirVocab.baseUri),
                         changeRequestId,
                         records.first().timestamp,
                         records.filter { it.type == ChangeRecordType.DELETE }
@@ -129,7 +130,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<JSONObject> {
-        val fqPodId = "$baseUri$podIdParam"
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(
@@ -157,7 +158,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<JSONObject> {
-        val fqPodId = "$baseUri$podIdParam"
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(
@@ -185,7 +186,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<JSONObject> {
-        val fqPodId = "$baseUri$podIdParam"
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(

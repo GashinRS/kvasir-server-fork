@@ -12,6 +12,7 @@ import io.vertx.ext.web.Router
 import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
+import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.messaging.Channels
 import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
@@ -62,7 +63,7 @@ class StorageApi(
 
 @ApplicationScoped
 class S3Interceptor(
-    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
+    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
     private val baseUri: String,
     @ConfigProperty(name = "kvasir.services.storage.s3.host")
     private val s3Host: String,
@@ -128,7 +129,7 @@ class S3Interceptor(
                         podId = "$baseUri$podId",
                         sliceId = sliceId?.let { "$baseUri$podId/slices/$it" },
                         objectId = context.request().uri.substringAfter("/$bucket/").substringBefore("?"),
-                        externalObjectUri = context.request().proxiedRequest().absoluteURI(),
+                        externalObjectUri = "${baseUri.removeSuffix("/")}${context.request().proxiedRequest().path()}",
                         internalStorageUri = "http://$s3Host:$s3Port${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),
                         type = operationType

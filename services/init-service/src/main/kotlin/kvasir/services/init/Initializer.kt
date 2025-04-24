@@ -13,6 +13,7 @@ import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import jakarta.enterprise.inject.Instance
+import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.*
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.reactive.skipToLast
@@ -26,7 +27,7 @@ import kotlin.jvm.optionals.getOrNull
 
 @ApplicationScoped
 class Initializer(
-    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
+    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
     private val baseUri: String,
     private val minioClient: MinioAsyncClient,
     private val podStore: PodStore,

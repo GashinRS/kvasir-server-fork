@@ -20,6 +20,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Singleton
 import jakarta.ws.rs.NotFoundException
 import jakarta.ws.rs.core.MediaType
+import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.PodStore
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.keycloak.representations.adapters.config.PolicyEnforcerConfig
@@ -33,7 +34,7 @@ private val EXCLUDE_PATH_PREFIXES = setOf("/q/", "/favicon.ico")
 @IfBuildProperty(name = Constants.KEYCLOAK_POLICY_AGENT_ENABLED, stringValue = "true")
 class KvasirTenantConfigResolver(
     private val podStore: PodStore,
-    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
+    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
     private val baseUri: String,
 ) : TenantConfigResolver {
     override fun resolve(
@@ -98,7 +99,7 @@ class KvasirTenantPolicyConfigResolver() : TenantPolicyConfigResolver {
 class FixedKeycloakPolicyEnforcerAuthorizer(
     private val resolver: PolicyEnforcerResolver,
     private val blockingExecutor: BlockingSecurityExecutor,
-    @ConfigProperty(name = "kvasir.webclient-uri")
+    @ConfigProperty(name = KvasirConfig.WEBCLIENT_URI_PROPERTY, defaultValue = KvasirConfig.WEBCLIENT_URI_DEFAULT)
     private val webclientUri: Optional<URI>,
 ) : KeycloakPolicyEnforcerAuthorizer(), HttpSecurityPolicy {
 

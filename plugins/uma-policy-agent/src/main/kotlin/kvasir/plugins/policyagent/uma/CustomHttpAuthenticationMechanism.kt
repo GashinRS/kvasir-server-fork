@@ -14,6 +14,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Alternative
 import jakarta.ws.rs.NotFoundException
 import jakarta.ws.rs.core.HttpHeaders
+import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.PodStore
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.jose4j.jwt.consumer.JwtConsumerBuilder
@@ -26,7 +27,7 @@ import java.util.UUID
 class CustomHttpAuthenticationMechanism(
     private val delegate: JWTAuthMechanism,
     private val podStore: PodStore,
-    @ConfigProperty(name = "kvasir.base-uri", defaultValue = "http://localhost:8080/")
+    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
     private val baseUri: String,
 ) :
     HttpAuthenticationMechanism by delegate {
