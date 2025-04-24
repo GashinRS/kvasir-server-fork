@@ -147,7 +147,10 @@ class ConvertToSQLResolver(
                 }
                 // Check if all attributes are accounted
                 val selectedFields =
-                    env.field.selectionSet.selections.filterIsInstance<Field>().map { f -> f.aliasOrName() }
+                    env.field.selectionSet.selections.filterIsInstance<Field>()
+                        .filterNot { f -> f.hasDirective(DIRECTIVE_OPTIONAL_NAME) }
+                        .map { f -> f.aliasOrName() }
+                        .filterNot { it == FIELD_TYPENAME_NAME }
                 valueMap.keys.containsAll(selectedFields)
             }
         } else {
