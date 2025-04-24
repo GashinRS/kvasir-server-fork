@@ -61,6 +61,13 @@ quarkus:
               "children": { "@reverse": "http://example.org/parent" }
             }
           auto-ingest-rdf: true
+          preconfigured-clients:
+            - client-id: music-tracker
+              redirect-uris:
+                - http://localhost:5173/*
+            - client-id: spotify-client
+              client-secret: testtest
+              enable-service-account: true
         - name: bob
           default-context: |
             {

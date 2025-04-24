@@ -6,6 +6,7 @@ import io.smallrye.config.WithDefault
 import io.smallrye.config.WithName
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import org.apache.kafka.common.protocol.types.Field.Bool
 import org.eclipse.microprofile.config.spi.Converter
 import java.util.Optional
 
@@ -22,6 +23,8 @@ interface StaticPodConfig {
     // When no auth-config is provided, the default is used
     fun authConfiguration(): Optional<AuthConfigurationConfig>
 
+    fun preconfiguredClients(): Optional<List<ClientConfig>>
+
     @WithDefault("false")
     @WithName("auto-ingest-rdf")
     fun autoIngestRDF(): Boolean
@@ -37,6 +40,17 @@ interface AuthConfigurationConfig {
     fun clientId(): String
 
     fun clientSecret(): String
+}
+
+interface ClientConfig {
+    fun clientId(): String
+
+    @WithDefault("false")
+    fun enableServiceAccount(): Boolean
+
+    fun clientSecret(): Optional<String>
+
+    fun redirectUris(): Optional<List<String>>
 }
 
 class JsonConvertor : Converter<Map<String, Any>> {

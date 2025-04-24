@@ -9,6 +9,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.AuthConfiguration
+import kvasir.definitions.kg.ClientConfiguration
 import kvasir.definitions.kg.PodAuthInitializer
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.jboss.resteasy.reactive.ClientWebApplicationException
@@ -61,10 +62,11 @@ class KeycloakPodAuthInitializer(
 
     override fun initialize(
         podId: String,
-        podName: String
+        podName: String,
+        preconfiguredClients: List<ClientConfiguration>
     ): Uni<AuthConfiguration> = vertx.executeBlocking {
         // Try creating a realm
-        buildRealm(podName)
+        buildRealm(podName, preconfiguredClients)
 
         // Return the auth configuration regardless
         AuthConfiguration(
@@ -77,7 +79,7 @@ class KeycloakPodAuthInitializer(
     /**
      * Create a realm for the pod
      */
-    private fun buildRealm(podName: String) = try {
+    private fun buildRealm(podName: String, preconfiguredClients: List<ClientConfiguration>) = try {
         keycloak.realms().create(RealmRepresentation().apply {
             this.realm = podName
             this.isEnabled = true
@@ -149,6 +151,31 @@ class KeycloakPodAuthInitializer(
             this.webOrigins = listOf<String>("+");
             this.attributes = mapOf<String, String>(Pair("pkce.code.challenge.method", "S256"))
         }).checkStatus()
+
+        // Create preconfigured clients
+        preconfiguredClients.forEach { preconfiguredClient ->
+            keycloak.realm(podName).clients().create(ClientRepresentation().apply {
+                this.name = preconfiguredClient.clientId
+                this.clientId = preconfiguredClient.clientId
+                if(preconfiguredClient.enableServiceAccount) {
+                    this.secret = preconfiguredClient.clientSecret
+                }
+                this.isServiceAccountsEnabled = preconfiguredClient.enableServiceAccount
+                this.isPublicClient = !preconfiguredClient.enableServiceAccount
+                this.isDirectAccessGrantsEnabled = preconfiguredClient.enableServiceAccount
+                this.authorizationServicesEnabled = false
+                this.redirectUris = preconfiguredClient.redirectUris ?: emptyList()
+            })
+
+            // TODO: fine-grained permissions for service-accounts
+            // Assign the same permission as the pod user to the service account (currently owner role)
+            if (preconfiguredClient.enableServiceAccount) {
+                val clientServiceAccountUser = keycloak.realm(podName).users()
+                    .searchByUsername("service-account-${preconfiguredClient.clientId}", true).first()
+                keycloak.realm(podName).users().get(clientServiceAccountUser.id).roles().realmLevel()
+                    .add(listOf(ownerRole))
+            }
+        }
 
         val clientRepresentation = keycloak.realm(podName).clients().findByClientId(CLIENT_ID).first()
         val clientResource = keycloak.realm(podName).clients().get(clientRepresentation.id)
