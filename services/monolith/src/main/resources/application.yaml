@@ -55,6 +55,9 @@ quarkus:
               "schema": "http://schema.org/",
               "ex": "http://example.org/",
               "saref": "https://saref.etsi.org/core/",
+              "mo": "http://purl.org/ontology/mo/",
+              "dc": "http://purl.org/dc/elements/1.1/",
+              "foaf": "http://xmlns.com/foaf/0.1/",
               "hasMeasurement": {
                 "@reverse": "https://saref.etsi.org/core/measurementMadeBy"
               },
