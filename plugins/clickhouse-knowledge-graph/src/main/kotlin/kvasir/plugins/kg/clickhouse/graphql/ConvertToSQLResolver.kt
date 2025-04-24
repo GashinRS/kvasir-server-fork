@@ -188,7 +188,7 @@ open class SQLConvertor(
 
     open fun toSQL(): SQLQuery {
         val outputType = GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLOutputType
-        val (pageSize, offset) = targetField.getPaginationInfo()
+        val (pageSize, offset) = targetField.getPaginationInfo(env.variables)
         val orderBy = orderByStatement(targetField, "_")
         val idField = when (mode) {
             SQLConvertorMode.GET_DATA -> "_id"
@@ -235,13 +235,14 @@ open class SQLConvertor(
             }
 
             SQLConvertorMode.COUNT -> {
-                val modifiedWhere = getRelationshipFilter()?.let { extraFilter ->
+                // TODO: what was the point of this modifiedWhere?
+                val modifiedWhere = /*getRelationshipFilter()?.let { extraFilter ->
                     if (whereClause.isNotEmpty()) {
                         "$whereClause AND $extraFilter"
                     } else {
                         "WHERE $extraFilter"
                     }
-                } ?: whereClause
+                } ?:*/ whereClause
                 SQLQuery(
                     "SELECT count(distinct subject) as totalCount FROM $tableRef ${
                         nestedFields.joinToString(" ") { it.joinStatement }
@@ -259,7 +260,7 @@ open class SQLConvertor(
         overrideJoinType: String? = null
     ): String {
         val name = field.aliasOrName()
-        val (pageSize, offset) = field.getPaginationInfo()
+        val (pageSize, offset) = field.getPaginationInfo(env.variables)
         val joinField = "${name}_holder"
 
         // Implement Handling for special scalar fields e.g. _types, _relations, _predicates
@@ -310,7 +311,7 @@ open class SQLConvertor(
         parentJoinField: String
     ): String {
         val name = "_rawRDF"
-        val (pageSize, offset) = parentField.getPaginationInfo()
+        val (pageSize, offset) = parentField.getPaginationInfo(env.variables)
         val reverse = parentFieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
             ?.getValue<Boolean>() ?: false
         val joinFieldName = "${name}_holder"
@@ -347,7 +348,7 @@ open class SQLConvertor(
         val outputType = fieldDefinition.type.innerType<GraphQLFieldsContainer>()
         val reverse = fieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
             ?.getValue<Boolean>() ?: false
-        val (pageSize, offset) = field.getPaginationInfo()
+        val (pageSize, offset) = field.getPaginationInfo(env.variables)
         val joinFieldName = "${name}_holder"
         // The effective subject for this relation field is the object of the parent field, but this changes when the relation is reversed.
         val relSubj = if (reverse) "subject" else "object"
@@ -381,7 +382,13 @@ open class SQLConvertor(
         val mappedFields =
             (listOf(
                 "'id'" to if (reverse) "subject::Dynamic" else "object"
-            ) + nestedFields.map { "'${it.fieldName}'" to "arrayDistinct(ARRAY_AGG(${it.fieldName}))" })
+            ) + nestedFields.map {
+                "'${it.fieldName}'" to if (it.nested) {
+                    "arrayFilter(x -> notEmpty(x), arrayDistinct(ARRAY_AGG(${it.fieldName})))"
+                } else {
+                    "arrayDistinct(ARRAY_AGG(${it.fieldName}))"
+                }
+            })
                 .joinToString { (a, b) -> "$a,$b" }
         val joinField = "${if (reverse) "object" else "subject"} AS $joinFieldName"
         return "${getJoinType(field)} (SELECT $joinField, map($mappedFields) as $name FROM $tableRef ${
@@ -404,7 +411,7 @@ open class SQLConvertor(
         val name = "__fragment_${fragment.typeCondition.name}"
         val outputType: GraphQLFieldsContainer = env.graphQLSchema.getTypeAs(fragment.typeCondition.name)
         val joinFieldName = "${name}_holder"
-        val (pageSize, offset) = parentField.getPaginationInfo()
+        val (pageSize, offset) = parentField.getPaginationInfo(env.variables)
         val (nestedFields) = getNestedFields(
             fragment,
             parentFieldDefinition,
@@ -463,12 +470,8 @@ open class SQLConvertor(
     }
 
     protected fun orderByStatement(field: Field, prefix: String = "", postFix: String = ""): String {
-        val orderByValue = field.arguments.find { it.name == ARG_ORDER_BY_NAME }?.value
-        return when (orderByValue) {
-            is ArrayValue -> orderByValue.values.map { (it as StringValue).value }
-            is StringValue -> listOf(orderByValue.value)
-            else -> emptyList()
-        }.takeIf { it.isNotEmpty() }?.let { fields ->
+        val orderByValue = field.getStringArrayArgument(ARG_ORDER_BY_NAME, env.variables)
+        return orderByValue?.takeIf { it.isNotEmpty() }?.let { fields ->
             "ORDER BY ${fields.joinToString { prefix + (if (it.startsWith("-")) "${it.substring(1)} DESC" else it.toString()) + postFix }} "
         } ?: ""
     }

@@ -121,7 +121,7 @@ class TSQLConvertor(
         GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLFieldsContainer
 
     override fun toSQL(): SQLQuery {
-        val (pageSize, offset) = targetField.getPaginationInfo()
+        val (pageSize, offset) = targetField.getPaginationInfo(env.variables)
         val orderBy = orderByStatement(targetField)
         val processedFields = targetField.selectionSet.selections.flatMap { selection ->
             // Revise fragment handling (cfr. main SQLConvertor implementation)

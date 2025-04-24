@@ -6,10 +6,7 @@ import graphql.schema.*
 import graphql.schema.idl.TypeDefinitionRegistry
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
-import kvasir.definitions.kg.graphql.FIELD_ID_NAME
-import kvasir.definitions.kg.graphql.KvasirDirectives
-import kvasir.definitions.kg.graphql.KvasirEnums
-import kvasir.definitions.kg.graphql.KvasirTypes
+import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.cursors.OffsetBasedCursor
 
@@ -46,12 +43,52 @@ fun GraphQLOutputType.isAbstract(): Boolean {
     return GraphQLTypeUtil.unwrapAll(this).let { it is GraphQLInterfaceType || it is GraphQLUnionType }
 }
 
-fun Field.getPaginationInfo(): Pair<Int, Long> {
-    val pageSize = (arguments.find { it.name == "pageSize" }?.value as? IntValue)?.value?.toInt()
-        ?: DEFAULT_PAGE_SIZE
-    val cursor = (arguments.find { it.name == "cursor" }?.value as? StringValue)?.value?.let {
-        OffsetBasedCursor.fromString(it)?.offset
-    } ?: 0L
+fun Field.getIntArgument(name: String, variables: Map<String, Any>): Int? {
+    return this.arguments.find { it.name == name }?.let {
+        when (val value = it.value) {
+            is IntValue -> value.value.toInt()
+            is VariableReference -> {
+                variables[value.name].toString().toInt()
+            }
+
+            else -> throw IllegalArgumentException("Unsupported argument type: ${value::class.simpleName}")
+        }
+    }
+}
+
+fun Field.getStringArgument(name: String, variables: Map<String, Any>): String? {
+    return this.arguments.find { it.name == name }?.let {
+        when (val value = it.value) {
+            is StringValue -> value.value
+            is VariableReference -> {
+                variables[value.name].toString()
+            }
+
+            else -> throw IllegalArgumentException("Unsupported argument type: ${value::class.simpleName}")
+        }
+    }
+}
+
+fun Field.getStringArrayArgument(name: String, variables: Map<String, Any>): List<String>? {
+    return this.arguments.find { it.name == name }?.let {
+        val result = (it.value as ArrayValue).values.map { value ->
+            when(value) {
+                is StringValue -> value.value
+                is VariableReference -> {
+                    variables[value.name].toString()
+                }
+
+                else -> throw IllegalArgumentException("Unsupported argument type: ${value::class.simpleName}")
+            }
+        }
+        result
+    }
+}
+
+fun Field.getPaginationInfo(variables: Map<String, Any>): Pair<Int, Long> {
+    val pageSize = this.getIntArgument(ARG_PAGE_SIZE_NAME, variables) ?: DEFAULT_PAGE_SIZE
+    val cursor =
+        this.getStringArgument(ARG_CURSOR_NAME, variables)?.let { OffsetBasedCursor.fromString(it)?.offset } ?: 0L
     return pageSize to cursor
 }
 
