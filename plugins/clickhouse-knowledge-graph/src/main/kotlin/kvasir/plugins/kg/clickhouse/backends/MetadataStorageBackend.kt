@@ -77,7 +77,7 @@ class MetadataStorageBackend(
                         .minus(subjectsToTypeUris.keys)
                 ).entries.flatMap { (typeUri, subjects) ->
                     // ... and then generate MetadataEntry instances
-                    statements.filter { it.subject in subjects && it.predicate != RDFVocab.type }.distinct()
+                    statements.filter { it.subject in subjects }.distinct()
                         .flatMap { statement ->
                             val typeRefs = statement.dataType?.let { listOf(it) }
                                 ?: subjectsToTypeUris[statement.`object` as String]?.toList()
