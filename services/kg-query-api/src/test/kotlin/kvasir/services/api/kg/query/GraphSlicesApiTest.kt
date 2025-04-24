@@ -9,7 +9,6 @@ import jakarta.inject.Inject
 import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.changes.ChangeHistory
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -17,8 +16,12 @@ import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.test.clickhouse.ClickhouseTestResource
 import kvasir.utils.test.commons.*
-import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.MethodOrderer
+import org.junit.jupiter.api.Order
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.TestMethodOrder
 
 @QuarkusTest
 @TestHTTPEndpoint(GraphSlicesApi::class)
@@ -277,7 +280,7 @@ class GraphSlicesApiTest {
             .body(QueryInputImpl(readQ))
             .post("$sliceUri/query")
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
-        assertNull(result.getDataField("person"))
+        assertNull(result.getDataField<Map<String, Any>>("person"))
     }
 
     @Test

@@ -15,7 +15,7 @@ kvasir:
 quarkus:
   http:
     cors:
-      ~: true
+      enabled: true
       origins: /.*/
       exposed-headers: Link, Location
   minio:
@@ -27,7 +27,7 @@ quarkus:
   quarkus:
     http:
       cors:
-        ~: true
+        enabled: true
         origins: http://localhost:3000,http://localhost:4200
   kvasir:
     plugins:

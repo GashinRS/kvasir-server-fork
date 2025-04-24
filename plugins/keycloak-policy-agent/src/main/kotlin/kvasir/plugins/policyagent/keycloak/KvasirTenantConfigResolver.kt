@@ -8,12 +8,13 @@ import io.quarkus.keycloak.pep.runtime.KeycloakPolicyEnforcerTenantConfig
 import io.quarkus.oidc.OidcRequestContext
 import io.quarkus.oidc.OidcTenantConfig
 import io.quarkus.oidc.TenantConfigResolver
+import io.quarkus.oidc.runtime.OidcTenantConfig.ApplicationType
+import io.quarkus.oidc.runtime.OidcUtils
 import io.quarkus.security.identity.SecurityIdentity
 import io.quarkus.security.spi.runtime.BlockingSecurityExecutor
 import io.quarkus.vertx.http.runtime.security.HttpSecurityPolicy
 import io.quarkus.vertx.http.runtime.security.HttpSecurityPolicy.CheckResult
 import io.smallrye.mutiny.Uni
-import io.vertx.core.http.HttpHeaders
 import io.vertx.ext.web.RoutingContext
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Singleton
@@ -21,9 +22,9 @@ import jakarta.ws.rs.NotFoundException
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.PodStore
 import org.eclipse.microprofile.config.inject.ConfigProperty
-import org.jboss.resteasy.reactive.server.core.request.AcceptHeaders
-import org.keycloak.common.util.MimeTypeUtil
 import org.keycloak.representations.adapters.config.PolicyEnforcerConfig
+import java.net.URI
+import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 private val EXCLUDE_PATH_PREFIXES = setOf("/q/", "/favicon.ico")
@@ -38,13 +39,13 @@ class KvasirTenantConfigResolver(
     override fun resolve(
         routingContext: RoutingContext,
         requestContext: OidcRequestContext<OidcTenantConfig>
-    ): Uni<OidcTenantConfig?> {
+    ): Uni<OidcTenantConfig> {
         return getTenantConfig(routingContext.request().path())
     }
 
-    private fun getTenantConfig(path: String): Uni<OidcTenantConfig?> {
+    private fun getTenantConfig(path: String): Uni<OidcTenantConfig> {
         val pathItems = path.split('/').filterNot { it.isBlank() }
-        if (pathItems.isEmpty() || EXCLUDE_PATH_PREFIXES.any{path.startsWith(it)}) {
+        if (pathItems.isEmpty() || EXCLUDE_PATH_PREFIXES.any { path.startsWith(it) }) {
             return Uni.createFrom().nullItem()
         }
         val podName = pathItems.first()
@@ -52,15 +53,19 @@ class KvasirTenantConfigResolver(
         return podStore.getById(podId)
             .onItem().ifNull().failWith { NotFoundException() }
             .onItem().ifNotNull().transformToUni { pod ->
-                Uni.createFrom().item(OidcTenantConfig().apply {
-                    this.setTenantId(podName)
-                    this.setApplicationType(OidcTenantConfig.ApplicationType.SERVICE)
+                Uni.createFrom().item(
                     pod?.getAuthConfiguration()?.let { authConfig ->
-                        this.setAuthServerUrl(authConfig.serverUrl)
-                        this.setClientId(authConfig.clientId)
-                        this.credentials.setSecret(authConfig.clientSecret)
-                    }
-                })
+                        OidcTenantConfig.builder()
+                            .tenantEnabled(true)
+                            .tenantId(podName)
+                            .tenantPath("$podName/*")
+                            .authentication().cookiePath("/$podName").end()
+                            .applicationType(ApplicationType.SERVICE)
+                            .authServerUrl(authConfig.serverUrl)
+                            .clientId(authConfig.clientId)
+                            .credentials(authConfig.clientSecret).discoveryEnabled(true)
+                            .build()
+                    })
             }
     }
 
@@ -73,8 +78,8 @@ class KvasirTenantPolicyConfigResolver() : TenantPolicyConfigResolver {
         routingContext: RoutingContext,
         tenantConfig: OidcTenantConfig?,
         requestContext: OidcRequestContext<KeycloakPolicyEnforcerTenantConfig>
-    ): Uni<KeycloakPolicyEnforcerTenantConfig?> {
-        val tenantId = tenantConfig?.tenantId?.getOrNull()?.takeIf { it != "Default" }
+    ): Uni<KeycloakPolicyEnforcerTenantConfig> {
+        val tenantId = tenantConfig?.tenantId()?.getOrNull()?.takeIf { it != "Default" }
         return if (tenantId == null) {
             // Default policy config resolver
             Uni.createFrom().nullItem()
@@ -86,14 +91,15 @@ class KvasirTenantPolicyConfigResolver() : TenantPolicyConfigResolver {
             )
         }
     }
-
 }
 
 @Singleton
 @IfBuildProperty(name = Constants.KEYCLOAK_POLICY_AGENT_ENABLED, stringValue = "true")
 class FixedKeycloakPolicyEnforcerAuthorizer(
     private val resolver: PolicyEnforcerResolver,
-    private val blockingExecutor: BlockingSecurityExecutor
+    private val blockingExecutor: BlockingSecurityExecutor,
+    @ConfigProperty(name = "kvasir.webclient-uri")
+    private val webclientUri: Optional<URI>,
 ) : KeycloakPolicyEnforcerAuthorizer(), HttpSecurityPolicy {
 
     companion object {
@@ -106,8 +112,13 @@ class FixedKeycloakPolicyEnforcerAuthorizer(
         identity: Uni<SecurityIdentity>,
         requestContext: HttpSecurityPolicy.AuthorizationRequestContext
     ): Uni<CheckResult> {
-        if (routingContext.parsedHeaders().accept().any{ MediaType.TEXT_HTML == it.value() }) {
-            return CheckResult.permit()
+        // If root path of tenant: check for possible passthrough so redirect to client is possible
+        if (webclientUri.isPresent && routingContext.get<String>(OidcUtils.TENANT_ID_ATTRIBUTE)
+                .let { routingContext.normalizedPath() == "/${it}" }
+        ) {
+            if (routingContext.parsedHeaders().accept().any { it.value() == (MediaType.TEXT_HTML) }) {
+                return CheckResult.permit();
+            }
         }
         return identity.flatMap { identity ->
             if (identity.isAnonymous) {
@@ -133,7 +144,7 @@ class FixedKeycloakPolicyEnforcerAuthorizer(
     private fun checkPermissionInternalMadeAccessible(
         routingContext: RoutingContext,
         securityIdentity: SecurityIdentity
-    ): Uni<HttpSecurityPolicy.CheckResult> {
+    ): Uni<CheckResult> {
         val methodDef = KeycloakPolicyEnforcerAuthorizer::class.java.getDeclaredMethod(
             "checkPermissionInternal",
             RoutingContext::class.java,
