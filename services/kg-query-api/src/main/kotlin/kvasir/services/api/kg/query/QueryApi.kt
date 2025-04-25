@@ -1,18 +1,18 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import io.quarkus.security.PermissionsAllowed
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
-import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.utils.http.KvasirUriInfo
+import kvasir.utils.http.getParentUri
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.media.Schema
@@ -27,7 +27,7 @@ const val QUERY_API_PATH = "/query"
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
     private val podStore: PodStore,
-    private val uriInfo: UriInfo,
+    private val uriInfo: KvasirUriInfo,
     private val securityIdentity: SecurityIdentity
 ) {
 
@@ -42,8 +42,8 @@ class QueryApi(
         @PathParam("podId") podId: String,
         input: QueryInputWithContext
     ): Uni<QueryResult> {
-        val podId = uriInfo.absolutePath.toString().substringBefore(QUERY_API_PATH)
-        return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input)
                 knowledgeGraph.query(req).toUni()
@@ -61,8 +61,8 @@ class QueryApi(
     fun queryJsonLD(
         @PathParam("podId") podId: String, input: QueryInputWithContext
     ): Uni<Any> {
-        val podId = uriInfo.absolutePath.toString().substringBefore(QUERY_API_PATH)
-        return podStore.getById(podId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input)
                 knowledgeGraph.query(req).map {

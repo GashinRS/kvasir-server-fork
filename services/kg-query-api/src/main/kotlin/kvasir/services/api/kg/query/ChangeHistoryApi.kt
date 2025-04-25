@@ -1,21 +1,20 @@
 package kvasir.services.api.kg.query
 
-import io.quarkus.security.PermissionsAllowed
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
-import jakarta.annotation.security.RolesAllowed
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Link
 import jakarta.ws.rs.core.Response
-import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.changes.ChangeHistory
 import kvasir.definitions.kg.changes.ChangeHistoryRequest
 import kvasir.definitions.kg.changes.ChangeReport
-import kvasir.definitions.kg.changes.ChangeHistory
 import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
+import kvasir.utils.http.KvasirUriInfo
+import kvasir.utils.http.getParentUri
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.idgen.InvalidChangeRequestIdException
 import kvasir.utils.rdf.RDFTransformer
@@ -30,7 +29,7 @@ import java.util.*
 class ChangeHistoryApi(
     val changeHistory: ChangeHistory,
     val knowledgeGraph: KnowledgeGraph,
-    val uriInfo: UriInfo,
+    val uriInfo: KvasirUriInfo,
     private val securityIdentity: SecurityIdentity
 ) {
 
@@ -42,10 +41,10 @@ class ChangeHistoryApi(
         @QueryParam("pageSize") @Parameter(required = false) @DefaultValue("100") pageSize: Int,
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<List<ChangeReport>>> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/changes")
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return changeHistory.list(
             ChangeHistoryRequest(
-                podId = podId,
+                podId = fqPodId,
                 cursor = cursor.orElse(null),
                 pageSize = pageSize
             )
@@ -66,11 +65,12 @@ class ChangeHistoryApi(
         @QueryParam("pageSize") @Parameter(required = false) @DefaultValue("100") pageSize: Int,
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<List<ChangeReport>>> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices/$sliceId/changes")
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return changeHistory.list(
             ChangeHistoryRequest(
-                podId = podId,
-                sliceId = sliceId,
+                podId = fqPodId,
+                sliceId = fqSliceId,
                 cursor = cursor.orElse(null),
                 pageSize = pageSize
             )
@@ -90,11 +90,11 @@ class ChangeHistoryApi(
         @PathParam("podId") podId: String,
         @PathParam("changeId") changeId: String
     ): Uni<ChangeReport> {
-        val id = uriInfo.absolutePath.toString()
-        val podId = uriInfo.absolutePath.toString().substringBefore("/changes")
+        val id = uriInfo.getResourceUri().toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         return changeHistory.get(
             ChangeHistoryRequest(
-                podId = podId,
+                podId = fqPodId,
                 changeRequestId = id
             )
         )
@@ -105,7 +105,7 @@ class ChangeHistoryApi(
                     Uni.createFrom().item(
                         ChangeReport(
                             id,
-                            podId,
+                            fqPodId,
                             listOf(ChangeReportStatusEntry(changeRequestId.timestamp(), ChangeStatusCode.QUEUED))
                         )
                     )
@@ -123,9 +123,9 @@ class ChangeHistoryApi(
         @PathParam("sliceId") sliceId: String,
         @PathParam("changeId") changeId: String
     ): Uni<ChangeReport> {
-        val fqChangeId = uriInfo.absolutePath.toString()
-        val fqSliceId = uriInfo.absolutePath.toString().substringBeforeLast("/changes")
-        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/slices/$sliceId/changes")
+        val fqChangeId = uriInfo.getResourceUri().toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(4).toASCIIString()
         return changeHistory.get(
             ChangeHistoryRequest(
                 podId = fqPodId,
@@ -160,8 +160,8 @@ class ChangeHistoryApi(
         @QueryParam("pageSize") @Parameter(required = false) @DefaultValue("2500") pageSize: Int,
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<ChangeRecords>> {
-        val fqPodId = uriInfo.absolutePath.toString().substringBefore("/changes")
-        val fqChangeRequestId = uriInfo.absolutePath.toString().substringBefore("/records")
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqChangeRequestId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return knowledgeGraph.getChangeRecords(
             ChangeRecordRequest(
                 podId = fqPodId,
@@ -210,11 +210,12 @@ class ChangeHistoryApi(
         @QueryParam("pageSize") @Parameter(required = false) @DefaultValue("2500") pageSize: Int,
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<ChangeRecords>> {
-        val podId = uriInfo.absolutePath.toString().substringBefore("/slices/$sliceId/changes")
+        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        val fqChangeId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return knowledgeGraph.getChangeRecords(
             ChangeRecordRequest(
-                podId = podId,
-                changeRequestId = uriInfo.absolutePath.toString().substringBefore("/records"),
+                podId = fqPodId,
+                changeRequestId = fqChangeId,
                 cursor = cursor.orElse(null),
                 pageSize = pageSize
             )
@@ -242,20 +243,10 @@ class ChangeHistoryApi(
     private fun generateLinks(result: PagedResult<*>): Array<Link> {
         return listOfNotNull(
             result.nextCursor?.let {
-                Link.fromUri(
-                    uriInfo.absolutePathBuilder.replaceQueryParam(
-                        "cursor",
-                        it
-                    ).build()
-                ).rel("next").build()
+                Link.fromUri(uriInfo.getAbsoluteUri("cursor" to it)).rel("next").build()
             },
             result.previousCursor?.let {
-                Link.fromUri(
-                    uriInfo.absolutePathBuilder.replaceQueryParam(
-                        "cursor",
-                        it
-                    ).build()
-                ).rel("previous").build()
+                Link.fromUri(uriInfo.getAbsoluteUri("cursor" to it)).rel("previous").build()
             }
         ).toTypedArray()
     }
