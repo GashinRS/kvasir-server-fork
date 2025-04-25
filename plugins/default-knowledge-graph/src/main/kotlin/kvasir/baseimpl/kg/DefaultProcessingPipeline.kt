@@ -5,6 +5,7 @@ import io.quarkus.arc.All
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.enterprise.inject.Instance
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeProcessor
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
@@ -160,7 +161,8 @@ class MaterializeS3References(
 
 @ApplicationScoped
 class MaterializeRecords(
-    private val kg: KnowledgeGraph
+    private val kg: KnowledgeGraph,
+    private val sliceStore: Instance<SliceStore>
 ) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
         // Process embedded inserts/deletes
@@ -192,23 +194,32 @@ class MaterializeRecords(
                     }
             }
     }
-
+    
     private fun bindWhere(request: ChangeRequest): Uni<QueryResult> {
         return if (request.with == null) {
             Uni.createFrom().item(QueryResult(data = emptyMap()))
         } else {
-            val q = QueryRequest(
-                context = request.context,
-                podId = request.podId,
-                sliceId = request.sliceId,
-                query = request.with!!
-            )
-            kg.query(q).toUni()
-                .onFailure().recoverWithItem { err ->
-                    QueryResult(
-                        data = emptyMap(),
-                        errors = listOf(mapOf("message" to (err.message ?: "")))
+            // For change requests on a Slice, load the Slice schema
+            (request.sliceId?.let { sliceId ->
+                sliceStore.get().getById(request.podId, sliceId)
+                    .onItem().ifNull().failWith(IllegalArgumentException("Slice not found: $sliceId"))
+                    .onItem().ifNotNull().transform { it!! }
+            } ?: Uni.createFrom().nullItem())
+                .chain { slice ->
+                    val q = QueryRequest(
+                        context = slice?.context ?: request.context,
+                        podId = request.podId,
+                        sliceId = request.sliceId,
+                        query = request.with!!,
+                        predefinedSchema = slice.schema
                     )
+                    kg.query(q).toUni()
+                        .onFailure().recoverWithItem { err ->
+                            QueryResult(
+                                data = emptyMap(),
+                                errors = listOf(mapOf("message" to (err.message ?: "")))
+                            )
+                        }
                 }
         }
     }
@@ -285,7 +296,7 @@ class SliceSHACLValidator(private val sliceStore: SliceStore) : ChangeProcessor 
 internal fun Multi<ChangeRecord>.validate(validator: SHACLValidator): Uni<Void> {
     return this.collect().asSet().chain { records ->
         try {
-            if(records.isNotEmpty()) {
+            if (records.isNotEmpty()) {
                 validator.validate(records.map { it.statement })
             }
             Uni.createFrom().voidItem()
