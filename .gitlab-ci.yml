@@ -1,12 +1,12 @@
 variables:
-  INSTANCE: 'Writerside/kd'
-  ARTIFACT: 'webHelpKD2-all.zip'
-  DOCKER_VERSION: '243.21565'
-  ALGOLIA_ARTIFACT: 'algolia-indexes-KD.zip'
-  ALGOLIA_APP_NAME: '23BLLNEZ2S'
-  ALGOLIA_INDEX_NAME: 'prod_KVASIR-NEXT'
-  CONFIG_JSON_PRODUCT: 'kd'
-  CONFIG_JSON_VERSION: 'main'
+  INSTANCE: "Writerside/kd"
+  ARTIFACT: "webHelpKD2-all.zip"
+  DOCKER_VERSION: "243.21565"
+  ALGOLIA_ARTIFACT: "algolia-indexes-KD.zip"
+  ALGOLIA_APP_NAME: "23BLLNEZ2S"
+  ALGOLIA_INDEX_NAME: "prod_KVASIR-NEXT"
+  CONFIG_JSON_PRODUCT: "kd"
+  CONFIG_JSON_VERSION: "main"
   MAVEN_CLI_OPTS: >-
     --batch-mode
     --errors
@@ -57,7 +57,6 @@ workflow:
     - if: $CI_COMMIT_BRANCH
       variables: *commitBranchVersions
 
-
 .mavenChanges: &mavenChanges
   - "**/src/**/*"
   - "**/pom.xml"
@@ -72,7 +71,7 @@ stages:
 build:maven:
   stage: test
   image: $JDK_IMAGE
-  tags: [ "cache", "docker" ]
+  tags: ["cache", "docker"]
   cache:
     key: ${CI_COMMIT_REF_SLUG}
     paths:
@@ -83,9 +82,9 @@ build:maven:
     - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
       alias: docker
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: "$CI_COMMIT_TAG"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
     - changes: *mavenChanges
       variables:
         SKIP_TESTS: "-DskipTests"
@@ -113,7 +112,7 @@ package:maven:
   stage: package
   needs: [build:maven]
   image: $JDK_IMAGE
-  tags: [ "cache" ]
+  tags: ["cache"]
   cache:
     key: ${CI_COMMIT_REF_SLUG}
     paths:
@@ -134,14 +133,14 @@ package:maven:
         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-noauth
         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-noauth
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: "$CI_COMMIT_TAG"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
   script:
     - ./mvnw $MAVEN_CLI_OPTS -DskipTests install -Pservices
-        -Dquarkus.container-image.push=true
-        -Dkvasir.plugins.policy-agent.keycloak.enabled=$KEYCLOAK_POLICY_ENFORCER
-        -Dkvasir.plugins.policy-agent.uma.enabled=$UMA_POLICY_ENFORCER
+      -Dquarkus.container-image.push=true
+      -Dkvasir.plugins.policy-agent.keycloak.enabled=$KEYCLOAK_POLICY_ENFORCER
+      -Dkvasir.plugins.policy-agent.uma.enabled=$UMA_POLICY_ENFORCER
   interruptible: true
   artifacts:
     paths:
@@ -151,9 +150,9 @@ build:writerside:
   needs: [build:maven]
   stage: test
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: "$CI_COMMIT_TAG"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
   image: registry.jetbrains.team/p/writerside/builder/writerside-builder:$DOCKER_VERSION
   script:
     - set -e
@@ -175,9 +174,9 @@ test:writerside:
   image: $JDK_IMAGE
   stage: test
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: "$CI_COMMIT_TAG"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
   script:
     - cd public
     - curl -o wrs-checker.jar -L https://packages.jetbrains.team/maven/p/writerside/maven/com/jetbrains/writerside/writerside-ci-checker/1.0/writerside-ci-checker-1.0.jar
@@ -186,8 +185,8 @@ test:writerside:
 pages:
   stage: deploy
   rules:
-    - if: '$CI_COMMIT_TAG'
-    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_TAG"
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
   needs: [build:writerside, test:writerside]
   image: ubuntu:latest
   before_script:
@@ -207,9 +206,9 @@ search:
   rules:
     # Never run when the ALGOLIA_KEY is not set
     - when: never
-      if: '$ALGOLIA_KEY == null'
-    - if: '$CI_COMMIT_TAG'
-    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+      if: "$ALGOLIA_KEY == null"
+    - if: "$CI_COMMIT_TAG"
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
   needs: [build:writerside, test:writerside, pages]
   image: registry.jetbrains.team/p/writerside/builder/algolia-publisher:2.0.32-3
   script:
@@ -222,13 +221,13 @@ search:
   interruptible: false
 
 smoke_test:compose:
-  tags: [ "docker" ]
+  tags: ["docker"]
   image: docker
   stage: verify
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: "$CI_COMMIT_TAG"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
   services:
     - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
       alias: docker
