@@ -243,12 +243,14 @@ smoke_test:compose:
         fi
         sleep 1
       done
+    - echo "$DOCKER_TOKEN" | docker login -u $DOCKER_USER --password-stdin
+    - echo "$DOCKER_TOKEN" | docker login docker.redpanda.com -u $DOCKER_USER --password-stdin
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - cd .deployment/docker-compose
     - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$IMAGE_TAG%g" docker-compose.yml
     - docker compose up -d --wait --quiet-pull --no-color
-    - docker ps -a
+    - docker ps
     - tests/compose-smoke-test.sh
   after_script:
     - cd .deployment/docker-compose
