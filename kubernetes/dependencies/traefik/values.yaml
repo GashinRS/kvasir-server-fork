@@ -1,0 +1,22 @@
+ports:
+  web:
+    nodePort: 32080
+  websecure:
+    nodePort: 32443
+
+service:
+  type: NodePort
+
+providers:
+  kubernetesIngress:
+    publishedService:
+      enabled: true
+
+ingressRoute:
+  dashboard:
+    enabled: true
+
+logs:
+  access:
+    enabled: true
+    addInternals: true

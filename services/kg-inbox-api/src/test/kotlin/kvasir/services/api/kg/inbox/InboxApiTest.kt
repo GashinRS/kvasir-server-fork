@@ -207,13 +207,13 @@ class InboxApiTest {
         // Delete the person
         val delete = ChangeRequestInput(
             context = TestConstants.CONTEXT, with = """
-            { 
+            {
               ex_Person(id: "$personId") {
                 id
                 so_givenName
                 so_familyName
                 so_email
-              } 
+              }
             }
         """.trimIndent(), delete = listOf(
                 """
@@ -247,12 +247,12 @@ class InboxApiTest {
                     type Query {
                       ex_hello: String
                     }
-                    
+
                     type Mutation {
                         insert(input: PersonInput!): ID!
                         delete(input: PersonInput!): ID!
                     }
-                    
+
                     input PersonInput @class(iri: "ex:Person") {
                       id: ID!
                       so_givenName: String!

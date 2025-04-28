@@ -7,6 +7,7 @@ import io.smallrye.mutiny.Uni
 import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.Response
+import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.AuthConfiguration
 import kvasir.definitions.kg.PodAuthInitializer
 import org.eclipse.microprofile.config.inject.ConfigProperty
@@ -35,6 +36,12 @@ class KeycloakPodAuthInitializer(
     private val vertx: Vertx,
     @ConfigProperty(name = "quarkus.oidc.auth-server-url")
     defaultRealmUri: String,
+    @ConfigProperty(name = "quarkus.keycloak.admin-client.username", defaultValue = "admin")
+    username: String,
+    @ConfigProperty(name = "quarkus.keycloak.admin-client.password", defaultValue = "admin")
+    password: String,
+    @ConfigProperty(name = KvasirConfig.WEBCLIENT_URI_PROPERTY, defaultValue = KvasirConfig.WEBCLIENT_URI_DEFAULT)
+    private val webClientUri: String,
     @ConfigProperty(
         name = "kvasir.plugins.policy-agent.keycloak.realm-initializer.request-password-reset",
         defaultValue = "true"
@@ -49,7 +56,7 @@ class KeycloakPodAuthInitializer(
     // TODO: why are these instances created manually?
     private val keycloakHostUrl = URI(defaultRealmUri).let { "${it.scheme}://${it.authority}" };
     private val keycloak = KeycloakBuilder.builder().serverUrl(keycloakHostUrl).realm("master")
-        .clientId("admin-cli").grantType("password").username("admin").password("admin").build()
+        .clientId("admin-cli").grantType("password").username(username).password(password).build()
     private val realmsBaseUri = defaultRealmUri.substringBeforeLast("/")
 
     override fun initialize(
@@ -107,6 +114,8 @@ class KeycloakPodAuthInitializer(
         val defaultUser = keycloak.realm(podName).users().searchByUsername(podName.lowercase(), true).first()
         keycloak.realm(podName).users().get(defaultUser.id).roles().realmLevel().add(listOf(ownerRole))
 
+
+
         val secret =
             Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8).toString()
 
@@ -132,7 +141,11 @@ class KeycloakPodAuthInitializer(
             this.isDirectAccessGrantsEnabled = false
             this.authorizationServicesEnabled = false
             this.redirectUris =
-                listOf<String>("http://localhost:4200/*", "http://localhost:3000/*", "http://localhost:8081/*");
+                listOf<String>("http://localhost:4200/*",
+                    "http://localhost:3000/*",
+                    "http://localhost:8081/*",
+                    webClientUri.removeSuffix("/") + "/*"
+                );
             this.webOrigins = listOf<String>("+");
             this.attributes = mapOf<String, String>(Pair("pkce.code.challenge.method", "S256"))
         }).checkStatus()

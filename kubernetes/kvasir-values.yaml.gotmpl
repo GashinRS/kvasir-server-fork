@@ -1,0 +1,70 @@
+global:
+  host: {{ .StateValues.kvasirHost }}
+  ingressRoutes:
+    matchHost: true
+    tlsEnabled: {{ .StateValues.tlsEnabled }}
+    proxy: {{ .StateValues.proxy }}
+  {{- if eq .Environment.Name "kind" }}
+    tls:
+      secretName: kvasir-tls
+  {{- end }}
+
+  image:
+    registry: gitlab.ilabt.imec.be:4567/ibcndevs/solid/kvasir-next
+    pullPolicy: Always
+    tag: main
+  imagePullSecrets:
+    - name: gitlab-credentials
+
+  env:
+    - name: KVASIR_BASE_URI
+      value: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.kvasirHost }}/"
+    - name: KVASIR_WEBCLIENT_URI
+      value: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.kvasirHost }}/_ui/"
+
+  deploymentStrategy:
+    type: Recreate
+
+  quarkus:
+    httpPort: 8080
+    metricsPort: 9000
+
+  oidc:
+    enabled: true
+    authServerUrl: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.keycloakHost }}/realms/quarkus"
+    clientId: "quarkus-app"
+    clientSecret: "secret"
+    realm: "quarkus"
+    existingSecret: ""
+    clientIdSecretKey: ""
+    clientSecretSecretKey: ""
+    realmSecretKey: ""
+    keycloakAdmin:
+      username: "kcadmin"
+      password: {{ .StateValues.keycloakAdminPassword }}
+      realm: "master"
+
+
+  minio:
+    host: "minio.minio.svc.cluster.local"
+    port: "9000"
+    skipTlsVerify: true
+    useTls: false
+    accessKey: "admin"
+    secretKey: {{ .StateValues.minioRootpassword }}
+    existingSecret: ""
+    accessKeySecretKey: ""
+    secretKeySecretKey: ""
+
+  kafka:
+    bootstrapServers: "kvasir-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092"
+
+  clickhouse:
+    host: "clickhouse-clickhouse.clickhouse.svc.cluster.local"
+    port: "8123"
+
+"pod-management-api":
+  applicationYaml:
+    quarkus:
+      log:
+        level: DEBUG

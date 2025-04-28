@@ -1,3 +1,6 @@
+kvasir:
+  base-uri: http://localhost:8080/
+  webclient-uri: ${kvasir.base-uri}_ui/
 mp:
   messaging:
     outgoing:

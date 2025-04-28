@@ -264,3 +264,26 @@ smoke_test:compose:
       - .deployment/docker-compose/compose-ps.txt
     expire_in: 1 week
     when: on_failure
+
+deploy:cnl:
+  stage: deploy
+  image: ghcr.io/helmfile/helmfile:v0.171.0
+  allow_failure: true
+  rules:
+    # only run on this repo not on forks
+    - if: '$CI_PROJECT_NAME != "kvasir-next" && $CI_PROJECT_NAMESPACE != "ibcndevs/solid"'
+      when: never
+    - if: "$CI_COMMIT_TAG"
+      when: manual
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
+      when: manual
+  before_script:
+    - kubectl config use-context ibcndevs/clusters:kvasir-cnl
+    - kubectl config view --minify
+    - echo $DOCKER_TOKEN | helm registry login docker.io -u $DOCKER_USER --password-stdin
+  script:
+    - cd kubernetes
+    - helmfile deps
+    - helmfile sync

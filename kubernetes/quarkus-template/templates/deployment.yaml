@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "quarkus-template.fullname" . }}
+  labels:
+    {{- include "quarkus-template.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  {{- with .Values.deploymentStrategy | default .Values.global.deploymentStrategy }}
+  strategy:
+      {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "quarkus-template.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "quarkus-template.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "quarkus-template.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default .Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.quarkus.httpPort | default .Values.global.quarkus.httpPort }}
+              protocol: TCP
+            {{- with .Values.quarkus.metricsPort | default .Values.global.quarkus.metricsPort}}
+            - name: metrics
+              containerPort: {{ . }}
+              protocol: TCP
+            {{- end }}
+          env:
+            {{- if .Values.oidc.enabled -}}
+            {{- include "quarkus-template.oidc.envConfig" . | nindent 12 }}
+            {{- include "quarkus-template.oidc.envConfig.additional" . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.oidc.keycloakAdmin.enabled -}}
+            {{- include "quarkus-template.oidc.keycloakAdmin.envConfig" . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.minio.enabled -}}
+            {{- include "quarkus-template.minio.envConfig" . | nindent 12 }}
+            {{- include "quarkus-template.minio.envConfig.additional" . | nindent 12}}
+            {{- end }}
+            {{- if .Values.clickhouse.enabled -}}
+            {{- include "quarkus-template.clickhouse.envConfig" . | nindent 12 }}
+            {{- include "quarkus-template.clickhouse.envConfig.additional"  . | nindent 12}}
+            {{- end }}
+            {{- if .Values.kafka.enabled -}}
+            {{- include "quarkus-template.kafka.envConfig" . | nindent 12 }}
+            {{- include "quarkus-template.kafka.envConfig.additional" . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.env -}}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.global.env -}}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.livenessProbe | default .Values.global.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe | default .Values.global.readinessProbe}}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /home/jboss/config
+          {{- if .Values.global.truststore }}
+            - name: oidc-truststore-volume
+              mountPath: /etc/certs/oidc
+              readOnly: true
+          {{- end }}
+{{/*            {{- toYaml .Values.volumeMounts | nindent 12 }}*/}}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "quarkus-template.fullname" . }}-app-properties
+        {{- if .Values.global.truststore }}
+        - name: oidc-truststore-volume
+          secret:
+            secretName: {{ .Values.global.truststore.secretName }}
+            items:
+            - key: oidc-truststore.p12 # The key used when creating the secret
+              path: truststore.p12 
+        {{- end }}
+{{/*        {{- toYaml .Values.volumes | nindent 8 }}*/}}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

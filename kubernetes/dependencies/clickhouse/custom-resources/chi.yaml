@@ -1,0 +1,86 @@
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: clickhouse
+  namespace: clickhouse
+spec:
+  defaults:
+    templates:
+      serviceTemplate: cluster-ip
+      dataVolumeClaimTemplate: data-storage-vc-template
+      logVolumeClaimTemplate: log-storage-vc-template
+      podTemplate: pod-template-with-volumes
+  configuration:
+    users:
+      default/networks/host_regexp: (chi-clickhouse-[^.]+\d+-\d+|clickhouse\-clickhouse)\.clickhouse\.svc\.cluster\.local$
+      # Change the network to your pod network subrange, 192.168.0.0/16 is our pod network
+      # TIP: kubectl cluster-info dump | grep -m 1 cluster-cidr
+      default/networks/ip:
+        - 127.0.0.1
+        - 192.168.0.0/16
+        - 10.244.0.0/16
+      default/profile: default
+      default/quota: default
+    profiles:
+      default/allow_experimental_dynamic_type: 1
+    clusters:
+      - name: "kvasir-data"
+        # Change to desired
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+    settings:
+      logger/level: information
+  templates:
+    podTemplates:
+      - name: pod-template-with-volumes
+        podDistribution:
+          - type: ShardAntiAffinity
+          - type: MaxNumberPerNode
+            number: 2
+        spec:
+          containers:
+            - name: clickhouse
+              image: clickhouse/clickhouse-server:25.3.3.42
+              volumeMounts:
+                - name: data-storage-vc-template
+                  mountPath: /var/lib/clickhouse
+                - name: log-storage-vc-template
+                  mountPath: /var/log/clickhouse-server
+              # Change according to your usage and resource limitations
+              resources:
+                requests:
+                  memory: 2Gi
+                  cpu: 250m
+    #                limits:
+    #                  memory: 2Gi
+    # Service template which disables the default Load Balancer
+    serviceTemplates:
+      - name: service-tpl
+        spec:
+          ports:
+            - name: http
+              port: 8123
+            - name: client
+              port: 9000
+          type: ClusterIP
+    # Change your storageclasses and if desired sizes
+    volumeClaimTemplates:
+      - name: data-storage-vc-template
+        reclaimPolicy: Retain
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          # storageClassName: set-your-non-default-storageclass-here
+          resources:
+            requests:
+              storage: 20Gi
+      - name: log-storage-vc-template
+        reclaimPolicy: Retain
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          # storageClassName: set-your-non-default-storageclass-here
+          resources:
+            requests:
+              storage: 2Gi

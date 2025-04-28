@@ -1,0 +1,12 @@
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: clickhouse
+  namespace: clickhouse
+spec:
+  configuration:
+    zookeeper:
+      nodes:
+        # Check correct URL/port for your installation!
+        - host: keeper-chkeeper
+          port: 2181

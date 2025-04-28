@@ -13,8 +13,8 @@ import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import jakarta.enterprise.inject.Instance
-import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.*
+import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.reactive.skipToLast
 import kvasir.definitions.reactive.toUni

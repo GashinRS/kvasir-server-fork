@@ -1,0 +1,27 @@
+dependencies:
+- name: quarkus-template
+  repository: file://../quarkus-template
+  version: 0.1.0
+- name: quarkus-template
+  repository: file://../quarkus-template
+  version: 0.1.0
+- name: quarkus-template
+  repository: file://../quarkus-template
+  version: 0.1.0
+- name: quarkus-template
+  repository: file://../quarkus-template
+  version: 0.1.0
+- name: quarkus-template
+  repository: file://../quarkus-template
+  version: 0.1.0
+- name: quarkus-template
+  repository: file://../quarkus-template
+  version: 0.1.0
+- name: quarkus-template
+  repository: file://../quarkus-template
+  version: 0.1.0
+- name: quarkus-template
+  repository: file://../quarkus-template
+  version: 0.1.0
+digest: sha256:cc3563f0cac26eeae2a11575907863c3c00798fba06a35af125c1d3325ec2c81
+generated: "2025-03-13T15:28:15.814048347+01:00"

@@ -1,0 +1,38 @@
+{{- if .Values.ingressRoutes.enabled}}
+{{- $fullName := include "quarkus-template.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+{{- $tlsEnabled := or .Values.global.ingressRoutes.tlsEnabled .Values.ingressRoutes.tlsEnabled -}}
+{{- $matchHost := or .Values.ingressRoutes.matchHost .Values.global.ingressRoutes.matchHost -}}
+{{- $proxyMode := .Values.global.ingressRoutes.proxy | default "none" -}}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "quarkus-template.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - {{- if eq $proxyMode "edge" }}
+      web
+      {{- else }}
+      {{ $tlsEnabled | ternary "websecure" "web" }}
+      {{- end }}
+  routes:
+    {{- range .Values.ingressRoutes.routes }}
+    {{- $host := .host | default $.Values.global.host }}
+    - match: {{ printf "%s%s" ($matchHost | ternary (printf "Host(`%s`) && " $host) "") .match }}
+      priority: {{ .priority | default 0 }}
+      kind: Rule
+      {{- if .middlewares }}
+      middlewares:
+        {{- toYaml .middlewares | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ $fullName }}
+          port: {{ $svcPort }}
+    {{- end}}
+  {{- if and $tlsEnabled (ne $proxyMode "edge") }}
+  tls:
+    secretName: {{ .Values.global.ingressRoutes.tls.secretName }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,49 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: change-requests
+  labels:
+    strimzi.io/cluster: kvasir-kafka
+spec:
+  partitions: 15
+  replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: outbox
+  labels:
+    strimzi.io/cluster: kvasir-kafka
+spec:
+  partitions: 15
+  replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: storage-mutations
+  labels:
+    strimzi.io/cluster: kvasir-kafka
+spec:
+  partitions: 15
+  replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: slice-events
+  labels:
+    strimzi.io/cluster: kvasir-kafka
+spec:
+  partitions: 15
+  replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: pod-events
+  labels:
+    strimzi.io/cluster: kvasir-kafka
+spec:
+  partitions: 15
+  replicas: 2
