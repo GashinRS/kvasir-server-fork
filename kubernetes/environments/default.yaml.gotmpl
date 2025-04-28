@@ -1,0 +1,6 @@
+kvasirHost: {{ requiredEnv "KVASIR_HOST" }}
+keycloakHost: {{ env "KEYCLOAK_HOST" }}
+minioRootpassword: {{ env "MINIO_ROOT_PASSWORD" | default "miniopassword" }}
+keycloakAdminPassword: {{ env "KEYCLOAK_ADMIN_PASSWORD" | default "kcpassword" }}
+tlsEnabled: {{ env "TLS_ENABLED" | default "false" }}
+proxy: {{ env "PROXY" | default "edge" }}

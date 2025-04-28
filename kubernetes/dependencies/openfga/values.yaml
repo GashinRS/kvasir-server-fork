@@ -1,0 +1,11 @@
+datastore:
+  engine: postgres
+  applyMigrations: true
+  migrationType: job
+  # Reference to the secret created by pgo
+  uri: postgres://pgobelisk.postgresql:5432/openfga
+  existingSecret: openfga.openfga.pgobelisk.credentials.postgresql.acid.zalan.do
+  secretKeys:
+    usernameKey: "username"
+    passwordKey: "password"
+

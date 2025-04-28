@@ -38,3 +38,9 @@ load-tests/results
 # Ignore Helmsman temporary directory
 .helmsman-tmp
 *.drawio.bkp
+
+# Local Kind setup
+kubernetes/.certs
+kubernetes/.env
+
+**/kls_database.db

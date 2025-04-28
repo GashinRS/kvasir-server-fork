@@ -1,0 +1,59 @@
+apiVersion: "clickhouse-keeper.altinity.com/v1"
+kind: "ClickHouseKeeperInstallation"
+metadata:
+  name: chkeeper
+spec:
+  configuration:
+    clusters:
+      - name: "keeper"
+        layout:
+          replicasCount: 3
+    settings:
+      prometheus/endpoint: "/metrics"
+      prometheus/port: "7000"
+      prometheus/metrics: "true"
+      prometheus/events: "true"
+      prometheus/asynchronous_metrics: "true"
+      prometheus/status_info: "false"
+
+  defaults:
+    templates:
+      # Templates are specified as default for all clusters
+      podTemplate: default
+
+  templates:
+    podTemplates:
+      - name: default
+        spec:
+          # affinity removed to allow use in single node test environment
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: "app"
+                        operator: In
+                        values:
+                          - clickhouse-keeper
+                  topologyKey: "kubernetes.io/hostname"
+          containers:
+            - name: clickhouse-keeper
+              imagePullPolicy: IfNotPresent
+              image: "clickhouse/clickhouse-keeper:24.9.2.42"
+              resources:
+                requests:
+                  memory: "256M"
+                  cpu: "250m"
+                limits:
+                  memory: "1Gi"
+          securityContext:
+            fsGroup: 101
+
+    volumeClaimTemplates:
+      - name: default
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi

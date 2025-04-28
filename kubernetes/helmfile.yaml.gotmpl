@@ -1,0 +1,150 @@
+environments:
+  default:
+    values:
+      - environments/default.yaml.gotmpl
+  kind:
+    values:
+      - environments/default.yaml.gotmpl
+      - tlsEnabled: true
+      - proxy: "none"
+---
+
+helmDefaults:
+  timeout: 1200
+  createNamespace: true
+
+repositories:
+  - name: strimzi
+    oci: true
+    url: quay.io/strimzi-helm
+  - name: bitnami
+    oci: true
+    url: registry-1.docker.io/bitnamicharts
+  - name: traefik
+    url: https://helm.traefik.io/traefik
+  - name: clickhouse-operator
+    url: https://docs.altinity.com/clickhouse-operator
+  - name: discover
+    oci: true
+    url: ghcr.io/idlab-discover/registry
+
+releases:
+  - name: traefik
+    namespace: traefik
+    labels:
+      component: dependency
+      app: traefik
+    chart: traefik/traefik
+    version: 35.1.0
+    values:
+      - dependencies/traefik/values.yaml
+{{- if eq .Environment.Name "kind" }}
+      - dependencies/traefik/kind-values.yaml.gotmpl
+{{- end }}
+
+  - name: kafka-operator
+    namespace: kafka
+    labels:
+      component: operators
+    chart: strimzi/strimzi-kafka-operator
+    version: 0.45.0
+    values:
+      - dependencies/kafka/operator/values.yaml
+  - name: kafka
+    namespace: kafka
+    labels:
+      component: dependency
+    chart: ./dependencies/kafka/custom-resources
+    needs: [ kafka-operator ]
+
+  - name: clickhouse-operator
+    namespace: clickhouse
+    labels:
+      component: operators
+      app: clickhouse
+    chart: clickhouse-operator/altinity-clickhouse-operator
+    version: 0.24.5
+    values:
+      - dependencies/clickhouse/operator/values.yaml
+  - name: clickhouse
+    namespace: clickhouse
+    labels:
+      component: dependency
+      app: clickhouse
+    chart: ./dependencies/clickhouse/custom-resources
+    needs: [ clickhouse-operator ]
+
+  - name: minio
+    namespace: minio
+    labels:
+      component: dependency
+      app: minio
+    chart: bitnami/minio
+    version: 16.0.8
+    values:
+      - auth:
+          rootPassword: {{ .StateValues.minioRootpassword }}
+
+  - name: keycloak
+    namespace: keycloak
+    labels:
+        app: keycloak
+        component: dependency
+    chart: bitnami/keycloak
+    version: 24.6.1
+    values:
+      - auth:
+          adminUser: kcadmin
+          adminPassword: {{ .StateValues.keycloakAdminPassword }}
+      - dependencies/keycloak/values.yaml.gotmpl
+{{- if eq .Environment.Name "kind" }}
+      - production: false
+{{- end }}
+      - proxy: {{ .StateValues.proxy }}
+      - keycloakConfigCli:
+          enabled: true
+          configuration:
+            kvasir-realm.json: |
+              {{ readFile "../plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json" | nindent 14 }}
+
+  - name: kvasir
+    namespace: kvasir
+    needs:
+      - traefik/traefik
+      - keycloak/keycloak
+      - kafka/kafka
+      - clickhouse/clickhouse
+      - minio/minio
+    labels:
+      app: kvasir
+      component: kvasir
+    chart: ./kvasir
+    values:
+      - kvasir-values.yaml.gotmpl
+      - global:
+          ingressRoutes:
+            tlsEnabled: {{ .StateValues.tlsEnabled }}
+            proxy: {{ .StateValues.proxy }}
+
+
+  - name: kvasir-ui
+    namespace: kvasir
+    needs: [ kvasir/kvasir ]
+    labels:
+      app: kvasir-ui
+      component: kvasir
+    chart: discover/kvasir-ui
+    version: 0.1.1
+    values:
+      - global:
+          host: {{ .StateValues.kvasirHost }}
+          ingressRoutes:
+            matchHost: true
+            tlsEnabled: {{ .StateValues.tlsEnabled }}
+            proxy: {{ .StateValues.proxy }}
+            {{- if eq .Environment.Name "kind" }}
+            tls:
+              secretName: kvasir-tls
+            {{- end }}
+        ingressRoutes:
+          enabled: true

@@ -1,0 +1,19 @@
+postgresql:
+  enabled: true
+
+proxy: edge
+production: true
+
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  hostname: {{ .StateValues.keycloakHost }}
+{{- if and (ne .StateValues.proxy "edge") .StateValues.tlsEnabled }}
+  tls: true
+  {{/* TLS certificates will be retrieved from a TLS secret with name: `{{- printf "%s-tls" (tpl .Values.ingress.hostname .) }}` */}}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  secrets:
+    - name: "trigger-usage-of-external-tls-secret"
+{{- end }}
