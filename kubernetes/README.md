@@ -88,13 +88,13 @@ In that case, just run the command again. It should succeed the second time.
 The entire stack can be setup with helmfile, `helmfile.yaml.gotmpl` holds the configuration for all dependencies, Kvasir and Kvasir UI. Though some initial input is required, see `environments/default.yaml.gotmpl`:
 
 ```yaml
-kvasirHost: { { requiredEnv "KVASIR_HOST" } }
-keycloakHost: { { env "KEYCLOAK_HOST" } }
-minioRootpassword: { { env "MINIO_ROOT_PASSWORD" | default "miniopassword" } }
+kvasirHost: {{ requiredEnv "KVASIR_HOST" }}
+keycloakHost: {{ env "KEYCLOAK_HOST" }}
+minioRootpassword: {{ env "MINIO_ROOT_PASSWORD" | default "miniopassword" }}
 keycloakAdminPassword:
-  { { env "KEYCLOAK_ADMIN_PASSWORD" | default "kcpassword" } }
-tlsEnabled: { { env "TLS_ENABLED" | default "false" } }
-proxy: { { env "PROXY" | default "edge" } }
+  {{ env "KEYCLOAK_ADMIN_PASSWORD" | default "kcpassword" }}
+tlsEnabled: {{ env "TLS_ENABLED" | default "false" }}
+proxy: {{ env "PROXY" | default "edge" }}
 ```
 
 By default the `state-values` are setup through Environment variables. You can also provide
