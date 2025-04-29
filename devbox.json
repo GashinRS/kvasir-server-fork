@@ -2,11 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.14.0/.schema/devbox.schema.json",
   "packages": [
     "temurin-bin@21.0.6",
-    "kubernetes-helm@3.17.2",
     "helmfile@0.171.0",
-    "kubectl@latest",
-    "mkcert@latest",
-    "kind@latest"
+    "git-cliff@2.8.0",
+    "kubectl@1.32.3",
+    "kind@0.27.0",
+    "mkcert@1.4.4",
+    "kubernetes-helm@3.17.3"
   ],
   "shell": {
     "init_hook": [
