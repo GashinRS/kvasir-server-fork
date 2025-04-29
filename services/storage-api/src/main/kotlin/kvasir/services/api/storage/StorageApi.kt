@@ -22,6 +22,7 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 import uk.co.lucasweb.aws.v4.signer.Signer
 import uk.co.lucasweb.aws.v4.signer.credentials.AwsCredentials
 import java.net.URI
+import java.net.URLDecoder
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -128,7 +129,7 @@ class S3Interceptor(
                         timestamp = Instant.now(),
                         podId = "$baseUri$podId",
                         sliceId = sliceId?.let { "$baseUri$podId/slices/$it" },
-                        objectId = context.request().uri.substringAfter("/$bucket/").substringBefore("?"),
+                        objectId = URLDecoder.decode(context.request().uri.substringAfter("/$bucket/").substringBefore("?"), Charsets.UTF_8.name()),
                         externalObjectUri = "${baseUri.removeSuffix("/")}${context.request().proxiedRequest().path()}",
                         internalStorageUri = "http://$s3Host:$s3Port${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),
