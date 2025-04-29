@@ -4,15 +4,11 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
-## [0.4.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.4.1..0.4.2) - 2025-04-29
+## [0.5.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.5.0..0.5.1) - 2025-04-29
 
 ### Bug Fixes
 
 - KvasirUriInfo abstraction allows running Kvasir behind a reverse proxy - ([967796b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/967796b4f1fb604343d842cdbd152f7a4bcef63c)) - Wannes Kerckhove
-
-### Chore
-
-- Quarkus 3.21.3 update - ([e893e0f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/e893e0fdf898c84339e4dc011685247864609291)) - Thomas Dupont
 
 ### Documentation
 
@@ -25,7 +21,7 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
-## [0.4.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.4.0..0.4.1) - 2025-04-16
+## [0.5.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.4.0..0.5.0) - 2025-04-16
 
 ### Bug Fixes
 
@@ -49,10 +45,6 @@ All notable changes to this project will be documented in this file. See [conven
 
 - **(compose)** update kvasir-ui to 0.4.4 release - ([a6c2a9d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a5f9d0cf99f3ed7f32e886962a5f92849146be73)) - Thomas Dupont
 - fix changelog gitlab URLs - ([44a9dc2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/44a9dc23afb691233247094f0c3f5857dfd7327f)) - Jasper Vaneessen
-
-### Build
-
-- add 'services' profile to trigger build with correct dep tree - ([4a8db9a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4a8db9a411955c650467c244a9079151999335c1)) - Jasper Vaneessen
 
 ---
 
@@ -78,11 +70,6 @@ All notable changes to this project will be documented in this file. See [conven
 ### Tests
 
 - Added basic unit tests for the main services - ([f169cbe](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/f169cbee5a2183f0720e19be94f73d0c2ba9a814)) - Wannes Kerckhove
-
-### Ci
-
-- integrate multi platform builds (ARM support) - ([438782e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/438782eca721cd62ace9cd77e0d5424523e91108)) - Jasper Vaneessen
-- parallel builds for policy enforcers - ([a7435ec](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a7435ecc9476291f85337bbc637635798a759768)) - Jasper Vaneessen
 
 ---
 
@@ -159,19 +146,6 @@ All notable changes to this project will be documented in this file. See [conven
 
 - removed test scope dependency on clickhouse-plugin in storage-api (no longer needed because of build property disabling policy-enforcer) - ([bab321b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/bab321bd292323bd28f5a52181f73676f10ac496)) - Wannes Kerckhove
 
-### Build
-
-- update maven and CI for testing and image deployment - ([4bebea8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4bebea851eebadc364afa2c23e2522c636bdccff)) - Jasper Vaneessen
-- fixing missing CH dependency in storage-api - ([b7beb44](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b7beb44420aef44c2afd806d224b8dbb4af7ae47)) - Wannes Kerckhove
-
-### Busy
-
-- Working on Keycloak integration - ([cfa1c63](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/cfa1c63aaf2786845fb617d2421a49312cb1cf9c)) - Wannes Kerckhove
-
-### Ci
-
-- fix quarkus image push property - ([375d36a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/375d36af81b22c3676712173c91fff686246643e)) - Jasper Vaneessen
-
 ---
 
 ## [0.1.9](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.1.8..0.1.9) - 2024-12-05
@@ -195,12 +169,6 @@ All notable changes to this project will be documented in this file. See [conven
 - Fixed issue with S3 proxy (caused by breaking change in Vert.x dependency) - ([ae16c0d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ae16c0dfc976aa8eb45316abefb2871c1bcb1079)) - Wannes Kerckhove
 - Fixed runtime errors caused by build issues - ([875c9d7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/875c9d705853af2b1adccc31fb569dc384765208)) - Wannes Kerckhove
 - Fixed rdfs_Resource queries no longer giving results - ([80c03f7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/80c03f7d5505ea106db9a1770093aa0794b39392)) - Wannes Kerckhove
-
-### Ci
-
-- dont build search index when key isn't set - ([32d451a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/32d451aea2c3cdf44d634836b4498349d4830758)) - Jasper Vaneessen
-- fix algolia key check - ([a80ee7b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a80ee7b14c639e76c85599eb75b76558622ab5f2)) - Jasper Vaneessen
-- remove static set ALGOLIA_KEY (purely rely on CI/CD vars) - ([c3aba16](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c3aba16f76ce544226190fdfd4dfb5bca7571e5c)) - Jasper Vaneessen
 
 ---
 
@@ -233,17 +201,6 @@ All notable changes to this project will be documented in this file. See [conven
 - added maven wrapper - ([1ec1e67](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/1ec1e67c5fcec0088632d88f558d0653973d7be4)) - Wannes Kerckhove
 - added Maven build files - ([d98d914](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d98d914545c226de11fa6a237d08c1585665c893)) - Wannes Kerckhove
 - updated .gitignore - ([a86b02d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a86b02da6e176469f17a5f83aeadd9b6853d92fc)) - Wannes Kerckhove
-
-### Build
-
-- monolith module can always include the quarkus-maven-plugin - ([1c60e9f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/1c60e9f4807d9c5f7c12a96d27840eea392a6512)) - Wannes Kerckhove
-
-### Ci
-
-- change to mvn + mvnw executable - ([46088cb](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/46088cb2df812ded16e8c6a1849dc868cb59ff18)) - Jasper Vaneessen
-- mvn cache - ([6f6fc65](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/6f6fc65994bb590014a62f77a469edd102ea7ff9)) - Jasper Vaneessen
-- adapt workflow - ([a7a5ea8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a7a5ea88a554fa6cea1e7697285b053c11f7fc22)) - Jasper Vaneessen
-- add needs to test:writerside - ([d5e99ff](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d5e99ff1da55d3dd33b776724462386125ff9f61)) - Jasper Vaneessen
 
 ---
 
@@ -280,10 +237,6 @@ All notable changes to this project will be documented in this file. See [conven
 - implemented basic offset based paging for GraphQL querying (cfr. Stardog or Ruben T implementations) - ([83021fb](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/83021fbeff940edfb7a276025dc495c533ae944e)) - Wannes Kerckhove
 - totalCount is now available for non-scalar relationships - ([8000fbf](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/8000fbfd4384eec60d52bb91e863170b5b6d86cd)) - Wannes Kerckhove
 
-### Wip
-
-- working on totalCount implementation - ([f5a509a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/f5a509a88ff7840d1f4ea2d0580be753dcfcaa67)) - Wannes Kerckhove
-
 ---
 
 ## [0.1.3-preview](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.1.2-preview..0.1.3-preview) - 2024-11-20
@@ -306,18 +259,6 @@ All notable changes to this project will be documented in this file. See [conven
 
 - removing old xtdb startup scripts - ([272b286](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/272b286e9f4d511c51ae908a454f7214db6c801c)) - Wannes Kerckhove
 - removed legacy xtdb code in kg implementation module - ([025f330](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/025f33007590e4194ca4fa46bbc061a86e716760)) - Wannes Kerckhove
-
-### Ci
-
-- added a docker-compose deployment folder - ([171f4e8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/171f4e8dadb262c297ff0fa5ae487d4a9d824d74)) - Wannes Kerckhove
-
----
-
-## [0.1.2-preview](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.1.1-preview..0.1.2-preview) - 2024-11-19
-
-### Ci
-
-- Quick fix for docker rate limit - ([9e235fe](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/9e235fec5962893962ce8ad2e45c7bb923134e0c)) - Wannes Kerckhove
 
 ---
 
@@ -417,36 +358,5 @@ All notable changes to this project will be documented in this file. See [conven
 
 - added storage api (s3 proxy) basic test - ([082de4d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/082de4d0d046ec4d9ed405b03738ab9e45a2154a)) - Wannes Kerckhove
 - Wrote some basic tests for Xtdb KG mutations - ([155323a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/155323aaca01ad6db24628d42c3e501cf7edfccb)) - Wannes Kerckhove
-
-### Busy
-
-- working on class-based query entry-points - ([3192131](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/3192131327ae0dcb919eef1d3836e78323e387aa)) - Wannes Kerckhove
-
-### Ci
-
-- publish Writerside pages - ([a5085d2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a5085d27d5fbcbb69f8a9cda4a1af4d410b8fff3)) - tdupont
-- basic gradle pipeline (no testing, dummy deployment) - ([cd1a329](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/cd1a329add486de6cd58ef71306f727d585df836)) - Jasper Vaneessen
-- basic gradle pipeline (no testing, dummy deployment) - ([1986833](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/1986833fb05ac333c887e6a37dc19ec5ec628807)) - Jasper Vaneessen
-- updating image version for writerside build - ([70c63c3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/70c63c34c7db592541150f1849a082696550fbc1)) - Wannes Kerckhove
-- build kvasir ui only from latest main branch - ([c01ac94](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c01ac94caa9084d4e402fab652ace0de7405c931)) - tdupont
-
-### Eval
-
-- KG metadata is now constructed at ingest time. Experimenting with schema-first query resolving. - ([db1ee8d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/db1ee8d35a8df1a334c60d76052bd90b234aab5e)) - Wannes Kerckhove
-
-### Git
-
-- updated .gitignore to exclude kotlin compiler tmp files - ([4104945](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/410494577aecb5bb8915b128784a678eae731028)) - Wannes Kerckhove
-
-### Overhaul
-
-- abstracted part of the query engine and replaced xtdb with Clickhouse as default implementation. - ([1e01181](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/1e0118183eaa2620b93ed492e1b4153eb78d7ac2)) - Wannes Kerckhove
-
-### Wip
-
-- graphql to sql shaping up - ([3ac9629](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/3ac962987673184fb1355a04c70e6a9660578551)) - Wannes Kerckhove
-- alternative change commands + trying to fix query bug - ([ece5d2f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ece5d2fd1e8c9882fb9362fc86dae111c2bcec81)) - Wannes Kerckhove
-- preparing history api - ([e5f73e9](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/e5f73e9c47eb529621a1750d71ebc9ad21a8ed79)) - Wannes Kerckhove
-- working on change history + complete API structure overhaul - ([0a95840](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/0a95840eef1a2187fc1284bd868d986fb91708b9)) - Wannes Kerckhove
 
 <!-- generated by git-cliff -->

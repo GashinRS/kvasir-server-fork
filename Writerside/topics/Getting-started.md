@@ -59,7 +59,7 @@ Kvasir UI: https://kvasir-10-10-134-243.nip.io/_ui
 Keycloak Admin UI: https://keycloak-10-10-134-243.nip.io/auth/admin
 ````
 
-## Deploying to Kubernetes
+### Hosted Kubernetes cluster
 
 The entire stack can be setup with helmfile, `helmfile.yaml.gotmpl` holds the configuration for all dependencies, Kvasir and Kvasir UI. Though some initial input is required, see `environments/default.yaml.gotmpl`:
 
