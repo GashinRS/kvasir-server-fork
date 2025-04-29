@@ -1,6 +1,5 @@
 package kvasir.plugins.kg.clickhouse.client
 
-import idlab.obelisk.core.plugins.datastore.clickhouse.client.ClickhouseClientConfig
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonArray

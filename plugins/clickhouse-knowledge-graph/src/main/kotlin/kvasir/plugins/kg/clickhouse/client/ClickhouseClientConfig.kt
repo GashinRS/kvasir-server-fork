@@ -1,4 +1,4 @@
-package idlab.obelisk.core.plugins.datastore.clickhouse.client
+package kvasir.plugins.kg.clickhouse.client
 
 import io.smallrye.config.ConfigMapping
 import io.smallrye.config.WithDefault
