@@ -26,7 +26,75 @@ The settings for this pod can be modified via the file `application.yaml` in the
 
 
 ## Running on Kubernetes
-(A guide will be added in the future)
+
+Provided here is a short overview of how to deploy Kvasir on Kubernetes. 
+See [Deploying to Kubernetes](Deploying-to-Kubernetes.md) for full instructions on how to deploy Kvasir on Kubernetes.
+
+This project includes [devbox](https://github.com/jetify-com/devbox) configuration to manage development environment.
+
+Install devbox:
+```sh
+curl -fsSL https://get.jetpack.io/devbox | bash
+```
+
+### Local setup using Kind
+You can run Kvasir on a local Kubernetes cluster with [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/) by using the provided helper script.
+
+Then run the Kvasir local-cluster setup script:
+```sh
+devbox run local-cluster
+```
+
+Or run the script directly:
+```sh
+devbox shell
+kubernetes/kvasir-kind.sh
+```
+
+The script will output the URLs to access Kvasir, UI and Keycloak after the setup is complete. For example:
+
+```sh
+Kvasir deployed to https://kvasir-10-10-134-243.nip.io
+Kvasir UI: https://kvasir-10-10-134-243.nip.io/_ui
+Keycloak Admin UI: https://keycloak-10-10-134-243.nip.io/auth/admin
+````
+
+## Deploying to Kubernetes
+
+The entire stack can be setup with helmfile, `helmfile.yaml.gotmpl` holds the configuration for all dependencies, Kvasir and Kvasir UI. Though some initial input is required, see `environments/default.yaml.gotmpl`:
+
+```yaml
+kvasirHost: {{ requiredEnv "KVASIR_HOST" }}
+keycloakHost: {{ env "KEYCLOAK_HOST" }}
+minioRootpassword: {{ env "MINIO_ROOT_PASSWORD" | default "miniopassword" }}
+keycloakAdminPassword:
+  {{ env "KEYCLOAK_ADMIN_PASSWORD" | default "kcpassword" }}
+tlsEnabled: {{ env "TLS_ENABLED" | default "false" }}
+proxy: {{ env "PROXY" | default "edge" }}
+```
+
+After setting the necessary environment variables, you can run the following command to deploy Kvasir and all dependencies:
+
+```bash
+helmfile sync
+```
+
+Alternatively refer to a custom file
+
+```bash
+helmfile sync --state-values-file=custom-state-values.yaml
+```
+
+Or set values on the commandline:
+
+```bash
+helmfile sync --state-values-set kvasirHost=kvasir.example.com \
+    --state-values-set keycloakHost=auth.example.com \
+    --state-values-set minioRootpassword=miniopassword \
+    --state-values-set keycloakAdminPassword=kcpassword \
+    --state-values-set tlsEnabled=true \
+    --state-values-set proxy=edge
+```
 
 ## Running in dev mode
 

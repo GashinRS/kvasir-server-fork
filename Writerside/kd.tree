@@ -22,4 +22,5 @@
     </toc-element>
     <toc-element topic="Kvasir-UI.md"/>
     <toc-element topic="API-Reference.md"/>
+    <toc-element topic="Deploying-to-Kubernetes.md"
 </instance-profile>
