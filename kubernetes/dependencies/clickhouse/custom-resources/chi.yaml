@@ -41,7 +41,7 @@ spec:
         spec:
           containers:
             - name: clickhouse
-              image: clickhouse/clickhouse-server:25.3.3.42
+              image: altinity/clickhouse-server:24.8.14.10459.altinitystable
               volumeMounts:
                 - name: data-storage-vc-template
                   mountPath: /var/lib/clickhouse

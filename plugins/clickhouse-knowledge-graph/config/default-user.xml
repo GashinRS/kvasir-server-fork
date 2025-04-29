@@ -1,0 +1,7 @@
+<clickhouse>
+  <!-- Docs: <https://clickhouse.com/docs/en/operations/settings/settings_users/> -->
+  <users>
+    <default>
+    </default>
+  </users>
+</clickhouse>

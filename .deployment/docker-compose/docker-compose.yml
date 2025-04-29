@@ -36,11 +36,11 @@ services:
       retries: 5
 
   clickhouse:
-    #    24.8 = LTS version
-    image: clickhouse/clickhouse-server:24.8.11.5
+    #    24.8 = lts version
+    image: altinity/clickhouse-server:24.8.14.10459.altinitystable
     ports:
       - "8123:8123"
-      # TCP port for ClickHouse (should not be required externally)
+      # tcp port for clickhouse (should not be required externally)
       #- "9000:9000"
     volumes:
       - "clickhouse_data:/var/lib/clickhouse"
@@ -115,8 +115,8 @@ services:
     ports:
       - "8280:8080"
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KEYCLOAK_EXTRA_ARGS: --import-realm
     volumes:
       - ../../plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json:/opt/bitnami/keycloak/data/import/quarkus-realm.json
