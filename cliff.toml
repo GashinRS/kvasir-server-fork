@@ -55,7 +55,7 @@ conventional_commits = true
 # filter out the commits that are not conventional
 filter_unconventional = true
 # process each line of a commit as an individual commit
-split_commits = false
+split_commits = true
 # regex for preprocessing the commit messages
 commit_preprocessors = [
     # { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/orhun/git-cliff/issues/${2}))"}, # replace issue numbers
@@ -75,7 +75,7 @@ commit_parsers = [
     { body = ".*security", group = "Security" },
 ]
 # filter out the commits that are not matched by commit parsers
-filter_commits = false
+filter_commits = true
 # sort the tags topologically
 topo_order = false
 # sort the commits inside sections by oldest/newest order

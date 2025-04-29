@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
-## [0.4.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.4.1..0.4.2) - 2025-04-28
+## [0.4.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.4.1..0.4.2) - 2025-04-29
 
 ### Bug Fixes
 
@@ -14,9 +14,14 @@ All notable changes to this project will be documented in this file. See [conven
 
 - Quarkus 3.21.3 update - ([e893e0f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/e893e0fdf898c84339e4dc011685247864609291)) - Thomas Dupont
 
+### Documentation
+
+- Add documentation on Kubernetes deployments - ([dd997f3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/dd997f3af3fc852b3918a926e090d47d58c21e6e)) - Jasper Vaneessen
+
 ### Miscellaneous Chores
 
 - **(kubernetes)** Add Helm and Helmfile configurations along with helper scripts for Kubernetes deployments - ([21a53f6](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/21a53f648a296e3cccc468f306288adee9333c53)) - Jasper Vaneessen
+- update development dependencies - ([5f0ee38](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5f0ee38783a66a6cb9138ed3fbfcd58459f95e57)) - Jasper Vaneessen
 
 ---
 
