@@ -6,7 +6,7 @@ variables:
   ALGOLIA_APP_NAME: "23BLLNEZ2S"
   ALGOLIA_INDEX_NAME: "prod_KVASIR-NEXT"
   CONFIG_JSON_PRODUCT: "kd"
-  CONFIG_JSON_VERSION: "1.0"
+  CONFIG_JSON_VERSION: "main"
   MAVEN_CLI_OPTS: >-
     --batch-mode
     --errors
