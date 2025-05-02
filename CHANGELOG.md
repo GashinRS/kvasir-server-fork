@@ -4,11 +4,13 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
-## [0.5.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.5.0..0.5.1) - 2025-04-29
+## [0.5.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.5.0..0.5.1) - 2025-05-02
 
 ### Bug Fixes
 
 - KvasirUriInfo abstraction allows running Kvasir behind a reverse proxy - ([967796b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/967796b4f1fb604343d842cdbd152f7a4bcef63c)) - Wannes Kerckhove
+- wrong package for ClickhouseClientConfig fixed - ([61f1085](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/61f1085474665c1c4b08c883ed7af22f6d34361b)) - Thomas Dupont
+- uploading s3 files (special chars) no longer crashes simple rdf pipeline - ([10a0f15](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/10a0f15f510f59a97d613acdaff00c4eccac227f)) - Thomas Dupont
 
 ### Documentation
 
@@ -16,8 +18,10 @@ All notable changes to this project will be documented in this file. See [conven
 
 ### Miscellaneous Chores
 
+- **(dependencies)** set CH version to Altinity LTS 24.8 - ([47ac5a0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/47ac5a0fcff1194e244ae65b0e44261a2fb3fd9b)) - Jasper Vaneessen
 - **(kubernetes)** Add Helm and Helmfile configurations along with helper scripts for Kubernetes deployments - ([21a53f6](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/21a53f648a296e3cccc468f306288adee9333c53)) - Jasper Vaneessen
-- update development dependencies - ([5f0ee38](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5f0ee38783a66a6cb9138ed3fbfcd58459f95e57)) - Jasper Vaneessen
+- **(release)** prepare release 0.5.1 - ([c329bb0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c329bb0e28efecb5ce239c0c1624a4ed4783adb6)) - Jasper Vaneessen
+- update dependencies - ([5f0ee38](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5f0ee38783a66a6cb9138ed3fbfcd58459f95e57)) - Jasper Vaneessen
 
 ---
 
