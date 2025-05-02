@@ -84,7 +84,7 @@ services:
       - --kafka-addr internal://0.0.0.0:9092
       - --advertise-kafka-addr internal://localhost:9092
       - --mode dev-container
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.2
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.11
     ports:
       - "9092:9092"
     healthcheck:
@@ -109,7 +109,7 @@ services:
       retries: 5
 
   keycloak:
-    image: bitnami/keycloak:26.1.4
+    image: bitnami/keycloak:26.2.2
     depends_on:
       - postgresql
     ports:
@@ -133,7 +133,7 @@ services:
       retries: 5
 
   kvasir-ui:
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.5.0
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.5.1
     depends_on:
       - kvasir
     ports:
