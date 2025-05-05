@@ -6,6 +6,7 @@ import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
+import io.vertx.core.json.JsonObject
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
@@ -34,6 +35,8 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestStreamElementType
 import java.net.URI
+import java.util.*
+import kotlin.jvm.optionals.getOrNull
 
 @Path("")
 class GraphSlicesApi(
@@ -189,6 +192,29 @@ class GraphSlicesApi(
         }
     }
 
+    @GET
+    @Path("{podId}/slices/{sliceId}/query")
+    @Produces(MediaType.APPLICATION_JSON)
+    fun queryVirtualViaGet(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
+        @QueryParam("query") query: String,
+        @QueryParam("variables") variables: Optional<String>,
+        @QueryParam("operationName") operationName: Optional<String>
+    ): Uni<QueryResult> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        val input =
+            QueryInputImpl(
+                query = query,
+                variables = variables.getOrNull()?.let { JsonObject(it).map },
+                operationName = operationName.getOrNull()
+            )
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
+            executeQuery(fqPodId, slice, input).toUni()
+        }
+    }
+
     @POST
     @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
@@ -206,6 +232,29 @@ class GraphSlicesApi(
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).onItem().transformToMulti { slice ->
             executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
+        }
+    }
+
+    @GET
+    @Path("{podId}/slices/{sliceId}/query")
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    fun streamVirtualViaGet(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") sliceId: String,
+        @QueryParam("query") query: String,
+        @QueryParam("variables") variables: Optional<String>,
+        @QueryParam("operationName") operationName: Optional<String>,
+    ): Multi<OutboundSseEvent> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        val queryInputImpl =
+            QueryInputImpl(
+                query = query,
+                variables = variables.getOrNull()?.let { JsonObject(it).map },
+                operationName = operationName.getOrNull()
+            )
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).onItem().transformToMulti { slice ->
+            executeQuery(fqPodId, slice, queryInputImpl).map { sse.newEventBuilder().name("next").data(it).build() }
         }
     }
 
