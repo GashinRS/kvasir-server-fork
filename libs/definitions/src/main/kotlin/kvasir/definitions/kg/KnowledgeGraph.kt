@@ -1,5 +1,6 @@
 package kvasir.definitions.kg
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
@@ -176,7 +177,17 @@ data class ChangeRecordRequest(
     val podId: String,
     val changeRequestId: String,
     var cursor: String? = null,
-    val pageSize: Int = 100
+    val pageSize: Int = 100,
+    // Optional subject filter (subject must be in the supplied set)
+    val subjectIn: Set<String>? = null,
+    // Optional predicate filter (predicate must be in the supplied set)
+    val predicateIn: Set<String>? = null,
+    // Optional object filter (object must be in the supplied set)
+    val objectIn: Set<Any>? = null,
+    // Optional graph filter (graph must be in the supplied set)
+    val graphIn: Set<String>? = null,
+    // Optional type filter (which type of records to include in the result, inserts, deletes or both)
+    val recordType: ChangeRecordType? = null
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)

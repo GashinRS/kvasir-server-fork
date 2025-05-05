@@ -23,7 +23,8 @@ abstract class AbstractStorageBackend(
         val pageSize = request.pageSize.coerceAtMost(MAX_PAGE_SIZE_RECORDS)
         val offset = request.cursor?.let { OffsetBasedCursor.fromString(it) }?.offset ?: 0
         val whereClause = listOfNotNull(
-            "change_request_id = '${request.changeRequestId}'"
+            "change_request_id = '${request.changeRequestId}'",
+            generateFilters(request)
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE (", ")") ?: ""
         val sql =
             "SELECT ${targetTableColumns.joinToString()} FROM ${databaseFromPodId(request.podId)}.$targetTable $whereClause LIMIT ${pageSize + 1} OFFSET $offset"
@@ -61,5 +62,6 @@ abstract class AbstractStorageBackend(
     }
 
     protected abstract fun resultToChangeRecord(result: Map<String, Any>): List<ChangeRecord>
+    protected abstract fun generateFilters(request: ChangeRecordRequest): String?
 
 }

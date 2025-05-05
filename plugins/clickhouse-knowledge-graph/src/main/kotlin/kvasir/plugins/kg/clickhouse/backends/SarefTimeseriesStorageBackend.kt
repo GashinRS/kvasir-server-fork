@@ -9,10 +9,7 @@ import graphql.util.TreeTransformerUtil
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import jakarta.inject.Singleton
-import kvasir.definitions.kg.ChangeRecord
-import kvasir.definitions.kg.ChangeRecordType
-import kvasir.definitions.kg.QueryRequest
-import kvasir.definitions.kg.RDFStatement
+import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.kg.graphql.ARG_CLASS_NAME
 import kvasir.definitions.kg.graphql.DIRECTIVE_STORAGE_NAME
@@ -195,6 +192,18 @@ class SarefTimeseriesStorageBackend(
                 type = ChangeRecordType.INSERT,
             )
         }
+    }
+
+    // TODO: Support filters on the hasValue and hasTimestamp properties (currently only label filters are supported)
+    override fun generateFilters(request: ChangeRecordRequest): String? {
+        return listOfNotNull(
+            request.subjectIn?.let { subjects -> "id IN (${subjects.joinToString(", ") { "'$it'" }})" },
+            request.graphIn?.let { graphs -> "graph IN (${graphs.joinToString(", ") { "'$it'" }})" },
+            request.predicateIn?.let { predicates -> "hasAny(mapKeys(labels), [${predicates.joinToString(", ") { "'$it'" }}])" },
+            request.objectIn?.let { objects ->
+                "hasAny(mapValues(labels), [${objects.joinToString(", ") { "'$it'" }}])"
+            },
+        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ")
     }
 
     override fun prepareQuery(request: QueryRequest, queryDocument: Document): Document {
