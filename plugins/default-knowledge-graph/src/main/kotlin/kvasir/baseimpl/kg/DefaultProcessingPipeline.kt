@@ -112,7 +112,7 @@ class MaterializeS3References(
                         deleteTuples.map {
                             ChangeRecord(
                                 request.id,
-                                buffer.requestTimestamp,
+                                request.getTimestamp(),
                                 ChangeRecordType.DELETE,
                                 it
                             )
@@ -132,7 +132,7 @@ class MaterializeS3References(
                                 insertTuples.map {
                                     ChangeRecord(
                                         request.id,
-                                        buffer.requestTimestamp,
+                                        request.getTimestamp(),
                                         ChangeRecordType.INSERT,
                                         it
                                     )
@@ -175,7 +175,7 @@ class MaterializeRecords(
                 buffer.add(
                     deleteStatements.map {
                         ChangeRecord(
-                            request.id, buffer.requestTimestamp,
+                            request.id, request.getTimestamp(),
                             ChangeRecordType.DELETE, it
                         )
                     }
@@ -186,7 +186,7 @@ class MaterializeRecords(
                         buffer.add(
                             insertStatements.map {
                                 ChangeRecord(
-                                    request.id, buffer.requestTimestamp,
+                                    request.id, request.getTimestamp(),
                                     ChangeRecordType.INSERT, it
                                 )
                             }

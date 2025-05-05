@@ -16,7 +16,6 @@ import java.util.concurrent.atomic.AtomicLong
 @ApplicationScoped
 class InMemoryChangeRequestTxBufferFactory : ChangeRequestTxBufferFactory {
     override fun open(request: ChangeRequest): Uni<ChangeRequestTxBuffer> {
-        val requestStartTs = Instant.now()
         return Uni.createFrom().item(object : ChangeRequestTxBuffer {
 
             private val insertRecords = HashSet<ChangeRecord>()
@@ -26,8 +25,6 @@ class InMemoryChangeRequestTxBufferFactory : ChangeRequestTxBufferFactory {
             private val nrOfDeletes = AtomicLong(0)
             override val request: ChangeRequest
                 get() = request
-            override val requestTimestamp: Instant
-                get() = requestStartTs
 
             override fun stream(
                 filterByType: ChangeRecordType?,

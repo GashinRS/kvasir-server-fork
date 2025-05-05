@@ -9,6 +9,7 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlin.uuid.toJavaUuid
 import kotlin.uuid.toKotlinUuid
+import kvasir.definitions.kg.ChangeRequest
 
 class InvalidChangeRequestIdException(msg: String) : RuntimeException(msg)
 
@@ -49,4 +50,8 @@ data class ChangeRequestId(val baseUri: String, val uuid: UUID) {
         }
     }
 
+}
+
+fun ChangeRequest.getTimestamp(): Instant {
+    return ChangeRequestId.fromId(this.id).timestamp()
 }
