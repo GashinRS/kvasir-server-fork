@@ -71,17 +71,21 @@ fun Field.getStringArgument(name: String, variables: Map<String, Any>): String? 
 
 fun Field.getStringArrayArgument(name: String, variables: Map<String, Any>): List<String>? {
     return this.arguments.find { it.name == name }?.let {
-        val result = (it.value as ArrayValue).values.map { value ->
-            when(value) {
-                is StringValue -> value.value
-                is VariableReference -> {
-                    variables[value.name].toString()
-                }
+        when (val argVal = it.value) {
+            is ArrayValue -> argVal.values.map { value ->
+                when (value) {
+                    is StringValue -> value.value
+                    is VariableReference -> {
+                        variables[value.name].toString()
+                    }
 
-                else -> throw IllegalArgumentException("Unsupported argument type: ${value::class.simpleName}")
+                    else -> throw IllegalArgumentException("Unsupported argument type: ${value::class.simpleName}")
+                }
             }
+
+            is StringValue -> listOf(argVal.value)
+            else -> throw IllegalArgumentException("Unsupported argument type: ${argVal::class.simpleName}")
         }
-        result
     }
 }
 
