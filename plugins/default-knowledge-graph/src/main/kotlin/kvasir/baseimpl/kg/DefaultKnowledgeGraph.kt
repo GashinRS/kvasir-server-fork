@@ -429,7 +429,7 @@ class DefaultKnowledgeGraph(
             podId = request.podId,
             statusEntry = listOf(
                 ChangeReportStatusEntry(ChangeRequestId.fromId(request.id).timestamp(), ChangeStatusCode.QUEUED),
-                ChangeReportStatusEntry(Instant.now(), resultCode)
+                ChangeReportStatusEntry(Instant.now(), resultCode, errorMessage)
             ),
             sliceId = request.sliceId,
             errorMessage = errorMessage
