@@ -4,7 +4,6 @@ import cz.jirutka.rsql.parser.RSQLParser
 import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
-import cz.jirutka.rsql.parser.ast.OrNode
 import cz.jirutka.rsql.parser.ast.RSQLOperators
 import graphql.language.*
 import graphql.schema.*
@@ -12,11 +11,9 @@ import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
-import kvasir.baseimpl.kg.SchemaGenerator
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
-import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
@@ -29,6 +26,8 @@ import kvasir.utils.graphql.*
 import kvasir.utils.json.convertToJsonMap
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
+
+private val FIELD_EXPR_REGEX = Regex("""\[(\d+)\]|\.([a-zA-Z_]\w*)""")
 
 @ApplicationScoped
 class ConvertToSQLResolver(
@@ -475,7 +474,27 @@ open class SQLConvertor(
     protected fun orderByStatement(field: Field, prefix: String = "", postFix: String = ""): String {
         val orderByValue = field.getStringArrayArgument(ARG_ORDER_BY_NAME, env.variables)
         return orderByValue?.takeIf { it.isNotEmpty() }?.let { fields ->
-            "ORDER BY ${fields.joinToString { prefix + (if (it.startsWith("-")) "${it.substring(1)} DESC" else it.toString()) + postFix }} "
+            val parsedFieldExpr = fields.map { input ->
+                // Replace array index and object key expressions with Clickhouse-compatible syntax
+                val output = FIELD_EXPR_REGEX.replace(input) { matchResult ->
+                    when {
+                        matchResult.groupValues[1].isNotEmpty() -> {
+                            // This is an array index
+                            val index = matchResult.groupValues[1].toInt() + 1
+                            "[$index]"
+                        }
+
+                        matchResult.groupValues[2].isNotEmpty() -> {
+                            // This is an object key
+                            "['${matchResult.groupValues[2]}']"
+                        }
+
+                        else -> matchResult.value
+                    }
+                }
+                output
+            }
+            "ORDER BY ${parsedFieldExpr.joinToString { prefix + (if (it.startsWith("-")) "${it.substring(1)} DESC" else it.toString()) + postFix }} "
         } ?: ""
     }
 
