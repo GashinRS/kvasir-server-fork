@@ -1,5 +1,6 @@
 package kvasir.utils.shacl
 
+import graphql.Scalars
 import graphql.language.IntValue
 import graphql.language.StringValue
 import graphql.scalars.ExtendedScalars
@@ -191,6 +192,7 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
             field.getDirectiveArg<StringValue>(DIRECTIVE_PREDICATE_NAME, ARG_IRI_NAME)?.value
         }
         val subject = rdfFactory.createBNode()
+        val fieldType = field.type.innerType<GraphQLInputType>()
         return listOfNotNull(
             rdfFactory.createStatement(subject, RDF.TYPE, SHACL.PROPERTY_SHAPE),
             rdfFactory.createStatement(subject, SHACL.PATH, rdfFactory.createIRI(propertyName)),
@@ -217,24 +219,27 @@ class GraphQL2SHACL(graphql: String, private val context: Map<String, Any>) {
                     field.getAppliedDirective(DIRECTIVE_SHAPE_NAME).getArgument(ARG_MAX_COUNT_NAME).getValue<Int>()
                 )
             ) else null,
-            if (field.type.isScalar()) {
-                rdfFactory.createStatement(
+            when {
+                fieldType == Scalars.GraphQLID -> rdfFactory.createStatement(subject, SHACL.NODE_KIND_PROP, SHACL.IRI)
+                fieldType.isScalar() -> rdfFactory.createStatement(
                     subject,
                     SHACL.DATATYPE,
                     rdfFactory.createIRI(field.type.innerType<GraphQLScalarType>().rdfDatatype())
                 )
-            } else {
-                val relType = field.type.innerType<GraphQLInputObjectType>()
-                val typeClass = relType.getAppliedDirective(DIRECTIVE_CLASS_NAME)?.let {
-                    resolveNameAsIri(relType.name) ?: it.getArgument(ARG_IRI_NAME)?.getValue<String>()
-                }
-                if (typeClass == null) {
-                    // GraphQL describes a Shape
-                    val shapeFQName = resolveNameAsIri(relType.name) ?: "$shapeDocBaseIri${relType.name}"
-                    rdfFactory.createStatement(subject, SHACL.NODE, rdfFactory.createIRI(shapeFQName))
-                } else {
-                    // GraphQL describes an actual RDF class
-                    rdfFactory.createStatement(subject, SHACL.CLASS, rdfFactory.createIRI(typeClass))
+
+                else -> {
+                    val relType = field.type.innerType<GraphQLInputObjectType>()
+                    val typeClass = relType.getAppliedDirective(DIRECTIVE_CLASS_NAME)?.let {
+                        resolveNameAsIri(relType.name) ?: it.getArgument(ARG_IRI_NAME)?.getValue<String>()
+                    }
+                    if (typeClass == null) {
+                        // GraphQL describes a Shape
+                        val shapeFQName = resolveNameAsIri(relType.name) ?: "$shapeDocBaseIri${relType.name}"
+                        rdfFactory.createStatement(subject, SHACL.NODE, rdfFactory.createIRI(shapeFQName))
+                    } else {
+                        // GraphQL describes an actual RDF class
+                        rdfFactory.createStatement(subject, SHACL.CLASS, rdfFactory.createIRI(typeClass))
+                    }
                 }
             },
             field.getAppliedDirective(DIRECTIVE_SHAPE_NAME)?.getArgument(ARG_PATTERN_NAME)?.getValue<String?>()?.let {

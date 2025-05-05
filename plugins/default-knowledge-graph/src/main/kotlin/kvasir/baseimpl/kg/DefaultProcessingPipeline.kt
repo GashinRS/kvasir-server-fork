@@ -2,6 +2,7 @@ package kvasir.baseimpl.kg
 
 import com.dashjoin.jsonata.Jsonata.jsonata
 import io.quarkus.arc.All
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
@@ -10,6 +11,7 @@ import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeProcessor
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
+import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
 import kvasir.definitions.kg.exceptions.SHACLValidationException
 import kvasir.definitions.kg.slices.SliceStore
@@ -18,12 +20,16 @@ import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirNamedGraphs
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.reactive.skipToLast
+import kvasir.utils.graphql.ChangeRequestValidator
+import kvasir.utils.idgen.getTimestamp
 import kvasir.utils.rdf.RDFTransformer
+import kvasir.utils.rdf.writeToString
 import kvasir.utils.shacl.GraphQL2SHACL
 import kvasir.utils.shacl.RDF4JSHACLValidator
 import kvasir.utils.shacl.SHACLValidationFailure
 import kvasir.utils.shacl.SHACLValidator
 import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.eclipse.rdf4j.rio.RDFFormat
 
 @ApplicationScoped
 class EvaluateAssertions(
@@ -194,7 +200,7 @@ class MaterializeRecords(
                     }
             }
     }
-    
+
     private fun bindWhere(request: ChangeRequest): Uni<QueryResult> {
         return if (request.with == null) {
             Uni.createFrom().item(QueryResult(data = emptyMap()))
@@ -211,7 +217,7 @@ class MaterializeRecords(
                         podId = request.podId,
                         sliceId = request.sliceId,
                         query = request.with!!,
-                        predefinedSchema = slice.schema
+                        predefinedSchema = slice?.schema
                     )
                     kg.query(q).toUni()
                         .onFailure().recoverWithItem { err ->
@@ -261,6 +267,7 @@ class MaterializeRecords(
         return when (val transformedData = jsonata(template).evaluate(bindings)) {
             is List<*> -> transformedData.map { it as Map<String, Any> }
             is Map<*, *> -> listOf(transformedData as Map<String, Any>)
+            null -> emptyList()           // No Match
             else -> throw InvalidTemplateException("Invalid template result: $transformedData")
         }
     }
@@ -275,6 +282,7 @@ class SliceSHACLValidator(private val sliceStore: SliceStore) : ChangeProcessor 
                 .chain { sliceSpec ->
                     if (sliceSpec != null) {
                         val shaclGen = GraphQL2SHACL(sliceSpec.schema, sliceSpec.context)
+                        Log.debug(shaclGen.getInsertSHACL().writeToString(RDFFormat.TURTLE))
                         val insertValidator = RDF4JSHACLValidator(shaclGen.getInsertSHACL())
                         val deleteValidator = RDF4JSHACLValidator(shaclGen.getDeleteSHACL())
                         // Validate inserts
@@ -292,6 +300,33 @@ class SliceSHACLValidator(private val sliceStore: SliceStore) : ChangeProcessor 
 
 }
 
+@ApplicationScoped
+class SliceGraphQLBasedValidator(private val sliceStore: SliceStore) : ChangeProcessor {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+        return buffer.request.sliceId?.let { sliceId ->
+            // Load Slice schema
+            sliceStore.getById(buffer.request.podId, sliceId)
+                .chain { sliceSpec ->
+                    if (sliceSpec != null) {
+                        buffer.stream().collect().asSet().chain { records ->
+                            val validator = ChangeRequestValidator(records, sliceSpec.schema, sliceSpec.context)
+                            try {
+                                validator.validate()
+                                Uni.createFrom().voidItem()
+                            } catch (t: Throwable) {
+                                Uni.createFrom().failure(t)
+                            }
+                        }
+                    } else {
+                        Uni.createFrom()
+                            .failure(InvalidChangeRequestException("Cannot validate change request: no spec found for Slice '$sliceId'!"))
+                    }
+                }
+        } ?: Uni.createFrom().voidItem()
+    }
+
+}
+
 // TODO: this should work for large collections of change records as well
 internal fun Multi<ChangeRecord>.validate(validator: SHACLValidator): Uni<Void> {
     return this.collect().asSet().chain { records ->
@@ -301,6 +336,7 @@ internal fun Multi<ChangeRecord>.validate(validator: SHACLValidator): Uni<Void> 
             }
             Uni.createFrom().voidItem()
         } catch (e: SHACLValidationFailure) {
+            Log.debug(e.report)
             Uni.createFrom()
                 .failure(SHACLValidationException("Change request does not match the Slice input specification!", e))
         }

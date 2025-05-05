@@ -5,7 +5,7 @@ kvasir:
         - class-name: kvasir.baseimpl.kg.EvaluateAssertions
         - class-name: kvasir.baseimpl.kg.MaterializeS3References
         - class-name: kvasir.baseimpl.kg.MaterializeRecords
-        - class-name: kvasir.baseimpl.kg.SliceSHACLValidator
+        - class-name: kvasir.baseimpl.kg.SliceGraphQLBasedValidator
         - class-name: kvasir.plugins.kg.clickhouse.backends.MetadataStorageBackend
         - class-name: kvasir.plugins.kg.clickhouse.backends.SarefTimeseriesStorageBackend
         - class-name: kvasir.plugins.kg.clickhouse.backends.GenericStorageBackend
