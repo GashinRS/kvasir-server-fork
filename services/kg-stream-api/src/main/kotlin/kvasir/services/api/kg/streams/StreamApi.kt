@@ -78,7 +78,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<JSONObject> {
-        val podId = "$baseUri$podIdParam"
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(
