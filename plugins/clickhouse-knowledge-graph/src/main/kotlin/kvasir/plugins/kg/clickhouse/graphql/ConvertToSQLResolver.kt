@@ -703,11 +703,10 @@ open class SQLConvertor(
 
         target as DirectivesContainer<*>
         val globalNodeFilter = if (env.executionStepInfo.path.parent.isRootPath) {
-            (target.getDirectiveArg<StringValue>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
-                ?: targetDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
-                ?.let {
+            getFilter(target, targetDefinition, env)
+                ?.let { filterExpr ->
                     val rsqlParser = RSQLParser()
-                    val parsedFilter = rsqlParser.parse(it.value)
+                    val parsedFilter = rsqlParser.parse(filterExpr)
                     val aliasedIdField = target.selectionSet?.selections?.filterIsInstance<Field>()
                         ?.find { it.name == FIELD_ID_NAME && it.alias != null }
                     if (aliasedIdField != null) {
@@ -720,11 +719,10 @@ open class SQLConvertor(
             null
         }
         val subFieldFilters = allSubFields.map { (subField, subFieldDefinition) ->
-            (subField.getDirectiveArg<StringValue>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
-                ?: subFieldDefinition.getDirectiveArg(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))
-                ?.let {
+            getFilter(subField, subFieldDefinition, env)
+                ?.let { filterExpr ->
                     val rsqlParser = RSQLParser()
-                    rsqlParser.parse(it.value)
+                    rsqlParser.parse(filterExpr)
                         .accept(SelectorReplacingFilterVisitor(SELF_REF_SELECTOR, subField.aliasOrName()))
                 }
         }
@@ -786,3 +784,26 @@ data class SQLQuery(val sql: String, val columns: List<String>)
 
 data class FieldToJoin(val field: Field, val typeFilter: Node?)
 data class SelectedField(val fieldName: String, val nested: Boolean, val joinStatement: String)
+
+// Fetches filter arg value for a field (with fallback to fieldDefinition), taking into account potential variable references
+internal fun getFilter(
+    field: DirectivesContainer<*>,
+    fieldDefinition: GraphQLFieldDefinition,
+    env: DataFetchingEnvironment
+): String? {
+    return (field.getDirectiveArg<Value<*>>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME)
+        ?: fieldDefinition.getDirectiveArg<Value<*>>(DIRECTIVE_FILTER_NAME, ARG_IF_NAME))?.let { ifValue ->
+        when (ifValue) {
+            is StringValue -> ifValue.value
+            is VariableReference -> {
+                when (val value = env.variables[ifValue.name]) {
+                    is String -> value
+                    null -> throw IllegalArgumentException("Variable '${ifValue.name}' not found in the environment.")
+                    else -> throw IllegalArgumentException("Unsupported variable type for 'if'-argument: ${value::class.simpleName}")
+                }
+            }
+
+            else -> throw IllegalArgumentException("Unsupported 'if'-argument type: ${ifValue::class.simpleName}")
+        }
+    }
+}
