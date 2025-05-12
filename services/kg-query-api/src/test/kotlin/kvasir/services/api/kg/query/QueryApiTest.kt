@@ -461,4 +461,90 @@ class QueryApiTest {
         assertEquals(listOf(selectedPerson[SchemaVocab.givenName]), returnedResource["so_givenName"])
     }
 
+    @Test
+    fun testRawRDFField() {
+        // Add a new relation to a Person, which can refer both to another Person or literal values
+        val selectedPerson = personData.random()
+        val selectedPersonId = selectedPerson[JsonLdKeywords.id]!!
+        val targetPersons =
+            personData.filter { it[JsonLdKeywords.id] != selectedPersonId }.shuffled().take(2)
+        val knowsLiteralNames = listOf("Henry", "Mary")
+        val changeRequest =    ChangeRequest(
+            ChangeRequestId.generate("$podUri/changes").encode(),
+            emptyMap(),
+            podUri,
+            // Include type info for both sides of the relation to help the metadata generator
+            insert = listOf(
+                mapOf(
+                    JsonLdKeywords.id to selectedPerson[JsonLdKeywords.id],
+                    JsonLdKeywords.type to ExampleVocab.Person,
+                    ExampleVocab.knows to targetPersons.map {
+                        mapOf(
+                            JsonLdKeywords.id to it[JsonLdKeywords.id],
+                            JsonLdKeywords.type to ExampleVocab.Person
+                        )
+                    }
+                )
+            )
+        )
+        kg.process(changeRequest).await().indefinitely()
+
+        val q = QueryInputWithContext(
+            """
+            {
+              ex_Person {
+                id
+                _rawRDF
+                ex_knows {
+                  _rawRDF
+                }
+              }
+            }
+        """.trimIndent(), providedContext = TestConstants.CONTEXT
+        )
+        var result = testHelpers.queryKGViaHTTP(q, podUri)
+        var persons = result.getDataField<List<Map<String, Any>>>("ex_Person")!!
+
+        // There should only be one result (as other instances don't have the knows relation)
+        assertEquals(1, persons.size)
+        assertEquals(selectedPersonId, persons.first()[FIELD_ID_NAME])
+        assertEquals(selectedPersonId, persons.first().getJsonObject(FIELD_RAW_RDF_NAME)?.get(JsonLdKeywords.id))
+        assertEquals(
+            targetPersons.map { it[JsonLdKeywords.id] }.toSet(),
+            persons.first().getJsonArray<JSONObject>("ex_knows")
+                ?.map { it.getJsonObject(FIELD_RAW_RDF_NAME)?.get(JsonLdKeywords.id) }
+                ?.toSet()
+        )
+
+        // Now add literal values as object for the knows relation, making the return type of the field an RDFNode
+        kg.process(
+            ChangeRequest(
+                ChangeRequestId.generate("$podUri/changes").encode(),
+                emptyMap(),
+                podUri,
+                insert = listOf(
+                    mapOf(
+                        JsonLdKeywords.id to selectedPerson[JsonLdKeywords.id],
+                        JsonLdKeywords.type to ExampleVocab.Person,
+                        ExampleVocab.knows to knowsLiteralNames
+                    )
+                )
+            )
+        ).await().indefinitely()
+
+        // Perform the query again, rawRDF should contain both Person ids and the literal values.
+        result = testHelpers.queryKGViaHTTP(q, podUri)
+        persons = result.getDataField<List<Map<String, Any>>>("ex_Person")!!
+        assertEquals(
+            targetPersons.map { it[JsonLdKeywords.id] }.toSet(),
+            persons.first().getJsonArray<JSONObject>("ex_knows")
+                ?.mapNotNull { it.getJsonObject(FIELD_RAW_RDF_NAME)?.get(JsonLdKeywords.id) }
+                ?.toSet()
+        )
+        assertEquals(
+            knowsLiteralNames.toSet(),
+            persons.first().getJsonArray<JSONObject>("ex_knows")
+                ?.mapNotNull { it.getJsonObject(FIELD_RAW_RDF_NAME)?.get(JsonLdKeywords.value) }?.toSet())
+    }
+
 }

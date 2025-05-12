@@ -218,19 +218,25 @@ open class SQLConvertor(
             targetFieldDefinition,
             idField
         )
+
         val projection =
             (
                     listOf("subject AS $idField") + nestedFields.map {
-                        val baseFieldProj = "arrayDistinct(ARRAY_AGG(${it.fieldName}))"
-                        (if (it.nested) "arrayFilter(x -> notEmpty(x), $baseFieldProj)" else baseFieldProj)
-                            .plus(" AS _${it.fieldName}")
+                        // At the top-level, _rawRDF fields are treated differently, as these always refer to the id of the top-level Resource.
+                        if (it.rawRDF) {
+                            "[[subject, '', '']] AS _${it.fieldName}"
+                        } else {
+                            val baseFieldProj = "arrayDistinct(ARRAY_AGG(${it.fieldName}))"
+                            (if (it.nested) "arrayFilter(x -> notEmpty(x), $baseFieldProj)" else baseFieldProj)
+                                .plus(" AS _${it.fieldName}")
+                        }
                     }
                     ).joinToString()
         return when (mode) {
             SQLConvertorMode.GET_DATA -> {
                 SQLQuery(
                     "SELECT $projection FROM $tableRef ${
-                        nestedFields.joinToString(" ") { it.joinStatement }
+                        nestedFields.filterNot { it.rawRDF }.joinToString(" ") { it.joinStatement }
                     } $whereClause GROUP BY subject $orderBy LIMIT $offset, $pageSize",
                     listOf(idField) + nestedFields.map { "_${it.fieldName}" }
                 )
@@ -307,40 +313,6 @@ open class SQLConvertor(
         } $COLLAPSE_STATE_EXPR LIMIT $offset, $pageSize BY subject) ${name}_join ON $parentJoinField = $joinField"
     }
 
-    fun rawRDFFieldJoinStatement(
-        parentField: Field,
-        parentFieldDefinition: GraphQLFieldDefinition,
-        parentJoinField: String
-    ): String {
-        val name = "_rawRDF"
-        val (pageSize, offset) = parentField.getPaginationInfo(env.variables)
-        val reverse = parentFieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
-            ?.getValue<Boolean>() ?: false
-        val joinFieldName = "${name}_holder"
-        val selector = if (parentJoinField == "_id") {
-            // Select by type
-            val fqType = getFQName(parentField, context)
-            "(predicate = '${RDFVocab.type}' AND object = '$fqType')"
-        } else {
-            // Select by predicate
-            "predicate = '${getPredicateForField(parentField, parentFieldDefinition)}'"
-        }
-        val whereClause = listOfNotNull(
-            targetGraphFilterNode?.let { GraphQLFilterVisitor(context).visitNode(it) },
-            selector,
-            atTimestamp?.let { "timestamp <= '${ClickhouseUtils.convertInstant(it)}'" }
-        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
-
-        val joinField = "${if (reverse) "object" else "subject"} AS $joinFieldName"
-        val valueExpr = "${if (reverse) "[subject, '', '']" else "[object, datatype, language]"} AS $name"
-        return "${getJoinType(parentField)} (SELECT $joinField, $valueExpr FROM $tableRef $whereClause GROUP BY ${
-            (if (reverse) REVERSED_SORT_COLUMNS else SORT_COLUMNS).joinToString(
-                prefix = "(",
-                postfix = ")"
-            )
-        } $COLLAPSE_STATE_EXPR LIMIT $offset, $pageSize BY ${if (reverse) "object" else "subject"}) ${name}_join ON $parentJoinField = $joinFieldName"
-    }
-
     fun relationFieldJoinStatement(
         field: Field,
         fieldDefinition: GraphQLFieldDefinition,
@@ -387,6 +359,9 @@ open class SQLConvertor(
             ) + nestedFields.map {
                 "'${it.fieldName}'" to if (it.nested) {
                     "arrayFilter(x -> notEmpty(x), arrayDistinct(ARRAY_AGG(${it.fieldName})))"
+                } else if(it.rawRDF) {
+                    // TODO: what with reverse relations?
+                    "[[${if (reverse) "subject" else "object"}, datatype, language]] as ${it.fieldName}"
                 } else {
                     "arrayDistinct(ARRAY_AGG(${it.fieldName}))"
                 }
@@ -394,7 +369,7 @@ open class SQLConvertor(
                 .joinToString { (a, b) -> "$a,$b" }
         val joinField = "${if (reverse) "object" else "subject"} AS $joinFieldName"
         return "${getJoinType(field)} (SELECT $joinField, map($mappedFields) as $name FROM $tableRef ${
-            nestedFields.joinToString(" ") { it.joinStatement }
+            nestedFields.filterNot { it.rawRDF }.joinToString(" ") { it.joinStatement }
         } $whereClause GROUP BY ${
             (if (reverse) REVERSED_SORT_COLUMNS else SORT_COLUMNS).joinToString(
                 prefix = "(",
@@ -551,12 +526,7 @@ open class SQLConvertor(
                             nestedField.selectionSet != null,
                             if (nestedField.selectionSet == null) {
                                 if (nestedField.name == "_rawRDF") {
-                                    // Special _rawRDF scalar handling
-                                    rawRDFFieldJoinStatement(
-                                        field as Field,
-                                        fieldDefinition,
-                                        if (parentJoinField == "_id") parentJoinField else "subject"
-                                    )
+                                    ""
                                 } else {
                                     // Scalar field
                                     scalarFieldJoinStatement(
@@ -572,7 +542,8 @@ open class SQLConvertor(
                                     nestedFieldDefinition,
                                     parentJoinField
                                 )
-                            }
+                            },
+                            nestedField.name == "_rawRDF"
                         )
                     }
             } else {
@@ -783,7 +754,12 @@ data class FieldInfo(val fieldSelection: List<SelectedField>)
 data class SQLQuery(val sql: String, val columns: List<String>)
 
 data class FieldToJoin(val field: Field, val typeFilter: Node?)
-data class SelectedField(val fieldName: String, val nested: Boolean, val joinStatement: String)
+data class SelectedField(
+    val fieldName: String,
+    val nested: Boolean,
+    val joinStatement: String,
+    val rawRDF: Boolean = false
+)
 
 // Fetches filter arg value for a field (with fallback to fieldDefinition), taking into account potential variable references
 internal fun getFilter(

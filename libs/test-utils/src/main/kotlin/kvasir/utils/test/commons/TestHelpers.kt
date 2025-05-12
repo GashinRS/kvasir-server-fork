@@ -44,7 +44,6 @@ class TestHelpers(
     fun queryKGViaHTTP(
         q: Any,
         podUri: String = getPodUri(TestConstants.TEST_POD_1_ID),
-        context: JSONObject? = null,
         sliceUri: String? = null
     ): QueryResult {
         val requestUri = "${sliceUri ?: podUri}/query"

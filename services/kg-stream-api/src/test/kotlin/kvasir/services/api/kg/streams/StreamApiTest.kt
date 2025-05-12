@@ -47,7 +47,7 @@ class StreamApiTest {
                 }
             """.trimIndent()
             // Perform query
-            testHelpers.queryKGViaHTTP(QueryInputImpl(query), podUri, TestConstants.CONTEXT)
+            testHelpers.queryKGViaHTTP(QueryInputImpl(query), podUri)
 
             val receivedEvent = sseClient.openStream().toUni().await().atMost(Duration.ofSeconds(5))
             assertEquals(query, receivedEvent.query)
