@@ -1,5 +1,6 @@
 package kvasir.services.api.kg.streams
 
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.vertx.core.json.Json
 import io.vertx.mutiny.core.Vertx
@@ -76,7 +77,7 @@ class StreamApi(
             required = false
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
-    ): Multi<ChangeRecords> {
+    ): Multi<JSONObject> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
@@ -99,7 +100,7 @@ class StreamApi(
             .map { buffer ->
                 buffer.groupBy { it.changeRequestId }.map { (changeRequestId, records) ->
                     ChangeRecords(
-                        mapOf("kss" to KvasirVocab.baseUri),
+                        KvasirVocab.context,
                         changeRequestId,
                         records.first().timestamp,
                         records.filter { it.type == ChangeRecordType.DELETE }
@@ -112,6 +113,7 @@ class StreamApi(
                 }
             }
             .onItem().disjoint<ChangeRecords>()
+            .map { JsonLdHelper.encode(it, it.context) }
     }
 
     @Path("{podId}/query-events")

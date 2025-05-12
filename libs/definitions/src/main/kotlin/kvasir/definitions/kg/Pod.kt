@@ -29,7 +29,7 @@ interface PodStore {
  */
 interface PodAuthInitializer {
 
-    fun initialize(podId: String, podName: String): Uni<AuthConfiguration>
+    fun initialize(podId: String, podName: String, preconfiguredClients: List<ClientConfiguration> = emptyList()): Uni<AuthConfiguration>
 
 }
 
@@ -99,4 +99,11 @@ data class LifeCycleEvent(
     val podId: String,
     @JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null
+)
+
+data class ClientConfiguration(
+    val clientId: String,
+    val enableServiceAccount: Boolean,
+    val clientSecret: String? = null,
+    val redirectUris: List<String>? = null
 )

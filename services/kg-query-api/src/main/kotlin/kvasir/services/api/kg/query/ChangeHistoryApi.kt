@@ -162,42 +162,14 @@ class ChangeHistoryApi(
     ): Uni<RestResponse<ChangeRecords>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqChangeRequestId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return knowledgeGraph.getChangeRecords(
+        return listChangeRecords(
             ChangeRecordRequest(
                 podId = fqPodId,
                 changeRequestId = fqChangeRequestId,
                 cursor = cursor.orElse(null),
                 pageSize = pageSize
             )
-        ).map { results ->
-            try {
-                val response = if (results.items.isNotEmpty()) {
-                    ChangeRecords(
-                        mapOf("kss" to KvasirVocab.baseUri),
-                        fqChangeRequestId,
-                        results.items.first().timestamp,
-                        results.items.filter { it.type == ChangeRecordType.DELETE }
-                            .map { it.statement }.takeIf { it.isNotEmpty() }
-                            ?.let { RDFTransformer.statementsToJsonLD(it) },
-                        results.items.filter { it.type == ChangeRecordType.INSERT }
-                            .map { it.statement }.takeIf { it.isNotEmpty() }
-                            ?.let { RDFTransformer.statementsToJsonLD(it) }
-                    )
-                } else {
-                    val parsedId = ChangeRequestId.fromId(fqChangeRequestId)
-                    ChangeRecords(
-                        mapOf("kss" to KvasirVocab.baseUri),
-                        fqChangeRequestId,
-                        parsedId.timestamp()
-                    )
-                }
-                ResponseBuilder.ok(response)
-                    .links(*generateLinks(results))
-                    .build()
-            } catch (err: InvalidChangeRequestIdException) {
-                RestResponse.status(Response.Status.BAD_REQUEST)
-            }
-        }
+        )
     }
 
     @Path("{podId}/slices/{sliceId}/changes/{changeId}/records")
@@ -212,32 +184,14 @@ class ChangeHistoryApi(
     ): Uni<RestResponse<ChangeRecords>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
         val fqChangeId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return knowledgeGraph.getChangeRecords(
+        return listChangeRecords(
             ChangeRecordRequest(
                 podId = fqPodId,
                 changeRequestId = fqChangeId,
                 cursor = cursor.orElse(null),
                 pageSize = pageSize
             )
-        ).map { results ->
-            val response = results.items.groupBy { result -> result.changeRequestId }
-                .map { (changeRequestId, records) ->
-                    ChangeRecords(
-                        mapOf("kss" to KvasirVocab.baseUri),
-                        changeRequestId,
-                        records.first().timestamp,
-                        records.filter { it.type == ChangeRecordType.DELETE }
-                            .map { it.statement }.takeIf { it.isNotEmpty() }
-                            ?.let { RDFTransformer.statementsToJsonLD(it) },
-                        records.filter { it.type == ChangeRecordType.INSERT }
-                            .map { it.statement }.takeIf { it.isNotEmpty() }
-                            ?.let { RDFTransformer.statementsToJsonLD(it) }
-                    )
-                }.first()
-            ResponseBuilder.ok(response)
-                .links(*generateLinks(results))
-                .build()
-        }
+        )
     }
 
     private fun generateLinks(result: PagedResult<*>): Array<Link> {
@@ -249,6 +203,38 @@ class ChangeHistoryApi(
                 Link.fromUri(uriInfo.getAbsoluteUri("cursor" to it)).rel("previous").build()
             }
         ).toTypedArray()
+    }
+
+    private fun listChangeRecords(request: ChangeRecordRequest): Uni<RestResponse<ChangeRecords>> {
+        return knowledgeGraph.getChangeRecords(request).map { results ->
+            try {
+                val response = if (results.items.isNotEmpty()) {
+                    ChangeRecords(
+                        mapOf("kss" to KvasirVocab.baseUri),
+                        request.changeRequestId,
+                        results.items.first().timestamp,
+                        results.items.filter { it.type == ChangeRecordType.DELETE }
+                            .map { it.statement }.takeIf { it.isNotEmpty() }
+                            ?.let { RDFTransformer.statementsToJsonLD(it) },
+                        results.items.filter { it.type == ChangeRecordType.INSERT }
+                            .map { it.statement }.takeIf { it.isNotEmpty() }
+                            ?.let { RDFTransformer.statementsToJsonLD(it) }
+                    )
+                } else {
+                    val parsedId = ChangeRequestId.fromId(request.changeRequestId)
+                    ChangeRecords(
+                        mapOf("kss" to KvasirVocab.baseUri),
+                        request.changeRequestId,
+                        parsedId.timestamp()
+                    )
+                }
+                ResponseBuilder.ok(response)
+                    .links(*generateLinks(results))
+                    .build()
+            } catch (err: InvalidChangeRequestIdException) {
+                RestResponse.status(Response.Status.BAD_REQUEST)
+            }
+        }
     }
 
 

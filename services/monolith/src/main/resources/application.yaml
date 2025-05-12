@@ -26,9 +26,17 @@ quarkus:
 "%dev":
   quarkus:
     http:
+      access-log:
+        enabled: true
       cors:
         enabled: true
-        origins: http://localhost:3000,http://localhost:4200
+        origins: http://localhost:3000,http://localhost:4200, http://localhost:5173
+    minio:
+      url: http://localhost:9000
+      port: 9000
+      secure: false
+      access-key: kvasir
+      secret-key: kvasirkvasir
   kvasir:
     plugins:
       policy-agent:
@@ -47,12 +55,22 @@ quarkus:
               "schema": "http://schema.org/",
               "ex": "http://example.org/",
               "saref": "https://saref.etsi.org/core/",
+              "mo": "http://purl.org/ontology/mo/",
+              "dc": "http://purl.org/dc/elements/1.1/",
+              "foaf": "http://xmlns.com/foaf/0.1/",
               "hasMeasurement": {
                 "@reverse": "https://saref.etsi.org/core/measurementMadeBy"
               },
               "children": { "@reverse": "http://example.org/parent" }
             }
           auto-ingest-rdf: true
+          preconfigured-clients:
+            - client-id: music-tracker
+              redirect-uris:
+                - http://localhost:5173/*
+            - client-id: spotify-client
+              client-secret: testtest
+              enable-service-account: true
         - name: bob
           default-context: |
             {

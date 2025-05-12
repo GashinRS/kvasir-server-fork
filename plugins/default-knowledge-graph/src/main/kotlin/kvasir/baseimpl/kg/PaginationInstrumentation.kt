@@ -16,6 +16,8 @@ import graphql.schema.DataFetchingEnvironment
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.kg.changes.StorageBackend
+import kvasir.definitions.kg.graphql.ARG_CURSOR_NAME
+import kvasir.definitions.kg.graphql.ARG_PAGE_SIZE_NAME
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.utils.cursors.OffsetBasedCursor
 import kvasir.utils.graphql.*
@@ -53,11 +55,15 @@ class PaginationInstrumentation(
         state as PaginationInstrumentationState
         if (parameters.executionStepInfo.fieldDefinition.type.isList()) {
             val env = state.environments[parameters.executionStepInfo.path.toString()]!!
-            val (pageSize, _) = env.field.getPaginationInfo()
+            val (pageSize, _) = env.field.getPaginationInfo(env.variables)
             val outputSize = ((parameters.fetchedValue as? FetchedValue)?.fetchedValue as? List<*>)?.size
-            if (outputSize != null && outputSize == pageSize) {
+            // Always include the pagination info is the cursor argument is present
+            if (outputSize != null && (outputSize == pageSize || env.field.arguments.any { it.name == ARG_CURSOR_NAME })) {
                 return object : SimpleInstrumentationContext<Any>() {
                     override fun onCompleted(result: Any?, t: Throwable?) {
+                        if (t != null) {
+                            throw t
+                        }
                         val count = storageBackends[env.getStorageClass()]!!.count(podId, context, atTimestamp, env)
                         state.addCountTarget(parameters.executionStepInfo, count)
                     }
@@ -75,7 +81,7 @@ class PaginationInstrumentation(
         return Multi.createFrom().iterable((state as PaginationInstrumentationState).state.entries)
             .onItem().transformToUni { (path, countPromise) ->
                 val env = state.environments[path]!!
-                val (pageSize, offset) = env.field.getPaginationInfo()
+                val (pageSize, offset) = env.field.getPaginationInfo(env.variables)
                 countPromise
                     .map { totalCount ->
                         mapOf(
@@ -85,10 +91,14 @@ class PaginationInstrumentation(
                             }",
                             "path" to path,
                             "parent" to env.getFromSource<String>("id"),
-                            (if (env.executionStepInfo.path.parent.isRootPath) "class" else "predicate") to getFQName(
-                                env.fieldDefinition,
-                                context
-                            ),
+                            (if (env.executionStepInfo.path.parent.isRootPath) "class" else "predicate") to try {
+                                getFQName(
+                                    env.fieldDefinition,
+                                    context
+                                )
+                            } catch (ex: IllegalArgumentException) {
+                                null
+                            },
                             "totalCount" to totalCount,
                             "next" to if (offset + pageSize < totalCount) OffsetBasedCursor(offset + pageSize).encode() else null,
                             "previous" to if (offset - pageSize >= 0) OffsetBasedCursor(offset - pageSize).encode() else null

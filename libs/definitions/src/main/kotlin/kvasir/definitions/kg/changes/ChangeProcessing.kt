@@ -86,11 +86,6 @@ interface ChangeRequestTxBuffer {
     val request: ChangeRequest
 
     /**
-     * Timestamp at which request processing started
-     */
-    val requestTimestamp: Instant
-
-    /**
      * Stream the records currently in the buffer
      */
     fun stream(

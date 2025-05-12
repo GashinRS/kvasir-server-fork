@@ -60,9 +60,10 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
             }
             )
             .fields(
-                KvasirTypes.commonResourceFields + type.properties.map { property ->
-                    generateGraphQLProperty(property)
-                } + generateReverseProperties(type)
+                KvasirTypes.commonResourceFields + type.properties.filterNot { it.uri == RDFVocab.type }
+                    .map { property ->
+                        generateGraphQLProperty(property)
+                    } + generateReverseProperties(type)
             ).build()
     }
 

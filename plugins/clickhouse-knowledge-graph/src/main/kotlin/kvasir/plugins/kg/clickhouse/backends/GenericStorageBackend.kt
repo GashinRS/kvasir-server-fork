@@ -5,10 +5,7 @@ import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
 import io.smallrye.mutiny.Uni
 import jakarta.inject.Singleton
-import kvasir.definitions.kg.ChangeRecord
-import kvasir.definitions.kg.ChangeRecordType
-import kvasir.definitions.kg.QueryRequest
-import kvasir.definitions.kg.RDFStatement
+import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
@@ -88,6 +85,31 @@ class GenericStorageBackend(
                 type = if (result["sign"] as Int == 1) ChangeRecordType.INSERT else ChangeRecordType.DELETE
             )
         )
+    }
+
+    override fun generateFilters(request: ChangeRecordRequest): String? {
+        return listOfNotNull(
+            request.subjectIn?.let { subjects -> "subject IN ${subjects.joinToString(", ", "(", ")") { "'$it'" }}" },
+            request.predicateIn?.let { predicates ->
+                "predicate IN ${
+                    predicates.joinToString(
+                        ", ",
+                        "(",
+                        ")"
+                    ) { "'$it'" }
+                }"
+            },
+            request.objectIn?.let { objects ->
+                "toString(object) IN ${
+                    objects.joinToString(
+                        ", ",
+                        "(",
+                        ")"
+                    ) { "'$it'" }
+                }"
+            },
+            request.graphIn?.let { graphs -> "graph IN ${graphs.joinToString(", ", "(", ")") { "'$it'" }}" },
+        ).takeIf { it.isNotEmpty() }?.joinToString(" AND ")
     }
 
     override fun prepareQuery(request: QueryRequest, queryDocument: Document): Document {

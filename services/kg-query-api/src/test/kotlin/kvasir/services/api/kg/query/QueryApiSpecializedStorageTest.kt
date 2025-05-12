@@ -66,7 +66,7 @@ class QueryApiSpecializedStorageTest {
             }
         """.trimIndent(), providedContext = TestConstants.CONTEXT
         )
-        val result = testHelpers.queryKGViaHTTP(q, podUri, TestConstants.CONTEXT)
+        val result = testHelpers.queryKGViaHTTP(q, podUri)
         println(result)
         assertEquals(
             sensorData.recordsBySensorId[selectedId]!!.sortedByDescending { it[SAREFVocab.hasTimestamp]!! as Comparable<Any> }
@@ -98,7 +98,7 @@ class QueryApiSpecializedStorageTest {
             }
         """.trimIndent(), providedContext = TestConstants.CONTEXT
         )
-        val result = testHelpers.queryKGViaHTTP(q, podUri, TestConstants.CONTEXT)
+        val result = testHelpers.queryKGViaHTTP(q, podUri)
 
         val retrievedSensor = result.data!!.getJsonArray<JSONObject>("saref_Sensor")!!.first()
         assertEquals(selectedId, retrievedSensor[FIELD_ID_NAME])

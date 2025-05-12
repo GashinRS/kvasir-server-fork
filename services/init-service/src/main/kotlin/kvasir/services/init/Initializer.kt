@@ -49,7 +49,14 @@ class Initializer(
                     .onItem().transformToUni { podConfig ->
                         val podId = "${baseUri}${podConfig.name()}"
                         setupS3Bucket(podId)
-                            .chain { _ -> setupAuth(podId, podConfig.name(), podConfig.authConfiguration()) }
+                            .chain { _ ->
+                                setupAuth(
+                                    podId,
+                                    podConfig.name(),
+                                    podConfig.authConfiguration(),
+                                    podConfig.preconfiguredClients()
+                                )
+                            }
                             .chain { authConfig -> setupPod(podId, podConfig, authConfig) }
                     }
                     .concatenate()
@@ -81,11 +88,22 @@ class Initializer(
     private fun setupAuth(
         podId: String,
         podName: String,
-        suppliedAuthConfig: Optional<AuthConfigurationConfig>
+        suppliedAuthConfig: Optional<AuthConfigurationConfig>,
+        preconfiguredClients: Optional<List<ClientConfig>>
     ): Uni<AuthConfiguration?> {
         return if (suppliedAuthConfig.isEmpty && podAuthInitializer.isResolvable) {
             Log.debug("Initializing auth configuration for pod '$podId'")
-            podAuthInitializer.get().initialize(podId, podName).map { it }
+            val clients = preconfiguredClients.getOrNull()?.let { configuredClients ->
+                configuredClients.map {
+                    ClientConfiguration(
+                        it.clientId(),
+                        it.enableServiceAccount(),
+                        it.clientSecret().getOrNull(),
+                        it.redirectUris().getOrNull()
+                    )
+                }
+            } ?: emptyList()
+            podAuthInitializer.get().initialize(podId, podName, clients).map { it }
         } else {
             suppliedAuthConfig.getOrNull()?.let { authConfig ->
                 Uni.createFrom().item(

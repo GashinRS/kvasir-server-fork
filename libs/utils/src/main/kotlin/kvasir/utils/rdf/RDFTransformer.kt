@@ -5,11 +5,15 @@ import com.github.jsonldjava.core.RDFDataset
 import com.github.jsonldjava.utils.JsonUtils
 import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.rdf.JsonLdKeywords
+import org.eclipse.rdf4j.model.Model
 import org.eclipse.rdf4j.model.Statement
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory
 import org.eclipse.rdf4j.model.util.Values
 import org.eclipse.rdf4j.rio.RDFFormat
 import org.eclipse.rdf4j.rio.Rio
+import org.eclipse.rdf4j.rio.WriterConfig
+import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings
+import org.eclipse.rdf4j.rio.helpers.TurtleWriterSettings
 import java.io.StringWriter
 
 object RDFTransformer {
@@ -84,4 +88,13 @@ object RDFTransformer {
         return iri
     }
 
+}
+
+fun Model.writeToString(format: RDFFormat): String {
+    return StringWriter().use { writer ->
+        val config = WriterConfig().set(BasicWriterSettings.INLINE_BLANK_NODES, true)
+            .set(BasicWriterSettings.PRETTY_PRINT, true)
+        Rio.write(this, writer, format, config)
+        writer.toString()
+    }
 }
