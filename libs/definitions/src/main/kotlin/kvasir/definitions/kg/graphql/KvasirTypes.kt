@@ -64,6 +64,20 @@ object KvasirTypes {
             }
         })
         .build()
+
+    val UntypedResource = GraphQLObjectType.newObject().name(TYPE_UNTYPED_RESOURCE)
+        .description("Common supertype for representing RDF resources.")
+        .withInterfaces(Resource, RDFNode)
+        .fields(commonResourceFields)
+        .withAppliedDirective(KvasirDirectives.classDirective.toAppliedDirective().let { resourceTypeDirective ->
+            resourceTypeDirective.transform { directiveBuilder ->
+                directiveBuilder.argument(resourceTypeDirective.getArgument(ARG_IRI_NAME).transform { argBuilder ->
+                    argBuilder.valueLiteral(StringValue.of(RDFSVocab.Resource))
+                })
+            }
+        })
+        .build()
+
     val BoxedLiteral = GraphQLObjectType.newObject().name(TYPE_BOXED_LITERAL)
         .description("This type represents a boxed literal, can be useful to use in combination with the RDFNode supertype, in order to support fields which can either have Resources or literals as values.")
         .withInterface(RDFNode)
@@ -73,5 +87,5 @@ object KvasirTypes {
         )
         .build()
 
-    val all = setOf(RDFNode, Resource, BoxedLiteral)
+    val all = setOf(RDFNode, Resource, UntypedResource, BoxedLiteral)
 }
