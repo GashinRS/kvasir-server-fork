@@ -469,7 +469,13 @@ class QueryApiTest {
         val targetPersons =
             personData.filter { it[JsonLdKeywords.id] != selectedPersonId }.shuffled().take(2)
         val knowsLiteralNames = listOf("Henry", "Mary")
-        val changeRequest =    ChangeRequest(
+        val targetPersonsLd = targetPersons.map {
+            mapOf(
+                JsonLdKeywords.id to it[JsonLdKeywords.id],
+                JsonLdKeywords.type to ExampleVocab.Person
+            )
+        }
+        val changeRequest = ChangeRequest(
             ChangeRequestId.generate("$podUri/changes").encode(),
             emptyMap(),
             podUri,
@@ -478,12 +484,7 @@ class QueryApiTest {
                 mapOf(
                     JsonLdKeywords.id to selectedPerson[JsonLdKeywords.id],
                     JsonLdKeywords.type to ExampleVocab.Person,
-                    ExampleVocab.knows to targetPersons.map {
-                        mapOf(
-                            JsonLdKeywords.id to it[JsonLdKeywords.id],
-                            JsonLdKeywords.type to ExampleVocab.Person
-                        )
-                    }
+                    ExampleVocab.knows to targetPersonsLd
                 )
             )
         )
@@ -517,20 +518,19 @@ class QueryApiTest {
         )
 
         // Now add literal values as object for the knows relation, making the return type of the field an RDFNode
-        kg.process(
-            ChangeRequest(
-                ChangeRequestId.generate("$podUri/changes").encode(),
-                emptyMap(),
-                podUri,
-                insert = listOf(
-                    mapOf(
-                        JsonLdKeywords.id to selectedPerson[JsonLdKeywords.id],
-                        JsonLdKeywords.type to ExampleVocab.Person,
-                        ExampleVocab.knows to knowsLiteralNames
-                    )
+        val changeRequest2 = ChangeRequest(
+            ChangeRequestId.generate("$podUri/changes").encode(),
+            emptyMap(),
+            podUri,
+            insert = listOf(
+                mapOf(
+                    JsonLdKeywords.id to selectedPerson[JsonLdKeywords.id],
+                    JsonLdKeywords.type to ExampleVocab.Person,
+                    ExampleVocab.knows to knowsLiteralNames
                 )
             )
-        ).await().indefinitely()
+        )
+        kg.process(changeRequest2).await().indefinitely()
 
         // Perform the query again, rawRDF should contain both Person ids and the literal values.
         result = testHelpers.queryKGViaHTTP(q, podUri)
@@ -544,7 +544,27 @@ class QueryApiTest {
         assertEquals(
             knowsLiteralNames.toSet(),
             persons.first().getJsonArray<JSONObject>("ex_knows")
-                ?.mapNotNull { it.getJsonObject(FIELD_RAW_RDF_NAME)?.get(JsonLdKeywords.value) }?.toSet())
+                ?.mapNotNull { it.getJsonObject(FIELD_RAW_RDF_NAME)?.get(JsonLdKeywords.value) }?.toSet()
+        )
+
+        val reverseChanges = ChangeRequest(
+            ChangeRequestId.generate("$podUri/changes").encode(),
+            emptyMap(),
+            podUri,
+            delete = listOf(
+                mapOf(
+                    JsonLdKeywords.id to selectedPerson[JsonLdKeywords.id],
+                    JsonLdKeywords.type to ExampleVocab.Person,
+                    ExampleVocab.knows to targetPersonsLd + knowsLiteralNames
+                )
+            )
+        )
+        kg.process(reverseChanges).await().indefinitely()
+
+        // Perform the query again, there should be no results
+        result = testHelpers.queryKGViaHTTP(q, podUri)
+        persons = result.getDataField<List<Map<String, Any>>>("ex_Person")!!
+        assertEquals(0, persons.size)
     }
 
 }

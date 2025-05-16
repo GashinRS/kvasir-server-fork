@@ -42,6 +42,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                             }).build()
             )
             .additionalType(KvasirTypes.BoxedLiteral)
+            .additionalType(KvasirTypes.UntypedResource)
             .additionalDirectives(KvasirDirectives.all)
         return SchemaGeneratorResult(schema)
     }

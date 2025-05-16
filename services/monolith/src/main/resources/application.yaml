@@ -68,7 +68,7 @@ quarkus:
             - client-id: music-tracker
               redirect-uris:
                 - http://localhost:5173/*
-            - client-id: spotify-client
+            - client-id: music-tracker-client
               client-secret: testtest
               enable-service-account: true
         - name: bob

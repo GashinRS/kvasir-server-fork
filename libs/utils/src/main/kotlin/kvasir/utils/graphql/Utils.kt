@@ -4,6 +4,7 @@ import graphql.TypeResolutionEnvironment
 import graphql.language.Field
 import graphql.language.StringValue
 import graphql.schema.GraphQLDirectiveContainer
+import graphql.schema.GraphQLNamedType
 import graphql.schema.GraphQLObjectType
 import graphql.schema.TypeResolver
 import kvasir.definitions.kg.graphql.*
@@ -33,6 +34,9 @@ fun getFQName(field: Field, context: Map<String, Any>): String {
 class RDFClassTypeResolver(private val context: JSONObject) : TypeResolver {
     override fun getType(env: TypeResolutionEnvironment): GraphQLObjectType {
         val target = convertToJsonMap(env.getObject())
+        val fieldType = env.fieldType.innerType<GraphQLNamedType>()
+        val defaultResolvedType =
+            if (fieldType.name == TYPE_RESOURCE) KvasirTypes.UntypedResource else KvasirTypes.BoxedLiteral
         return (target[FIELD_TYPENAME_NAME] as String?)?.let {
             env.schema.getObjectType(it)
         } ?: run {
@@ -45,10 +49,10 @@ class RDFClassTypeResolver(private val context: JSONObject) : TypeResolver {
                         DIRECTIVE_CLASS_NAME,
                         ARG_IRI_NAME
                     )?.value ?: JsonLdHelper.getFQName(objectType.name, context, "_")) == fqClassName
-                } ?: KvasirTypes.BoxedLiteral
+                } ?: defaultResolvedType
             } else {
                 // Default to BoxedLiteral
-                KvasirTypes.BoxedLiteral
+                defaultResolvedType
             }
         }
     }

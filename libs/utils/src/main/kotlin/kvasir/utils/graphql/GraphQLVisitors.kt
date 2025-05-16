@@ -25,7 +25,16 @@ abstract class KvasirNodeVisitor(protected val providedContext: Map<String, Any>
 class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor(providedContext) {
 
     companion object {
-        val IGNORE_TYPES = setOf(TYPE_QUERY, TYPE_MUTATION, TYPE_SUBSCRIPTION, ENUM_TRIGGER_TYPE_NAME, TYPE_RDF_NODE, TYPE_RESOURCE, TYPE_BOXED_LITERAL)
+        val IGNORE_TYPES = setOf(
+            TYPE_QUERY,
+            TYPE_MUTATION,
+            TYPE_SUBSCRIPTION,
+            ENUM_TRIGGER_TYPE_NAME,
+            TYPE_RDF_NODE,
+            TYPE_RESOURCE,
+            TYPE_BOXED_LITERAL,
+            TYPE_UNTYPED_RESOURCE
+        )
     }
 
     override fun visitTypeDefinition(

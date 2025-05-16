@@ -6,6 +6,7 @@ const val TYPE_SUBSCRIPTION = "Subscription"
 
 const val TYPE_RDF_NODE = "RDFNode"
 const val TYPE_RESOURCE = "Resource"
+const val TYPE_UNTYPED_RESOURCE = "UntypedResource"
 const val TYPE_BOXED_LITERAL = "BoxedLiteral"
 
 const val ENUM_TRIGGER_TYPE_NAME = "TriggerType"
