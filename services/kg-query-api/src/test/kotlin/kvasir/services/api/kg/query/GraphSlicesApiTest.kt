@@ -55,7 +55,7 @@ class GraphSlicesApiTest {
             type ex_Person {
                 id: ID!
                 so_givenName: String!
-                so_familyName: String!
+                familyName: String! @predicate(iri: "so:familyName")
                 so_email: [String!]! @filter(if: "it==*$filterEmailDomain")
             }
         """.trimIndent()
@@ -104,7 +104,7 @@ class GraphSlicesApiTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body(
                 QueryInputImpl(
-                    query = "{ persons { id so_givenName so_familyName so_email } }"
+                    query = "{ persons { id so_givenName familyName so_email } }"
                 )
             )
             .post("{podId}/slices/{sliceId}/query", TestConstants.TEST_POD_2_ID, sliceName)
@@ -121,7 +121,7 @@ class GraphSlicesApiTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body(
                 QueryInputImpl(
-                    query = "{ persons { id so_givenName so_familyName } }"
+                    query = "{ persons { id so_givenName familyName } }"
                 )
             )
             .post("{podId}/slices/{sliceId}/query", TestConstants.TEST_POD_2_ID, sliceName)
@@ -151,7 +151,7 @@ class GraphSlicesApiTest {
             type ex_Person {
                 id: ID!
                 so_givenName: String!
-                so_familyName: String!
+                familyName: String! @predicate(iri: "so:familyName")
                 so_email: [String!]! @filter(if: "it==*$filterEmailDomain")
             }
             
@@ -242,7 +242,7 @@ class GraphSlicesApiTest {
                 person(id: "$testSubject") {
                     id
                     so_givenName
-                    so_familyName
+                    familyName
                 }
             }
         """.trimIndent()
@@ -255,7 +255,7 @@ class GraphSlicesApiTest {
 
         val returnedPersonData = result.getDataField<Map<String, Any>>("person")!!
         assertEquals("John", returnedPersonData["so_givenName"])
-        assertEquals("Doe", returnedPersonData["so_familyName"])
+        assertEquals("Doe", returnedPersonData["familyName"])
 
         // Now perform a delete mutation
         q = """
@@ -292,7 +292,7 @@ class GraphSlicesApiTest {
                 person(id: "$testSubject") {
                     id
                     so_givenName
-                    so_familyName
+                    familyName
                 }
             }
         """.trimIndent()
@@ -305,7 +305,7 @@ class GraphSlicesApiTest {
 
         val returnedPersonData = result.getDataField<Map<String, Any>>("person")!!
         assertEquals("John", returnedPersonData["so_givenName"])
-        assertEquals("Doe", returnedPersonData["so_familyName"])
+        assertEquals("Doe", returnedPersonData["familyName"])
     }
 
 }
