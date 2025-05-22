@@ -5,6 +5,15 @@
         enabled: true
     management:
       test-port: 9002
+    oidc:
+      enabled: false
+    keycloak:
+      admin-client:
+        client-id: admin-cli
+        realm: master
+        username: admin
+        password: admin
+        grant-type: PASSWORD
   kvasir:
     base-uri: http://localhost:${quarkus.http.test-port}/
     plugins:
@@ -16,7 +25,7 @@
     services:
       storage:
         s3:
-          host: localhost
+          host: ${quarkus.minio.url}
           port: ${quarkus.minio.port}
           access-key: ${quarkus.minio.access-key}
           secret-key: ${quarkus.minio.secret-key}

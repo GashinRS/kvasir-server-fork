@@ -97,91 +97,43 @@ class ChangeRequestValidator(
             // Remove the type record from the to be validated set
             toBeValidatedRecords.remove(typeRecord)
 
+            // Handle the id field separately by checking if the subject matches the shape directive constraints
+            type.fieldDefinitions.firstOrNull { it.name == FIELD_ID_NAME }?.let { idFieldDefinition ->
+                checkValueConstraints(instanceId, idFieldDefinition, "Invalid subject for resource '$instanceId'")
+            }
+
             val definedProperties =
-                type.fieldDefinitions.mapNotNull { fieldDefinition ->
-                    if (fieldDefinition.name == FIELD_ID_NAME) {
-                        // Handle id field by checking if the subject matches the shape directive constraints
-                        checkValueConstraints(instanceId, fieldDefinition, "Invalid subject for resource '$instanceId'")
-                        null
-                    } else {
-                        val allowMultipleValues = fieldDefinition.type.isList()
-                        val optional = fieldDefinition.type.isOptional()
-                        val fqFieldName = resolveNameAsIri(fieldDefinition.name) ?: run {
-                            // Or else get IRI from predicate directive
-                            fieldDefinition.getDirectiveArg<StringValue>(DIRECTIVE_PREDICATE_NAME, ARG_IRI_NAME)?.value
+                type.fieldDefinitions.filter { it.name != FIELD_ID_NAME }.groupBy { fieldDefinition ->
+                    resolveNameAsIri(fieldDefinition.name) ?: run {
+                        // Or else get IRI from predicate directive
+                        fieldDefinition.getDirectiveArg<StringValue>(DIRECTIVE_PREDICATE_NAME, ARG_IRI_NAME)?.value?.let {
+                            JsonLdHelper.getFQName(it, context) ?: it
                         }
-                        val matches =
-                            records.filter { it.type == operation && it.statement.subject == instanceId && it.statement.predicate == fqFieldName }
-                                .toSet()
-                        if (matches.isEmpty() && !optional) {
-                            throw InvalidChangeRequestException("Missing required property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName'")
-                        }
-                        if (matches.size > 1 && !allowMultipleValues) {
-                            throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' has multiple values, but ${if (optional) "at most one" else "only one"} is allowed")
-                        }
-
-                        fieldDefinition.getDirectiveArg<IntValue>(DIRECTIVE_SHAPE_NAME, ARG_MIN_COUNT_NAME)
-                            ?.let { minCount ->
-                                if (matches.size < minCount.value.toInt()) {
-                                    throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' has ${matches.size} values, but at least ${minCount.value} are required")
-                                }
-                            }
-
-                        fieldDefinition.getDirectiveArg<IntValue>(DIRECTIVE_SHAPE_NAME, ARG_MAX_COUNT_NAME)
-                            ?.let { maxCount ->
-                                if (matches.size > maxCount.value.toInt()) {
-                                    throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' has ${matches.size} values, but at most ${maxCount.value} are allowed")
-                                }
-                            }
-
-                        val fieldType = fieldDefinition.type.innerType<GraphQLInputType>()
-                        when {
-                            fieldType == Scalars.GraphQLID -> {
-                                if (matches.any { it.statement.dataType != null }) {
-                                    throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' should be an IRI")
-                                }
-                                matches.forEach {
-                                    checkValueConstraints(
-                                        it.statement.`object`,
-                                        fieldDefinition,
-                                        "Invalid object IRI for relation '$fqFieldName' on resource '$instanceId'"
-                                    )
-                                }
-                            }
-
-                            fieldType.isScalar() -> {
-                                val rdfDataType = fieldType.innerType<GraphQLScalarType>().rdfDatatype()
-                                if (matches.any { it.statement.dataType != rdfDataType }) {
-                                    throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' should be of type '$rdfDataType'")
-                                }
-                                matches.forEach {
-                                    checkValueConstraints(
-                                        it.statement.`object`,
-                                        fieldDefinition,
-                                        "Invalid literal value for property '$fqFieldName' on resource '$instanceId'"
-                                    )
-                                }
-                            }
-
-                            else -> {
-                                // Complex type, recurse
-                                val complexType = fieldType.innerType<GraphQLInputObjectType>()
-                                // Find subjects for the relationship
-                                val targetInstanceIds =
-                                    records.filter { it.type == operation && it.statement.subject == instanceId && it.statement.predicate == fqFieldName }
-                                        .map { it.statement.`object`.toString() }.toSet()
-                                validateInstancesOfType(
-                                    targetInstanceIds,
-                                    complexType,
-                                    complexType.getFQName(),
-                                    operation
-                                )
-                            }
-                        }
-                        // If all cases pass, remove the matching records from the to be validated set
-                        toBeValidatedRecords.removeAll(matches)
-                        fqFieldName
+                    }!!
+                }.mapNotNull { (fqFieldName, fieldDefinitions) ->
+                    val matches =
+                        records.filter { it.type == operation && it.statement.subject == instanceId && it.statement.predicate == fqFieldName }
+                            .toSet()
+                    // If all cases pass for one of the fields, remove the matching records from the to be validated set
+                    val validationResults = fieldDefinitions.map {
+                        isValidFieldValue(
+                            it,
+                            operation,
+                            instanceId,
+                            fqTypeName,
+                            fqFieldName,
+                            matches
+                        )
                     }
+                    if (validationResults.any { it.valid }) {
+                        toBeValidatedRecords.removeAll(matches)
+                    } else {
+                        // If none of the fields pass, throw an exception
+                        val compositeMessage =
+                            validationResults.joinToString("\n\t") { "- No match via field '${it.fieldDefinition.name}': ${it.error?.message}" }
+                        throw InvalidChangeRequestException("Invalid value for property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName': $compositeMessage")
+                    }
+                    fqFieldName
                 }.toSet()
             // The instance cannot have properties that are not defined in the type
             val extraProperties =
@@ -196,6 +148,90 @@ class ChangeRequestValidator(
                     }"
                 )
             }
+        }
+    }
+
+    private fun isValidFieldValue(
+        fieldDefinition: GraphQLInputObjectField,
+        operation: ChangeRecordType,
+        instanceId: String,
+        fqTypeName: String,
+        fqFieldName: String,
+        matches: Set<ChangeRecord>
+    ): FieldValidationResult {
+        try {
+            val allowMultipleValues = fieldDefinition.type.isList()
+            val optional = fieldDefinition.type.isOptional()
+
+            if (matches.isEmpty() && !optional) {
+                throw InvalidChangeRequestException("Missing required property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName'")
+            }
+            if (matches.size > 1 && !allowMultipleValues) {
+                throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' has multiple values, but ${if (optional) "at most one" else "only one"} is allowed")
+            }
+
+            fieldDefinition.getDirectiveArg<IntValue>(DIRECTIVE_SHAPE_NAME, ARG_MIN_COUNT_NAME)
+                ?.let { minCount ->
+                    if (matches.size < minCount.value.toInt()) {
+                        throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' has ${matches.size} values, but at least ${minCount.value} are required")
+                    }
+                }
+
+            fieldDefinition.getDirectiveArg<IntValue>(DIRECTIVE_SHAPE_NAME, ARG_MAX_COUNT_NAME)
+                ?.let { maxCount ->
+                    if (matches.size > maxCount.value.toInt()) {
+                        throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' has ${matches.size} values, but at most ${maxCount.value} are allowed")
+                    }
+                }
+
+            val fieldType = fieldDefinition.type.innerType<GraphQLInputType>()
+            when {
+                fieldType == Scalars.GraphQLID -> {
+                    if (matches.any { it.statement.dataType != null }) {
+                        throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' should be an IRI")
+                    }
+                    matches.forEach {
+                        checkValueConstraints(
+                            it.statement.`object`,
+                            fieldDefinition,
+                            "Invalid object IRI for relation '$fqFieldName' on resource '$instanceId'"
+                        )
+                    }
+                }
+
+                fieldType.isScalar() -> {
+                    val scalarType = fieldType.innerType<GraphQLScalarType>()
+                    val rdfDataType = scalarType.rdfDatatype()
+                    if (matches.any { it.statement.dataType != rdfDataType && scalarType.name != ExtendedScalars.Json.name }) {
+                        throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' should be of type '$rdfDataType'")
+                    }
+                    matches.forEach {
+                        checkValueConstraints(
+                            it.statement.`object`,
+                            fieldDefinition,
+                            "Invalid literal value for property '$fqFieldName' on resource '$instanceId'"
+                        )
+                    }
+                }
+
+                else -> {
+                    // Complex type, recurse
+                    val complexType = fieldType.innerType<GraphQLInputObjectType>()
+                    // Find subjects for the relationship
+                    val targetInstanceIds =
+                        records.filter { it.type == operation && it.statement.subject == instanceId && it.statement.predicate == fqFieldName }
+                            .map { it.statement.`object`.toString() }.toSet()
+                    validateInstancesOfType(
+                        targetInstanceIds,
+                        complexType,
+                        complexType.getFQName(),
+                        operation
+                    )
+                }
+            }
+            return FieldValidationResult(fieldDefinition, true)
+        } catch (t: Throwable) {
+            return FieldValidationResult(fieldDefinition, false, t)
         }
     }
 
@@ -298,3 +334,9 @@ class ChangeRequestValidator(
         }
     }
 }
+
+internal data class FieldValidationResult(
+    val fieldDefinition: GraphQLInputObjectField,
+    val valid: Boolean,
+    val error: Throwable? = null
+)
