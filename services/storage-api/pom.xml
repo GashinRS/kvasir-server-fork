@@ -39,6 +39,7 @@
             <groupId>kvasir-libs</groupId>
             <artifactId>test-utils</artifactId>
             <version>1.0.0-SNAPSHOT</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

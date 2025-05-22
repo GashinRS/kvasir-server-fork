@@ -1,6 +1,7 @@
 package kvasir.services.api.storage
 
 import com.google.common.hash.Hashing
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.vertx.UniHelper
 import io.smallrye.reactive.messaging.MutinyEmitter
@@ -39,14 +40,18 @@ internal const val HEADER_X_AMZ_DATE = "x-amz-date"
  */
 @ApplicationScoped
 class StorageApi(
-    @ConfigProperty(name = "kvasir.services.storage.s3.host", defaultValue = "localhost")
+    @ConfigProperty(name = "kvasir.services.storage.s3.host")
     private val s3Host: String,
-    @ConfigProperty(name = "kvasir.services.storage.s3.port", defaultValue = "9000")
+    @ConfigProperty(name = "kvasir.services.storage.s3.port")
     private val s3Port: Int,
+    @ConfigProperty(name = "quarkus.minio.url")
+    private val minioHost: String,
     private val s3Interceptor: S3Interceptor
 ) {
 
     fun onStart(@Observes router: Router, vertx: Vertx) {
+        Log.debug("storage-api sees '$minioHost' as minio host")
+        Log.debug("storage-api proxying S3 requests to $s3Host:$s3Port")
         val proxyClient = vertx.createHttpClient()
         val proxy = HttpProxy.reverseProxy(proxyClient)
         proxy.origin(s3Port, s3Host).addInterceptor(s3Interceptor)
@@ -129,7 +134,10 @@ class S3Interceptor(
                         timestamp = Instant.now(),
                         podId = "$baseUri$podId",
                         sliceId = sliceId?.let { "$baseUri$podId/slices/$it" },
-                        objectId = URLDecoder.decode(context.request().uri.substringAfter("/$bucket/").substringBefore("?"), Charsets.UTF_8.name()),
+                        objectId = URLDecoder.decode(
+                            context.request().uri.substringAfter("/$bucket/").substringBefore("?"),
+                            Charsets.UTF_8.name()
+                        ),
                         externalObjectUri = "${baseUri.removeSuffix("/")}${context.request().proxiedRequest().path()}",
                         internalStorageUri = "http://$s3Host:$s3Port${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),

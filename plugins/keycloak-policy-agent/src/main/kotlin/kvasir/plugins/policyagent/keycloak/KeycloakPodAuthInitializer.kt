@@ -3,6 +3,7 @@ package kvasir.plugins.policyagent.keycloak
 import com.google.common.hash.Hashing
 import io.quarkus.arc.properties.IfBuildProperty
 import io.quarkus.logging.Log
+import io.quarkus.vertx.VertxContextSupport
 import io.smallrye.mutiny.Uni
 import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
@@ -13,6 +14,7 @@ import kvasir.definitions.kg.ClientConfiguration
 import kvasir.definitions.kg.PodAuthInitializer
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.jboss.resteasy.reactive.ClientWebApplicationException
+import org.keycloak.admin.client.Keycloak
 import org.keycloak.admin.client.KeycloakBuilder
 import org.keycloak.representations.idm.*
 import org.keycloak.representations.idm.authorization.PolicyEnforcementMode
@@ -34,13 +36,9 @@ private const val DEFAULT_PERMISSION_NAME = "Default Permission"
 @ApplicationScoped
 @IfBuildProperty(name = Constants.KEYCLOAK_POLICY_AGENT_ENABLED, stringValue = "true")
 class KeycloakPodAuthInitializer(
-    private val vertx: Vertx,
     @ConfigProperty(name = "quarkus.oidc.auth-server-url")
     defaultRealmUri: String,
-    @ConfigProperty(name = "quarkus.keycloak.admin-client.username", defaultValue = "admin")
-    username: String,
-    @ConfigProperty(name = "quarkus.keycloak.admin-client.password", defaultValue = "admin")
-    password: String,
+    private val keycloak: Keycloak,
     @ConfigProperty(name = KvasirConfig.WEBCLIENT_URI_PROPERTY, defaultValue = KvasirConfig.WEBCLIENT_URI_DEFAULT)
     private val webClientUri: String,
     @ConfigProperty(
@@ -54,17 +52,13 @@ class KeycloakPodAuthInitializer(
     private val SSO_MAX_LIFESPAN = Duration.parse("8h").inWholeSeconds.toInt();
     private val ACCESS_TOKEN_LIFESPAN = Duration.parse("5m").inWholeSeconds.toInt();
 
-    // TODO: why are these instances created manually?
-    private val keycloakHostUrl = URI(defaultRealmUri).let { "${it.scheme}://${it.authority}" };
-    private val keycloak = KeycloakBuilder.builder().serverUrl(keycloakHostUrl).realm("master")
-        .clientId("admin-cli").grantType("password").username(username).password(password).build()
     private val realmsBaseUri = defaultRealmUri.substringBeforeLast("/")
 
     override fun initialize(
         podId: String,
         podName: String,
         preconfiguredClients: List<ClientConfiguration>
-    ): Uni<AuthConfiguration> = vertx.executeBlocking {
+    ): Uni<AuthConfiguration> = VertxContextSupport.executeBlocking {
         // Try creating a realm
         buildRealm(podName, preconfiguredClients)
 
@@ -117,7 +111,6 @@ class KeycloakPodAuthInitializer(
         keycloak.realm(podName).users().get(defaultUser.id).roles().realmLevel().add(listOf(ownerRole))
 
 
-
         val secret =
             Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8).toString()
 
@@ -143,7 +136,8 @@ class KeycloakPodAuthInitializer(
             this.isDirectAccessGrantsEnabled = false
             this.authorizationServicesEnabled = false
             this.redirectUris =
-                listOf<String>("http://localhost:4200/*",
+                listOf<String>(
+                    "http://localhost:4200/*",
                     "http://localhost:3000/*",
                     "http://localhost:8081/*",
                     webClientUri.removeSuffix("/") + "/*"
@@ -157,7 +151,7 @@ class KeycloakPodAuthInitializer(
             keycloak.realm(podName).clients().create(ClientRepresentation().apply {
                 this.name = preconfiguredClient.clientId
                 this.clientId = preconfiguredClient.clientId
-                if(preconfiguredClient.enableServiceAccount) {
+                if (preconfiguredClient.enableServiceAccount) {
                     this.secret = preconfiguredClient.clientSecret
                 }
                 this.isServiceAccountsEnabled = preconfiguredClient.enableServiceAccount
