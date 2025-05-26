@@ -3,6 +3,7 @@ package kvasir.plugins.kg.clickhouse.backends
 import graphql.language.Document
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.inject.Singleton
 import kvasir.definitions.kg.*
@@ -30,15 +31,19 @@ class GenericStorageBackend(
 
 
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+        val startTs = System.currentTimeMillis()
+        Log.debug("Storing change request ${buffer.request.id}...")
         return buffer.stream().group().intoLists().of(bufferSize)
             .onItem().transformToUniAndConcatenate { records ->
                 clickhouseClient.insert(RDFDatasetQuadInsertSpec(databaseFromPodId(buffer.request.podId)), records)
-                    .chain { _ ->
-                        // Remove the stored records from the tx buffer
-                        buffer.remove(records, true)
-                    }
             }
             .skipToLast()
+            .chain { _ ->
+                buffer.destroy()
+            }
+            .invoke { _ ->
+                Log.debug("Stored change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
+            }
     }
 
     override fun datafetcher(podId: String, context: Map<String, Any>, atTimestamp: Instant?): DataFetcher<Any>? {

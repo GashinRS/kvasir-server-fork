@@ -38,6 +38,8 @@ class EvaluateAssertions(
     private val assertionCheckingParallelism: Int,
 ) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+        val startTs = System.currentTimeMillis()
+        Log.debug("Evaluating assertions for change request ${buffer.request.id}...")
         val request = buffer.request
         return Multi.createFrom().iterable(request.assert)
             .onItem()
@@ -93,6 +95,9 @@ class EvaluateAssertions(
             }
             .merge(assertionCheckingParallelism)
             .skipToLast()
+            .invoke { _ ->
+                Log.debug("Finished evaluating assertions for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
+            }
     }
 
 }
@@ -105,6 +110,8 @@ class MaterializeS3References(
     private val referenceHandlingBuffer: Int,
 ) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+        val startTs = System.currentTimeMillis()
+        Log.debug("Processing external references for change request ${buffer.request.id}...")
         val request = buffer.request
         return if (request.insertFromRefs.isNotEmpty() || request.deleteFromRefs.isNotEmpty()) {
             // Delete from external sources
@@ -151,6 +158,9 @@ class MaterializeS3References(
         } else {
             Uni.createFrom().voidItem()
         }
+            .invoke { _ ->
+                Log.debug("Finished processing external references for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
+            }
     }
 
     /**
@@ -171,6 +181,8 @@ class MaterializeRecords(
     private val sliceStore: Instance<SliceStore>
 ) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+        val startTs = System.currentTimeMillis()
+        Log.debug("Processing with clauses for change request ${buffer.request.id}...")
         // Process embedded inserts/deletes
         val request = buffer.request
         return bindWhere(request)
@@ -198,6 +210,9 @@ class MaterializeRecords(
                             }
                         )
                     }
+            }
+            .invoke { _ ->
+                Log.debug("Finished processing with clauses for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
             }
     }
 
@@ -277,6 +292,8 @@ class MaterializeRecords(
 class SliceSHACLValidator(private val sliceStore: SliceStore) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
         return buffer.request.sliceId?.let { sliceId ->
+            val startTs = System.currentTimeMillis()
+            Log.debug("Validating change request ${buffer.request.id} against Slice SHACL schema...")
             // Load Slice schema
             sliceStore.getById(buffer.request.podId, sliceId)
                 .chain { sliceSpec ->
@@ -295,6 +312,9 @@ class SliceSHACLValidator(private val sliceStore: SliceStore) : ChangeProcessor 
                         Uni.createFrom().voidItem()
                     }
                 }
+                .invoke { _ ->
+                    Log.debug("Finished validating change request ${buffer.request.id} against Slice SHACL schema in ${System.currentTimeMillis() - startTs} ms")
+                }
         } ?: Uni.createFrom().voidItem()
     }
 
@@ -304,6 +324,8 @@ class SliceSHACLValidator(private val sliceStore: SliceStore) : ChangeProcessor 
 class SliceGraphQLBasedValidator(private val sliceStore: SliceStore) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
         return buffer.request.sliceId?.let { sliceId ->
+            val startTs = System.currentTimeMillis()
+            Log.debug("Validating change request ${buffer.request.id} against Slice GraphQL schema...")
             // Load Slice schema
             sliceStore.getById(buffer.request.podId, sliceId)
                 .chain { sliceSpec ->
@@ -321,6 +343,9 @@ class SliceGraphQLBasedValidator(private val sliceStore: SliceStore) : ChangePro
                         Uni.createFrom()
                             .failure(InvalidChangeRequestException("Cannot validate change request: no spec found for Slice '$sliceId'!"))
                     }
+                }
+                .invoke { _ ->
+                    Log.debug("Finished validating change request ${buffer.request.id} against Slice GraphQL schema in ${System.currentTimeMillis() - startTs} ms")
                 }
         } ?: Uni.createFrom().voidItem()
     }

@@ -2,6 +2,7 @@ package kvasir.baseimpl.kg
 
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
+import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordType
@@ -14,7 +15,7 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 
 @ApplicationScoped
-class InMemoryChangeRequestTxBufferFactory : ChangeRequestTxBufferFactory {
+class InMemoryChangeRequestTxBufferFactory(private val vertx: Vertx) : ChangeRequestTxBufferFactory {
     override fun open(request: ChangeRequest): Uni<ChangeRequestTxBuffer> {
         return Uni.createFrom().item(object : ChangeRequestTxBuffer {
 
@@ -43,17 +44,16 @@ class InMemoryChangeRequestTxBufferFactory : ChangeRequestTxBufferFactory {
                 }
             }
 
-            override fun add(records: List<ChangeRecord>): Uni<Void> {
+            override fun add(records: List<ChangeRecord>): Uni<Void> = vertx.executeBlocking {
                 records.forEach { record ->
                     when (record.type) {
                         ChangeRecordType.INSERT -> insertRecords.add(record)
                         ChangeRecordType.DELETE -> deleteRecords.add(record)
                     }
                 }
-                return Uni.createFrom().voidItem()
-            }
+            }.replaceWithVoid()
 
-            override fun remove(records: List<ChangeRecord>, stored: Boolean): Uni<Void> {
+            override fun remove(records: List<ChangeRecord>, stored: Boolean): Uni<Void> = vertx.executeBlocking {
                 records.forEach { record ->
                     when (record.type) {
                         ChangeRecordType.INSERT -> insertRecords.remove(record)
@@ -68,8 +68,7 @@ class InMemoryChangeRequestTxBufferFactory : ChangeRequestTxBufferFactory {
                         }
                     }
                 }
-                return Uni.createFrom().voidItem()
-            }
+            }.replaceWithVoid()
 
             override fun statistics(): Uni<ChangeRequestTxBufferStatistics> {
                 return Uni.createFrom()
@@ -78,11 +77,10 @@ class InMemoryChangeRequestTxBufferFactory : ChangeRequestTxBufferFactory {
                     )
             }
 
-            override fun destroy(): Uni<Void> {
+            override fun destroy(): Uni<Void> = vertx.executeBlocking {
                 this.insertRecords.clear()
                 this.deleteRecords.clear()
-                return Uni.createFrom().voidItem()
-            }
+            }.replaceWithVoid()
 
         })
     }

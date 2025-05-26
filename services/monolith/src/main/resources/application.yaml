@@ -32,7 +32,7 @@ quarkus:
         enabled: true
         origins: http://localhost:3000,http://localhost:4200, http://localhost:5173
     minio:
-      url: http://localhost:9000
+      url: localhost
       port: 9000
       secure: false
       access-key: kvasir
