@@ -56,6 +56,8 @@ class MetadataStorageBackend(
     }
 
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+        val startTs = System.currentTimeMillis()
+        Log.debug("Processing metadata for change request ${buffer.request.id}...")
         val targetPodId = buffer.request.podId
         return buffer.stream().filter { it.type == ChangeRecordType.INSERT }.map { it.statement }.collect().asList()
             .chain { statements ->
@@ -93,6 +95,9 @@ class MetadataStorageBackend(
                         }
                 }
                 clickhouseClient.insert(MetadataInsertRecordSpec(databaseFromPodId(targetPodId)), metadataEntries)
+            }
+            .invoke { _ ->
+                Log.debug("Processed metadata for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
             }
     }
 

@@ -13,10 +13,12 @@ import kvasir.definitions.kg.ReferenceLoader
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
+import kvasir.utils.rdf.ReactiveRDFParser
 import kvasir.utils.s3.S3Utils
 import org.eclipse.rdf4j.model.Literal
 import org.eclipse.rdf4j.query.QueryResults
 import org.eclipse.rdf4j.rio.RDFFormat
+import org.eclipse.rdf4j.rio.Rio
 import kotlin.jvm.optionals.getOrNull
 
 @ApplicationScoped
@@ -38,7 +40,7 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
             )
             .onItem().transformToMulti { resp ->
                 // TODO: do we need to set a baseURI here?
-                Multi.createFrom().iterable(QueryResults.parseGraphBackground(resp, null, parseLang(resp)))
+                ReactiveRDFParser.parseRdf(resp, parseLang(resp))
             }
             .map { statement ->
                 RDFStatement(
