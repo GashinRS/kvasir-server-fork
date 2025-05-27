@@ -2,9 +2,6 @@
 
 <show-structure depth="2"/>
 
-> This feature is still work in progress.
-> {style="note"}
-
 The Changes and Query APIs are expressive ways to interact with the Knowledge Graph of a Pod. However, they provide
 access to the entire Knowledge Graph, which may not always be necessary or desirable. In some cases, it may be more
 efficient to work with a well-defined subset of the Knowledge Graph, known as a "slice". Also from the perspective of
