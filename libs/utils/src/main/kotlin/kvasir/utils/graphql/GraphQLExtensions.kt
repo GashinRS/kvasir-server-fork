@@ -1,5 +1,6 @@
 package kvasir.utils.graphql
 
+import graphql.Scalars
 import graphql.language.*
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*

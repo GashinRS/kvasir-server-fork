@@ -11,7 +11,40 @@ implementations that can handle specific types of data in a different or optimiz
 integrated with the Kvasir [](Changes.md) and [Query API](Querying.md), and all associated features (
 e.g., [time traveling](Querying.md#time-travel)).
 
-A built-in example of such a "Custom data backend" is the way in which Kvasir handles (SAREF) time-series.
+A built-in example of such a "Custom data backend" is the way in which Kvasir handles (SAREF) time-series. This feature
+is not enabled by default and needs to be configured on a per-pod basis. Here is an example configuration for Alice's
+pod:
+
+```yaml
+kvasir:
+  bootstrap:
+    pods:
+      - name: alice
+        default-context: |
+          {
+            "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "xsd": "http://www.w3.org/2001/XMLSchema#",
+            "schema": "http://schema.org/",
+            "ex": "http://example.org/",
+            "saref": "https://saref.etsi.org/core/"
+          }
+        auto-ingest-rdf: true
+  changes:
+    processing:
+      pipeline:
+        - class-name: kvasir.baseimpl.kg.EvaluateAssertions
+        - class-name: kvasir.baseimpl.kg.MaterializeS3References
+        - class-name: kvasir.baseimpl.kg.MaterializeRecords
+        - class-name: kvasir.baseimpl.kg.SliceGraphQLBasedValidator
+        - class-name: kvasir.plugins.kg.clickhouse.backends.MetadataStorageBackend
+        - class-name: kvasir.plugins.kg.clickhouse.backends.SarefTimeseriesStorageBackend
+        - class-name: kvasir.plugins.kg.clickhouse.backends.GenericStorageBackend
+          default-storage: true
+```
+
+Note the inclusion of the `kvasir.plugins.kg.clickhouse.backends.SarefTimeseriesStorageBackend` in the configured
+processing pipeline.
 
 ## Why treat time-series differently?
 

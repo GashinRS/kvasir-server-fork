@@ -29,7 +29,8 @@ open class GraphQLFilterVisitor(private val context: Map<String, Any>) :
         return when {
             pattern != null -> pattern
             op == RSQLOperators.EQUAL -> "$fieldPart = ${arguments[0]}"
-            op == RSQLOperators.NOT_EQUAL -> "${fieldPart.replace(" AND", " AND NOT")} = ${arguments[0]}"
+            //op == RSQLOperators.NOT_EQUAL -> "${fieldPart.replace(" AND", " AND NOT")} = ${arguments[0]}" => what was the purpose of this?
+            op == RSQLOperators.NOT_EQUAL -> "$fieldPart != ${arguments[0]}"
             op == RSQLOperators.GREATER_THAN -> "$fieldPart > ${arguments[0]}"
             op == RSQLOperators.GREATER_THAN_OR_EQUAL -> "$fieldPart >= ${arguments[0]}"
             op == RSQLOperators.LESS_THAN -> "$fieldPart < ${arguments[0]}"

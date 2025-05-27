@@ -6,6 +6,7 @@ import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
 import graphql.language.*
+import graphql.scalars.ExtendedScalars
 import graphql.schema.*
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
@@ -346,6 +347,7 @@ open class SQLConvertor(
                     })"
                 },
             getNodeFilter(field, fieldDefinition, outputType)?.let { GraphQLFilterVisitor(context).visitNode(it) },
+            if (outputType == KvasirTypes.BoxedLiteral) scalarTypeFilter() else null,
             getArgsFilter(field)?.let {
                 GraphQLFilterVisitor(context).visitNode(
                     SelectorReplacingFilterVisitor("id", relSubj).visitNode(it)
@@ -359,7 +361,7 @@ open class SQLConvertor(
             ) + nestedFields.map {
                 "'${it.fieldName}'" to if (it.nested) {
                     "arrayFilter(x -> notEmpty(x), arrayDistinct(ARRAY_AGG(${it.fieldName})))"
-                } else if(it.rawRDF) {
+                } else if (it.rawRDF) {
                     // TODO: what with reverse relations?
                     "[[${if (reverse) "subject" else "object"}, datatype, language]] as ${it.fieldName}"
                 } else {
@@ -712,7 +714,13 @@ open class SQLConvertor(
             is GraphQLInterfaceType -> env.graphQLSchema.getImplementations(requiredType)
             is GraphQLUnionType -> requiredType.types
             else -> listOf(requiredType)
-        }.map { getFQName(it as GraphQLDirectiveContainer, context) }
+        }.mapNotNull {
+            if (it is GraphQLNamedType && it.name in setOf(TYPE_BOXED_LITERAL, ExtendedScalars.Json.name)) {
+                null
+            } else {
+                getFQName(it as GraphQLDirectiveContainer, context)
+            }
+        }
         return if (matchTypes.isNotEmpty()) {
             AndNode(
                 listOf(
@@ -722,6 +730,14 @@ open class SQLConvertor(
             )
         } else {
             null
+        }
+    }
+
+    protected fun scalarTypeFilter(requiredType: GraphQLScalarType? = null): Node {
+        return if (requiredType != null) {
+            ComparisonNode(RSQLOperators.EQUAL, "datatype", listOf(requiredType.rdfDatatype()))
+        } else {
+            ComparisonNode(RSQLOperators.NOT_EQUAL, "datatype", listOf(""))
         }
     }
 
