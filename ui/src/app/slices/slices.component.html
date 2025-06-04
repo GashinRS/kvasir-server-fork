@@ -1,0 +1,87 @@
+<nz-page-header>
+  <nz-page-header-title>Slices</nz-page-header-title>
+  <nz-page-header-subtitle
+    >Shape your own views over your data</nz-page-header-subtitle
+  >
+  <nz-page-header-extra>
+    <button nz-button nzType="primary" [routerLink]="['./new']">
+      Create Slice
+    </button>
+  </nz-page-header-extra>
+</nz-page-header>
+
+@if (slices.hasValue()) {
+  <nz-table #basicTable [nzData]="slices.value()!">
+    <thead>
+      <tr>
+        <th>name</th>
+        <th>id</th>
+        <th>action</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (data of basicTable.data; track data) {
+        @let dataName = data["kss:name"];
+        <tr>
+          <td>
+            <nz-space>
+              <span *nzSpaceItem>{{ dataName }} </span>
+              @if (data["kss:description"]; as desc) {
+                <app-help
+                  *nzSpaceItem
+                  [text]="desc"
+                  type="secondary"
+                ></app-help>
+              }
+            </nz-space>
+          </td>
+          <td>{{ data["@id"] }}</td>
+          <td nz-flex nzJustify="space-between">
+            <nz-space>
+              <button
+                *nzSpaceItem
+                nz-button
+                type="button"
+                nzType="primary"
+                nzSize="small"
+                (click)="querySlice(dataName)"
+              >
+                query
+              </button>
+              <button
+                *nzSpaceItem
+                nz-button
+                type="button"
+                nzType="primary"
+                nzGhost
+                nzSize="small"
+                (click)="writeToSlice(dataName)"
+              >
+                changes
+              </button>
+              <button
+                *nzSpaceItem
+                nz-button
+                type="button"
+                nzSize="small"
+                (click)="editSlice(dataName)"
+              >
+                edit
+              </button>
+            </nz-space>
+            <button
+              nz-button
+              type="button"
+              nzType="primary"
+              nzDanger
+              nzSize="small"
+              (click)="deleteSlice(dataName)"
+            >
+              delete
+            </button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </nz-table>
+}

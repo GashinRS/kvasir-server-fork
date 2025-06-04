@@ -1,0 +1,27 @@
+<div>
+  <div class="description">
+    <nz-icon nzType="exclamation-circle" nzTheme="outline" />
+    <span>{{ error.description }}</span>
+  </div>
+
+  @if (error.message; as message) {
+    <p class="message">
+      {{ message }}
+    </p>
+  }
+  @if (error.stack; as stack) {
+    <div class="stack">{{ stack }}</div>
+  }
+</div>
+
+<div *nzModalFooter>
+  <button
+    nz-button
+    nzType="default"
+    (click)="copyError()"
+    [disabled]="isCopyBtnDisabled"
+  >
+    {{ copyBtnTxt }}
+  </button>
+  <button nz-button nzType="primary" (click)="modal.close()">Close</button>
+</div>

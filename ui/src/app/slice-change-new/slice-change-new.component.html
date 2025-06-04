@@ -1,0 +1,56 @@
+<nz-page-header>
+  <nz-page-header-title
+    >New Change Request
+    <small>({{ slice.value()?.["kss:name"] }})</small></nz-page-header-title
+  >
+  <nz-page-header-subtitle
+    >Compose a new change request for this slice</nz-page-header-subtitle
+  >
+</nz-page-header>
+
+<form
+  nz-form
+  [nzLayout]="'vertical'"
+  [formGroup]="inputForm"
+  (ngSubmit)="submitForm()"
+>
+  <nz-form-item>
+    <nz-form-label>Change request (JSON body)</nz-form-label>
+    <nz-form-control [nzErrorTip]="insertErrorTpl">
+      <textarea nz-input formControlName="request" rows="24"></textarea>
+      <ng-template #insertErrorTpl let-control>
+        @for (entry of control.errors | keyvalue; track entry.key) {
+          <span nz-typography [nzType]="errorStyle(entry.key)">
+            {{ showError(entry) }}
+          </span>
+        }
+      </ng-template>
+    </nz-form-control>
+  </nz-form-item>
+  <nz-form-item>
+    <nz-form-control>
+      <div nz-flex nzJustify="flex-end">
+        <nz-space>
+          <button
+            type="button"
+            *nzSpaceItem
+            nz-button
+            nzType="link"
+            (click)="reset()"
+          >
+            Reset
+          </button>
+          <button
+            *nzSpaceItem
+            nz-button
+            type="submit"
+            nzType="primary"
+            [disabled]="isInputInvalid()"
+          >
+            Send
+          </button>
+        </nz-space>
+      </div>
+    </nz-form-control>
+  </nz-form-item>
+</form>

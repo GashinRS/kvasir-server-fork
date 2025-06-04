@@ -1,0 +1,13 @@
+<div nz-flex nzJustify="space-between" nzGap="small">
+  <span class="version">{{ version }}</span>
+  <span class="commit"
+    ><a
+      [href]="
+        'https://gitlab.ilabt.imec.be/ibcndevs/solid/kvasir-ui/-/commit/' +
+        commitHash
+      "
+      >#{{ commitHash }}</a
+    ></span
+  >
+  <span class="build">{{ buildDate | date: "yyyy-MM-dd|HH:mm" }}</span>
+</div>

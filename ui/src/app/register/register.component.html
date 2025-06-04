@@ -1,0 +1,59 @@
+<div class="pageroot">
+  <nz-page-header>
+    <nz-page-header-title>Sign up</nz-page-header-title>
+    <nz-page-header-subtitle
+      >Create your own Kvasir Pod</nz-page-header-subtitle
+    >
+  </nz-page-header>
+
+  <form nz-form [formGroup]="createForm" (ngSubmit)="createPod()">
+    <nz-form-item>
+      <nz-form-control nzErrorTip="Please input your desired pod name!">
+        <input
+          type="text"
+          nz-input
+          formControlName="podName"
+          placeholder="Pod name"
+        />
+      </nz-form-control>
+    </nz-form-item>
+    <button
+      nz-button
+      class="login-form-button login-form-margin"
+      [nzType]="'primary'"
+      [nzBlock]="true"
+      [disabled]="createForm.invalid"
+    >
+      Create
+    </button>
+    Or
+    <a routerLink="/login">Login</a>
+  </form>
+
+  <ng-template #infoModal let-ref="modalRef">
+    <p>You will be redirected to the login screen.<br />Log in with:</p>
+    <table nz-table class="register-table">
+      <tbody>
+        <tr>
+          <td>Username</td>
+          <td>
+            <span nz-typography>
+              <code>{{ ref.config.nzData }}</code>
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td>Password</td>
+          <td>
+            <span nz-typography>
+              <code>{{ ref.config.nzData }}</code>
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p nz-typography nzType="secondary">
+      Change your password after first login!
+    </p>
+  </ng-template>
+</div>
