@@ -1,0 +1,10 @@
+global:
+  host: kvasir.discover.ilabt.imec.be
+  ingressRoutes:
+    matchHost: true
+    tlsEnabled: true
+    proxy: edge
+image:
+  tag: latest
+ingressRoutes:
+  enabled: true

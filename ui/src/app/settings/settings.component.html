@@ -1,0 +1,58 @@
+<nz-page-header
+  nzTitle="Pod settings"
+  nzSubtitle="Configure basic settings for your pod"
+>
+</nz-page-header>
+<form [formGroup]="settingsForm">
+  <nz-row>
+    <nz-col nzFlex="1">
+      <div class="default-context">
+        <h5 nz-typography>Default context</h5>
+        <span nz-typography nzType="secondary"
+          >This is the default context applied for your whole pod. It allows you
+          to remap prefixes to your liking.</span
+        >
+        <textarea
+          nz-input
+          id="context"
+          formControlName="defaultContext"
+        ></textarea>
+        <div class="error">
+          <span nz-typography nzType="danger">{{ defaultContextError() }}</span>
+        </div>
+        <div class="btns">
+          <button nz-button nzType="text" (click)="resetDefaultContext()">
+            Reset
+          </button>
+          <button
+            nz-button
+            nzType="primary"
+            (click)="saveDefaultContext()"
+            [disabled]="this.defaultContextError() != null"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </nz-col>
+  </nz-row>
+  <nz-row>
+    <nz-col nzSpan="24">
+      <h5 nz-typography>Configuration flags</h5>
+    </nz-col>
+  </nz-row>
+  <nz-row>
+    <nz-col nzSpan="24" nzXs="14" nzSm="10" nzMd="8" nzLg="6" nzXl="4">
+      <nz-space>
+        <span *nzSpaceItem>Auto-ingest RDF</span>
+        <app-help
+          text="Automatically ingest RDF into the Changes API if the content of an S3 File Upload is an RDF MIME-type, thus adding it to the knowledge graph."
+          *nzSpaceItem
+        ></app-help>
+      </nz-space>
+    </nz-col>
+    <nz-col nzSpan="24" nxXs="10" nzSm="14" nzMd="16" nzLg="18" nzXl="20">
+      <nz-switch formControlName="autoIngestRDF"></nz-switch>
+    </nz-col>
+  </nz-row>
+</form>

@@ -1,0 +1,135 @@
+<nz-page-header>
+  <nz-breadcrumb nz-page-header-breadcrumb>
+    <nz-breadcrumb-item>
+      <a routerLink="/s3">
+        <span nz-icon nzType="home"></span>
+        <span>{{ podName }}</span>
+      </a>
+    </nz-breadcrumb-item>
+
+    @let parts = prefix()?.split("/");
+
+    @for (part of parts; track $index) {
+      <nz-breadcrumb-item>
+        <a (click)="goToBreadcrumbIndex($index)">
+          <span>{{ part }}</span>
+        </a>
+      </nz-breadcrumb-item>
+    }
+  </nz-breadcrumb>
+  <nz-page-header-extra>
+    <nz-space>
+      <button *nzSpaceItem nz-button nzType="dashed" (click)="showModal()">
+        Create prefix folder...
+      </button>
+
+      <button
+        *nzSpaceItem
+        nz-button
+        nz-dropdown
+        [nzDropdownMenu]="menu4"
+        nzType="primary"
+      >
+        <span nz-icon nzType="upload"></span>
+        Upload
+        <span nz-icon nzType="down"></span>
+      </button>
+    </nz-space>
+
+    <nz-dropdown-menu #menu4="nzDropdownMenu">
+      <ul nz-menu>
+        <li nz-menu-item>
+          <nz-upload
+            [nzShowUploadList]="false"
+            [nzCustomRequest]="customRequestFn"
+            (nzChange)="handleChange($event)"
+          >
+            Upload a file
+          </nz-upload>
+        </li>
+        <li nz-menu-item>
+          <nz-upload
+            [nzShowUploadList]="false"
+            [nzCustomRequest]="customRequestFn"
+            (nzChange)="handleChange($event)"
+            nzDirectory
+          >
+            Upload folder
+          </nz-upload>
+        </li>
+      </ul>
+    </nz-dropdown-menu>
+  </nz-page-header-extra>
+</nz-page-header>
+
+<nz-modal
+  [(nzVisible)]="prefixModalVisible"
+  nzTitle="Create prefix folder..."
+  (nzOnCancel)="handleCancel()"
+  (nzOnOk)="handleOk()"
+>
+  <ng-container *nzModalContent>
+    <div>Please enter a prefix to create a virtual empty folder</div>
+    <div>
+      <nz-input-group [nzAddOnBefore]="prefix() || ''">
+        <input type="text" nz-input [(ngModel)]="prefixInputValue" />
+      </nz-input-group>
+    </div>
+  </ng-container>
+</nz-modal>
+
+<nz-table #basicTable [nzData]="dataList.value()!" [nzNoResult]="emptyTpl">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Modified at</th>
+      <th>Size</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for (data of basicTable.data; track data.Key) {
+      @let name = unPrefix(data.Key!);
+      @switch (data.type) {
+        @case ("file") {
+          <tr>
+            <td>
+              <a (click)="downloadObject(data.Key!)">{{ name }}</a>
+            </td>
+            <td>{{ data.LastModified | date }}</td>
+            <td>{{ data.Size | number }} kB</td>
+            <td>
+              <a (click)="deleteObject(data.Key!)">Delete</a>
+            </td>
+          </tr>
+        }
+        @case ("folder") {
+          <tr>
+            <td>
+              <a (click)="goToFolder(name)">
+                <nz-space>
+                  <span
+                    *nzSpaceItem
+                    nz-icon
+                    nzType="folder"
+                    nzTheme="outline"
+                  ></span>
+                  <span *nzSpaceItem>{{ name }}</span>
+                </nz-space>
+              </a>
+            </td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+        }
+      }
+    }
+  </tbody>
+</nz-table>
+<ng-template #emptyTpl>
+  <nz-empty
+    nzNotFoundContent="Empty folder"
+    nzNotFoundImage="simple"
+  ></nz-empty>
+</ng-template>

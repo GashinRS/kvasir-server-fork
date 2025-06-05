@@ -1,0 +1,67 @@
+.layout {
+    min-height: 100vh;
+}
+
+.logo {
+    width: 31px;
+    height: 31px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 16px 24px 16px 0;
+    float: left;
+}
+
+.product {
+    color: white;
+    vertical-align: middle;
+    float: left;
+    font-size: 16px;
+    font-weight: bold;
+    padding-right: 20px;
+}
+
+nz-header {
+    position: fixed;
+    width: 100%;
+}
+
+[nz-menu] {
+    line-height: 64px;
+
+    .right-menu {
+        float: right;
+
+        [nz-icon] {
+            font-size: 16px;
+        }
+    }
+
+    .logout {
+        font-size: 11px;
+        line-height: 1;
+    }
+}
+
+nz-content {
+    padding: 0 50px;
+    margin-top: 64px;
+}
+
+.inner-content {
+    position: relative;
+    background: #fff;
+    // padding: 24px;
+    min-height: calc(100vh - 64px - 70px);
+    display: grid;
+    grid-template-rows: 0 1fr;
+}
+
+nz-footer {
+    // padding: 10px;
+    display: grid;
+    grid-auto-flow: column;
+    justify-content: space-between;
+    text-align: center;
+    // font-size: 14px;
+
+
+}

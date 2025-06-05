@@ -1,0 +1,13 @@
+<nz-page-header>
+  <nz-page-header-title
+    >Query {{ slice.value()?.["kss:name"] }}</nz-page-header-title
+  >
+  <nz-page-header-subtitle>Query data in this Slice</nz-page-header-subtitle>
+</nz-page-header>
+@if (slice.hasValue()) {
+  <app-graphiql-editor
+    [queryEndpoint]="queryEndpoint()"
+    [historyKey]="historyKey()"
+    theme="light"
+  ></app-graphiql-editor>
+}

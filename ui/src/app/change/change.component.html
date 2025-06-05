@@ -1,0 +1,98 @@
+@if (change.hasValue()) {
+  @let ch = change.value()!;
+  <nz-row class="header-row">
+    <!-- <nz-space nzDirection="vertical"> -->
+    <nz-col nzFlex="1">
+      <nz-descriptions
+        nzTitle="Change Details"
+        nzBordered
+        [nzColumn]="2"
+        nzSize="small"
+      >
+        <nz-descriptions-item nzTitle="Change Report ID" [nzSpan]="2">
+          {{ ch["@id"] }}
+        </nz-descriptions-item>
+        <nz-descriptions-item
+          nzTitle="Pod ID"
+          [nzSpan]="ch?.['kss:sliceId'] ? 1 : 2"
+          >{{ ch["kss:podId"] }}
+        </nz-descriptions-item>
+        @if (ch["kss:sliceId"]; as sliceId) {
+          <nz-descriptions-item nzTitle="Slice ID">
+            {{ sliceId }}
+          </nz-descriptions-item>
+        }
+        <nz-descriptions-item nzTitle="Inserts">
+          {{ ch?.["kss:nrOfInserts"] | number: "1.0-0" }}
+        </nz-descriptions-item>
+        <nz-descriptions-item nzTitle="Deletes">
+          {{ ch?.["kss:nrOfDeletes"] | number: "1.0-0" }}
+        </nz-descriptions-item>
+        @let statusCode = statusEntry()["kss:statusCode"];
+        <nz-descriptions-item nzTitle="Result Code">
+          {{ statusCode }}
+        </nz-descriptions-item>
+        <nz-descriptions-item nzTitle="Timestamp">
+          {{ statusEntry()["kss:timestamp"] | date: "d MMM, yyyy @ hh:mm:ss" }}
+        </nz-descriptions-item>
+        @if (isError(statusCode)) {
+          <nz-descriptions-item [nzSpan]="2">
+            {{ statusEntry()["kss:message"] }}
+          </nz-descriptions-item>
+        }
+      </nz-descriptions>
+    </nz-col>
+  </nz-row>
+  <nz-row>
+    <nz-col nzFlex="1">
+      <h3>Records</h3>
+      <nz-table
+        #virtualTable
+        [nzVirtualItemSize]="39"
+        [nzTotal]="
+          (ch?.['kss:nrOfDeletes'] ?? 0) + (ch?.['kss:nrOfInserts'] ?? 0)
+        "
+        [nzShowPagination]="false"
+        [nzPageSize]="10"
+        [nzData]="records"
+        [nzVirtualForTrackBy]="trackByIndex"
+        [nzVirtualMinBufferPx]="500"
+        [nzVirtualMaxBufferPx]="1000"
+        [nzFrontPagination]="false"
+        [nzScroll]="{ y: '500px' }"
+        [nzSize]="'small'"
+        [nzTableLayout]="'fixed'"
+        [fetchLimit]="300"
+        (fetchNextPage)="onFetchNextPage($event)"
+        [nzNoResult]="noRecords"
+        server-paged
+      >
+        <thead>
+          <tr>
+            <th nzWidth="60px">Sign</th>
+            <th>Subject</th>
+            <th>Predicate</th>
+            <th>Object</th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-template nz-virtual-scroll let-data let-index="index">
+            <tr>
+              <td>{{ data.sign }}</td>
+              <td>{{ data.subject }}</td>
+              <td>{{ data.predicate }}</td>
+              <td nzEllipsis>{{ data.object }}</td>
+            </tr>
+          </ng-template>
+        </tbody>
+      </nz-table>
+    </nz-col>
+  </nz-row>
+}
+
+<ng-template #noRecords>
+  <nz-empty
+    nzNotFoundImage="simple"
+    nzNotFoundContent="No records were deleted or inserted as a result of this change request."
+  ></nz-empty>
+</ng-template>
