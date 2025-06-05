@@ -53,8 +53,8 @@ spec:
             {{- include "quarkus-template.oidc.envConfig" . | nindent 12 }}
             {{- include "quarkus-template.oidc.envConfig.additional" . | nindent 12 }}
             {{- end }}
-            {{- if .Values.oidc.keycloakAdmin.enabled -}}
-            {{- include "quarkus-template.oidc.keycloakAdmin.envConfig" . | nindent 12 }}
+            {{- if .Values.keycloakAdmin.enabled -}}
+            {{- include "quarkus-template.keycloakAdmin.envConfig" . | nindent 12 }}
             {{- end }}
             {{- if .Values.minio.enabled -}}
             {{- include "quarkus-template.minio.envConfig" . | nindent 12 }}

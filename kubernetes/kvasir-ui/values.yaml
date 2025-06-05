@@ -10,10 +10,6 @@ global:
     tls:
       secretName: ""
 
-  image:
-    registry: "gitlab.ilabt.imec.be:4567/discover/packages"
-    tag: ""
-    pullPolicy: IfNotPresent
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
