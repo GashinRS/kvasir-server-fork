@@ -19,6 +19,8 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { map, tap } from 'rxjs';
 import { KvasirService } from '../services/kvasir.service';
 import { Slice, SliceInput } from '../types';
+import { NzCodeEditorModule } from 'ng-zorro-antd/code-editor';
+import { DevSettingsService } from '../services/dev-settings.service';
 
 @Component({
   selector: 'app-slice-edit',
@@ -31,6 +33,7 @@ import { Slice, SliceInput } from '../types';
     NzInputModule,
     NzButtonModule,
     NzFlexModule,
+    NzCodeEditorModule,
   ],
   templateUrl: './slice-edit.component.html',
   styleUrl: './slice-edit.component.less',
@@ -40,6 +43,7 @@ export class SliceEditComponent {
   private kvasir = inject(KvasirService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  settings = inject(DevSettingsService);
 
   private slice = rxResource<Slice & { context: string }, unknown>({
     loader: () =>

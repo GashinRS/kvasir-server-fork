@@ -24,7 +24,11 @@
       <nz-form-item>
         <nz-form-label>&#64;context</nz-form-label>
         <nz-form-control [nzAutoTips]="autoTips">
-          <textarea nz-input formControlName="@context" rows="6"></textarea>
+          <nz-code-editor
+            class="field"
+            formControlName="@context"
+            [nzEditorOption]="settings.getCodeEditorSetting().json_readonly"
+          ></nz-code-editor>
         </nz-form-control>
       </nz-form-item>
     </nz-col>
@@ -46,37 +50,11 @@
       <nz-form-item>
         <nz-form-label>schema</nz-form-label>
         <nz-form-control>
-          <textarea nz-input formControlName="kss:schema" rows="18"></textarea>
-        </nz-form-control>
-      </nz-form-item>
-    </nz-col>
-  </nz-row>
-  <nz-row>
-    <nz-col nzSpan="24">
-      <nz-form-item>
-        <nz-form-control>
-          <div nz-flex nzJustify="flex-end">
-            <nz-space>
-              <button
-                type="button"
-                *nzSpaceItem
-                nz-button
-                nzType="link"
-                (click)="reset()"
-              >
-                Reset
-              </button>
-              <button
-                *nzSpaceItem
-                nz-button
-                type="submit"
-                nzType="primary"
-                [disabled]="editForm.invalid"
-              >
-                Save
-              </button>
-            </nz-space>
-          </div>
+          <nz-code-editor
+            class="editor"
+            formControlName="kss:schema"
+            [nzEditorOption]="settings.getCodeEditorSetting().graphql_readonly"
+          ></nz-code-editor>
         </nz-form-control>
       </nz-form-item>
     </nz-col>

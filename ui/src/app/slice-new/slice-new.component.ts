@@ -9,6 +9,7 @@ import {
 } from '@angular/forms';
 import { Router } from '@angular/router';
 import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzCodeEditorModule } from 'ng-zorro-antd/code-editor';
 import { NzFlexModule } from 'ng-zorro-antd/flex';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzGridModule } from 'ng-zorro-antd/grid';
@@ -17,6 +18,7 @@ import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { KvasirService } from '../services/kvasir.service';
 import { SliceInput } from '../types';
+import { DevSettingsService } from '../services/dev-settings.service';
 
 const DEFAULT_CONTEXT = `{
   "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
@@ -33,6 +35,7 @@ const DEFAULT_CONTEXT = `{
     NzGridModule,
     NzFlexModule,
     NzSpaceModule,
+    NzCodeEditorModule,
   ],
   templateUrl: './slice-new.component.html',
   styleUrl: './slice-new.component.less',
@@ -41,6 +44,7 @@ export class SliceNewComponent {
   // DI
   private kvasir = inject(KvasirService);
   private router = inject(Router);
+  settings = inject(DevSettingsService);
 
   readonly inputForm: FormGroup;
   readonly autoTips = {

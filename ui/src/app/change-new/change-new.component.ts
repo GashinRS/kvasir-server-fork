@@ -17,6 +17,8 @@ import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
 import { KvasirService } from '../services/kvasir.service';
+import { DevSettingsService } from '../services/dev-settings.service';
+import { NzCodeEditorModule } from 'ng-zorro-antd/code-editor';
 
 const DEFAULT_VALUE = `{
   "@context": {
@@ -46,6 +48,7 @@ const WARNINGS = [ERR_KEY_UNDEFINED_PREFIXES];
     NzSpaceModule,
     NzTypographyModule,
     KeyValuePipe,
+    NzCodeEditorModule,
   ],
   templateUrl: './change-new.component.html',
   styleUrl: './change-new.component.less',
@@ -54,6 +57,7 @@ export class ChangeNewComponent {
   // DI
   private kvasir = inject(KvasirService);
   private router = inject(Router);
+  settings = inject(DevSettingsService);
 
   readonly inputForm: FormGroup;
   // readonly ctrlChild = viewChild<NzFormControlComponent>('ctrlChild');

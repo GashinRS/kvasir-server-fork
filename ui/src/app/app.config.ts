@@ -22,6 +22,7 @@ import { provideRequiredKeycloakProviders } from './keycloak.config';
 import { APP_CONFIG_TOKEN, AppConfig } from './services/config.service';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { NzModalModule } from 'ng-zorro-antd/modal';
+import { NzCodeEditorModule } from 'ng-zorro-antd/code-editor';
 
 registerLocaleData(en);
 
