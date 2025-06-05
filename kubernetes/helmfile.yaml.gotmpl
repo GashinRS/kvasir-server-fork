@@ -7,6 +7,9 @@ environments:
       - environments/default.yaml.gotmpl
       - tlsEnabled: true
       - proxy: "none"
+  dev:
+    values:
+      - environments/default.yaml.gotmpl
 ---
 
 helmDefaults:
@@ -121,11 +124,12 @@ releases:
     chart: ./kvasir
     values:
       - kvasir-values.yaml.gotmpl
+      {{- if .StateValues.image.tag }}
       - global:
-          ingressRoutes:
-            tlsEnabled: {{ .StateValues.tlsEnabled }}
-            proxy: {{ .StateValues.proxy }}
-
+          image:
+            registry: {{ .StateValues.image.registry }}
+            tag: {{ .StateValues.image.tag }}
+      {{- end }}
 
   - name: kvasir-ui
     namespace: kvasir
@@ -145,5 +149,10 @@ releases:
             tls:
               secretName: kvasir-tls
             {{- end }}
+        {{- if .StateValues.image.tag }}
+        image:
+          registry: {{ .StateValues.image.registry}}
+          tag: {{ .StateValues.image.tag }}
+        {{- end }}
         ingressRoutes:
           enabled: true

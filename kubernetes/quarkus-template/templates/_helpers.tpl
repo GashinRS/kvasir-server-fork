@@ -88,35 +88,35 @@ The image reference for the Quarkus application
 {{- define "quarkus-template.oidc.envConfig.additional" -}}
 {{- end }}
 
-{{- define "quarkus-template.oidc.keycloakAdmin.envConfig" -}}
+{{- define "quarkus-template.keycloakAdmin.envConfig" -}}
 - name: QUARKUS_KEYCLOAK_ADMIN_CLIENT_ENABLED
-  value: {{ .Values.oidc.keycloakAdmin.enabled | quote }}
+  value: {{ .Values.keycloakAdmin.enabled | quote }}
 - name: QUARKUS_KEYCLOAK_ADMIN_CLIENT_SERVER_URL
   value: {{ .Values.global.oidc.authServerUrl | quote }}
 - name: QUARKUS_KEYCLOAK_ADMIN_CLIENT_GRANT_TYPE
   value: "password"
 - name: QUARKUS_KEYCLOAK_ADMIN_CLIENT_REALM
-  value: {{ .Values.global.oidc.keycloakAdmin.realm | quote }}
-{{- if and .Values.global.oidc.keycloakAdmin.existingSecret .Values.global.oidc.keycloakAdmin.usernameSecretKey }}
+  value: {{ .Values.global.keycloakAdmin.realm | quote }}
+{{- if and .Values.global.keycloakAdmin.existingSecret .Values.global.keycloakAdmin.usernameSecretKey }}
 - name: QUARKUS_KEYCLOAK_ADMIN_CLIENT_USERNAME
   valueFrom:
     secretKeyRef:
-      name: {{ .Values.global.oidc.keycloakAdmin.existingSecret }}
-      key: {{ .Values.global.oidc.keycloakAdmin.usernameSecretKey }}
-{{- else if .Values.global.oidc.keycloakAdmin.username }}
+      name: {{ .Values.global.keycloakAdmin.existingSecret }}
+      key: {{ .Values.global.keycloakAdmin.usernameSecretKey }}
+{{- else if .Values.global.keycloakAdmin.username }}
 - name: QUARKUS_KEYCLOAK_ADMIN_CLIENT_USERNAME
-  value: {{ .Values.global.oidc.keycloakAdmin.username | quote }}
+  value: {{ .Values.global.keycloakAdmin.username | quote }}
 {{- end }}
 
-{{- if and .Values.global.oidc.keycloakAdmin.existingSecret .Values.global.oidc.keycloakAdmin.passwordSecretKey }}
+{{- if and .Values.global.keycloakAdmin.existingSecret .Values.global.keycloakAdmin.passwordSecretKey }}
 - name: QUARKUS_KEYCLOAK_ADMIN_CLIENT_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ .Values.global.oidc.keycloakAdmin.existingSecret }}
-      key: {{ .Values.global.oidc.keycloakAdmin.passwordSecretKey }}
-{{- else if .Values.global.oidc.keycloakAdmin.password }}
+      name: {{ .Values.global.keycloakAdmin.existingSecret }}
+      key: {{ .Values.global.keycloakAdmin.passwordSecretKey }}
+{{- else if .Values.global.keycloakAdmin.password }}
 - name: QUARKUS_KEYCLOAK_ADMIN_CLIENT_PASSWORD
-  value: {{ .Values.global.oidc.keycloakAdmin.password | quote }}
+  value: {{ .Values.global.keycloakAdmin.password | quote }}
 {{- end }}
 
 {{- end }}

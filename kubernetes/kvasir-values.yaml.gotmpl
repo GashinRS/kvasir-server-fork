@@ -9,13 +9,6 @@ global:
       secretName: kvasir-tls
   {{- end }}
 
-  image:
-    registry: gitlab.ilabt.imec.be:4567/ibcndevs/solid/kvasir-next
-    pullPolicy: Always
-    tag: main
-  imagePullSecrets:
-    - name: gitlab-credentials
-
   env:
     - name: KVASIR_BASE_URI
       value: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.kvasirHost }}/"
@@ -29,6 +22,12 @@ global:
     httpPort: 8080
     metricsPort: 9000
 
+
+  {{- if eq .Environment.Name "kind" }}
+  truststore:
+    secretName: oidc-truststore-secret
+  {{- end }}
+
   oidc:
     enabled: true
     authServerUrl: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.keycloakHost }}/realms/quarkus"
@@ -39,10 +38,12 @@ global:
     clientIdSecretKey: ""
     clientSecretSecretKey: ""
     realmSecretKey: ""
-    keycloakAdmin:
-      username: "kcadmin"
-      password: {{ .StateValues.keycloakAdminPassword }}
-      realm: "master"
+  keycloakAdmin:
+    enabled: true
+    username: "kcadmin"
+    password: {{ .StateValues.keycloakAdminPassword }}
+    realm: "master"
+    authAdminServerUrl: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.keycloakHost }}"
 
 
   minio:
@@ -62,9 +63,3 @@ global:
   clickhouse:
     host: "clickhouse-clickhouse.clickhouse.svc.cluster.local"
     port: "8123"
-
-"pod-management-api":
-  applicationYaml:
-    quarkus:
-      log:
-        level: DEBUG

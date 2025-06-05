@@ -1,4 +1,3 @@
-
 # Global config for various dependencies we use in our Quarkus based applications
 # These global values are used only when the dependency is enabled in the application
 # by setting the equivalent `.Values.<dependency>.enabled` to `true`
@@ -29,6 +28,8 @@ global:
     httpPort: 8080
     metricsPort: ""
 
+  truststore: {}
+
   oidc:
     authServerUrl: ""
     clientId: ""
@@ -39,14 +40,15 @@ global:
     clientSecretSecretKey: "client-secret"
     realmSecretKey: ""
     applicationYaml: {}
-    keycloakAdmin:
-      enabled: false
-      username: ""
-      password: ""
-      realm: ""
-      existingSecret: ""
-      usernameSecretKey: ""
-      passwordSecretKey: ""
+  keycloakAdmin:
+    enabled: false
+    serverUrl: ""
+    username: ""
+    password: ""
+    realm: ""
+    existingSecret: ""
+    usernameSecretKey: ""
+    passwordSecretKey: ""
 
   minio:
     host: ""
@@ -78,8 +80,8 @@ global:
 # TODO: allow overriding values for each dependency
 oidc:
   enabled: false
-  keycloakAdmin:
-    enabled: false
+keycloakAdmin:
+  enabled: false
 minio:
   enabled: false
 kafka:
@@ -92,7 +94,7 @@ replicaCount: 1
 
 # Set chart image name and override global values
 image:
-#  Defaults to chart name when not set
+  #  Defaults to chart name when not set
   name: ""
   registry: ""
   # This sets the pull policy for images.
@@ -124,7 +126,6 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
@@ -132,10 +133,12 @@ podAnnotations: {}
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
 
-podSecurityContext: {}
+podSecurityContext:
+  {}
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  {}
   # capabilities:
   #   drop:
   #   - ALL
@@ -160,12 +163,12 @@ ingressRoutes:
 #      middlewares:
 #        - name: StripPrefix
 
-
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: false
   className: ""
-  annotations: {}
+  annotations:
+    {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
@@ -178,9 +181,8 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
-
-
-resources: {}
+resources:
+  {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following

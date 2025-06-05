@@ -49,14 +49,3 @@ Selector labels
 app.kubernetes.io/name: {{ include "kvasir-ui.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
-
-{{/*
-Create the name of the service account to use
-*/}}
-{{- define "kvasir-ui.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "kvasir-ui.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
-{{- end }}
-{{- end }}
