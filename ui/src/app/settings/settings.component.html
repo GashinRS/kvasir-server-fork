@@ -12,11 +12,11 @@
           >This is the default context applied for your whole pod. It allows you
           to remap prefixes to your liking.</span
         >
-        <textarea
-          nz-input
-          id="context"
+        <nz-code-editor
+          class="editor"
           formControlName="defaultContext"
-        ></textarea>
+          [nzEditorOption]="settings.getCodeEditorSetting().json"
+        ></nz-code-editor>
         <div class="error">
           <span nz-typography nzType="danger">{{ defaultContextError() }}</span>
         </div>

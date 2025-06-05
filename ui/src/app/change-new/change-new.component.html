@@ -14,7 +14,11 @@
   <nz-form-item>
     <nz-form-label>Change request (JSON body)</nz-form-label>
     <nz-form-control [nzErrorTip]="insertErrorTpl">
-      <textarea nz-input formControlName="request" rows="24"></textarea>
+      <nz-code-editor
+        class="editor"
+        formControlName="request"
+        [nzEditorOption]="settings.getCodeEditorSetting().json"
+      ></nz-code-editor>
       <ng-template #insertErrorTpl let-control>
         @for (entry of control.errors | keyvalue; track entry.key) {
           <span nz-typography [nzType]="errorStyle(entry.key)">

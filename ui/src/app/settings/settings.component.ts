@@ -8,14 +8,12 @@ import {
 } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzCodeEditorModule } from 'ng-zorro-antd/code-editor';
 import { NzFlexModule } from 'ng-zorro-antd/flex';
 import { NzGridModule } from 'ng-zorro-antd/grid';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
-import {
-  NzNotificationModule,
-  NzNotificationService,
-} from 'ng-zorro-antd/notification';
+import { NzNotificationService } from 'ng-zorro-antd/notification';
 import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzSwitchModule } from 'ng-zorro-antd/switch';
@@ -23,6 +21,7 @@ import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
 import { Observable } from 'rxjs';
 import { HelpComponent } from '../components/help/help.component';
+import { DevSettingsService } from '../services/dev-settings.service';
 import { KvasirService } from '../services/kvasir.service';
 import { Pod, PodConfiguration } from '../types';
 
@@ -38,11 +37,11 @@ import { Pod, PodConfiguration } from '../types';
     NzSwitchModule,
     NzFlexModule,
     NzPageHeaderModule,
-    NzNotificationModule,
     NzToolTipModule,
     NzLayoutModule,
     HelpComponent,
     ReactiveFormsModule,
+    NzCodeEditorModule,
   ],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.less',
@@ -52,6 +51,7 @@ export class SettingsComponent implements AfterViewInit {
   private route = inject(ActivatedRoute);
   private kvasir = inject(KvasirService);
   private notify = inject(NzNotificationService);
+  settings = inject(DevSettingsService);
 
   defaultContextError = signal<string | undefined>(undefined);
   settingsForm: FormGroup;
