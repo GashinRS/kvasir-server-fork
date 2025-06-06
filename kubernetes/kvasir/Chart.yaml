@@ -56,3 +56,4 @@ dependencies:
     version: 0.1.0
     repository: "file://../quarkus-template"
     alias: init-service
+    condition: init-service.enabled

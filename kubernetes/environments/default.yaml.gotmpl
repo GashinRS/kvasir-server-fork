@@ -1,4 +1,5 @@
 kvasirHost: {{ requiredEnv "KVASIR_HOST" }}
+initEnabled: {{ env "INIT_ENABLED" | default "true" }}
 keycloakHost: {{ env "KEYCLOAK_HOST" }}
 minioRootpassword: {{ env "MINIO_ROOT_PASSWORD" | default "miniopassword" }}
 keycloakAdminPassword: {{ env "KEYCLOAK_ADMIN_PASSWORD" | default "kcpassword" }}

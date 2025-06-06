@@ -23,5 +23,5 @@ dependencies:
 - name: quarkus-template
   repository: file://../quarkus-template
   version: 0.1.0
-digest: sha256:cc3563f0cac26eeae2a11575907863c3c00798fba06a35af125c1d3325ec2c81
-generated: "2025-03-13T15:28:15.814048347+01:00"
+digest: sha256:cf57a6fd6594b09fcef3b0ebce1504d15efffef8f941b1c5f48c8be5fad2bd47
+generated: "2025-06-06T10:34:53.747209715+02:00"

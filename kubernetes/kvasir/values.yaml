@@ -181,10 +181,11 @@ global:
 #      - QUARKUS_OIDC_CREDENTIALS_SECRET=secret
 
 "init-service":
+  enabled: true
   oidc:
     enabled: true
-    keycloakAdmin:
-      enabled: true
+  keycloakAdmin:
+    enabled: true
   clickhouse:
     enabled: true
   minio:
@@ -307,8 +308,8 @@ global:
 "pod-management-api":
   oidc:
     enabled: true
-    keycloakAdmin:
-      enabled: true
+  keycloakAdmin:
+    enabled: true
   clickhouse:
     enabled: true
   minio:

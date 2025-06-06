@@ -1,22 +1,19 @@
-version: v0.171.0
+version: v1.1.0
 dependencies:
-- name: altinity-clickhouse-operator
-  repository: https://docs.altinity.com/clickhouse-operator
-  version: 0.24.5
-- name: keycloak
-  repository: oci://registry-1.docker.io/bitnamicharts
-  version: 24.6.1
-- name: kvasir-ui
-  repository: oci://ghcr.io/idlab-discover/registry
-  version: 0.1.1
-- name: minio
-  repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.0.8
-- name: strimzi-kafka-operator
-  repository: oci://quay.io/strimzi-helm
-  version: 0.45.0
-- name: traefik
-  repository: https://helm.traefik.io/traefik
-  version: 35.1.0
-digest: sha256:d00aacb9ce7a78ba6be18fe12acf3630d858f31e455f03d66cf8344e8b823cad
-generated: "2025-04-29T11:50:12.846288765+02:00"
+  - name: altinity-clickhouse-operator
+    repository: https://docs.altinity.com/clickhouse-operator
+    version: 0.24.5
+  - name: keycloak
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 24.6.1
+  - name: minio
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 16.0.8
+  - name: strimzi-kafka-operator
+    repository: oci://quay.io/strimzi-helm
+    version: 0.45.0
+  - name: traefik
+    repository: https://helm.traefik.io/traefik
+    version: 35.1.0
+digest: sha256:5fb722e29020a8e01554eb496258b2bed9fd6ef382e988a9a2a3f7fbaed30355
+generated: "2025-06-06T10:35:06.052634775+02:00"

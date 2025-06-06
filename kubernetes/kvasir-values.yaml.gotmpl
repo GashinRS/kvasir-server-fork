@@ -63,3 +63,7 @@ global:
   clickhouse:
     host: "clickhouse-clickhouse.clickhouse.svc.cluster.local"
     port: "8123"
+
+"init-service":
+  enabled: {{ .StateValues.initEnabled }}
+
