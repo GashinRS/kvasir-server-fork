@@ -1,9 +1,12 @@
 package kvasir.definitions.rdf
 
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 
 typealias JSONObject = Map<String, Any>
 

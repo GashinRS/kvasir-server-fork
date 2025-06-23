@@ -9,14 +9,17 @@ information and source code.
 It consists of three components:
 
 1. The `spotify-client` is a Java application that can communicate directly with the Spotify process running on your
-   system[^1]. It detects which track is playing, and sends [ListenAction](https://schema.org/ListenAction) events to a
-   Kvasir Slice[^2] that was preconfigured for the application.
+   system (this should be supported on Windows, macOS and Linux distros that use systemd). It detects which track is
+   playing, and sends [ListenAction](https://schema.org/ListenAction) events to a Kvasir [Slice](Slices.md) that was
+   preconfigured for the application.
 2. The `py-change-processor` is a Python script that subscribes to the configured Kvasir Slice and listens for
    new [ListenAction](https://schema.org/ListenAction) events via HTTP Server-Sent-Events (SSE). For each track played,
    the script will fetch artist and album metadata (release date, length of tracks, cover art) from the open music
    encyclopedia [MusicBrainz](https://musicbrainz.org), transform this data into RDF and upload it to Kvasir (which
    validates and stores it into the Knowledge Graph for the Pod). The change-processor also maintains a play count for
-   each track/album/artist[^3]. Album cover art is stored via the Pod's built-in S3 API.
+   each track/album/artist. In a real-life application, this feature would probably be performed by an additional
+   processing component, but in order to not overcomplicate the example, we opted for a single processing component.
+   Album cover art is stored via the Pod's built-in S3 API.
 3. The `web-app` is a single-page web application built using [Vue.js](https://vuejs.org). It visualizes the recently
    played tracks and allows you to browse the various artists and albums that are present in the Knowledge Graph for the
    demo user Alice.
@@ -51,8 +54,10 @@ To setup the Slice, go to http://localhost:8081/ and login into the `alice` pod 
 top right of the screen.
 
 Enter `music-tracker` as name for the Slice, and then copy the content
-of [kvasir-slice/context.jsonld](https://gitlab.ilabt.imec.be/kvasir/music-tracker-demo/-/blob/main/kvasir-slice/context.jsonld) in the `@context` area
-and [kvasir-slice/schema.sdl](https://gitlab.ilabt.imec.be/kvasir/music-tracker-demo/-/blob/main/kvasir-slice/schema.sdl) in the `schema` area respectively.
+of [kvasir-slice/context.jsonld](https://gitlab.ilabt.imec.be/kvasir/music-tracker-demo/-/blob/main/kvasir-slice/context.jsonld)
+in the `@context` area
+and [kvasir-slice/schema.sdl](https://gitlab.ilabt.imec.be/kvasir/music-tracker-demo/-/blob/main/kvasir-slice/schema.sdl)
+in the `schema` area respectively.
 
 The page should now look like this:
 
@@ -118,11 +123,3 @@ You can now visit the web-app at http://localhost:5173 and authenticate using al
   try clicking on the menu tabs at the top. Someties viewing the page in incognito mode can also work.
 * **I've made changes to the py-change-processor or web-app, but these are not showing up when running the deployment.**
   => Run `docker compose up -d --build`, this will trigger a rebuild of those components.
-
-[^1]: This should be supported on Windows, macOS and Linux distros that use systemd.
-
-[^2]: A Slice in Kvasir represents a subset of the Knowledge Graph for a Pod. It can be used as an abstraction for
-managing access control on specific subsets of data that can be produced to or consumed from Kvasir.
-
-[^3]: In a real-life application, this feature would probably be performed by an additional processing component, but in
-order to not overcomplicate the example, we opted for a single processing component.

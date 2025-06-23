@@ -287,7 +287,7 @@ global:
       - match: "PathRegexp(`^/[^/]+/slices/[^/]+$`)"
       - match: "PathRegexp(`^/[^/]+/slices/[^/]+/changes`) && Method(`GET`)"
       - match: "PathRegexp(`^/[^/]+/slices/[^/]+/query`) && Method(`POST`)"
-      - match: "PathRegexp(`^/[^/]+/query`) && Method(`POST`)"
+      - match: "PathRegexp(`^/[^/]+/query`) && ( Method(`POST`) || Method(`GET`) )"
 
 "kg-stream-api":
   kafka:
@@ -300,9 +300,9 @@ global:
     enabled: true
     routes:
       - match: "PathRegexp(`^/[^/]+/changes`) && Header(`Accept`, `text/event-stream`)"
-      - match: "PathRegexp(`^/[^/]+/life-cycle-events`) && Header(`Accept`, `text/event-stream`)"
-      - match: "PathRegexp(`^/[^/]+/query-events`) && Header(`Accept`, `text/event-stream`)"
-      - match: "PathRegexp(`^/[^/]+/s3-events`) && Header(`Accept`, `text/event-stream`)"
+      - match: "PathRegexp(`^/[^/]+/life-cycle`) && Header(`Accept`, `text/event-stream`)"
+      - match: "PathRegexp(`^/[^/]+/query`) && Header(`Accept`, `text/event-stream`)"
+      - match: "PathRegexp(`^/[^/]+/s3`) && Header(`Accept`, `text/event-stream`)"
       - match: "Header('Accept', 'text/event-stream"
 
 "pod-management-api":

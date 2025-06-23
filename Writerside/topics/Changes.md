@@ -191,7 +191,8 @@ also: [Reviewing a specific change](#reviewing-a-specific-change)).
 
 In addition to JSONata expressions in the insert and delete operations, the `kss:delete` operation also supports a
 wildcard expression. For example, the following operation deletes all triples that match the with-clause of the change
-request.
+request. Note that a with-clause is required in this case, Kvasir does not support deleting all data in a Pod via the
+Change Request API.
 
 **POST** `http://localhost:8080/alice/changes`
 
@@ -317,7 +318,7 @@ You can subcribe to changes in a pod by using the changes endpoint with the `Acc
 will return a stream of Server-Sent Events (SSE), containing the changes that are being made to the Pod in
 near-realtime.
 
-**GET** `http://localhost:8080/alice/changes` with header `Accept: text/event-stream`
+**GET** `http://localhost:8080/alice/events/changes` with header `Accept: text/event-stream`
 
 This will return a stream of events, where each event is a JSON-LD instance containing information on changes made to
 the Pod's Knowledge Graph.

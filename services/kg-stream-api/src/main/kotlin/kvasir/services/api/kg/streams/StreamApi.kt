@@ -1,14 +1,10 @@
 package kvasir.services.api.kg.streams
 
-import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.vertx.core.json.Json
 import io.vertx.mutiny.core.Vertx
 import io.vertx.mutiny.kafka.client.consumer.KafkaConsumer
-import jakarta.ws.rs.GET
-import jakarta.ws.rs.Path
-import jakarta.ws.rs.PathParam
-import jakarta.ws.rs.QueryParam
+import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeReport
@@ -22,7 +18,9 @@ import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
 import kvasir.utils.rdf.RDFTransformer
 import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.eclipse.microprofile.reactive.messaging.Message
@@ -31,7 +29,6 @@ import org.jboss.resteasy.reactive.server.spi.ServerRequestContext
 import java.time.Duration
 import java.util.*
 
-@Tag(name = ApiDocTags.KG_STREAMING_API)
 @Path("")
 class StreamApi(
     private val vertx: Vertx,
@@ -62,9 +59,16 @@ class StreamApi(
     private val resumeTokenHeaderName: String
 ) {
 
-    @Path("{podId}/changes")
+    @Path("{podId}/events/changes")
     @GET
+    @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @Tag(name = ApiDocTags.KG_EVENTS_API)
+    @Operation(
+        summary = "Stream changes made to the specified pod's Knowledge Graph.",
+        description = "This endpoint allows clients to receive real-time updates about changes made to the Knowledge Graph of a specific pod. Only committed changes are streamed.",
+    )
+    @APIResponseSchema(value = ChangeRecords::class)
     fun stream(
         @PathParam("podId") podIdParam: String,
         @QueryParam("resumeToken") @Parameter(
@@ -78,7 +82,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<JSONObject> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(
@@ -116,9 +120,16 @@ class StreamApi(
             .map { JsonLdHelper.encode(it, it.context) }
     }
 
-    @Path("{podId}/query-events")
+    @Path("{podId}/events/query")
     @GET
+    @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @Tag(name = ApiDocTags.KG_EVENTS_API)
+    @Operation(
+        summary = "Stream query events for a specific pod.",
+        description = "This endpoint allows clients to receive real-time updates about query requests made to the Knowledge Graph of a specific pod. E.g. can be used to generate an access log for auditing purposes.",
+    )
+    @APIResponseSchema(value = QueryRequestEvent::class)
     fun streamQueryEvents(
         @PathParam("podId") podIdParam: String,
         @QueryParam("resumeToken") @Parameter(
@@ -132,7 +143,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<JSONObject> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(
@@ -144,9 +155,16 @@ class StreamApi(
             .map { event -> JsonLdHelper.encode(event.payload, event.payload.context) }
     }
 
-    @Path("{podId}/life-cycle-events")
+    @Path("{podId}/events/life-cycle")
     @GET
+    @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @Tag(name = ApiDocTags.KG_EVENTS_API)
+    @Operation(
+        summary = "Stream life-cycle events for a specific pod.",
+        description = "This endpoint allows clients to receive real-time updates about life-cycle events of a specific pod. E.g. can be used to be notified when a new Slice is created.",
+    )
+    @APIResponseSchema(value = LifeCycleEvent::class)
     fun streamLifeCycleEvents(
         @PathParam("podId") podIdParam: String,
         @QueryParam("resumeToken") @Parameter(
@@ -160,7 +178,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<JSONObject> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(
@@ -172,9 +190,16 @@ class StreamApi(
             .map { event -> JsonLdHelper.encode(event.payload, event.payload.context) }
     }
 
-    @Path("{podId}/s3-events")
+    @Path("{podId}/events/s3")
     @GET
+    @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @Tag(name = ApiDocTags.KG_EVENTS_API)
+    @Operation(
+        summary = "Stream S3 events for a specific Pod.",
+        description = "This endpoint allows clients to receive real-time updates about S3 storage events (e.g. file uploads, deletions) for a specific Pod. E.g. this allows triggering a pipeline when a file with a specific extension is created.",
+    )
+    @APIResponseSchema(value = StorageEvent::class)
     fun streamStorageMutationEvents(
         @PathParam("podId") podIdParam: String,
         @QueryParam("resumeToken") @Parameter(
@@ -188,7 +213,7 @@ class StreamApi(
         )
         receiveBacklog: Optional<Boolean>, // Only has effect when a new session is created (i.e. no resume token)
     ): Multi<JSONObject> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
         return streamFrom(

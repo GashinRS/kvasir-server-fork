@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
@@ -29,14 +30,19 @@ interface PodStore {
  */
 interface PodAuthInitializer {
 
-    fun initialize(podId: String, podName: String, preconfiguredClients: List<ClientConfiguration> = emptyList()): Uni<AuthConfiguration>
+    fun initialize(
+        podId: String,
+        podName: String,
+        preconfiguredClients: List<ClientConfiguration> = emptyList()
+    ): Uni<AuthConfiguration>
 
 }
 
+@GenerateNoArgConstructor
 data class Pod(
-    @JsonProperty(JsonLdKeywords.id)
+    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @JsonProperty(KvasirVocab.configuration)
+    @get:JsonProperty(KvasirVocab.configuration)
     val configuration: Map<String, Any>,
 ) {
 
@@ -67,12 +73,13 @@ object PodConfigurationProperty {
 
 }
 
+@GenerateNoArgConstructor
 data class AuthConfiguration(
-    @JsonProperty(KvasirVocab.serverUrl)
+    @get:JsonProperty(KvasirVocab.serverUrl)
     val serverUrl: String,
-    @JsonProperty(KvasirVocab.clientId)
+    @get:JsonProperty(KvasirVocab.clientId)
     val clientId: String,
-    @JsonProperty(KvasirVocab.clientSecret)
+    @get:JsonProperty(KvasirVocab.clientSecret)
     val clientSecret: String,
 )
 
@@ -85,19 +92,20 @@ enum class LifeCycleEventType {
     SLICE_DELETED,
 }
 
+@GenerateNoArgConstructor
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 data class LifeCycleEvent(
-    @JsonProperty(JsonLdKeywords.context)
+    @get:JsonProperty(JsonLdKeywords.context)
     val context: JSONObject = KvasirVocab.context,
-    @JsonProperty(JsonLdKeywords.id)
+    @get:JsonProperty(JsonLdKeywords.id)
     val id: String = "urn:kvasir:life-cycle-events:${UUID.randomUUID()}",
-    @JsonProperty(KvasirVocab.timestamp)
+    @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant = Instant.now(),
-    @JsonProperty(KvasirVocab.type)
+    @get:JsonProperty(KvasirVocab.type)
     val type: LifeCycleEventType,
-    @JsonProperty(KvasirVocab.podId)
+    @get:JsonProperty(KvasirVocab.podId)
     val podId: String,
-    @JsonProperty(KvasirVocab.sliceId)
+    @get:JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null
 )
 

@@ -35,7 +35,7 @@ class StreamApiTest {
     fun testQueryRequestEvents() {
         val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(
-            "${podUri}/query-events?receiveBacklog=true",
+            "${podUri}/events/query?receiveBacklog=true",
             ParseEventsFromJsonLD(QueryRequestEvent::class.java)
         ).use { sseClient ->
             val query = """
@@ -58,7 +58,7 @@ class StreamApiTest {
     fun testLifeCycleEvents() {
         val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(
-            "${podUri}/life-cycle-events?receiveBacklog=true",
+            "${podUri}/events/life-cycle?receiveBacklog=true",
             ParseEventsFromJsonLD(LifeCycleEvent::class.java)
         ).use { client ->
             // Create a slice
@@ -99,7 +99,7 @@ class StreamApiTest {
     fun testStorageMutationEvents() {
         val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(
-            "${podUri}/s3-events?receiveBacklog=true",
+            "${podUri}/events/s3?receiveBacklog=true",
             ParseEventsFromJsonLD(StorageEvent::class.java)
         ).use { client ->
             // Upload a file

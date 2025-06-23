@@ -1,27 +1,26 @@
 package kvasir.definitions.kg.changes
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import org.eclipse.microprofile.openapi.annotations.media.Schema
 
-
+@GenerateNoArgConstructor
 data class Assertion(
-    @JsonProperty(JsonLdKeywords.type)
+    @get:JsonProperty(JsonLdKeywords.type)
     @get:Schema(
-        name = "@type",
         description = "The type of the assertion.",
         required = true,
         enumeration = [KvasirVocab.AssertEmptyResult, KvasirVocab.AssertNonEmptyResult],
-        example = "kss:AssertEmptyResult"
+        example = KvasirVocab.AssertEmptyResult
     )
     val type: String,
-    @JsonProperty(KvasirVocab.query)
+    @get:JsonProperty(KvasirVocab.query)
     @get:Schema(
-        name = "kss:query",
         description = "The GraphQL query string to be executed.",
         required = true,
-        example = "{ id ex_givenName(_: \"Bob\") }"
+        example = "ex_Person { id ex_givenName @filter(if: \"it==Bob\") }"
     )
     val queryStr: String
 )

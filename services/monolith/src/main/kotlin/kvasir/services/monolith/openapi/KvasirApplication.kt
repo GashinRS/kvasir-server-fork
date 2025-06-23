@@ -16,15 +16,15 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
     tags = [
         Tag(
             name = ApiDocTags.KG_CHANGES_API,
-            description = "API for managing changes to the knowledge graph, including requesting changes, listing changes, and retrieving change reports."
+            description = "API for managing changes to a specific Pod's Knowledge Graph (KG), including requesting changes, listing changes, and retrieving change reports."
         ),
         Tag(
             name = ApiDocTags.KG_QUERYING_API,
-            description = "API for querying the knowledge graph of a specific pod using GraphQL."
+            description = "API for querying the knowledge graph of a specific Pod using GraphQL."
         ),
         Tag(
-            name = ApiDocTags.KG_STREAMING_API,
-            description = "API for streaming changes to the knowledge graph, including subscribing to changes and retrieving change records."
+            name = ApiDocTags.KG_EVENTS_API,
+            description = "API for streaming committed changes to the knowledge graph, query events, life-cycle events and storage (S3) events for a specific Pod."
         ),
         Tag(
             name = ApiDocTags.STORAGE_API,
@@ -32,7 +32,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
         ),
         Tag(
             name = ApiDocTags.PODS_API,
-            description = "API for managing pods, including creating, listing, deleting pods, managing slices, etc."
+            description = "API for managing Pods, including creating, listing, deleting pods, managing slices, etc."
         )
     ]
 )
