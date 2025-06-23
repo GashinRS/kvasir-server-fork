@@ -4,6 +4,7 @@ import com.github.jsonldjava.core.JsonLdProcessor
 import com.github.jsonldjava.core.RDFDataset
 import com.github.jsonldjava.utils.JsonUtils
 import kvasir.definitions.kg.RDFStatement
+import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
 import org.eclipse.rdf4j.model.Model
 import org.eclipse.rdf4j.model.Statement
@@ -42,11 +43,11 @@ object RDFTransformer {
         }
     }
 
-    fun statementsToJsonLD(statements: List<RDFStatement>): Any {
+    fun statementsToJsonLD(statements: List<RDFStatement>): JSONObject {
         val rdf4jStatements = statements.map { asRDF4JStatement(it) }
         return StringWriter().use { writer ->
             Rio.write(rdf4jStatements, writer, RDFFormat.JSONLD)
-            JsonUtils.fromString(writer.toString())
+            JsonUtils.fromString(writer.toString()) as JSONObject
         }
     }
 

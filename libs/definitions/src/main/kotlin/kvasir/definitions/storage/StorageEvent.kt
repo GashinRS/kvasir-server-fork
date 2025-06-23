@@ -1,28 +1,30 @@
 package kvasir.definitions.storage
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import java.time.Instant
 
+@GenerateNoArgConstructor
 data class StorageEvent(
-    @JsonProperty(JsonLdKeywords.id)
+    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @JsonProperty(KvasirVocab.timestamp)
+    @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
-    @JsonProperty(KvasirVocab.podId)
+    @get:JsonProperty(KvasirVocab.podId)
     val podId: String,
-    @JsonProperty(KvasirVocab.sliceId)
+    @get:JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null,
-    @JsonProperty(KvasirVocab.objectId)
+    @get:JsonProperty(KvasirVocab.objectId)
     val objectId: String,
-    @JsonProperty(KvasirVocab.externalObjectUri)
+    @get:JsonProperty(KvasirVocab.externalObjectUri)
     val externalObjectUri: String,
-    @JsonProperty(KvasirVocab.internalObjectUri)
+    @get:JsonProperty(KvasirVocab.internalObjectUri)
     val internalStorageUri: String,
-    @JsonProperty(KvasirVocab.versionId)
+    @get:JsonProperty(KvasirVocab.versionId)
     val versionId: String,
-    @JsonProperty(KvasirVocab.type)
+    @get:JsonProperty(KvasirVocab.type)
     val type: StorageEventType
 )
 

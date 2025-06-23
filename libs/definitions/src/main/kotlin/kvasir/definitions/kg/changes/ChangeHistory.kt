@@ -3,6 +3,7 @@ package kvasir.definitions.kg.changes
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.ChangeStatusCode
 import kvasir.definitions.kg.PagedResult
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -51,32 +52,28 @@ data class ChangeHistoryRequest(
     val pageSize: Int = 100
 )
 
+@GenerateNoArgConstructor
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 data class ChangeReport(
-    @JsonProperty(JsonLdKeywords.id)
+    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @JsonProperty(KvasirVocab.podId)
+    @get:JsonProperty(KvasirVocab.podId)
     val podId: String,
-    @JsonProperty(KvasirVocab.statusEntry)
+    @get:JsonProperty(KvasirVocab.statusEntry)
     val statusEntry: List<ChangeReportStatusEntry>,
-    @JsonProperty(KvasirVocab.sliceId)
+    @get:JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null,
-    @JsonProperty(KvasirVocab.nrOfInserts)
+    @get:JsonProperty(KvasirVocab.nrOfInserts)
     val nrOfInserts: Long = 0,
-    @JsonProperty(KvasirVocab.nrOfDeletes)
+    @get:JsonProperty(KvasirVocab.nrOfDeletes)
     val nrOfDeletes: Long = 0,
-    @JsonProperty(KvasirVocab.message)
+    @get:JsonProperty(KvasirVocab.message)
     val errorMessage: String? = null
-) {
+)
 
-    fun getLatestStatus(): ChangeReportStatusEntry? {
-        return statusEntry.maxByOrNull { it.timestamp }
-    }
-
-}
-
+@GenerateNoArgConstructor
 data class ChangeReportStatusEntry(
-    @JsonProperty(KvasirVocab.timestamp) val timestamp: Instant,
-    @JsonProperty(KvasirVocab.statusCode) val code: ChangeStatusCode,
-    @JsonProperty(KvasirVocab.message) val message: String? = null
+    @get:JsonProperty(KvasirVocab.timestamp) val timestamp: Instant,
+    @get:JsonProperty(KvasirVocab.statusCode) val code: ChangeStatusCode,
+    @get:JsonProperty(KvasirVocab.message) val message: String? = null
 )

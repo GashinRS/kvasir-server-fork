@@ -1,16 +1,19 @@
 package kvasir.services.api.kg.query
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Link
 import jakarta.ws.rs.core.Response
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeHistory
 import kvasir.definitions.kg.changes.ChangeHistoryRequest
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.openapi.ApiDocTags
+import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.http.KvasirUriInfo
@@ -19,6 +22,7 @@ import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.idgen.InvalidChangeRequestIdException
 import kvasir.utils.rdf.RDFTransformer
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.jboss.resteasy.reactive.RestResponse
 import org.jboss.resteasy.reactive.RestResponse.ResponseBuilder
@@ -36,6 +40,7 @@ class ChangeHistoryApi(
     @Path("{podId}/changes")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
+    @APIResponseSchema(ChangeReportGraph::class)
     fun listChangeReports(
         @PathParam("podId") podId: String,
         @QueryParam("pageSize") @Parameter(required = false) @DefaultValue("100") pageSize: Int,
@@ -59,6 +64,7 @@ class ChangeHistoryApi(
     @Path("{podId}/slices/{sliceId}/changes")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
+    @APIResponseSchema(ChangeReportGraph::class)
     fun listSliceChangeReports(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
@@ -239,3 +245,10 @@ class ChangeHistoryApi(
 
 
 }
+
+// This type is only needed to generate OpenAPI documentation.
+@GenerateNoArgConstructor
+data class ChangeReportGraph(
+    @get:JsonProperty(JsonLdKeywords.graph)
+    val graph: List<ChangeReport>
+)

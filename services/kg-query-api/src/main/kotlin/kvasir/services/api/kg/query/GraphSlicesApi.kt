@@ -12,6 +12,7 @@ import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.sse.OutboundSseEvent
 import jakarta.ws.rs.sse.Sse
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
@@ -31,10 +32,12 @@ import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestStreamElementType
 import java.net.URI
+import java.time.Instant
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
@@ -44,7 +47,6 @@ class GraphSlicesApi(
     private val podStore: PodStore,
     private val knowledgeGraph: KnowledgeGraph,
     private val uriInfo: KvasirUriInfo,
-    private val securityIdentity: SecurityIdentity,
     private val sse: Sse,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifeCycleEventEmitter: MutinyEmitter<LifeCycleEvent>
@@ -58,10 +60,11 @@ class GraphSlicesApi(
         summary = "List slices of the specified pod.",
         description = "List slices of the specified pod's Knowledge Graph."
     )
+    @APIResponseSchema(SliceGraph::class)
     fun listSlices(@PathParam("podId") podId: String): Uni<List<SliceSummary>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return getPodOrThrow404(podStore, fqPodId).chain { _ ->
-            sliceStore.list(fqPodId)
+            sliceStore.list(fqPodId).map { it }
         }
     }
 
@@ -73,6 +76,7 @@ class GraphSlicesApi(
         summary = "Define a new slice of the KG.",
         description = "Define a new slice (subset) of the specified pod's Knowledge Graph, based on a GraphQL-LD schema."
     )
+    @APIResponse(responseCode = "201", description = "Slice successfully created.")
     fun createSlice(@PathParam("podId") podId: String, input: SliceInput): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getChildUri(input.name).toASCIIString()
@@ -123,6 +127,7 @@ class GraphSlicesApi(
         summary = "Update a specific slice definition..",
         description = "Update a specific slice definition details."
     )
+    @APIResponse(responseCode = "204", description = "Slice successfully updated.")
     fun updateSlice(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
@@ -153,6 +158,7 @@ class GraphSlicesApi(
         summary = "Delete a specific slice.",
         description = "Delete a specific slice of the specified pod's Knowledge Graph."
     )
+    @APIResponse(responseCode = "201", description = "Slice successfully deleted.")
     fun deleteSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().toASCIIString()
@@ -172,13 +178,14 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.KG_QUERYING_API)
     @POST
     @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
-        summary = "Retrieve data from a specific subset of the KG.",
-        description = "Query a predefined slice of the specified pod's Knowledge Graph using GraphQL."
+        summary = "Interact with a specific subset of the KG.",
+        description = "Execute a query on a predefined slice of the specified pod's Knowledge Graph using GraphQL."
     )
     fun queryVirtual(
         @PathParam("podId") podId: String,
@@ -192,15 +199,22 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.KG_QUERYING_API)
     @GET
     @Path("{podId}/slices/{sliceId}/query")
     @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+        summary = "Interact with a specific subset of the KG.",
+        description = "Execute a query on a predefined slice of the specified pod's Knowledge Graph using GraphQL."
+    )
     fun queryVirtualViaGet(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
         @QueryParam("query") query: String,
         @QueryParam("variables") variables: Optional<String>,
-        @QueryParam("operationName") operationName: Optional<String>
+        @QueryParam("operationName") operationName: Optional<String>,
+        @QueryParam("atTimestamp") atTimestamp: Optional<Instant>,
+        @QueryParam("atChangeRequest") atChangeRequest: Optional<String>
     ): Uni<QueryResult> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
@@ -208,7 +222,9 @@ class GraphSlicesApi(
             QueryInputImpl(
                 query = query,
                 variables = variables.getOrNull()?.let { JsonObject(it).map },
-                operationName = operationName.getOrNull()
+                operationName = operationName.getOrNull(),
+                atTimestamp = atTimestamp.getOrNull(),
+                atChangeRequest = atChangeRequest.getOrNull()
             )
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
             executeQuery(fqPodId, slice, input).toUni()
@@ -218,11 +234,8 @@ class GraphSlicesApi(
     @POST
     @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
-    @Operation(
-        summary = "Retrieve data from a specific subset of the KG.",
-        description = "Query a predefined slice of the specified pod's Knowledge Graph using GraphQL."
-    )
     fun streamVirtual(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
@@ -237,6 +250,7 @@ class GraphSlicesApi(
 
     @GET
     @Path("{podId}/slices/{sliceId}/query")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
     fun streamVirtualViaGet(
         @PathParam("podId") podId: String,
@@ -258,14 +272,12 @@ class GraphSlicesApi(
         }
     }
 
-    @Tag(name = ApiDocTags.KG_QUERYING_API)
     @POST
     @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(JSON_LD_MEDIA_TYPE)
     @APIResponse(
         responseCode = "200",
-        description = "The query result in JSON-LD format.",
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
     fun queryVirtualJsonLD(
@@ -275,6 +287,40 @@ class GraphSlicesApi(
     ): Uni<Any> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
+            executeQuery(fqPodId, slice, input).toUni().map {
+                it.toJsonLD(slice.context)
+            }
+        }
+    }
+
+    @GET
+    @Path("{podId}/slices/{sliceId}/query")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(JSON_LD_MEDIA_TYPE)
+    @APIResponse(
+        responseCode = "200",
+        content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
+    )
+    fun queryVirtualJsonLDViaGet(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") sliceId: String,
+        @QueryParam("query") query: String,
+        @QueryParam("variables") variables: Optional<String>,
+        @QueryParam("operationName") operationName: Optional<String>,
+        @QueryParam("atTimestamp") atTimestamp: Optional<Instant>,
+        @QueryParam("atChangeRequest") atChangeRequest: Optional<String>
+    ): Uni<Any> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        val input =
+            QueryInputImpl(
+                query = query,
+                variables = variables.getOrNull()?.let { JsonObject(it).map },
+                operationName = operationName.getOrNull(),
+                atTimestamp = atTimestamp.getOrNull(),
+                atChangeRequest = atChangeRequest.getOrNull()
+            )
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
             executeQuery(fqPodId, slice, input).toUni().map {
                 it.toJsonLD(slice.context)
@@ -320,16 +366,17 @@ class GraphSlicesApi(
     }
 }
 
+@GenerateNoArgConstructor
 data class SliceInput(
-    @JsonProperty(JsonLdKeywords.context)
+    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
-    @JsonProperty(KvasirVocab.name)
+    @get:JsonProperty(KvasirVocab.name)
     val name: String,
-    @JsonProperty(KvasirVocab.schema)
+    @get:JsonProperty(KvasirVocab.schema)
     val schema: String,
-    @JsonProperty(KvasirVocab.description)
+    @get:JsonProperty(KvasirVocab.description)
     val description: String = "",
-    @JsonProperty(KvasirVocab.targetGraphs)
+    @get:JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 ) {
     fun toSlice(podId: String, sliceId: String, supportsChanges: Boolean): Slice {
@@ -345,3 +392,10 @@ data class SliceInput(
         )
     }
 }
+
+// Only needed for OpenAPI documentation
+@GenerateNoArgConstructor
+data class SliceGraph(
+    @get:JsonProperty(JsonLdKeywords.graph)
+    val graph: List<Slice>
+)

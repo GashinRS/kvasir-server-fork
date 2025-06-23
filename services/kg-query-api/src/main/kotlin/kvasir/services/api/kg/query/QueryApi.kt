@@ -3,6 +3,7 @@ package kvasir.services.api.kg.query
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
+import io.vertx.core.json.JsonObject
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
@@ -19,6 +20,8 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import java.time.Instant
+import java.util.*
+import kotlin.jvm.optionals.getOrNull
 
 const val QUERY_API_PATH = "/query"
 
@@ -27,8 +30,7 @@ const val QUERY_API_PATH = "/query"
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
     private val podStore: PodStore,
-    private val uriInfo: KvasirUriInfo,
-    private val securityIdentity: SecurityIdentity
+    private val uriInfo: KvasirUriInfo
 ) {
 
     @Path("{podId}$QUERY_API_PATH")
@@ -51,11 +53,42 @@ class QueryApi(
     }
 
     @Path("{podId}$QUERY_API_PATH")
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+        summary = "Retrieve data from the KG.",
+        description = "Query the knowledge graph of the specified pod using GraphQL."
+    )
+    fun queryViaGet(
+        @PathParam("podId") podId: String,
+        @QueryParam("query") query: String,
+        @QueryParam("variables") variables: Optional<String>,
+        @QueryParam("operationName") operationName: Optional<String>,
+        @QueryParam("atTimestamp") atTimestamp: Optional<Instant>,
+        @QueryParam("atChangeRequest") atChangeRequest: Optional<String>
+    ): Uni<QueryResult> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+            .onItem().ifNotNull().transformToUni { pod ->
+                val req = parseInput(
+                    pod!!,
+                    QueryInputWithContext(
+                        query,
+                        operationName.getOrNull(),
+                        variables.getOrNull()?.let { JsonObject(it).map },
+                        atTimestamp.getOrNull(),
+                        atChangeRequest.getOrNull()
+                    )
+                )
+                knowledgeGraph.query(req).toUni()
+            }
+    }
+
+    @Path("{podId}$QUERY_API_PATH")
     @POST
     @Produces(JSON_LD_MEDIA_TYPE)
     @APIResponse(
         responseCode = "200",
-        description = "The query result in JSON-LD format.",
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
     fun queryJsonLD(
@@ -65,6 +98,39 @@ class QueryApi(
         return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input)
+                knowledgeGraph.query(req).map {
+                    it.toJsonLD(req.context)
+                }.toUni()
+            }
+    }
+
+    @Path("{podId}$QUERY_API_PATH")
+    @GET
+    @Produces(JSON_LD_MEDIA_TYPE)
+    @APIResponse(
+        responseCode = "200",
+        content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
+    )
+    fun queryJsonLDViaGet(
+        @PathParam("podId") podId: String,
+        @QueryParam("query") query: String,
+        @QueryParam("variables") variables: Optional<String>,
+        @QueryParam("operationName") operationName: Optional<String>,
+        @QueryParam("atTimestamp") atTimestamp: Optional<Instant>,
+        @QueryParam("atChangeRequest") atChangeRequest: Optional<String>
+    ): Uni<Any> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+            .onItem().ifNotNull().transformToUni { pod ->
+                val req = parseInput(
+                    pod!!, QueryInputWithContext(
+                        query,
+                        operationName.getOrNull(),
+                        variables.getOrNull()?.let { JsonObject(it).map },
+                        atTimestamp.getOrNull(),
+                        atChangeRequest.getOrNull()
+                    )
+                )
                 knowledgeGraph.query(req).map {
                     it.toJsonLD(req.context)
                 }.toUni()
@@ -108,11 +174,6 @@ interface QueryInput {
     val variables: Map<String, Any>?
 
     @get:Schema(
-        description = "The named graphs to be targeted by the query. If no graphs are specified, all graphs are targeted."
-    )
-    val targetGraphs: Set<String>
-
-    @get:Schema(
         description = "Query the state of the KG at the specified point in time."
     )
     val atTimestamp: Instant?
@@ -127,7 +188,6 @@ data class QueryInputImpl(
     override val query: String,
     override val operationName: String? = null,
     override val variables: Map<String, Any>? = null,
-    override val targetGraphs: Set<String> = emptySet(),
     override val atTimestamp: Instant? = null,
     override val atChangeRequest: String? = null
 ) : QueryInput
@@ -136,14 +196,13 @@ data class QueryInputWithContext(
     override val query: String,
     override val operationName: String? = null,
     override val variables: Map<String, Any>? = null,
-    override val targetGraphs: Set<String> = emptySet(),
     override val atTimestamp: Instant? = null,
     override val atChangeRequest: String? = null,
     @get:JsonProperty("@context")
     @get:Schema(
         name = "@context",
         description = "The JSON-LD context for the query.",
-        example = ApiDocConstants.JSON_LD_CONTEXT_EXAMPLE_2
+        example = ApiDocConstants.JSON_LD_CONTEXT_EXAMPLE
     )
     val providedContext: Map<String, Any>? = null
 ) : QueryInput

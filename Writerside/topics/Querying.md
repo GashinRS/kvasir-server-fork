@@ -6,17 +6,23 @@ The standard query mechanism for the Pod KG uses schemaless GraphQL (inspired by
 Taelman's [GraphQL to SPARQL library](https://github.com/rubensworks/graphql-to-sparql.js) and
 the [Stardog GraphQL API](https://docs.stardog.com/query-stardog/graphql)).
 
-The query endpoint is available at `/{podId}/kg/query` and accepts POST requests with a JSON body, which should conform
+The query endpoint is available at `/{podId}/kg/query` and accepts POST requests with a JSON body **[1]**, which should
+conform
 to the [GraphQL specification](https://graphql.org/learn/serving-over-http/#post-request). The request body may contain
 a `@context` object, to provide aliases for the predicate IRIs used in the query. If no content is explicitly provided,
-the system will fall back to the default mapping that is configured for the pod (TODO: see Pod config).
+the system will fall back to the default mapping that is configured for the pod (
+see [](Pod-Management.md#default-context)).
+
+> **[1]**: Alternatively, you can also use the `GET` method with query parameters, but you won't be able to provide a
+> JSON-LD context. This approach primarily has it uses when [querying a Slice](Slices.md). See
+> the [API Reference](API-Reference.md) for more information.
 
 ## Why GraphQL?
 
 When choosing a query language for the Knowledge Graph, we considered several options, including SPARQL, GraphQL,
 RESTful APIs (centered around collections of specific RDF classes), or a proprietary query language (e.g. similar to
 what [Fluree](https://developers.flur.ee/docs/learn/foundations/querying/) is doing). In the end we chose GraphQL
-as the main querying mechanism[^1] for the following reasons:
+as the main querying mechanism **[2]** for the following reasons:
 
 * GraphQL is a widely adopted query language that is easy to learn and use. It is especially popular in the context of
   modern web applications and APIs. By using GraphQL, we aim to make the Knowledge Graph accessible to a broad audience.
@@ -28,6 +34,9 @@ as the main querying mechanism[^1] for the following reasons:
   easy to understand and use. This is important for users who are not familiar with RDF or SPARQL. More importantly, it
   limits the implementation scope, enhancing performance and simplifying the process for third parties to develop a
   Kvasir-compatible API.
+
+> **[2]**: The architecture of Kvasir is designed to be modular and flexible, so it is possible to add additional query
+> mechanisms in the future, if needed.
 
 ## Basic usage
 
@@ -568,11 +577,14 @@ Some limitations include:
   resources A and B, while change request 2 adds type information for resource B), Kvasir may not be aware of detailed
   type information. Users can assist the schema generation by inserting important type information via concrete
   instances in a single insert batch.
-* Kvasir does not assume any vocabularies, shapes or ontologies to apply[^2]. This means e.g. that we will associate
+* Kvasir does not assume any vocabularies, shapes or ontologies to apply **[3]**. This means e.g. that we will associate
   predicates used for a specific Resource, with all RDF classes the Resource is an instance of.
 * Complex type hierarchies are automatically abstracted away via common supertypes such as `RDFNode` and `Resource` (see
   [next section](#common-supertypes)). It is than up to the user to have knowledge of which subtypes are available for a
   specific relation (although the GraphQL interface provides introspection and discovery mechanisms).
+
+> **[3]**: In regard to the full KG. When requesting changes to a Slice via the Changes API, SHACL Shape restrictions
+> may apply!
 
 ## Common supertypes
 
@@ -723,9 +735,3 @@ Returns:
   }
 }
 ```
-
-[^1]: The architecture of Kvasir is designed to be modular and flexible, so it is possible to add additional query
-mechanisms in the future, if needed.
-
-[^2]: In regard to the full KG. When requesting changes to a Slice via the Changes API, SHACL Shape restrictions may
-apply!

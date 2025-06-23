@@ -2,6 +2,7 @@ package kvasir.definitions.kg.slices
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Uni
+import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 
@@ -16,30 +17,31 @@ interface SliceStore {
     fun deleteById(podId: String, segmentId: String): Uni<Void>
 }
 
+@GenerateNoArgConstructor
 data class Slice(
-    @JsonProperty(JsonLdKeywords.id)
+    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @JsonProperty(JsonLdKeywords.context)
+    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
-    @JsonProperty(KvasirVocab.podId)
+    @get:JsonProperty(KvasirVocab.podId)
     val podId: String,
-    @JsonProperty(KvasirVocab.name)
+    @get:JsonProperty(KvasirVocab.name)
     val name: String,
-    @JsonProperty(KvasirVocab.description)
+    @get:JsonProperty(KvasirVocab.description)
     val description: String,
-    @JsonProperty(KvasirVocab.schema)
+    @get:JsonProperty(KvasirVocab.schema)
     val schema: String,
-    @JsonProperty(KvasirVocab.supportsChanges)
+    @get:JsonProperty(KvasirVocab.supportsChanges)
     val supportsChanges: Boolean = false,
-    @JsonProperty(KvasirVocab.targetGraphs)
+    @get:JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 )
 
 data class SliceSummary(
-    @JsonProperty(JsonLdKeywords.id)
+    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @JsonProperty(KvasirVocab.name)
+    @get:JsonProperty(KvasirVocab.name)
     val name: String,
-    @JsonProperty(KvasirVocab.description)
+    @get:JsonProperty(KvasirVocab.description)
     val description: String
 )

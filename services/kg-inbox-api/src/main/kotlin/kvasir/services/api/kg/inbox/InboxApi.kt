@@ -38,7 +38,6 @@ class InboxApi(
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
     private val sliceStore: SliceStore,
     private val podStore: PodStore,
-    private val securityIdentity: SecurityIdentity,
     private val uriInfo: KvasirUriInfo
 ) {
 
@@ -56,7 +55,7 @@ class InboxApi(
     ): Uni<Response> {
         val podUri = uriInfo.getResourceUri().getParentUri()
         val fqPodId = podUri.toString()
-        return checkPermissions(input).chain { _ -> podStore.getById(fqPodId) }
+        return podStore.getById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val changeCommand = input.toChangeRequest(podUri, uriInfo)
@@ -83,7 +82,7 @@ class InboxApi(
         val podUri = uriInfo.getResourceUri().getParentUri(3)
         val fqPodId = podUri.toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return checkPermissions(input).chain { _ -> sliceStore.getById(fqPodId, fqSliceId) }
+        return sliceStore.getById(fqPodId, fqSliceId)
             .onItem().ifNull().failWith(NotFoundException("Slice not found"))
             .onItem().ifNotNull().transformToUni { slice ->
                 if (slice!!.supportsChanges) {
@@ -99,63 +98,39 @@ class InboxApi(
             }
     }
 
-    private fun checkPermissions(input: ChangeRequestInput): Uni<Void> {
-//        return Uni.combine().all().unis<Boolean>(
-//            listOfNotNull(
-//                input.insert.takeIf { it.isNotEmpty() }
-//                    ?.let { securityIdentity.checkPermission(StringPermission(PermissionScopes.WRITE)) },
-//                input.delete.takeIf { it.isNotEmpty() }
-//                    ?.let { securityIdentity.checkPermission(StringPermission(PermissionScopes.DELETE)) }
-//            ))
-//            .withUni { results ->
-//                if (!results.all { it as Boolean }) {
-//                    Uni.createFrom().failure(ForbiddenException())
-//                } else {
-//                    Uni.createFrom().voidItem()
-//                }
-//            }
-        // Implement via a provider of the configured policy-agent. So this can work generically.
-        return Uni.createFrom().voidItem()
-    }
-
 }
 
 data class ChangeRequestInput(
     @get:Schema(
-        name = "@context",
         description = "The JSON-LD context for the change request.",
-        example = ApiDocConstants.JSON_LD_CONTEXT_EXAMPLE_1
+        example = ApiDocConstants.JSON_LD_CONTEXT_EXAMPLE
     )
-    @JsonProperty(JsonLdKeywords.context)
+    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any> = emptyMap(),
     @get:Schema(
-        name = "kss:assert",
         description = "List of assertions to be checked before applying the change request."
     )
-    @JsonProperty(KvasirVocab.assert)
+    @get:JsonProperty(KvasirVocab.assert)
     @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val assert: List<Assertion> = emptyList(),
     @get:Schema(
-        name = "kss:with",
         description = "Optional GraphQL query where matches are required to be found for the change request to be applied. Results are bound to the field names in the query and can be used in the insert and delete operations (via templates).",
-        example = "{ id ex_givenName(_: \"Bob\") }"
+        example = "ex_Person { id ex_givenName @filter(if: \"it==Bob\") }"
     )
-    @JsonProperty(KvasirVocab.with)
+    @get:JsonProperty(KvasirVocab.with)
     val with: String? = null,
     @get:Schema(
-        name = "kss:insert",
         description = "List of triples to be inserted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
         example = "[ { \"@id\": \"ex:123\", \"ex:givenName\": \"Bob\" } ]"
     )
-    @JsonProperty(KvasirVocab.insert)
+    @get:JsonProperty(KvasirVocab.insert)
     @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val insert: List<Any> = emptyList(),
     @get:Schema(
-        name = "kss:delete",
         description = "List of triples to be deleted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
         example = "[ { \"@id\": \"ex:123\", \"ex:givenName\": \"Alice\" } ]"
     )
-    @JsonProperty(KvasirVocab.delete)
+    @get:JsonProperty(KvasirVocab.delete)
     @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val delete: List<Any> = emptyList(),
 ) {

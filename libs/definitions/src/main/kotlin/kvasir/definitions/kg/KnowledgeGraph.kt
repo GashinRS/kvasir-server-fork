@@ -300,16 +300,16 @@ data class ChangeRecord(
 @GenerateNoArgConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class ChangeRecords(
-    @JsonProperty(JsonLdKeywords.context)
+    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
-    @JsonProperty(JsonLdKeywords.id)
+    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @JsonProperty(KvasirVocab.timestamp)
+    @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
-    @JsonProperty(KvasirVocab.delete)
-    val deleted: Any? = null,
-    @JsonProperty(KvasirVocab.insert)
-    val inserted: Any? = null
+    @get:JsonProperty(KvasirVocab.delete)
+    val deleted: JSONObject? = null,
+    @get:JsonProperty(KvasirVocab.insert)
+    val inserted: JSONObject? = null
 )
 
 enum class ChangeRecordType {
@@ -323,29 +323,29 @@ enum class QueryRequestStatusCode {
 @GenerateNoArgConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class QueryRequestEvent(
-    @JsonProperty(JsonLdKeywords.id)
+    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @JsonProperty(KvasirVocab.timestamp)
+    @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
-    @JsonProperty(JsonLdKeywords.context)
+    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any> = emptyMap(),
-    @JsonProperty(KvasirVocab.statusCode)
+    @get:JsonProperty(KvasirVocab.statusCode)
     val statusCode: QueryRequestStatusCode,
-    @JsonProperty(KvasirVocab.podId)
+    @get:JsonProperty(KvasirVocab.podId)
     val podId: String,
-    @JsonProperty(KvasirVocab.sliceId)
+    @get:JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null,
-    @JsonProperty(KvasirVocab.query)
+    @get:JsonProperty(KvasirVocab.query)
     val query: String,
-    @JsonProperty(KvasirVocab.variables)
+    @get:JsonProperty(KvasirVocab.variables)
     val variables: Map<String, Any>? = null,
-    @JsonProperty(KvasirVocab.operationName)
+    @get:JsonProperty(KvasirVocab.operationName)
     val operationName: String? = null,
-    @JsonProperty(KvasirVocab.atTimestamp)
+    @get:JsonProperty(KvasirVocab.atTimestamp)
     val atTimestamp: Instant? = null,
-    @JsonProperty(KvasirVocab.atChangeRequestId)
+    @get:JsonProperty(KvasirVocab.atChangeRequestId)
     val atChangeRequestId: String? = null,
-    @JsonProperty(KvasirVocab.message)
+    @get:JsonProperty(KvasirVocab.message)
     val errorMessage: String? = null
 ) {
     companion object {
