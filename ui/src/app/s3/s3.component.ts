@@ -92,10 +92,10 @@ export class S3Component implements OnInit {
 
   /** Main s3 object list */
   dataList = resource({
-    request: () => ({ prefix: this.prefix() }),
-    loader: async ({ request }) => {
+    params: () => ({ prefix: this.prefix() }),
+    loader: async ({ params }) => {
       const distinctFolders = new Set();
-      const result = await this.s3w.listObjects(request.prefix);
+      const result = await this.s3w.listObjects(params.prefix);
       return ensureArray(result.Contents)
         .map((obj: any) => this.mapToFileAndFolder(obj))
         .filter((obj: FileOrFolder) => {

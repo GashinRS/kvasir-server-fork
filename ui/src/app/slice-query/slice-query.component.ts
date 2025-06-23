@@ -20,7 +20,7 @@ export class SliceQueryComponent {
   private session = inject(SessionService);
 
   slice = rxResource<Slice, unknown>({
-    loader: () => this.route.data.pipe(map(({ slice }) => slice)),
+    stream: () => this.route.data.pipe(map(({ slice }) => slice)),
   });
   queryEndpoint = computed(
     () =>

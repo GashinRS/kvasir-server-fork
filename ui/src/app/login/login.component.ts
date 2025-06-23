@@ -41,7 +41,7 @@ export class LoginComponent {
       : null,
   );
   podsResource = rxResource<Pod[], void>({
-    loader: () =>
+    stream: () =>
       this.kvasir
         .listPods()
         .pipe(

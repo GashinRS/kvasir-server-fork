@@ -61,7 +61,7 @@ export class SliceChangeNewComponent {
 
   readonly inputForm: FormGroup;
   readonly slice = rxResource({
-    loader: () => this.route.data.pipe(map(({ slice }) => slice as Slice)),
+    stream: () => this.route.data.pipe(map(({ slice }) => slice as Slice)),
   });
   readonly sliceName = computed(() => this.slice.value()!['kss:name']);
 

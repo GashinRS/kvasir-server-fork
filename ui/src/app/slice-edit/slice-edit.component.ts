@@ -46,7 +46,7 @@ export class SliceEditComponent {
   settings = inject(DevSettingsService);
 
   private slice = rxResource<Slice & { context: string }, unknown>({
-    loader: () =>
+    stream: () =>
       this.route.data.pipe(
         map(({ slice }) => slice),
         tap(

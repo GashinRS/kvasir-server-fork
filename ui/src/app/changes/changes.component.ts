@@ -25,7 +25,7 @@ import { sortByTimestamp } from '../util/utils';
 })
 export class ChangesComponent {
   changes = rxResource({
-    loader: () => this.kvasir.listChangeReports(),
+    stream: () => this.kvasir.listChangeReports(),
   });
 
   // DI

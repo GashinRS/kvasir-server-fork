@@ -30,7 +30,7 @@ export class SlicesComponent {
   private router = inject(Router);
 
   slices = rxResource({
-    loader: () => this.kvasir.listSlices(),
+    stream: () => this.kvasir.listSlices(),
   });
 
   editSlice(sliceName: string): void {
