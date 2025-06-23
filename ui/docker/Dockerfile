@@ -1,4 +1,4 @@
-FROM desmart/nginx-spa:2.0.0
+FROM gitlab.ilabt.imec.be:4567/obelisk/packages/desmart/nginx-spa:2.0.0
 # Source from desmart/nginx-spa
 
 COPY dist/kvasir-ui/browser /app/_ui

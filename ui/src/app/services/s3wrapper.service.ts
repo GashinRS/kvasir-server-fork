@@ -5,8 +5,8 @@ import type {
   ListObjectsCommandOutput,
   PutObjectCommandOutput,
 } from '@aws-sdk/client-s3';
+import { XMLParser } from 'fast-xml-parser';
 import { firstValueFrom, map } from 'rxjs';
-import { xml2json } from 'xml-js';
 import { ConfigService } from './config.service';
 import { SessionService } from './session.service';
 
@@ -123,29 +123,11 @@ export class S3wrapperService {
   }
 }
 
+const parser = new XMLParser({
+  ignorePiTags: true,
+});
+
 function s3toJson<T>(xml: string, key?: string): T {
-  const result = xml2json(xml, { compact: true });
-  const tx = compactToType<T>(result) as any;
-  return key ? (tx[key] as T) : (tx as T);
-}
-
-function compactToType<T>(json: string): T {
-  let obj = JSON.parse(json);
-  let typedObj = normalize(obj);
-  return typedObj as T;
-}
-
-function normalize(obj: any | string): any {
-  if (typeof obj == 'string') {
-    return obj;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((o) => normalize(o));
-  }
-  return Object.entries<any>(obj).reduce((acc, curr) => {
-    if (curr[1]['_text'] != undefined) {
-      curr[1] = curr[1]['_text'];
-    }
-    return { ...acc, ...{ [curr[0]]: normalize(curr[1]) } };
-  }, {} as any);
+  const tx = parser.parse(xml || '');
+  return (key ? tx[key] : tx) as T;
 }

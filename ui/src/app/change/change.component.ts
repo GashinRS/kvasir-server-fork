@@ -50,7 +50,7 @@ export class ChangeComponent implements OnInit {
   readonly changeReportId = input.required<string>();
 
   change = rxResource<ChangeReport, unknown>({
-    loader: () => this.route.data.pipe(map(({ changeReport }) => changeReport)),
+    stream: () => this.route.data.pipe(map(({ changeReport }) => changeReport)),
   });
 
   statusEntry = computed<any>(() => {

@@ -29,15 +29,13 @@ export class SliceChangesComponent {
   private router = inject(Router);
 
   slice = rxResource({
-    loader: () => this.route.data.pipe(map(({ slice }) => slice as Slice)),
+    stream: () => this.route.data.pipe(map(({ slice }) => slice as Slice)),
   });
   changes = rxResource({
-    request: (): string | undefined =>
+    params: (): string | undefined =>
       this.slice.hasValue() ? this.slice.value()!['kss:name'] : undefined,
-    loader: (params) =>
-      params.request
-        ? this.kvasir.listSliceChangeReports(params.request)
-        : EMPTY,
+    stream: ({ params }) =>
+      params ? this.kvasir.listSliceChangeReports(params) : EMPTY,
   });
 
   lastStatus = (report: ChangeReport): ChangeStatusEntry | undefined =>
