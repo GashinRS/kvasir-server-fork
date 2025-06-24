@@ -24,7 +24,6 @@ class OpenApiExampleFilter : OASFilter {
         openAPI.components.schemas(
             openAPI.components.schemas
                 .map {
-                    log.infof("--- COMPONENT %s -----------------", it.key)
                     Pair(it.key, compactSchema(it.value))
                 }
                 .toMap()
@@ -64,7 +63,13 @@ class OpenApiExampleFilter : OASFilter {
 
     private fun markupContextMap(map: MutableMap<String, Schema>): MutableMap<String, Schema> {
         // If @context exists or an @graph property is present
-        if (map.containsKey("@graph") || map.containsKey("@context")) {
+        if (map.containsKey("@graph") || map.containsKey("@context") || map.keys.any { propKey ->
+                replacerMap.values.any { replKey ->
+                    propKey.startsWith(
+                        replKey + ":"
+                    )
+                }
+            }) {
             // Add the @context example or create a new @context property
             map.merge(
                 "@context",
