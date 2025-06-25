@@ -41,7 +41,7 @@ docker compose up -d
 # Documentation
 
 Visit the documentation pages
-at [https://ibcndevs.pages.ilabt.imec.be/solid/kvasir-next/](https://ibcndevs.pages.ilabt.imec.be/solid/kvasir-next/).
+at [https://kvasir.pages.ilabt.imec.be/kvasir-server/](https://kvasir.pages.ilabt.imec.be/kvasir-server/).
 
 # Issues
 
@@ -57,3 +57,16 @@ any, please report them in the [Issues](https://gitlab.ilabt.imec.be/kvasir/kvas
   * E.g. via Link headers for REST APIs (Changes API, Slices API)
   * E.g. via Relay-style pagination for GraphQL APIs
 * Optimize and harden the current prototype
+
+# Developer tips
+
+## Locally create and render OpenApi
+**Prerequisites:** install a recent nodejs version (comes with npm)
+
+```bash
+npx @redocly/cli build-docs -o ./_openapi/index.html ./services/monolith/target/openapi/openapi.yaml --theme.openapi.hideHostname=true --theme.openapi.pathInMiddlePanel=true
+cd _openapi
+npx http-server -y
+```
+
+Open http://localhost:8080 (or another port if that one was taken, see output console above)
