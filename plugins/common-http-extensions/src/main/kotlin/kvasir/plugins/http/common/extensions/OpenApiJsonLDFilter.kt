@@ -1,6 +1,7 @@
 package kvasir.plugins.http.common.extensions
 
 import io.quarkus.smallrye.openapi.OpenApiFilter
+import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
 import org.eclipse.microprofile.openapi.OASFactory
 import org.eclipse.microprofile.openapi.OASFilter
@@ -27,22 +28,55 @@ class OpenApiJsonLDFilter : OASFilter {
                 .toMap()
         )
 
-        // Find all types with @graph and duplicate their refs with new component type (WithoutContext)
-        val refs = openAPI.components.schemas.mapNotNull {
-            val ref = it.value.properties?.get("@graph")?.items?.ref
-            if (ref != null) {
-                it.value.properties.get("@graph")!!.items.ref(ref + "GraphItem");
+        openAPI.components.schemas
+            // Only check schemas that have an @context property already
+            .filterValues { it.properties?.containsKey("@context") ?: false }
+            // Map each schema to its own properties schemas for ARRAY types, if properties is present
+            .flatMap {
+                it.value.properties?.filterValues { subScheme ->
+                    (subScheme.type?.contains(Schema.SchemaType.ARRAY) ?: false)
+                }?.values ?: emptyList()
             }
-            ref;
-        }
+            // Set each array type properties ref to a new GraphItem affixed ref (that does not exist yet)
+            // Map the original refs
+            .mapNotNull {
+                val ref = it.items.ref;
+                if (ref != null) {
+                    it.items.ref(ref + "GraphItem");
+                }
+                ref;
+            }
+//            .filter { !it.endsWith("GraphItem") }
+            // Create new types without @context from the original refs
+            .forEach {
+                val name = it.substringAfterLast("/")
+                log.info("REF NAME: $name")
+                val newName = name+"GraphItem"
+                val copy = openAPI.components.schemas.get(name)
+                // Only if it does not exist yet
+                if (!openAPI.components.schemas.contains(newName)) {
+                    // Create the new schema
+                    val newComponent = openAPI.components.addSchema(newName, copy)
+                    // Remove all occurrences of @context from it and its descendants
+                    removeAtContextRecursively(newComponent.schemas.get(newName)!!, newName)
+                }
+            }
+    }
 
-        // Create new types without @context from refs list
-        refs.forEach {
-            val name = it.substringAfterLast("/")
-            val copy = openAPI.components.schemas.get(name)
-            copy!!.removeProperty("@context")
-            openAPI.components.addSchema(name + "GraphItem", copy)
-        }
+    private fun removeAtContextRecursively(schema: Schema, logName: String?) {
+        log.infof("RECURSIVE REMOVE WITH %s", logName)
+        schema.removeProperty("@context")
+        // Rewrite ref for arrays
+        schema.properties.values
+            .filter { it.type?.contains(Schema.SchemaType.ARRAY) ?: false }
+            .forEach {
+                it.items?.ref?.let { ref -> if (!ref.endsWith("GraphItem")) it.items.ref(ref + "GraphItem") }
+            }
+        // Recursive for objects
+        schema.properties
+            .filter { it.value.type?.contains(Schema.SchemaType.OBJECT) ?: false }
+            .forEach { removeAtContextRecursively(it.value, it.key ) }
+
     }
 
     private fun compactSchema(schema: Schema): Schema {
@@ -59,7 +93,7 @@ class OpenApiJsonLDFilter : OASFilter {
             schema.examples = schema.examples.map { obj -> obj.toString() }.map(::compact)
         }
         if (schema.properties != null) {
-            schema.properties = markupContextMap(
+            schema.properties = addContextAndSamples(
                 schema.properties
                     .map { entry -> Pair(compact(entry.key), compactSchema(entry.value)) }
                     .toMap().toMutableMap())
@@ -76,7 +110,7 @@ class OpenApiJsonLDFilter : OASFilter {
         return input
     }
 
-    private fun markupContextMap(map: MutableMap<String, Schema>): MutableMap<String, Schema> {
+    private fun addContextAndSamples(map: MutableMap<String, Schema>): MutableMap<String, Schema> {
         // If @context exists or an @graph property is present
         if (map.containsKey("@graph") || map.containsKey("@context") || map.keys.any { propKey ->
                 replacerMap.values.any { replKey ->
