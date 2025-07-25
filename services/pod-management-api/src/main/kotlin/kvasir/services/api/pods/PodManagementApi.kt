@@ -1,29 +1,33 @@
 package kvasir.services.api.pods
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
-import io.minio.MakeBucketArgs
-import io.minio.MinioAsyncClient
-import io.minio.SetBucketVersioningArgs
-import io.minio.messages.VersioningConfiguration
+import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
-import io.vertx.core.eventbus.EventBus
 import jakarta.annotation.security.PermitAll
-import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
-import jakarta.ws.rs.core.*
+import jakarta.ws.rs.core.MediaType
+import jakarta.ws.rs.core.Response
+import jakarta.ws.rs.core.UriBuilder
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.config.GenerateClientConfig
 import kvasir.definitions.config.KvasirConfig
-import kvasir.definitions.kg.*
-import kvasir.definitions.messaging.Channels
+import kvasir.definitions.config.PodConfig
+import kvasir.definitions.kg.LifeCycleEvent
+import kvasir.definitions.kg.LifeCycleEventType
+import kvasir.definitions.kg.Pod
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
 import kvasir.utils.http.getParentUri
-import kvasir.utils.s3.S3Utils
+import kvasir.utils.pod.PodSetupHelper
+import org.apache.http.HttpStatus
+import org.eclipse.microprofile.config.ConfigProvider
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
@@ -33,18 +37,16 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestResponse
 import java.net.URI
 import java.util.*
+import kotlin.jvm.optionals.getOrNull
 
 @Path("")
 class PodManagementApi(
-    private val podStore: PodStore,
-    private val minioClient: MinioAsyncClient,
     private val uriInfo: KvasirUriInfo,
     @ConfigProperty(name = KvasirConfig.WEBCLIENT_URI_PROPERTY, defaultValue = KvasirConfig.WEBCLIENT_URI_DEFAULT)
     private val webclientUri: Optional<URI>,
-    private val podAuthInitializer: Instance<PodAuthInitializer>,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>
-) {
+) : PodSetupHelper() {
 
     @PermitAll
     @POST
@@ -58,57 +60,20 @@ class PodManagementApi(
     fun register(input: RegisterPodInput): Uni<Response> {
         // This basic implementation check if the pod already exists in a non-atomic way.
         val fqPodId = uriInfo.getResourceUri().getChildUri(input.name).toASCIIString()
-        return podStore.getById(fqPodId).chain { existingPod ->
-            if (existingPod != null) {
-                Uni.createFrom().item(Response.status(Response.Status.CONFLICT).build())
-            } else {
-                // Initialize auth config with policy enforcement provider (if no config specified)
-                if (!input.configuration.containsKey(KvasirVocab.authConfiguration)) {
-                    podAuthInitializer.get().initialize(fqPodId, input.name).map { it }
-                } else {
-                    Uni.createFrom().nullItem()
-                }
-                    .chain { authConfig ->
-                        val config =
-                            if (authConfig != null) input.configuration.plus(KvasirVocab.authConfiguration to authConfig) else input.configuration
-                        podStore.persist(Pod(fqPodId, config))
-                    }
-                    .chain { _ ->
-                        // Initialize a new S3 bucket for the pod
-                        Uni.createFrom().completionStage(
-                            minioClient.makeBucket(
-                                MakeBucketArgs.builder().bucket(S3Utils.getBucket(fqPodId)).build()
-                            )
-                        )
-                            .chain { _ ->
-                                // Enable versioning for the bucket
-                                Uni.createFrom().completionStage(
-                                    minioClient.setBucketVersioning(
-                                        SetBucketVersioningArgs.builder()
-                                            .bucket(S3Utils.getBucket(fqPodId))
-                                            .config(
-                                                VersioningConfiguration(
-                                                    VersioningConfiguration.Status.ENABLED,
-                                                    true
-                                                )
-                                            )
-                                            .build()
-                                    )
-                                )
-                            }
-                    }
-                    .chain { _ ->
-                        // Emit life-cycle event
-                        lifecycleEventEmitter.send(
-                            LifeCycleEvent(
-                                type = LifeCycleEventType.POD_CREATED,
-                                podId = fqPodId
-                            )
-                        )
-                    }
-                    .map { Response.created(URI.create(fqPodId)).build() }
+        return createPod(fqPodId, input, errorWhenExists = true)
+            .chain { _ ->
+                // Emit life-cycle event when the Pod was successfully created
+                lifecycleEventEmitter.send(
+                    LifeCycleEvent(
+                        type = LifeCycleEventType.POD_CREATED,
+                        podId = fqPodId
+                    )
+                )
             }
-        }
+            .map { Response.created(URI.create(fqPodId)).build() }
+            .onFailure(IllegalStateException::class.java).recoverWithItem { _ ->
+                Response.status(HttpStatus.SC_CONFLICT).entity("Pod with ID $fqPodId already exists.").build()
+            }
     }
 
     @PermitAll
@@ -134,6 +99,7 @@ class PodManagementApi(
         summary = "Get pod details",
         description = "Returns the details of a specific pod identified by its ID."
     )
+    @OpenFgaPolicyEnforcer
     fun get(@PathParam("podId") podId: String): Uni<Pod> {
         val fqPodId = uriInfo.getResourceUri().toASCIIString()
         return podStore.getById(fqPodId)
@@ -174,8 +140,13 @@ class PodManagementApi(
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return podStore.getById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
-            .onItem().ifNotNull().transform {
-                PodPublicProfile("${fqPodId}/.profile", it!!.getAuthConfiguration()!!.serverUrl)
+            .onItem().ifNotNull().transform { pod ->
+                PodPublicProfile(
+                    "${fqPodId}/.profile",
+                    pod!!.getAuthConfiguration()?.get("authServerUrl")?.let { it as String }
+                        ?: ConfigProvider.getConfig()
+                            .getOptionalValue("quarkus.oidc.auth-server-url", String::class.java).getOrNull()
+                )
             }
     }
 
@@ -188,6 +159,7 @@ class PodManagementApi(
         description = "Updates the configuration of an existing pod identified by its ID."
     )
     @APIResponse(responseCode = "204", description = "Pod configuration updated.")
+    @OpenFgaPolicyEnforcer
     fun update(@PathParam("podId") podId: String, input: UpdatePodInput): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().toASCIIString()
         return podStore.getById(fqPodId).chain { existingPod ->
@@ -217,6 +189,7 @@ class PodManagementApi(
         description = "Deletes an existing pod identified by its ID. This will also remove all associated data."
     )
     @APIResponse(responseCode = "201", description = "Pod successfully deleted.")
+    @OpenFgaPolicyEnforcer
     fun delete(@PathParam("podId") podId: String): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().toASCIIString()
         // TODO: delete all content (incl. S3 bucket, KG data, etc.)
@@ -234,9 +207,20 @@ class PodManagementApi(
 data class RegisterPodInput(
     @get:JsonProperty(KvasirVocab.name)
     val name: String,
+    @get:JsonProperty(KvasirVocab.ownerUserId)
+    val ownerUserId: String,
     @get:JsonProperty(KvasirVocab.configuration)
     val configuration: Map<String, Any>,
-)
+) : PodConfig {
+
+    override fun name(): String = name
+
+    override fun ownerUserId(): Optional<String> = Optional.of(ownerUserId)
+
+    override fun configuration(): Map<String, Any> = configuration
+
+    override fun generateClients(): Optional<List<GenerateClientConfig>> = Optional.empty()
+}
 
 @GenerateNoArgConstructor
 data class UpdatePodInput(
@@ -259,9 +243,10 @@ data class PodInfoGraph(
 )
 
 @GenerateNoArgConstructor
+@JsonInclude(JsonInclude.Include.NON_DEFAULT)
 data class PodPublicProfile(
     @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
     @get:JsonProperty(KvasirVocab.authServerUrl)
-    val authServerUri: String
+    val authServerUri: String? = null
 )

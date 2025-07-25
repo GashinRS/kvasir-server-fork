@@ -27,9 +27,12 @@ repositories:
     url: https://helm.traefik.io/traefik
   - name: clickhouse-operator
     url: https://docs.altinity.com/clickhouse-operator
-  - name: discover
-    oci: true
-    url: ghcr.io/idlab-discover/registry
+  - name: postgres-operator-charts
+    url: https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+  - name: openfga
+    url: https://openfga.github.io/helm-charts
+  - name: idlab-discover
+    url: https://idlab-discover.github.io/charts/
 
 releases:
   - name: traefik
@@ -57,6 +60,7 @@ releases:
     namespace: kafka
     labels:
       component: dependency
+      state: "true"
     chart: ./dependencies/kafka/custom-resources
     needs: [ kafka-operator ]
 
@@ -74,6 +78,7 @@ releases:
     labels:
       component: dependency
       app: clickhouse
+      state: "true"
     chart: ./dependencies/clickhouse/custom-resources
     needs: [ clickhouse-operator ]
 
@@ -82,19 +87,40 @@ releases:
     labels:
       component: dependency
       app: minio
+      state: "true"
     chart: bitnami/minio
     version: 16.0.8
     values:
       - auth:
           rootPassword: {{ .StateValues.minioRootpassword }}
 
+  - name: postgres-operator
+    namespace: auth
+    labels:
+      component: operator
+      app: postgresql
+    chart: postgres-operator-charts/postgres-operator
+    version: 1.14.0
+    values:
+      - dependencies/postgresql/operator/values.yaml
+  - name: postgresql
+    namespace: auth
+    labels:
+      component: dependency
+      app: postgresql
+      state: "true"
+    chart: ./dependencies/postgresql/custom-resources
+    needs: [ postgres-operator ]
+
   - name: keycloak
-    namespace: keycloak
+    namespace: auth
     labels:
         app: keycloak
         component: dependency
+        state: "true"
     chart: bitnami/keycloak
-    version: 24.6.1
+    version: 24.7.7
+    needs: [ postgresql ]
     values:
       - auth:
           adminUser: kcadmin
@@ -104,17 +130,25 @@ releases:
       - production: false
 {{- end }}
       - proxy: {{ .StateValues.proxy }}
-      - keycloakConfigCli:
-          enabled: true
-          configuration:
-            kvasir-realm.json: |
-              {{ readFile "../plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json" | nindent 14 }}
+
+  - name: openfga
+    namespace: auth
+    labels:
+      component: dependency
+      app: openfga
+      state: "true"
+    chart: openfga/openfga
+    version: 0.2.38
+    needs: [ postgresql ]
+    values:
+      - dependencies/openfga/values.yaml
 
   - name: kvasir
     namespace: kvasir
     needs:
       - traefik/traefik
-      - keycloak/keycloak
+      - auth/keycloak
+      - auth/openfga
       - kafka/kafka
       - clickhouse/clickhouse
       - minio/minio
@@ -129,30 +163,5 @@ releases:
           image:
             registry: {{ .StateValues.image.registry }}
             tag: {{ .StateValues.image.tag }}
+            pullPolicy: Always
       {{- end }}
-
-  - name: kvasir-ui
-    namespace: kvasir
-    needs: [ kvasir/kvasir ]
-    labels:
-      app: kvasir-ui
-      component: kvasir
-    chart: ./kvasir-ui
-    values:
-      - global:
-          host: {{ .StateValues.kvasirHost }}
-          ingressRoutes:
-            matchHost: true
-            tlsEnabled: {{ .StateValues.tlsEnabled }}
-            proxy: {{ .StateValues.proxy }}
-            {{- if eq .Environment.Name "kind" }}
-            tls:
-              secretName: kvasir-tls
-            {{- end }}
-        {{- if .StateValues.image.tag }}
-        image:
-          registry: {{ .StateValues.image.registry}}
-          tag: {{ .StateValues.image.tag }}
-        {{- end }}
-        ingressRoutes:
-          enabled: true

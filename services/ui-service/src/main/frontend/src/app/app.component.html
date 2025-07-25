@@ -1,0 +1,53 @@
+<nz-layout class="layout">
+  <nz-header>
+    <!-- <div class="logo"></div> -->
+    <div class="product">Kvasir</div>
+    <ul nz-menu nzTheme="dark" nzMode="horizontal">
+      <li nz-menu-item routerLink="graphiql" nzMatchRouter>GraphiQL</li>
+      <li nz-menu-item routerLink="s3" nzMatchRouter>S3 Browser</li>
+      <li nz-menu-item routerLink="changes" nzMatchRouter>Changes</li>
+      <li nz-menu-item routerLink="slices" nzMatchRouter>Slices</li>
+      @if (sessionActive()) {
+        <li nz-menu-item class="right-menu" (click)="doLogout()">
+          {{ podName() }} <span class="logout">(logout)</span>
+        </li>
+      } @else {
+        <li nz-menu-item class="right-menu" routerLink="register" nzMatchRouter>
+          Sign up
+        </li>
+      }
+      <li
+        nz-menu-item
+        routerLink="settings"
+        nzMatchRouter
+        class="right-menu"
+        nz-tooltip="Pod settings"
+        nzTooltipPlacement="bottom"
+      >
+        <span nz-icon nzType="setting" nzTheme="fill"></span>
+      </li>
+      <li
+        nz-menu-item
+        routerLink="access-control"
+        nzMatchRouter
+        class="right-menu"
+        nz-tooltip="Access control"
+        nzTooltipPlacement="bottom"
+      >
+        <span nz-icon nzType="control" nzTheme="fill"></span>
+      </li>
+    </ul>
+  </nz-header>
+  <nz-content>
+    <div class="inner-content"><router-outlet></router-outlet></div>
+  </nz-content>
+  <nz-footer>
+    <span
+      >Kvasir ©2024 by
+      <a href="https://discover.idlab.ugent.be" target="_blank"
+        >IDLab - Discover</a
+      >
+    </span>
+    <app-version></app-version>
+  </nz-footer>
+</nz-layout>

@@ -1,0 +1,83 @@
+package kvasir.services.ui
+
+import io.quarkus.logging.Log
+import io.quarkus.runtime.StartupEvent
+import io.quarkus.vertx.web.RouteFilter
+import io.smallrye.mutiny.Multi
+import io.vertx.core.json.JsonObject
+import io.vertx.ext.web.RoutingContext
+import io.vertx.ext.web.handler.StaticHandler
+import io.vertx.mutiny.core.Vertx
+import io.vertx.mutiny.core.file.FileSystem
+import jakarta.enterprise.context.ApplicationScoped
+import jakarta.enterprise.event.Observes
+import kvasir.definitions.config.KvasirConfig
+import org.eclipse.microprofile.config.inject.ConfigProperty
+import java.util.*
+
+const val KEY_KVASIR_HOST = "KVASIR_HOST"
+const val PATH_PREFIX = "/_ui"
+const val WEBROOT = "webroot"
+const val CONFIG_PREFIX = "${PATH_PREFIX}/_cfg/config.json"
+const val INDEX_PAGE = "index.html"
+const val FALLBACK_PATH = "$PATH_PREFIX/$INDEX_PAGE"
+
+@ApplicationScoped
+class SpaHandler(
+    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY) private val host: String,
+) {
+    private val staticHandler = StaticHandler.create().setIndexPage(INDEX_PAGE)
+        .setCachingEnabled(true)
+        .setEnableFSTuning(true)
+
+    private lateinit var fsPaths: TreeSet<String>;
+
+    fun init(@Observes event: StartupEvent, vertx: Vertx) {
+        Log.info("SpaHandler starting, scanning web resources under $WEBROOT...")
+        fsPaths = listChildren(vertx.fileSystem(), WEBROOT)
+            .collect().`in`({ TreeSet<String>() }, { col, items -> col.addAll(items) }).await().indefinitely();
+        Log.info("SpaHandler started: ${fsPaths.size} web resources found.")
+    }
+
+    private fun listChildren(fs: FileSystem, path: String): Multi<List<String>> {
+        return fs.props(path).toMulti().flatMap {
+            // Path is DIR
+            if (it.isDirectory) {
+                fs.readDir(path).toMulti()
+                    .onItem().disjoint<String>()
+                    .onItem().transformToMultiAndMerge { p -> listChildren(fs, p) }
+            } else {
+                Multi.createFrom().item { listOf(path.substringAfterLast(WEBROOT).replace("\\", "/")) }
+            }
+        }
+    }
+
+    @RouteFilter
+    fun interceptUITraffic(rc: RoutingContext) {
+        if (rc.normalizedPath().startsWith(PATH_PREFIX, true)) {
+            handleUITraffic(rc);
+        } else {
+            rc.next();
+        }
+    }
+
+    private fun handleUITraffic(rc: RoutingContext) {
+        // WebUI config object
+        if (CONFIG_PREFIX.equals(rc.normalizedPath(), true)) {
+            Log.info("Intercepting UI Traffic: config")
+            rc.response().end(generateConfig().encode())
+        }
+        // If requested path is in scanned web resources: serve with StaticHandler
+        else if (fsPaths.contains(rc.normalizedPath())) {
+            staticHandler.handle(rc)
+        }
+        // Not found, then fall back to FALLBACK_PATH (index.html) and let the client handle routing
+        else {
+            rc.reroute(FALLBACK_PATH)
+        }
+    }
+
+    private fun generateConfig(): JsonObject {
+        return JsonObject.of(KEY_KVASIR_HOST, host);
+    }
+}

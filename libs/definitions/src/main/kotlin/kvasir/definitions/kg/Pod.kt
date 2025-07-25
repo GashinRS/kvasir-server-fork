@@ -9,8 +9,9 @@ import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.definitions.rdf.getJsonObject
 import java.time.Instant
-import java.util.UUID
+import java.util.*
 
 interface PodStore {
 
@@ -24,20 +25,6 @@ interface PodStore {
 
 }
 
-/**
- * A PodAuthInitializer can be provided by a plugin to initialize the auth configuration for a new pod
- * with the default authorization server (to streamline the process of creating a new pod).
- */
-interface PodAuthInitializer {
-
-    fun initialize(
-        podId: String,
-        podName: String,
-        preconfiguredClients: List<ClientConfiguration> = emptyList()
-    ): Uni<AuthConfiguration>
-
-}
-
 @GenerateNoArgConstructor
 data class Pod(
     @get:JsonProperty(JsonLdKeywords.id)
@@ -48,40 +35,26 @@ data class Pod(
 
     @JsonIgnore
     fun getDefaultContext(): Map<String, Any> {
-        return configuration[PodConfigurationProperty.DEFAULT_CONTEXT]?.let { JsonObject(it as String).map }
-            ?: emptyMap()
+        return configuration[KvasirVocab.defaultContext]?.let {
+            if (it is String && it.isNotEmpty()) {
+                JsonObject(it).map
+            } else {
+                null
+            }
+        } ?: emptyMap()
     }
 
     @JsonIgnore
     fun getAutoIngestRDF(): Boolean {
-        return configuration[PodConfigurationProperty.AUTO_INGEST_RDF] as? Boolean == true
+        return configuration[KvasirVocab.autoIngestRDF] as? Boolean == true
     }
 
     @JsonIgnore
-    fun getAuthConfiguration(): AuthConfiguration? {
-        return configuration[KvasirVocab.authConfiguration]?.let {
-            JsonObject(it as Map<String, Any>).mapTo(AuthConfiguration::class.java)
-        }
+    fun getAuthConfiguration(): Map<String, Any>? {
+        return configuration.getJsonObject(KvasirVocab.authConfiguration)
     }
 
 }
-
-object PodConfigurationProperty {
-
-    const val DEFAULT_CONTEXT = KvasirVocab.defaultContext
-    const val AUTO_INGEST_RDF = KvasirVocab.autoIngestRDF
-
-}
-
-@GenerateNoArgConstructor
-data class AuthConfiguration(
-    @get:JsonProperty(KvasirVocab.serverUrl)
-    val serverUrl: String,
-    @get:JsonProperty(KvasirVocab.clientId)
-    val clientId: String,
-    @get:JsonProperty(KvasirVocab.clientSecret)
-    val clientSecret: String,
-)
 
 enum class LifeCycleEventType {
     POD_CREATED,
@@ -107,11 +80,4 @@ data class LifeCycleEvent(
     val podId: String,
     @get:JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null
-)
-
-data class ClientConfiguration(
-    val clientId: String,
-    val enableServiceAccount: Boolean,
-    val clientSecret: String? = null,
-    val redirectUris: List<String>? = null
 )

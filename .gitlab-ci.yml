@@ -40,8 +40,8 @@ workflow:
   rules:
     - if: $CI_COMMIT_TAG
       variables:
-        IMAGE_TAG: "$CI_COMMIT_TAG"
-        IMAGE_ADDITIONAL_TAGS: "latest"
+        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_TAG"
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "latest"
         QUARKUS_CONTAINER_IMAGE_PUSH: "true"
 
     #    Ignore Draft MRs
@@ -49,8 +49,8 @@ workflow:
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       variables: &commitBranchVersions
-        IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
-        IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
+        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
         QUARKUS_CONTAINER_IMAGE_PUSH: "true"
     #   Don't trigger branch pipeline when there is an open MR
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
@@ -74,61 +74,6 @@ stages:
   - deploy
   - search
 
-build:kvasir-ui:
-  stage: test
-  image: $NODE_IMAGE
-  tags:
-    - cache
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}-npm
-    paths:
-      - ui/node_modules/
-    policy: pull-push
-    when: always
-  script:
-    - cd ./ui
-    - npm ci
-    - npm run build
-  artifacts:
-    untracked: false
-    when: on_success
-    access: all
-    expire_in: "1 day"
-    paths:
-      - ui/dist/
-  rules:
-    - if: "$CI_COMMIT_TAG"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-    - changes: *uiChanges
-
-package:kvasir-ui:
-  stage: package
-  needs:
-    - build:kvasir-ui
-  tags:
-    - docker
-    - cache
-  image:
-    name: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:latest
-  services:
-    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
-      alias: docker
-  before_script:
-    - docker run --privileged --rm tonistiigi/binfmt --install arm64
-    - docker context create tls-context
-    - docker --context tls-context buildx create --name multiarch --driver docker-container --bootstrap
-    - docker buildx use multiarch
-    - docker buildx ls
-  script:
-    - cd ./ui
-    - echo "$CI_JOB_TOKEN" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
-    - docker buildx build -t ${CI_REGISTRY_IMAGE}/kvasir-ui:${IMAGE_TAG} -t ${CI_REGISTRY_IMAGE}/kvasir-ui:${IMAGE_ADDITIONAL_TAGS} -f docker/Dockerfile --platform linux/amd64,linux/arm64 -o type=registry --provenance false .
-  rules:
-    - if: "$CI_COMMIT_TAG"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-
 build:maven:
   stage: test
   image: $JDK_IMAGE
@@ -146,11 +91,11 @@ build:maven:
     - if: "$CI_COMMIT_TAG"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-    - changes: *mavenChanges
-      variables:
-        SKIP_TESTS: "-DskipTests"
   script:
-    - ./mvnw $MAVEN_CLI_OPTS $SKIP_TESTS package -Pservices
+    - ./mvnw $MAVEN_CLI_OPTS test -Pservices
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Pservices
+      -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
+      -Dkvasir.plugins.policy-agent.openfga.enabled=true
   interruptible: true
   after_script:
     - awk -F,
@@ -169,43 +114,43 @@ build:maven:
       junit: "**/TEST-*.xml"
     when: always
 
-package:maven:
-  stage: package
-  needs: [build:maven]
-  image: $JDK_IMAGE
-  tags: ["cache"]
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    paths:
-      - .m2/repository/
-    policy: pull-push
-  parallel:
-    matrix:
-      - KEYCLOAK_POLICY_ENFORCER: "true"
-        UMA_POLICY_ENFORCER: "false"
-        QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-keycloak
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_TAG},${IMAGE_ADDITIONAL_TAGS},${IMAGE_ADDITIONAL_TAGS}-keycloak
-      - KEYCLOAK_POLICY_ENFORCER: "false"
-        UMA_POLICY_ENFORCER: "true"
-        QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-uma
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-uma
-      - KEYCLOAK_POLICY_ENFORCER: "false"
-        UMA_POLICY_ENFORCER: "false"
-        QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-noauth
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-noauth
-  rules:
-    - if: "$CI_COMMIT_TAG"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-  script:
-    - ./mvnw $MAVEN_CLI_OPTS -DskipTests install -Pservices
-      -Dquarkus.container-image.push=true
-      -Dkvasir.plugins.policy-agent.keycloak.enabled=$KEYCLOAK_POLICY_ENFORCER
-      -Dkvasir.plugins.policy-agent.uma.enabled=$UMA_POLICY_ENFORCER
-  interruptible: true
-  artifacts:
-    paths:
-      - "**/target/*.jar"
+# package:maven:
+#   stage: package
+#   needs: [build:maven]
+#   image: $JDK_IMAGE
+#   tags: ["cache"]
+#   cache:
+#     key: ${CI_COMMIT_REF_SLUG}
+#     paths:
+#       - .m2/repository/
+#     policy: pull-push
+#   parallel:
+#     matrix:
+#       - KEYCLOAK_POLICY_ENFORCER: "true"
+#         UMA_POLICY_ENFORCER: "false"
+#         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-keycloak
+#         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_TAG},${IMAGE_ADDITIONAL_TAGS},${IMAGE_ADDITIONAL_TAGS}-keycloak
+#       - KEYCLOAK_POLICY_ENFORCER: "false"
+#         UMA_POLICY_ENFORCER: "true"
+#         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-uma
+#         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-uma
+#       - KEYCLOAK_POLICY_ENFORCER: "false"
+#         UMA_POLICY_ENFORCER: "false"
+#         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-noauth
+#         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-noauth
+#   rules:
+#     - if: "$CI_COMMIT_TAG"
+#     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+#     - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
+#   script:
+#     - ./mvnw $MAVEN_CLI_OPTS -DskipTests install -Pservices
+#       -Dquarkus.container-image.push=true
+#       -Dkvasir.plugins.policy-agent.keycloak.enabled=$KEYCLOAK_POLICY_ENFORCER
+#       -Dkvasir.plugins.policy-agent.uma.enabled=$UMA_POLICY_ENFORCER
+#   interruptible: true
+#   artifacts:
+#     paths:
+#       - "**/target/*.jar"
 
 build:openapi:
   image: $JDK_IMAGE
@@ -345,7 +290,7 @@ smoke_test:compose:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - cd .deployment/docker-compose
-    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$IMAGE_TAG%g" docker-compose.yml
+    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$QUARKUS_CONTAINER_IMAGE_TAG%g" docker-compose.yml
     - docker compose up -d --wait --quiet-pull --no-color
     - docker ps
     - tests/compose-smoke-test.sh
@@ -382,4 +327,4 @@ deploy:cnl:
   script:
     - cd kubernetes
     - helmfile deps
-    - helmfile sync --state-values-set image.tag=${IMAGE_TAG} --state-values-set image.registry=${CI_REGISTRY_IMAGE}
+    - helmfile sync --state-values-set image.tag=${QUARKUS_CONTAINER_IMAGE_TAG} --state-values-set image.registry=${CI_REGISTRY_IMAGE}

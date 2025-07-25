@@ -2,7 +2,7 @@ package kvasir.services.api.kg.inbox
 
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonProperty
-import io.quarkus.security.identity.SecurityIdentity
+import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.smallrye.reactive.messaging.kafka.KafkaRecord
@@ -49,6 +49,7 @@ class InboxApi(
         description = "Post a change request, containing the requested mutations, to the inbox of the specified pod.",
     )
     @APIResponse(responseCode = "201", description = "Change request created.")
+    @OpenFgaPolicyEnforcer
     fun processChangeRequest(
         @PathParam("podId") podId: String,
         input: ChangeRequestInput
@@ -74,6 +75,7 @@ class InboxApi(
         description = "Post a change request, containing the requested mutations, to a slice inbox of the specified pod.",
     )
     @APIResponse(responseCode = "201", description = "Change request created.")
+    @OpenFgaPolicyEnforcer
     fun processSliceChangeRequest(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,

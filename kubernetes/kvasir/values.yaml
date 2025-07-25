@@ -71,6 +71,9 @@ global:
     clientSecretSecretKey: ""
     realmSecretKey: ""
 
+  openfga:
+    url: ""
+
   minio:
     host: ""
     port: ""
@@ -167,19 +170,6 @@ global:
   #  usernameSecretKey: ""
   #  passwordSecretKey: ""
 
-#      - KVASIR_KG_CLICKHOUSE_HOST=localhost
-#      - KVASIR_KG_CLICKHOUSE_PORT=8123
-#      - KVASIR_SERVICES_STORAGE_S3_HOST=localhost
-#      - KVASIR_SERVICES_STORAGE_S3_PORT=9000
-#      - QUARKUS_MINIO_URL=http://localhost:9000/
-#      - QUARKUS_MINIO_SECURE=true
-#      - QUARKUS_MINIO_ACCESS_KEY=kvasir
-#      - QUARKUS_MINIO_SECRET_KEY=kvasirkvasir
-#      - KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-#      - QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8280/realms/quarkus
-#      - QUARKUS_OIDC_CLIENT_ID=quarkus-app
-#      - QUARKUS_OIDC_CREDENTIALS_SECRET=secret
-
 "init-service":
   enabled: true
   oidc:
@@ -192,59 +182,38 @@ global:
     enabled: true
   kafka:
     enabled: true
+  openfga:
+    enabled: true
   applicationYaml:
     kvasir:
       bootstrap:
         pods:
-          - name: alice
-            default-context: |
-              {
-                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
-                "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-                "xsd": "http://www.w3.org/2001/XMLSchema#",
-                "schema": "http://schema.org/",
-                "ex": "http://example.org/",
-                "saref": "https://saref.etsi.org/core/",
-                "hasMeasurement": {
-                  "@reverse": "https://saref.etsi.org/core/measurementMadeBy"
-                },
-                "children": { "@reverse": "http://example.org/parent" }
-              }
-            auto-ingest-rdf: true
-          - name: bob
-            default-context: |
-              {
-                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
-                "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-                "xsd": "http://www.w3.org/2001/XMLSchema#",
-                "schema": "http://schema.org/",
-                "ex": "http://example.org/"
-              }
-            auto-ingest-rdf: false
-          - name: swdemo
-            default-context: |
-              {
-                "@language": "en",
-                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
-                "voc": "https://swapi.co/vocabulary/",
-                "commons": "https://commons.wikimedia.org/wiki/Special:FilePath/",
-                "dc": "http://purl.org/dc/elements/1.1/",
-                "dct": "http://purl.org/dc/terms/",
-                "owl": "http://www.w3.org/2002/07/owl#",
-                "p": "http://www.wikidata.org/prop/",
-                "pq": "http://www.wikidata.org/prop/qualifier/",
-                "ps": "http://www.wikidata.org/prop/statement/",
-                "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-                "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-                "wd": "http://www.wikidata.org/entity/",
-                "wds": "http://www.wikidata.org/entity/statement/",
-                "wdt": "http://www.wikidata.org/prop/direct/",
-                "wgs": "http://www.w3.org/2003/01/geo/wgs84_pos#",
-                "wikibase": "http://wikiba.se/ontology#",
-                "xml": "http://www.w3.org/XML/1998/namespace",
-                "xsd": "http://www.w3.org/2001/XMLSchema#"
-              }
-            auto-ingest-rdf: true
+        - name: alice
+          configuration: |
+            {
+              "@context": {
+                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+              },
+              "kss:autoIngestRDF": true,
+              "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
+            }
+          generate-clients:
+            - client-id: demo-client
+              client-secret: testtest
+              enable-service-account: true
+              openfga:
+                relationships:
+                  - target-resource: "/"
+                    relations: [ "reader", "writer", "deleter" ]
+        - name: bob
+          configuration: |
+            {
+              "@context": {
+                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+              },
+              "kss:autoIngestRDF": true,
+              "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
+            }
 
 "kg-change-processor":
   kafka:
@@ -263,6 +232,8 @@ global:
     enabled: true
   clickhouse:
     enabled: true
+  openfga:
+    enabled: true
   ingressRoutes:
     enabled: true
     routes:
@@ -275,6 +246,8 @@ global:
   oidc:
     enabled: true
   clickhouse:
+    enabled: true
+  openfga:
     enabled: true
   ingressRoutes:
     enabled: true
@@ -296,6 +269,8 @@ global:
     enabled: true
   clickhouse:
     enabled: true
+  openfga:
+    enabled: true
   ingressRoutes:
     enabled: true
     routes:
@@ -303,7 +278,7 @@ global:
       - match: "PathRegexp(`^/[^/]+/life-cycle`) && Header(`Accept`, `text/event-stream`)"
       - match: "PathRegexp(`^/[^/]+/query`) && Header(`Accept`, `text/event-stream`)"
       - match: "PathRegexp(`^/[^/]+/s3`) && Header(`Accept`, `text/event-stream`)"
-      - match: "Header('Accept', 'text/event-stream"
+      - match: "Header(`Accept`, `text/event-stream`)"
 
 "pod-management-api":
   oidc:
@@ -316,11 +291,15 @@ global:
     enabled: true
   kafka:
     enabled: true
+  openfga:
+    enabled: true
   ingressRoutes:
     enabled: true
     routes:
       - match: "PathRegexp(`^/[^/]+/\\.profile`) && Method(`GET`)"
       - match: "PathRegexp(`^/([^/]+)?$`)"
+      - match: "PathRegexp(`^/[^/]+/rebac/check`) && Method(`POST`)"
+      - match: "PathRegexp(`^/[^/]+/rebac/relationships`) && ( Method(`GET`) || Method(`POST`) )"
 
 "simple-rdf-ingester":
   oidc:
@@ -341,8 +320,19 @@ global:
     enabled: true
   clickhouse:
     enabled: true
+  openfga:
+    enabled: true
   ingressRoutes:
     enabled: true
     routes:
       - match: "PathRegexp(`^/[^/]+/s3/[^/]+`)"
       - match: "PathRegexp(`^/[^/]+/s3`)"
+
+"ui-service":
+  kafka:
+    enabled: true
+  ingressRoutes:
+    enabled: true
+    routes:
+      - match: PathPrefix(`/_ui`)
+        priority: 99999

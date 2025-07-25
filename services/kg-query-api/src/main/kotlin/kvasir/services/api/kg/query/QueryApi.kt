@@ -1,7 +1,7 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import io.quarkus.security.identity.SecurityIdentity
+import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import jakarta.ws.rs.*
@@ -12,6 +12,8 @@ import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.plugins.policyagent.openfga.extractors.GraphQLGetRelationExtractor
+import kvasir.plugins.policyagent.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
 import org.eclipse.microprofile.openapi.annotations.Operation
@@ -40,6 +42,7 @@ class QueryApi(
         summary = "Retrieve data from the KG.",
         description = "Query the knowledge graph of the specified pod using GraphQL."
     )
+    @OpenFgaPolicyEnforcer(relation = GraphQLPostRelationExtractor::class, readBody = true)
     fun query(
         @PathParam("podId") podId: String,
         input: QueryInputWithContext
@@ -59,6 +62,7 @@ class QueryApi(
         summary = "Retrieve data from the KG.",
         description = "Query the knowledge graph of the specified pod using GraphQL."
     )
+    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
     fun queryViaGet(
         @PathParam("podId") podId: String,
         @QueryParam("query") query: String,
@@ -91,6 +95,7 @@ class QueryApi(
         responseCode = "200",
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
+    @OpenFgaPolicyEnforcer(relation = GraphQLPostRelationExtractor::class, readBody = true)
     fun queryJsonLD(
         @PathParam("podId") podId: String, input: QueryInputWithContext
     ): Uni<Any> {
@@ -111,6 +116,7 @@ class QueryApi(
         responseCode = "200",
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
+    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
     fun queryJsonLDViaGet(
         @PathParam("podId") podId: String,
         @QueryParam("query") query: String,

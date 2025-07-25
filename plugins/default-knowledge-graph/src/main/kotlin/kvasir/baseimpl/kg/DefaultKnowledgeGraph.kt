@@ -27,8 +27,8 @@ import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.graphql.KvasirTypes
 import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.kg.graphql.TYPE_SUBSCRIPTION
-import kvasir.definitions.messaging.Channels
 import kvasir.definitions.reactive.skipToLast
+import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.cursors.OffsetBasedCursor
 import kvasir.utils.graphql.RDFClassTypeResolver
 import kvasir.utils.graphql.addKvasirBuiltins

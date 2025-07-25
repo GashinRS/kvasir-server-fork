@@ -115,8 +115,10 @@ interface ChangeRequestTxBuffer {
 
     /**
      * Cleanup the resources hold by the buffer
+     *
+     * @param stored Boolean indicating if the remaining records in the buffer were stored by the processor calling destroy.
      */
-    fun destroy(): Uni<Void>
+    fun destroy(stored: Boolean = false): Uni<Void>
 
 }
 

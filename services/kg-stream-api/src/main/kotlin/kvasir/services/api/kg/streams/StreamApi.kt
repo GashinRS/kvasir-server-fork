@@ -1,5 +1,6 @@
 package kvasir.services.api.kg.streams
 
+import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Multi
 import io.vertx.core.json.Json
 import io.vertx.mutiny.core.Vertx
@@ -8,12 +9,12 @@ import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeReport
-import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.storage.StorageEvent
+import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
 import kvasir.utils.rdf.RDFTransformer
@@ -69,6 +70,7 @@ class StreamApi(
         description = "This endpoint allows clients to receive real-time updates about changes made to the Knowledge Graph of a specific pod. Only committed changes are streamed.",
     )
     @APIResponseSchema(value = ChangeRecords::class)
+    @OpenFgaPolicyEnforcer
     fun stream(
         @PathParam("podId") podIdParam: String,
         @QueryParam("resumeToken") @Parameter(
@@ -130,6 +132,7 @@ class StreamApi(
         description = "This endpoint allows clients to receive real-time updates about query requests made to the Knowledge Graph of a specific pod. E.g. can be used to generate an access log for auditing purposes.",
     )
     @APIResponseSchema(value = QueryRequestEvent::class)
+    @OpenFgaPolicyEnforcer
     fun streamQueryEvents(
         @PathParam("podId") podIdParam: String,
         @QueryParam("resumeToken") @Parameter(
@@ -165,6 +168,7 @@ class StreamApi(
         description = "This endpoint allows clients to receive real-time updates about life-cycle events of a specific pod. E.g. can be used to be notified when a new Slice is created.",
     )
     @APIResponseSchema(value = LifeCycleEvent::class)
+    @OpenFgaPolicyEnforcer
     fun streamLifeCycleEvents(
         @PathParam("podId") podIdParam: String,
         @QueryParam("resumeToken") @Parameter(
@@ -200,6 +204,7 @@ class StreamApi(
         description = "This endpoint allows clients to receive real-time updates about S3 storage events (e.g. file uploads, deletions) for a specific Pod. E.g. this allows triggering a pipeline when a file with a specific extension is created.",
     )
     @APIResponseSchema(value = StorageEvent::class)
+    @OpenFgaPolicyEnforcer
     fun streamStorageMutationEvents(
         @PathParam("podId") podIdParam: String,
         @QueryParam("resumeToken") @Parameter(

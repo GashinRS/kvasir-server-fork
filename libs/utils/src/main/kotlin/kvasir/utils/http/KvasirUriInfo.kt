@@ -18,7 +18,7 @@ class KvasirUriInfo(
      * Get the resource URI (does not include query parameters). Used for id generation, etc.
      */
     fun getResourceUri(): URI {
-        return URI.create("${baseUri.removeSuffix("/")}${delegate.path}")
+        return URI.create("${getBaseUri()}${delegate.path}")
     }
 
     /**
@@ -27,7 +27,7 @@ class KvasirUriInfo(
      * @param overrideQueryParams Override the specified query parameters, with the associated values.
      */
     fun getAbsoluteUri(vararg overrideQueryParams: Pair<String, String>): URI {
-        val builder = UriBuilder.fromUri(URI.create(baseUri.removeSuffix("/")))
+        val builder = UriBuilder.fromUri(URI.create(getBaseUri()))
         delegate.queryParameters.forEach { (name, values) -> builder.queryParam(name, *values.toTypedArray()) }
         overrideQueryParams.forEach { (queryParamName, queryParamValue) ->
             builder.replaceQueryParam(
@@ -36,6 +36,10 @@ class KvasirUriInfo(
             )
         }
         return builder.build()
+    }
+
+    fun getBaseUri(): String {
+        return baseUri.removeSuffix("/")
     }
 }
 

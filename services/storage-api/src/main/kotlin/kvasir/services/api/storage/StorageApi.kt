@@ -13,10 +13,12 @@ import io.vertx.ext.web.Router
 import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
+import jakarta.enterprise.inject.Instance
+import kvasir.definitions.auth.AuthHandler
 import kvasir.definitions.config.KvasirConfig
-import kvasir.definitions.messaging.Channels
 import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
+import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.reactive.messaging.Channel
@@ -46,7 +48,8 @@ class StorageApi(
     private val s3Port: Int,
     @ConfigProperty(name = "quarkus.minio.url")
     private val minioHost: String,
-    private val s3Interceptor: S3Interceptor
+    private val s3Interceptor: S3Interceptor,
+    private val authHandler: Instance<AuthHandler>
 ) {
 
     fun onStart(@Observes router: Router, vertx: Vertx) {
@@ -56,13 +59,15 @@ class StorageApi(
         val proxy = HttpProxy.reverseProxy(proxyClient)
         proxy.origin(s3Port, s3Host).addInterceptor(s3Interceptor)
 
-        router.route("/:podId/s3/*").handler { ctx ->
-            proxy.handle(ctx.request())
+        val setupRoute = {
+            if (authHandler.isResolvable) {
+                router.route("/:podId/s3/*")
+                    .handler(authHandler.get())
+            } else {
+                router.route("/:podId/s3/*")
+            }
         }
-// Disable Slice-specific S3 for now
-//        router.route("/:podId/slices/:sliceId/s3/*").handler { ctx ->
-//            proxy.handle(ctx.request())
-//        }
+        setupRoute().handler { ctx -> proxy.handle(ctx.request()) }
     }
 
 }

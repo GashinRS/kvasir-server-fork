@@ -1,6 +1,7 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
@@ -41,6 +42,7 @@ class ChangeHistoryApi(
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
     @APIResponseSchema(ChangeReportGraph::class)
+    @OpenFgaPolicyEnforcer
     fun listChangeReports(
         @PathParam("podId") podId: String,
         @QueryParam("pageSize") @Parameter(required = false) @DefaultValue("100") pageSize: Int,
@@ -65,6 +67,7 @@ class ChangeHistoryApi(
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
     @APIResponseSchema(ChangeReportGraph::class)
+    @OpenFgaPolicyEnforcer
     fun listSliceChangeReports(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
@@ -92,6 +95,7 @@ class ChangeHistoryApi(
     @Path("{podId}/changes/{changeId}")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
+    @OpenFgaPolicyEnforcer
     fun getChangeReport(
         @PathParam("podId") podId: String,
         @PathParam("changeId") changeId: String
@@ -124,6 +128,7 @@ class ChangeHistoryApi(
     @Path("{podId}/slices/{sliceId}/changes/{changeId}")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
+    @OpenFgaPolicyEnforcer
     fun getSliceChangeReport(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
@@ -160,6 +165,7 @@ class ChangeHistoryApi(
     @Path("{podId}/changes/{changeId}/records")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
+    @OpenFgaPolicyEnforcer
     fun getChangeRecords(
         @PathParam("podId") podId: String,
         @PathParam("changeId") changeId: String,
@@ -181,6 +187,7 @@ class ChangeHistoryApi(
     @Path("{podId}/slices/{sliceId}/changes/{changeId}/records")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
+    @OpenFgaPolicyEnforcer
     fun getSliceChangeRecords(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,

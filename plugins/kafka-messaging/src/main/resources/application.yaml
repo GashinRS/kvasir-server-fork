@@ -1,0 +1,64 @@
+mp:
+  messaging:
+    outgoing:
+      change_requests_publish:
+        connector: smallrye-kafka
+        topic: change.requests
+        merge: true
+        waitForWriteCompletion: false
+      outbox_publish:
+        connector: smallrye-kafka
+        topic: outbox
+        merge: true
+        waitForWriteCompletion: false
+      storage_events_publish:
+        connector: smallrye-kafka
+        topic: storage.events
+        merge: true
+        waitForWriteCompletion: false
+      query_requests_publish:
+        connector: smallrye-kafka
+        topic: query.requests
+        merge: true
+        waitForWriteCompletion: false
+      lifecycle_events_publish:
+        connector: smallrye-kafka
+        topic: lifecycle.events
+        merge: true
+        waitForWriteCompletion: false
+    incoming:
+      change_requests_subscribe:
+        connector: smallrye-kafka
+        topic: change.requests
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest
+      outbox_subscribe:
+        connector: smallrye-kafka
+        topic: outbox
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest
+      storage_events_subscribe:
+        connector: smallrye-kafka
+        topic: storage.events
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest
+      query_requests_subscribe:
+        connector: smallrye-kafka
+        topic: query.requests
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest
+      lifecycle_events_subscribe:
+        connector: smallrye-kafka
+        topic: lifecycle.events
+        broadcast: true
+        auto:
+          offset:
+            reset: earliest

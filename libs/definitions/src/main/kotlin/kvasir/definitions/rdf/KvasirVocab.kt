@@ -11,6 +11,7 @@ object KvasirVocab {
     const val S3Reference = "${baseUri}S3Reference"
 
     const val autoIngestRDF = "${baseUri}autoIngestRDF"
+    const val ownerUserId = "${baseUri}ownerUserId"
     const val assert = "${baseUri}assert"
     const val configuration = "${baseUri}configuration"
     const val defaultContext = "${baseUri}defaultContext"
@@ -61,4 +62,47 @@ object KvasirNamedGraphs {
     const val queryResultDataGraph = "${baseUri}qr-data"
     const val queryResultErrorsGraph = "${baseUri}qr-errors"
 
+}
+
+object FgaVocab {
+    const val baseUri = "https://kvasir.discover.ilabt.imec.be/fine-grained-access#"
+
+    const val Resource = "${baseUri}Resource"
+    const val Group = "${baseUri}Group"
+    const val User = "${baseUri}User"
+
+    const val allowed = "${baseUri}allowed"
+    const val member = "${baseUri}member"
+    const val owner = "${baseUri}owner"
+    const val parent = "${baseUri}parent"
+    const val reader = "${baseUri}reader"
+    const val writer = "${baseUri}writer"
+    const val deleter = "${baseUri}deleter"
+    const val manager = "${baseUri}manager"
+    const val blocked = "${baseUri}blocked"
+    const val can_read = "${baseUri}can_read"
+    const val can_write = "${baseUri}can_write"
+    const val can_delete = "${baseUri}can_delete"
+    const val can_manage = "${baseUri}can_manage"
+
+    val ALL_TYPES = setOf(
+        Resource,
+        Group,
+        User
+    )
+
+    val GROUP_RELATIONS = setOf(member)
+    val RESOURCE_RELATIONS = setOf(
+        owner,
+        parent,
+        reader,
+        writer,
+        deleter,
+        manager,
+        blocked,
+        can_read,
+        can_write,
+        can_delete,
+        can_manage
+    )
 }

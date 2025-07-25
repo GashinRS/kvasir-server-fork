@@ -2,7 +2,7 @@ package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import graphql.parser.Parser
-import io.quarkus.security.identity.SecurityIdentity
+import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
@@ -17,12 +17,14 @@ import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.kg.slices.SliceSummary
-import kvasir.definitions.messaging.Channels
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.plugins.messaging.kafka.Channels
+import kvasir.plugins.policyagent.openfga.extractors.GraphQLGetRelationExtractor
+import kvasir.plugins.policyagent.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.utils.graphql.SchemaValidator
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
@@ -61,6 +63,7 @@ class GraphSlicesApi(
         description = "List slices of the specified pod's Knowledge Graph."
     )
     @APIResponseSchema(SliceGraph::class)
+    @OpenFgaPolicyEnforcer
     fun listSlices(@PathParam("podId") podId: String): Uni<List<SliceSummary>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return getPodOrThrow404(podStore, fqPodId).chain { _ ->
@@ -77,6 +80,7 @@ class GraphSlicesApi(
         description = "Define a new slice (subset) of the specified pod's Knowledge Graph, based on a GraphQL-LD schema."
     )
     @APIResponse(responseCode = "201", description = "Slice successfully created.")
+    @OpenFgaPolicyEnforcer
     fun createSlice(@PathParam("podId") podId: String, input: SliceInput): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getChildUri(input.name).toASCIIString()
@@ -110,6 +114,7 @@ class GraphSlicesApi(
         summary = "Retrieve a specific slice definition..",
         description = "Retrieve a specific slice definition details."
     )
+    @OpenFgaPolicyEnforcer
     fun getSlice(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String
@@ -128,6 +133,7 @@ class GraphSlicesApi(
         description = "Update a specific slice definition details."
     )
     @APIResponse(responseCode = "204", description = "Slice successfully updated.")
+    @OpenFgaPolicyEnforcer
     fun updateSlice(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
@@ -159,6 +165,7 @@ class GraphSlicesApi(
         description = "Delete a specific slice of the specified pod's Knowledge Graph."
     )
     @APIResponse(responseCode = "201", description = "Slice successfully deleted.")
+    @OpenFgaPolicyEnforcer
     fun deleteSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().toASCIIString()
@@ -187,6 +194,7 @@ class GraphSlicesApi(
         summary = "Interact with a specific subset of the KG.",
         description = "Execute a query on a predefined slice of the specified pod's Knowledge Graph using GraphQL."
     )
+    @OpenFgaPolicyEnforcer(relation = GraphQLPostRelationExtractor::class, readBody = true)
     fun queryVirtual(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
@@ -207,6 +215,7 @@ class GraphSlicesApi(
         summary = "Interact with a specific subset of the KG.",
         description = "Execute a query on a predefined slice of the specified pod's Knowledge Graph using GraphQL."
     )
+    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
     fun queryVirtualViaGet(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
@@ -236,6 +245,7 @@ class GraphSlicesApi(
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @OpenFgaPolicyEnforcer(relation = GraphQLPostRelationExtractor::class, readBody = true)
     fun streamVirtual(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
@@ -252,6 +262,7 @@ class GraphSlicesApi(
     @Path("{podId}/slices/{sliceId}/query")
     @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
     fun streamVirtualViaGet(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
@@ -280,6 +291,7 @@ class GraphSlicesApi(
         responseCode = "200",
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
+    @OpenFgaPolicyEnforcer(relation = GraphQLPostRelationExtractor::class, readBody = true)
     fun queryVirtualJsonLD(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
@@ -302,6 +314,7 @@ class GraphSlicesApi(
         responseCode = "200",
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
     )
+    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
     fun queryVirtualJsonLDViaGet(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,

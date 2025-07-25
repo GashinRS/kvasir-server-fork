@@ -19,6 +19,8 @@ services:
       - QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8280/realms/quarkus
       - QUARKUS_OIDC_CLIENT_ID=quarkus-app
       - QUARKUS_OIDC_CREDENTIALS_SECRET=secret
+      - QUARKUS_OPENFGA_STORE=kvasir
+      - QUARKUS_OPENFGA_URL=http://localhost:8380
     #    entrypoint: ["sleep", "3600"] # debug
     depends_on:
       clickhouse:
@@ -31,7 +33,7 @@ services:
         condition: service_healthy
     network_mode: host
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9100/q/health/ready"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9100/q/health/ready" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -73,7 +75,7 @@ services:
       - MINIO_ROOT_USER=kvasir
       - MINIO_ROOT_PASSWORD=kvasirkvasir
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -89,22 +91,7 @@ services:
     ports:
       - "9092:9092"
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
-  postgresql:
-    image: bitnami/postgresql:16.6.0
-    environment:
-      # ALLOW_EMPTY_PASSWORD is recommended only for development.
-      - ALLOW_EMPTY_PASSWORD=yes
-      - POSTGRESQL_USERNAME=bn_keycloak
-      - POSTGRESQL_DATABASE=bitnami_keycloak
-    volumes:
-      - "postgresql_data:/bitnami/postgresql"
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "bn_keycloak", "-d", "bitnami_keycloak"]
+      test: [ "CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -118,9 +105,9 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      KEYCLOAK_EXTRA_ARGS: --import-realm
-    volumes:
-      - ../../plugins/keycloak-policy-agent/src/main/resources/quarkus-realm.json:/opt/bitnami/keycloak/data/import/quarkus-realm.json
+      KEYCLOAK_DATABASE_NAME: postgres
+      KEYCLOAK_DATABASE_USER: postgres
+      KEYCLOAK_DATABASE_PASSWORD: password
     healthcheck:
       test:
         [
@@ -133,14 +120,56 @@ services:
       timeout: 10s
       retries: 5
 
-  kvasir-ui:
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/kvasir-ui:0.5.1
-    depends_on:
-      - kvasir
+  postgresql:
+    image: postgres:17
+    container_name: postgres
+    command: postgres -c 'max_connections=100'
+    networks:
+      - default
     ports:
-      - "8081:80"
+      - "5432:5432"
     environment:
-      - "KVASIR_HOST=http://localhost:8080"
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - "postgresql_data:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    image: openfga/openfga:latest
+    container_name: migrate
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://postgres:password@postgres:5432/postgres?sslmode=disable
+    command: migrate
+
+  openfga:
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    image: openfga/openfga:latest
+    container_name: openfga
+    command: run
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://postgres:password@postgres:5432/postgres?sslmode=disable
+      - OPENFGA_DATASTORE_MAX_OPEN_CONNS=100 #see postgres container
+      - OPENFGA_PLAYGROUND_ENABLED=true
+    ports:
+      - "8380:8080" #http
+      - "8381:8081" #grpc
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=openfga:8081"]
+      interval: 5s
+      timeout: 30s
+      retries: 3
 
 volumes:
   clickhouse_data:

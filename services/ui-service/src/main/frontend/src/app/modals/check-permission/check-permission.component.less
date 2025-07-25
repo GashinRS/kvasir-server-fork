@@ -1,0 +1,51 @@
+.check-permission-content {
+
+    span[type=addon] {
+        min-width: 110px;
+    }
+
+    span[type=prefix] {
+        user-select: all;
+        color: #888;
+        font-family: consolas;
+    }
+
+    .ant-input {
+        font-family: consolas;
+
+    }
+
+    .ant-input-group-addon:has(> .ant-select) {
+        padding: 0;
+    }
+
+    .resultRow {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: 8px;
+
+        div.result {
+            // width: 100%;
+            border-width: 1px;
+            border-style: dashed;
+            border-color: #aaa;
+            background-color: #eee;
+            display: grid;
+            place-items: center;
+            font-size: 14px;
+            font-variant: small-caps;
+
+            &.granted {
+                background-color: #33c567;
+                border-style: solid;
+                border-color: hsl(141, 59%, 39%)
+            }
+
+            &.denied {
+                background-color: #ff8e81;
+                border-style: solid;
+                border-color: hsl(6, 100%, 65%);
+            }
+        }
+    }
+}

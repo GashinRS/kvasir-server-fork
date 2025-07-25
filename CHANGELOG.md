@@ -4,24 +4,157 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.8.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.7.0..0.8.0) - 2025-07-24
+
+### Bug Fixes
+
+- **(openapi)** check if openapi components is not null, before compacting jsonld response and examples - ([e691b90](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/e691b90a6f0b5749ca0dce5f7543a311951fdc46)) - Thomas Dupont
+- Predicate or Class directive should take precedence when deriving FQ name for GraphQL schema element. - ([015aa6a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/015aa6a9a227f387d16157fb2d1dc7a58f5d049b)) - Wannes Kerckhove
+
+### Documentation
+
+- openapi filter to add `@context` and compaction for jsonld responses and examples to the API docs - ([441a160](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/441a1601a596b86da81349ea87e0c265e7afa59a)) - Thomas Dupont
+
+### Features
+
+- [**breaking**] fine grained access control added (openfga authz integration) - ([4a0f9ad](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4a0f9ad41e89716f9dc26379727c1119473f2797)) - Wannes Kerckhove
+- **(ui)** Kvasir UI is now part of the same codebase - Thomas Dupont
+- **(ui)** Kvasir UI is now started alongside the monolith (on path `/_ui`) - Thomas Dupont
+- **(ui)** UI added to manage Access Control of your pod - Thomas Dupont
+- openapi filter to automatically add `@context` and compaction to the API docs - ([0af9184](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/0af9184de869be53dfaa08fe3346ae247a72f176)) - Thomas Dupont
+- also add `@context` when prefixes are detected - ([e706805](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/e70680576a793ae74d802e6e1804d35482ec5a06)) - Thomas Dupont
+- also add `@context` on single items - ([f846837](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/f8468376af2593516f303f0381cf2c09d108d096)) - Thomas Dupont
+
+### Refactoring
+
+- **(openapi)** replace log.debug with log.trace statements - ([a9256ff](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a9256ff896231b1e99a44dcc893ba258e097e2d4)) - Thomas Dupont
+
+---
+
+## [0.7.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.6.4..0.7.0) - 2025-06-23
+
+### Features
+
+- **(ui)** All json and graphql fields are now monaco-editor fields - ([439ffa5](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/439ffa5d39117572503b51a0a9d0f2c490155525)) - Thomas Dupont
+
+### Miscellaneous Chores
+
+- **(deploy)** various helmfile fixes for local and CNL deployment - ([c6f6c76](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c6f6c761f9163e7bf7eecedcba0a51a95bb3ba11)) - Jasper Vaneessen
+- **(helm)** fix kvasir image registry - ([fa3328c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/fa3328c95c9b0618c1a2ca42355bc495bf01fe5d)) - Jasper Vaneessen
+- **(helm)** fix tag and registry overrides - ([fc2d113](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/fc2d113536b649d61bae4fa2e118500d1c5ca60e)) - Jasper Vaneessen
+- **(helm)** default SA for kvasir UI - ([dd97390](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/dd97390d9be97ac98ed81509f504fe1de00466e1)) - Jasper Vaneessen
+- **(helm)** facilitate deploy from new repo and add config options - ([5a2e26a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5a2e26ac109e5733cba1c024d1ccd5f9389d0de2)) - Jasper Vaneessen
+- **(ui)** version bump (without default tag) - ([0525efc](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/0525efc5fa53ec9b75c729061dbe48b13b44f0bd)) - Thomas Dupont
+- initial commit of kvasir-ui code - ([c4b0b42](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c4b0b425edc109bc4d13ca26c5e8dc92c2d09d67)) - Thomas Dupont
+- move kvasir-ui chart and change helmfile entry - ([6d29363](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/6d2936335404e8628cbc8dc54783ed07ac6229a7)) - Jasper Vaneessen
+- Added/reworked docs, fixed some API inconsistencies - ([fbd87e6](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/fbd87e68bda2a2308575652b538f875ac5be25ac)) - Wannes Kerckhove
+
+---
+
+## [0.6.4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.6.3..0.6.4) - 2025-05-27
+
+### Bug Fixes
+
+- fix Fix for #30, but causes test failures - ([5b2b194](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5b2b19440e5d926454fda55520241397fe11e53c)) - Wannes Kerckhove
+- Fix for tests failures - ([964706d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/964706d3c977489ed9a0c92f2b37986d23fd7848)) - Wannes Kerckhove
+
+### Miscellaneous Chores
+
+- bumped docker-compose monolith version - ([3035cdb](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/3035cdb8df87cf1dd1f4587ae6ca56fcf302e213)) - Wannes Kerckhove
+
+---
+
+## [0.6.3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.6.2..0.6.3) - 2025-05-26
+
+### Bug Fixes
+
+- Fixed #29 - ([e8bd804](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/e8bd804401c61f4b6f198197e398f4f78b92104d)) - Wannes Kerckhove
+
+### Miscellaneous Chores
+
+- bumped docker compose monolith image version - ([c0d0b38](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c0d0b380a87a80672c9844dad32f177326d7cc1f)) - Wannes Kerckhove
+
+---
+
+## [0.6.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.6.1..0.6.2) - 2025-05-22
+
+### Bug Fixes
+
+- Fix for #20, FQN not being used due to missing parentheses - ([3382a7a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/3382a7a972f88629efd68911ef0d5e020bcf6d31)) - Wannes Kerckhove
+- Fixed change request validator when multiple GraphQL input fields map to the same relation. - ([7e05027](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7e05027b6fb46f35c5bd887a0b6c81cd8b599a91)) - Wannes Kerckhove
+
+### Miscellaneous Chores
+
+- updated docker compose image ref - ([c812c68](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c812c68c695aed5535a430aa081db3bd3ed9d380)) - Wannes Kerckhove
+
+---
+
+## [0.6.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.6.0..0.6.1) - 2025-05-13
+
+### Bug Fixes
+
+- Hotfix for messages in the change.requests topic not getting acked - ([74d6c62](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/74d6c62b9a22fa3905b62def2474d6228f63a6f5)) - Wannes Kerckhove
+
+---
+
+## [0.6.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.5.1..0.6.0) - 2025-05-12
+
+### Bug Fixes
+
+- Fixed formatting of JSON-LD change request SSE output - ([8a161a0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/8a161a07d2932d9ae46ada61a3133c785e902147)) - Wannes Kerckhove
+- Fix for #18 - ([71f9ee9](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/71f9ee96eec8384810f0edd2e2f58a91793e223b)) - Wannes Kerckhove
+- Various fixes to pagination (also works with GraphQL variables now) - ([cc7401e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/cc7401e76a78a1656232b47af463332d56bec01d)) - Wannes Kerckhove
+- Fixed tests (default management test-port clashed with minio docker compose port) - ([6974413](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/697441388770c02ea5aa5683ae5bca2340864b6d)) - Wannes Kerckhove
+- Fixes #23 - ([716476d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/716476dbc8cfa6bebf3d08e431004ed034762c4d)) - Wannes Kerckhove
+- Fix for #24 - ([898279f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/898279f2009101480eab8457d70444c483de0936)) - Wannes Kerckhove
+- Mismatch of change request id bound timestamp and storage timestamp - ([c59a4a8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c59a4a8f6eef70ee2580ee5b0436489c77b5ec3f)) - Wannes Kerckhove
+- Fixed test util config - ([ad04c85](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ad04c8569cfb630a0fb5256ec70e2474f04edf22)) - Wannes Kerckhove
+- Fixed GraphQL string array argument parsing - ([187cf21](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/187cf212c7b17c4ce1a6c73e65732b1c517c6ea6)) - Wannes Kerckhove
+- Fixed fqPodId for change request SSE - ([6b4eccd](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/6b4eccd12675a8e8ce077c9ac54226e6c92dcdf4)) - Wannes Kerckhove
+- Fixed loading change records for Slice change requests. Report now also includes error message - ([ee8c425](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ee8c4256a5302a671b6505091461781c3a19ea06)) - Wannes Kerckhove
+- Fixed and optimized GraphQL subscription streaming - ([6114876](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/6114876c2888e471cfcd915f1e4bb239bd67d3cd)) - Wannes Kerckhove
+- Node filter can now refer to a variable (fixes #26) - ([2f6933f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/2f6933f964c96969f3301fc0e54fdde22db8df17)) - Wannes Kerckhove
+- Fixed \_rawRDF implementation (closes #27) - ([ad1f7bd](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ad1f7bda57427ab622050cab35b833db511ca104)) - Wannes Kerckhove
+
+### Features
+
+- added support for preconfigured clients (to be generated during Keycloak setup) - ([3a48e8a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/3a48e8af1d2d6ffbea17dbb7dee7f00b7312c56d)) - Wannes Kerckhove
+- Support for s,p.o,g filter when querying change records - ([87a2212](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/87a2212ab5a308c253866262b3fd85d6527608ad)) - Wannes Kerckhove
+- enable GraphQL query endpoint via GET for Slices - ([e1b1b71](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/e1b1b7145055322245fb9a70f70ce9cf2cb89a47)) - Wannes Kerckhove
+- Added support for nested orderBy statements - ([40d5917](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/40d591707f21d0e326273566aef41cf64afe12ad)) - Wannes Kerckhove
+
+### Miscellaneous Chores
+
+- added additional prefixes to alice default config - ([5b2fa08](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5b2fa0893c2d6807cd6071197ae558c2a598f2fd)) - Wannes Kerckhove
+- [**breaking**]Switched to GraphQL based Slice input validation (instead of SHACL). - ([9e6c4fc](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/9e6c4fc0e98ad208c279bc28a341b17626817a19)) - Wannes Kerckhove
+
+---
+
 ## [0.5.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.5.0..0.5.1) - 2025-05-02
 
 ### Bug Fixes
 
+- **(compose)** clickhouse version back to 24.8.11.5 - ([006cfb4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/006cfb4305c6f87bccfaeb8900bd70895a65bef0)) - Thomas Dupont
+- **(writerside)** use up to date docker version for writerside building - ([bfd0ab5](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/bfd0ab5747ed5a080bb300dc79905dd2f780b5e1)) - Thomas Dupont
 - KvasirUriInfo abstraction allows running Kvasir behind a reverse proxy - ([967796b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/967796b4f1fb604343d842cdbd152f7a4bcef63c)) - Wannes Kerckhove
 - wrong package for ClickhouseClientConfig fixed - ([61f1085](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/61f1085474665c1c4b08c883ed7af22f6d34361b)) - Thomas Dupont
 - uploading s3 files (special chars) no longer crashes simple rdf pipeline - ([10a0f15](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/10a0f15f510f59a97d613acdaff00c4eccac227f)) - Thomas Dupont
 
 ### Documentation
 
+- update changelog - ([6864186](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/68641864866c7d81327f533d632fc4ac1fd2032e)) - Jasper Vaneessen
 - Add documentation on Kubernetes deployments - ([dd997f3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/dd997f3af3fc852b3918a926e090d47d58c21e6e)) - Jasper Vaneessen
 
 ### Miscellaneous Chores
 
 - **(dependencies)** set CH version to Altinity LTS 24.8 - ([47ac5a0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/47ac5a0fcff1194e244ae65b0e44261a2fb3fd9b)) - Jasper Vaneessen
+- **(deps)** update docker images - ([df53928](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/df5392834db3c5314a5db4653d554461c147add7)) - Jasper Vaneessen
+- **(helm)** update appVersion - ([eab7c70](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/eab7c70ed4f15875c869bf07b03a615f3f4b20c7)) - Jasper Vaneessen
 - **(kubernetes)** Add Helm and Helmfile configurations along with helper scripts for Kubernetes deployments - ([21a53f6](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/21a53f648a296e3cccc468f306288adee9333c53)) - Jasper Vaneessen
 - **(release)** prepare release 0.5.1 - ([c329bb0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c329bb0e28efecb5ce239c0c1624a4ed4783adb6)) - Jasper Vaneessen
+- **(release)** clean up changelog - ([56695a8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/56695a8fe8144412ac05b13bb53bd4981d7710d7)) - Jasper Vaneessen
 - update dependencies - ([5f0ee38](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5f0ee38783a66a6cb9138ed3fbfcd58459f95e57)) - Jasper Vaneessen
+- update changelog [skip ci] - ([607fde4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/607fde4ef0919ee6d1b77cb413596390109a2957)) - Jasper Vaneessen
 
 ---
 
@@ -47,7 +180,13 @@ All notable changes to this project will be documented in this file. See [conven
 
 ### Miscellaneous Chores
 
-- **(compose)** update kvasir-ui to 0.4.4 release - ([a6c2a9d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a5f9d0cf99f3ed7f32e886962a5f92849146be73)) - Thomas Dupont
+- **(compose)** set monolith and kvasir-ui versions to 0.4.0 - ([efc86b7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/efc86b72bd5418914666bdf89c4d1989ff8e5154)) - Thomas Dupont
+- **(compose)** set kvasir-ui version to 0.4.1 - ([cf01848](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/cf018486f6eb428715c4a96d116747ce2dd6fa55)) - Thomas Dupont
+- **(compose)** update kvasir-ui to 0.4.2 release - ([882e3b5](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/882e3b516a11a757ab379c495114ef5c19a7e240)) - Thomas Dupont
+- **(compose)** update kvasir-ui to 0.4.3 release - ([1652ddd](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/1652ddd3adb2902cd0ab593d6ac37e09142cab76)) - Thomas Dupont
+- **(compose)** update kvasir-ui to 0.4.4 release - ([a6c2a9d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a6c2a9dd769dc050cfc61d3dba24ceeb2739d93c)) - Thomas Dupont
+- **(compose)** prepare for monolith 0.4.1 release - ([a5f9d0c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a5f9d0cf99f3ed7f32e886962a5f92849146be73)) - Thomas Dupont
+- **(release)** update changelog - ([6444cda](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/6444cda56387c8bf501ba0d716fa193d5f801e00)) - Jasper Vaneessen
 - fix changelog gitlab URLs - ([44a9dc2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/44a9dc23afb691233247094f0c3f5857dfd7327f)) - Jasper Vaneessen
 
 ---
@@ -77,13 +216,10 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
-## [0.3.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.1.10..0.3.0) - 2025-02-13
+## [0.3.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.2.0..0.3.0) - 2025-02-13
 
 ### Bug Fixes
 
-- .deployment docker-compose.yml - ([859f93f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/859f93f9556d59bddc6013ef88441935071350a2)) - tdupont
-- 409 on reboot when realm already exists, no longer crashes kvasir - ([fe83e94](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/fe83e94d699acc58825011264e518bfe58d1b749)) - tdupont
-- everything under /q/ is reachable again in dev mode - ([bfa5db2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/bfa5db2a327ecd12576dcececba4f67cd29f4787)) - tdupont
 - delete slices targets to correct table again - ([616dd8d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/616dd8d2cabf175e066c7b15c6bd58bec066c7a9)) - tdupont
 - docker compose versions for monolith and kvasir-ui were wrong - ([7f96ab5](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7f96ab53e0226690642c1c21466bf1a0be0decc5)) - tdupont
 
@@ -93,19 +229,35 @@ All notable changes to this project will be documented in this file. See [conven
 
 ### Features
 
-- add SmallRye health checks to all services + readiness check for monolith initialization - ([90c92f0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/90c92f00f28ffdbe822613e04f753954b92c25ff)) - Jasper Vaneessen
 - set more sensible auth timeout values - ([936cb1f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/936cb1ffdd5e30437645e1da2d1933a25ff5445e)) - tdupont
 - [**breaking**]introduced Custom data backends (incl. SAREF timeseries PoC) - ([43f9b2f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/43f9b2fbd3d5ad3d6d865de8cbbf57e8a5ef6209)) - Wannes Kerckhove
 
 ### Miscellaneous Chores
 
-- **(compose)** run kvasir in host networking mode - ([ad55314](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ad553147dcf0f610fef292be2375b8ce1dc88323)) - tdupont
 - **(compose)** pin kvasir and kvasir-ui versions - ([571d1eb](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/571d1ebb64b97c1d9a152269eb2817d962459dd2)) - Jasper Vaneessen
+- update ui to 0.3.3 - ([2b0bbd2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/2b0bbd2f61812c2ab78b31790299f87476f13c6b)) - Thomas Dupont
+- prepare update kvasir to 0.3.0 - ([6be1093](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/6be10939f294f9c024f0bcdee49aa593393ce8f6)) - Thomas Dupont
+
+---
+
+## [0.2.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.1.10..0.2.0) - 2025-01-13
+
+### Bug Fixes
+
+- .deployment docker-compose.yml - ([859f93f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/859f93f9556d59bddc6013ef88441935071350a2)) - tdupont
+- 409 on reboot when realm already exists, no longer crashes kvasir - ([fe83e94](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/fe83e94d699acc58825011264e518bfe58d1b749)) - tdupont
+- everything under /q/ is reachable again in dev mode - ([bfa5db2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/bfa5db2a327ecd12576dcececba4f67cd29f4787)) - tdupont
+
+### Features
+
+- add SmallRye health checks to all services + readiness check for monolith initialization - ([90c92f0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/90c92f00f28ffdbe822613e04f753954b92c25ff)) - Jasper Vaneessen
+
+### Miscellaneous Chores
+
+- **(compose)** run kvasir in host networking mode - ([ad55314](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ad553147dcf0f610fef292be2375b8ce1dc88323)) - tdupont
 - docs updated and code cleanup - ([a252762](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a252762b50e87d3cc0c013e0d09e7103a5e6677d)) - tdupont
 - update kvasir-ui to 0.2.3 - ([a1bc6ff](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a1bc6fff950f9dd86bf26dcde81aa2f264883333)) - tdupont
 - update changelog - ([5d8db89](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5d8db89e559c5a881b0690be4a4b29704f59604a)) - Jasper Vaneessen
-- update ui to 0.3.3 - ([2b0bbd2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/2b0bbd2f61812c2ab78b31790299f87476f13c6b)) - Thomas Dupont
-- prepare update kvasir to 0.3.0 - ([6be1093](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/6be10939f294f9c024f0bcdee49aa593393ce8f6)) - Thomas Dupont
 
 ---
 

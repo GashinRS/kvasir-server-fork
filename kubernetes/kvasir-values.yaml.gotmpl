@@ -12,8 +12,6 @@ global:
   env:
     - name: KVASIR_BASE_URI
       value: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.kvasirHost }}/"
-    - name: KVASIR_WEBCLIENT_URI
-      value: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.kvasirHost }}/_ui/"
 
   deploymentStrategy:
     type: Recreate
@@ -22,6 +20,17 @@ global:
     httpPort: 8080
     metricsPort: 9000
 
+  applicationYaml:
+    quarkus:
+      log:
+        level: INFO
+        category:
+          "kvasir":
+            level: DEBUG
+            min-level: DEBUG
+          "idlab.quarkus.ext.pep.openfga":
+            level: DEBUG
+            min-level: DEBUG
 
   {{- if eq .Environment.Name "kind" }}
   truststore:
@@ -40,11 +49,13 @@ global:
     realmSecretKey: ""
   keycloakAdmin:
     enabled: true
-    username: "kcadmin"
+    username: "kcadmin" 
     password: {{ .StateValues.keycloakAdminPassword }}
     realm: "master"
-    authAdminServerUrl: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.keycloakHost }}"
-
+    serverUrl: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.keycloakHost }}"
+  openfga:
+    url: "http://openfga.auth:8080"
+    storeId: "kvasir"
 
   minio:
     host: "minio.minio.svc.cluster.local"
@@ -67,3 +78,5 @@ global:
 "init-service":
   enabled: {{ .StateValues.initEnabled }}
 
+"ui-service":
+  enabled: true

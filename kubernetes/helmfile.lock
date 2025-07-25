@@ -5,7 +5,7 @@ dependencies:
     version: 0.24.5
   - name: keycloak
     repository: oci://registry-1.docker.io/bitnamicharts
-    version: 24.6.1
+    version: 24.7.7
   - name: minio
     repository: oci://registry-1.docker.io/bitnamicharts
     version: 16.0.8
@@ -15,5 +15,5 @@ dependencies:
   - name: traefik
     repository: https://helm.traefik.io/traefik
     version: 35.1.0
-digest: sha256:5fb722e29020a8e01554eb496258b2bed9fd6ef382e988a9a2a3f7fbaed30355
-generated: "2025-06-06T10:35:06.052634775+02:00"
+digest: sha256:375816738c0dcb720546c2e0c10133220a0419d51dadfaf3c78292408e806fb5
+generated: "2025-07-18T11:26:32.559830171+02:00"

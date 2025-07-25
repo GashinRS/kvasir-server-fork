@@ -1,5 +1,12 @@
 postgresql:
-  enabled: true
+  enabled: false
+externalDatabase:
+  existingSecret: keycloak.pgauth.credentials.postgresql.acid.zalan.do
+  existingSecretUserKey: username
+  existingSecretPasswordKey: password
+  host: pgauth.auth
+  port: 5432
+  database: keycloak
 
 proxy: edge
 production: true
@@ -17,3 +24,4 @@ ingress:
   secrets:
     - name: "trigger-usage-of-external-tls-secret"
 {{- end }}
+

@@ -2,20 +2,24 @@ kind: "postgresql"
 apiVersion: "acid.zalan.do/v1"
 
 metadata:
-  name: "pgkeycloak"
-  namespace: "keycloak"
+  name: "pgauth"
+  namespace: "auth"
+  labels:
+    team: kvasir
 
 spec:
-  teamId: "keycloak"
+  teamId: "kvasir"
   postgresql:
-    version: "16"
+    version: "17"
   numberOfInstances: 1
   volume:
     size: "10Gi"
   users:
     keycloak: ["SUPERUSER"]
+    openfga: ["SUPERUSER"]
   databases:
     keycloak: keycloak
+    openfga: openfga
 
   resources:
     requests:

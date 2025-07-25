@@ -2,14 +2,14 @@
 
 > Kvasir should eventually comply to
 > the [Trustflows specification](https://spec.knows.idlab.ugent.be/trustflows/all/e45c02bd3711f5734eeb75548ff37a70f57c465e/).
-> In the meantime, we've integrated [Keycloak](https://www.keycloak.org/) as an authentication and authorization
-> solution.
+> In the meantime, we've integrated [Keycloak](https://www.keycloak.org/) and [OpenFGA](https://openfga.dev) as the
+> default authentication and authorization solution.
 >
-> We plan to keep on supporting this Keycloak flavour in future releases, as this may be useful for simpler,
+> We plan to keep on supporting this Keycloak/OpenFGA flavour in future releases, as this may be useful for simpler,
 > non-decentralized applications.
 > {style="note"}
 
-Kvasir uses Keycloak as authentication solution. For now it will also manage authorization. Some of the main benefits
+Kvasir uses Keycloak as authentication solution. OpenFGA is used to manage authorization. Some of the main benefits
 for choosing Keycloak are:
 
 * Uses battle-tested
@@ -19,6 +19,10 @@ for choosing Keycloak are:
 * Client libraries available in multiple languages (not all
   official): [javascript](https://www.keycloak.org/securing-apps/javascript-adapter), [java](https://github.com/keycloak/keycloak-client), [python](https://pypi.org/project/python-keycloak/)
 
+OpenFGA on the other hand is an open-source implementation of the Google Zanzibar, a globally distributed authorization
+system that manages permissions at scale (powering authorization policies for Google Services such as YouTube, Drive,
+Calendar, Cloud and Maps.).
+
 ## Keycloak boostrap configuration
 
 Once you start Kvasir (through either [Docker Compose](Getting-started.md#running-with-docker-compose)
@@ -26,14 +30,12 @@ or [Dev mode](Getting-started.md#running-in-dev-mode)) the following will happen
 
 * A keycloak instance is spun up, it will have a default `master` realm and an imported `quarkus` realm for initial
   setup
-* For each pod an additional realm will be created, with the same name as the pod. (eg. `alice`)
-* In each realm, two clients are created:
-    * **kvasir-server**: this client manages the pod's authorization. A default policy is created that will allow users
-      with the realm role `owner` to access any resources on their pod.
+* In the `quarkus` realm, two clients are created:
+    * **quarkus-app**: this client is used by the Kvasir backend to verify tokens issued by this Keycloak instance.
     * **kvasir-ui**: this client manages authentication for the Kvasir UI client, which is a Single Page Application. It
-      is there mainly to be able to log into the pod's realm and thus get a token with the realm role `owner`. This
+      is there mainly to be able to log into the pod's realm and thus get a token. This
       bearer token can then be sent to the [Kvasir APIs](API-Reference.md).
-* They will also have a default user named after their pod name. Temporary credentials for that user are set to
+* A default user is created for each Pod. Temporary credentials for that user are set to
   `podname:podname` (eg. `alice:alice`). Upon a first login, these will be prompted for change.
 
 ## Creating your own client
@@ -56,11 +58,11 @@ by [OpenID Connect 1.0](https://openid.net/specs/openid-connect-core-1_0.html).
 
 #### 1. Create a public client in Keycloak
 
-You will first need a public client configured in your pod's keycloak realm.
+You will first need a public client configured in the `quarkus` keycloak realm.
 
 * To do that open the keycloak instance via its default URL: [](http://localhost:8280)
 * Log in with the default keycloak admin credentials: `admin:admin`
-* In the top left, there is a realm selector: select your pod's realm (`alice` in this example)
+* In the top left, there is a realm selector: select the `quarkus` realm.
   ![Keycloak realm selection](kc_realm_sel.png)
 * Go to the `Clients` section and click the `Create client` button
 * Enter a `Client ID` of your choosing
@@ -167,11 +169,11 @@ To do this it can use its client credentials to request a bearer token directly 
 
 #### 1. Create a confidential client in keycloak
 
-You will first need a confidential client configured in your pod's keycloak realm.
+You will first need a confidential client configured in the `quarkus` realm.
 
 * To do that open the keycloak instance via its default URL: [](http://localhost:8280)
 * Log in with the default keycloak admin credentials: `admin:admin`
-* In the top left, there is a realm selector: select your pod's realm (`alice` in this example)
+* In the top left, there is a realm selector: select the `quarkus` realm.
   ![Keycloak realm selection](kc_realm_sel.png)
 * Go to the `Clients` section and click the `Create client` button
 * Enter a `Client ID` of your choosing
@@ -184,17 +186,6 @@ You will first need a confidential client configured in your pod's keycloak real
 * Now click `Save` and your new client config opens.
 * Now go the `Credentials` tab and your can view your generated `client_secret` there.
 * Your chosen `Client ID` and generated `client_secret` form your pair of _Client credentials_ for the next step.
-
-> If you want the client itself to be able to access the resources protected by the default policy of this realm,
-> you will have to set the _service-account_ of this client to have the `owner` role.
->
-> * Go to the Client configuration of your client, and open the `Service accounts roles` tab.
-> * Click `Assign role`
-> * Change the selection box from ~~`Filter by clients`~~ to `Filter by realm roles`.
-> * Select `owner` and click `Assign` below.
-> * Granted tokens will now include the `owner` realm role.
->
-{style="note"}
 
 Now you have all you need to let your confidential client request a bearer token from the keycloak realm and be
 authenticated as itself.

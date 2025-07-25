@@ -22,6 +22,11 @@
             <artifactId>quarkus-reactive-routes</artifactId>
         </dependency>
         <dependency>
+            <groupId>kvasir-plugins</groupId>
+            <artifactId>kafka-messaging</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
             <groupId>io.smallrye.reactive</groupId>
             <artifactId>smallrye-mutiny-vertx-http-proxy</artifactId>
         </dependency>
@@ -33,6 +38,11 @@
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>clickhouse-knowledge-graph</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-plugins</groupId>
+            <artifactId>openfga-policy-agent</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>

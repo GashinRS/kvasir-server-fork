@@ -47,7 +47,16 @@ object RDFTransformer {
         val rdf4jStatements = statements.map { asRDF4JStatement(it) }
         return StringWriter().use { writer ->
             Rio.write(rdf4jStatements, writer, RDFFormat.JSONLD)
-            JsonUtils.fromString(writer.toString()) as JSONObject
+            val jsonld = JsonUtils.fromString(writer.toString())
+            if (jsonld is Iterable<*>) {
+                // If the result is a list, we wrap it in a map with a graph key
+                mapOf(JsonLdKeywords.graph to jsonld)
+            } else if (jsonld is Map<*, *>) {
+                // If it's already a map, we return it directly
+                jsonld as JSONObject
+            } else {
+                throw IllegalArgumentException("Unexpected JSON-LD format: $jsonld")
+            }
         }
     }
 

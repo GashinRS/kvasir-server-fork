@@ -11,7 +11,6 @@ import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.kg.changes.ChangeRequestTxBufferFactory
 import kvasir.definitions.kg.changes.ChangeRequestTxBufferStatistics
 import kvasir.definitions.reactive.asMulti
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 
 @ApplicationScoped
@@ -45,26 +44,29 @@ class InMemoryChangeRequestTxBufferFactory(private val vertx: Vertx) : ChangeReq
             }
 
             override fun add(records: List<ChangeRecord>): Uni<Void> = vertx.executeBlocking {
-                records.forEach { record ->
-                    when (record.type) {
-                        ChangeRecordType.INSERT -> insertRecords.add(record)
-                        ChangeRecordType.DELETE -> deleteRecords.add(record)
+                records.groupBy { it.type }.forEach { (type, records) ->
+                    when (type) {
+                        ChangeRecordType.INSERT -> insertRecords.addAll(records)
+                        ChangeRecordType.DELETE -> deleteRecords.addAll(records)
                     }
                 }
             }.replaceWithVoid()
 
             override fun remove(records: List<ChangeRecord>, stored: Boolean): Uni<Void> = vertx.executeBlocking {
-                records.forEach { record ->
-                    when (record.type) {
-                        ChangeRecordType.INSERT -> insertRecords.remove(record)
-                        ChangeRecordType.DELETE -> deleteRecords.remove(record)
-                    }
-                }
-                if (stored) {
-                    records.forEach {
-                        when (it.type) {
-                            ChangeRecordType.INSERT -> nrOfInserts.incrementAndGet()
-                            ChangeRecordType.DELETE -> nrOfDeletes.incrementAndGet()
+                records.groupBy { it.type }.forEach { (type, records) ->
+                    when (type) {
+                        ChangeRecordType.INSERT -> {
+                            insertRecords.removeAll(records)
+                            if (stored) {
+                                nrOfInserts.addAndGet(records.size.toLong())
+                            }
+                        }
+
+                        ChangeRecordType.DELETE -> {
+                            deleteRecords.removeAll(records)
+                            if (stored) {
+                                nrOfDeletes.addAndGet(records.size.toLong())
+                            }
                         }
                     }
                 }
@@ -77,7 +79,11 @@ class InMemoryChangeRequestTxBufferFactory(private val vertx: Vertx) : ChangeReq
                     )
             }
 
-            override fun destroy(): Uni<Void> = vertx.executeBlocking {
+            override fun destroy(stored: Boolean): Uni<Void> = vertx.executeBlocking {
+                if (stored) {
+                    nrOfInserts.addAndGet(this.insertRecords.size.toLong())
+                    nrOfDeletes.addAndGet(this.deleteRecords.size.toLong())
+                }
                 this.insertRecords.clear()
                 this.deleteRecords.clear()
             }.replaceWithVoid()
