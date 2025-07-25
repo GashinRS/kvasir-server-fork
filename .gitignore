@@ -47,3 +47,6 @@ kubernetes/.env
 
 # Ignore _openapi folder
 _openapi
+
+# Local folder
+.local

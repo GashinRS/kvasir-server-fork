@@ -1,10 +1,8 @@
 kvasir:
   plugins:
     policy-agent:
-      keycloak:
+      openfga:
         enabled: true
-      solid-uma:
-        enabled: false
   services:
     storage:
       s3:
@@ -43,65 +41,32 @@ quarkus:
         keycloak:
           realm-initializer:
             request-password-reset: false
-    webclient-uri: http://localhost:4200/_ui
+    webclient-uri: http://localhost:8080/_ui
     bootstrap:
       pods:
         - name: alice
-          default-context: |
+          configuration: |
             {
-              "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
-              "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-              "xsd": "http://www.w3.org/2001/XMLSchema#",
-              "schema": "http://schema.org/",
-              "ex": "http://example.org/",
-              "saref": "https://saref.etsi.org/core/",
-              "mo": "http://purl.org/ontology/mo/",
-              "dc": "http://purl.org/dc/elements/1.1/",
-              "foaf": "http://xmlns.com/foaf/0.1/",
-              "hasMeasurement": {
-                "@reverse": "https://saref.etsi.org/core/measurementMadeBy"
+              "@context": {
+                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
               },
-              "children": { "@reverse": "http://example.org/parent" }
+              "kss:autoIngestRDF": true,
+              "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
             }
-          auto-ingest-rdf: true
-          preconfigured-clients:
-            - client-id: music-tracker
-              redirect-uris:
-                - http://localhost:5173/*
-            - client-id: music-tracker-client
+          generate-clients:
+            - client-id: demo-client
               client-secret: testtest
               enable-service-account: true
+              openfga:
+                relationships:
+                  - target-resource: "/"
+                    relations: [ "reader", "writer", "deleter" ]
         - name: bob
-          default-context: |
+          configuration: |
             {
-              "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
-              "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-              "xsd": "http://www.w3.org/2001/XMLSchema#",
-              "schema": "http://schema.org/",
-              "ex": "http://example.org/"
+              "@context": {
+                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+              },
+              "kss:autoIngestRDF": true,
+              "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
             }
-          auto-ingest-rdf: false
-        - name: swdemo
-          default-context: |
-            {
-              "@language": "en",
-              "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
-              "voc": "https://swapi.co/vocabulary/",
-              "commons": "https://commons.wikimedia.org/wiki/Special:FilePath/",
-              "dc": "http://purl.org/dc/elements/1.1/",
-              "dct": "http://purl.org/dc/terms/",
-              "owl": "http://www.w3.org/2002/07/owl#",
-              "p": "http://www.wikidata.org/prop/",
-              "pq": "http://www.wikidata.org/prop/qualifier/",
-              "ps": "http://www.wikidata.org/prop/statement/",
-              "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-              "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-              "wd": "http://www.wikidata.org/entity/",
-              "wds": "http://www.wikidata.org/entity/statement/",
-              "wdt": "http://www.wikidata.org/prop/direct/",
-              "wgs": "http://www.w3.org/2003/01/geo/wgs84_pos#",
-              "wikibase": "http://wikiba.se/ontology#",
-              "xml": "http://www.w3.org/XML/1998/namespace",
-              "xsd": "http://www.w3.org/2001/XMLSchema#"
-            }
-          auto-ingest-rdf: true

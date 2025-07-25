@@ -16,13 +16,17 @@ import kvasir.utils.test.commons.TestHelpers
 import kvasir.utils.test.commons.TimeseriesData
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.MethodOrderer
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.TestMethodOrder
 
 @QuarkusTest
 @TestHTTPEndpoint(QueryApi::class)
 @QuarkusTestResource(ClickhouseTestResource::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class QueryApiSpecializedStorageTest {
 
     @Inject
@@ -50,6 +54,7 @@ class QueryApiSpecializedStorageTest {
     }
 
     @Test
+    @Order(0)
     fun testGetSensorDataViaFilter() {
         val selectedSeries = sensorData.sensors.random()
         val selectedId = selectedSeries[JsonLdKeywords.id] as String
@@ -80,6 +85,7 @@ class QueryApiSpecializedStorageTest {
     }
 
     @Test
+    @Order(1)
     fun testGetSensorDataViaReverseRelation() {
         val selectedSeries = sensorData.sensors.random()
         val selectedId = selectedSeries[JsonLdKeywords.id] as String

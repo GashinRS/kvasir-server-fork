@@ -6,6 +6,7 @@ import com.github.jsonldjava.utils.JsonUtils
 import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
 import jakarta.ws.rs.ext.*
+import kvasir.definitions.rdf.FgaVocab
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
@@ -13,7 +14,7 @@ import kvasir.definitions.rdf.KvasirVocab
 private const val MAIN_MEDIA_TYPE = "application"
 private const val SUB_MEDIA_TYPE = "ld+json"
 
-private val defaultContext = mapOf("kss" to KvasirVocab.baseUri)
+private val defaultContext = mapOf("kss" to KvasirVocab.baseUri, "kss-fga" to FgaVocab.baseUri)
 
 @Provider
 class JsonLDBodyInterceptor : WriterInterceptor, ReaderInterceptor {

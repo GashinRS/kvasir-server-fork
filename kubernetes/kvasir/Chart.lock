@@ -1,27 +1,30 @@
 dependencies:
 - name: quarkus-template
-  repository: file://../quarkus-template
-  version: 0.1.0
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
 - name: quarkus-template
-  repository: file://../quarkus-template
-  version: 0.1.0
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
 - name: quarkus-template
-  repository: file://../quarkus-template
-  version: 0.1.0
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
 - name: quarkus-template
-  repository: file://../quarkus-template
-  version: 0.1.0
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
 - name: quarkus-template
-  repository: file://../quarkus-template
-  version: 0.1.0
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
 - name: quarkus-template
-  repository: file://../quarkus-template
-  version: 0.1.0
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
 - name: quarkus-template
-  repository: file://../quarkus-template
-  version: 0.1.0
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
 - name: quarkus-template
-  repository: file://../quarkus-template
-  version: 0.1.0
-digest: sha256:cf57a6fd6594b09fcef3b0ebce1504d15efffef8f941b1c5f48c8be5fad2bd47
-generated: "2025-06-06T10:34:53.747209715+02:00"
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
+- name: quarkus-template
+  repository: https://idlab-discover.github.io/charts/
+  version: 0.2.2
+digest: sha256:6c4b4b9d8123712091313327387118cb5b7a421456edccdf47d8d36e5e8fa790
+generated: "2025-07-18T16:47:42.995772044+02:00"

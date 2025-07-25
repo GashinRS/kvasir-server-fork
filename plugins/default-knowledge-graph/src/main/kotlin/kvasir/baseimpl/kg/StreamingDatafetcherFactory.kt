@@ -17,8 +17,8 @@ import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.kg.graphql.*
-import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.RDFVocab
+import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.graphql.getDirectiveArg
 import kvasir.utils.graphql.getFQName
 import kvasir.utils.graphql.innerType

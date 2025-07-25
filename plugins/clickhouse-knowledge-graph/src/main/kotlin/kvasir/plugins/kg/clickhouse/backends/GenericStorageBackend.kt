@@ -39,7 +39,7 @@ class GenericStorageBackend(
             }
             .skipToLast()
             .chain { _ ->
-                buffer.destroy()
+                buffer.destroy(stored = true)
             }
             .invoke { _ ->
                 Log.debug("Stored change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")

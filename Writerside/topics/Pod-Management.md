@@ -80,18 +80,31 @@ example:
 kvasir:
   bootstrap:
     pods:
-      - name: alice
-        default-context: |
-          {
-            "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
-            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-            "xsd": "http://www.w3.org/2001/XMLSchema#",
-            "schema": "http://schema.org/",
-            "ex": "http://example.org/",
-            "saref": "https://saref.etsi.org/core/"
-          }
-        auto-ingest-rdf: true
+    - name: alice
+      configuration: |
+        {
+          "@context": {
+            "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+          },
+          "kss:autoIngestRDF": true,
+          "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
+        }
+      generate-clients:
+        - client-id: demo-client
+          client-secret: testtest
+          enable-service-account: true
+          openfga:
+            relationships:
+              - target-resource: "/"
+                relations: [ "reader", "writer", "deleter" ]
 ```
+
+As you can see, from this configuration entry you can also create clients and setup permissions for the Pod. The
+`generate-clients` section allows you to specify a list of clients that should be created for the Pod. Each client
+can have a `client-id`, `client-secret`, and an optional `enable-service-account` flag to indicate whether
+a service account should be created for the client. The `openfga` section allows you to specify the OpenFGA
+relationships for the client, which define the permissions that the client has on the Pod's resources. In this example,
+the client has `reader`, `writer`, and `deleter` permissions on the Pod's root resource (`/`).
 
 ### Via Pod Management API
 

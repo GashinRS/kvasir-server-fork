@@ -12,17 +12,6 @@ services:
         soft: 262144
         hard: 262144
 
-  ui:
-    build: ./ui
-    pull_policy: build
-    ports:
-      - "3000:4200"
-
-#  kvasir-ui:
-#    build: https://bot:sufPJVx5suVPs3W9kqxy@gitlab.ilabt.imec.be/ibcndevs/solid/kvasir-ui.git#main
-#    ports:
-#      - "3000:4200"
-#    pull_policy: build
   minio:
     image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
     command: server /data --console-address ":9001"

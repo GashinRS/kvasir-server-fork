@@ -29,6 +29,7 @@
         <module>simple-rdf-ingester</module>
         <module>storage-api</module>
         <module>init-service</module>
+        <module>ui-service</module>
     </modules>
 
     <dependencies>
@@ -42,20 +43,9 @@
             <artifactId>jib-core</artifactId>
             <version>0.27.0</version>
         </dependency>
-
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-health</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>uma-policy-agent</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>keycloak-policy-agent</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
         </dependency>
     </dependencies>
 

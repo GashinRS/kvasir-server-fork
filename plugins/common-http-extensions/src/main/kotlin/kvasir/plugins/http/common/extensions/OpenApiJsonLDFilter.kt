@@ -28,43 +28,45 @@ class OpenApiJsonLDFilter : OASFilter {
     override fun filterOpenAPI(openAPI: OpenAPI) {
         log.info("Filtering and compacting OpenAPI Schema...")
         // Compact all component type definitions
-        openAPI.components.schemas(
-            openAPI.components.schemas
-                .map { Pair(it.key, compactSchema(it.value, it.key)) }
-                .toMap()
-        )
+        if (openAPI.components != null) {
+            openAPI.components.schemas(
+                openAPI.components.schemas
+                    .map { Pair(it.key, compactSchema(it.value, it.key)) }
+                    .toMap()
+            )
 
-        openAPI.components.schemas
-            // Only check schemas that have an @context property already
-            .filterValues { it.properties?.containsKey(AT_CONTEX_KEY) ?: false }
-            // Map each schema to its own properties schemas for ARRAY types, if properties is present
-            .flatMap {
-                it.value.properties?.filterValues { subScheme ->
-                    (subScheme.type?.contains(Schema.SchemaType.ARRAY) ?: false)
-                }?.values ?: emptyList()
-            }
-            // Set each array type properties ref to a new GraphItem affixed ref (that does not exist yet)
-            // Map the original refs
-            .mapNotNull {
-                val ref = it.items.ref;
-                it.items?.ref?.let { ref -> if (!ref.endsWith(GRAPH_ITEM_TYPE_SUFFIX)) it.items.ref(ref + GRAPH_ITEM_TYPE_SUFFIX) }
-                ref;
-            }
-            .filter { !it.endsWith(GRAPH_ITEM_TYPE_SUFFIX) }
-            // Create new types without @context from the original refs
-            .forEach {
-                val name = it.substringAfterLast("/")
-                log.debug("REF NAME: $name")
-                val newName = name + GRAPH_ITEM_TYPE_SUFFIX
-                // Only if it does not exist yet
-                if (!openAPI.components.schemas.contains(newName)) {
-                    val copy = deepCopySchema(openAPI.components.schemas.get(name)!!)
-                    // Create the new schema
-                    val newComponent = openAPI.components.addSchema(newName, copy)
-                    // Remove all occurrences of @context from it and its descendants
-                    removeAtContextRecursively(newComponent.schemas.get(newName)!!, newName)
+            openAPI.components.schemas
+                // Only check schemas that have an @context property already
+                .filterValues { it.properties?.containsKey(AT_CONTEX_KEY) ?: false }
+                // Map each schema to its own properties schemas for ARRAY types, if properties is present
+                .flatMap {
+                    it.value.properties?.filterValues { subScheme ->
+                        (subScheme.type?.contains(Schema.SchemaType.ARRAY) ?: false)
+                    }?.values ?: emptyList()
                 }
-            }
+                // Set each array type properties ref to a new GraphItem affixed ref (that does not exist yet)
+                // Map the original refs
+                .mapNotNull {
+                    val ref = it.items.ref;
+                    it.items?.ref?.let { ref -> if (!ref.endsWith(GRAPH_ITEM_TYPE_SUFFIX)) it.items.ref(ref + GRAPH_ITEM_TYPE_SUFFIX) }
+                    ref;
+                }
+                .filter { !it.endsWith(GRAPH_ITEM_TYPE_SUFFIX) }
+                // Create new types without @context from the original refs
+                .forEach {
+                    val name = it.substringAfterLast("/")
+                    log.trace("REF NAME: $name")
+                    val newName = name + GRAPH_ITEM_TYPE_SUFFIX
+                    // Only if it does not exist yet
+                    if (!openAPI.components.schemas.contains(newName)) {
+                        val copy = deepCopySchema(openAPI.components.schemas.get(name)!!)
+                        // Create the new schema
+                        val newComponent = openAPI.components.addSchema(newName, copy)
+                        // Remove all occurrences of @context from it and its descendants
+                        removeAtContextRecursively(newComponent.schemas.get(newName)!!, newName)
+                    }
+                }
+        }
     }
 
     private fun deepCopySchema(schema: Schema): Schema {
@@ -83,7 +85,7 @@ class OpenApiJsonLDFilter : OASFilter {
     }
 
     private fun removeAtContextRecursively(schema: Schema, logName: String?) {
-        log.debugf("RECURSIVE REMOVE @context for  %s", logName)
+        log.tracef("RECURSIVE REMOVE @context for  %s", logName)
         schema.removeProperty(AT_CONTEX_KEY)
         schema.removeRequired(AT_CONTEX_KEY)
         // Rewrite ref for arrays
@@ -100,7 +102,7 @@ class OpenApiJsonLDFilter : OASFilter {
     }
 
     private fun compactSchema(schema: Schema, logName: String): Schema {
-        log.debug("compactSchema: $logName")
+        log.trace("compactSchema: $logName")
         if (schema.required != null) {
             schema.required = schema.required.map(::compact)
         }
@@ -132,7 +134,7 @@ class OpenApiJsonLDFilter : OASFilter {
     }
 
     private fun addContextAndSamples(map: MutableMap<String, Schema>, logName: String): MutableMap<String, Schema> {
-        log.debug("Adding context and samples for $logName")
+        log.trace("Adding context and samples for $logName")
         // If @context exists or an @graph property is present
         if (map.containsKey(AT_GRAPH_KEY) || map.containsKey(AT_CONTEX_KEY) || map.keys.any { propKey ->
                 replacerMap.values.any { replKey ->

@@ -12,12 +12,12 @@ import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.PodStore
-import kvasir.definitions.messaging.Channels
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
+import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.s3.S3Utils
 import org.eclipse.microprofile.reactive.messaging.Incoming

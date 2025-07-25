@@ -1,0 +1,56 @@
+<nz-page-header nzTitle="Access control" nzSubtitle="Setup ReBAC for your pod">
+  <nz-page-header-extra nz-space>
+    <button
+      nz-button
+      nzType="primary"
+      nzGhost
+      (click)="checkPermission()"
+      *nzSpaceItem
+    >
+      Check permission
+    </button>
+    <button
+      nz-button
+      nzType="primary"
+      (click)="createRelationship()"
+      *nzSpaceItem
+    >
+      Create relationship
+    </button>
+  </nz-page-header-extra>
+</nz-page-header>
+
+@if (relationships.hasValue()) {
+  <nz-table #basicTable [nzData]="relationships.value()!">
+    <thead>
+      <tr>
+        <th>subject &#64;id</th>
+        <th>subject &#64;type</th>
+        <th>relation</th>
+        <th>object &#64;id</th>
+        <th>object &#64;type</th>
+        <th>&nbsp;</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (data of basicTable.data; track $index) {
+        <tr>
+          <td>{{ data["@id"] }}</td>
+          <td>{{ data["@type"] }}</td>
+          <td>{{ data.getRelationName() }}</td>
+          <td>{{ data.getRelationObject()["@id"] }}</td>
+          <td>{{ data.getRelationObject()["@type"] }}</td>
+          <td>
+            <button nz-button nzDanger nzSize="small">
+              <nz-icon
+                nzType="delete"
+                nzTheme="outline"
+                (click)="remove(data)"
+              />
+            </button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </nz-table>
+}
