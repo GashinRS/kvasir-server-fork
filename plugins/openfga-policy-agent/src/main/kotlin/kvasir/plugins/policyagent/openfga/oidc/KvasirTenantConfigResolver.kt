@@ -17,7 +17,7 @@ import kvasir.definitions.kg.PodStore
 import kvasir.plugins.policyagent.openfga.OpenFgaConstants
 import org.eclipse.microprofile.config.inject.ConfigProperty
 
-private val EXCLUDE_PATH_PREFIXES = setOf("/q/", "/favicon.ico", "/_ui", "/.well-known/")
+private val EXCLUDE_PATH_PREFIXES = setOf("/q/", "/favicon.ico", "/robots.txt", "/_ui", "/.well-known/")
 
 /**
  * Enables multi-tenant OIDC (i.e. each Pod can have its own OIDC configuration) op top of Quarkus OIDC.
