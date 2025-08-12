@@ -1,5 +1,5 @@
 {
-  "baseBranches": ["main"],
+  "baseBranches": ["next"],
   "packageRules": [
     {
       "matchCategories": ["helm"],
