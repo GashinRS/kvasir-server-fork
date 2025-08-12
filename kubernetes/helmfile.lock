@@ -9,11 +9,17 @@ dependencies:
   - name: minio
     repository: oci://registry-1.docker.io/bitnamicharts
     version: 16.0.8
+  - name: openfga
+    repository: https://openfga.github.io/helm-charts
+    version: 0.2.38
+  - name: postgres-operator
+    repository: https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+    version: 1.14.0
   - name: strimzi-kafka-operator
     repository: oci://quay.io/strimzi-helm
     version: 0.45.0
   - name: traefik
     repository: https://helm.traefik.io/traefik
     version: 35.1.0
-digest: sha256:375816738c0dcb720546c2e0c10133220a0419d51dadfaf3c78292408e806fb5
-generated: "2025-07-18T11:26:32.559830171+02:00"
+digest: sha256:a2cafa739673c96b6095c36f20f2b529db9ed39ddfcd2ae73ce6707e25beffaa
+generated: "2025-08-12T13:45:56.302638443+02:00"

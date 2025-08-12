@@ -1,0 +1,72 @@
+build:maven:
+  extends:
+    - .ignore-tags
+    - .maven-cache
+    - .docker-in-docker
+    - .branch-only
+  stage: test
+  image: $JDK_IMAGE
+  tags: ["cache", "docker"]
+  script:
+    - set -xe
+    - ./mvnw $MAVEN_CLI_OPTS test -Pservices
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Pservices -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH -Dkvasir.plugins.policy-agent.openfga.enabled=true
+  interruptible: true
+  after_script:
+    - awk -F, '{ instructions += $4 + $5; covered += $5 } END { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered (line coverage)" }' target/coverage/jacoco.csv
+  coverage: "/(d+.d+) % covered/"
+  artifacts:
+    paths:
+      - "**/target"
+    reports:
+      coverage_report:
+        coverage_format: jacoco
+        path: target/coverage/jacoco.xml
+      junit: "**/TEST-*.xml"
+    when: always
+
+build:openapi:
+  extends:
+    - .ignore-tags
+    - .maven-cache
+    - .main-branch-only
+  image: $JDK_IMAGE
+  stage: package
+  before_script:
+    - set -xe
+    - curl -sL https://deb.nodesource.com/setup_20.x | bash
+    - apt install -y nodejs yq
+    - node -v
+  script:
+    - set -xe
+    - ./mvnw -DskipTests package -Dquarkus.container-image.push=false
+    - mkdir -p ./_openapi
+    - yq 'del(.servers)' ./services/monolith/target/openapi/openapi.yaml >./_openapi/openapi.yaml
+    - npx -y @redocly/cli@1.34.3 build-docs -o _openapi/index.html ./_openapi/openapi.yaml --theme.openapi.hideHostname=true --theme.openapi.pathInMiddlePanel=true
+    - rm ./_openapi/openapi.yaml
+  artifacts:
+    paths:
+      - _openapi
+    expire_in: 1 week
+
+build:writerside:
+  extends:
+    - .ignore-tags
+    - .branch-only
+  stage: test
+  image: $WRITERSIDE_IMAGE
+  script:
+    - set -xe
+    - export DISPLAY=:99
+    - Xvfb :99 &
+    - /opt/builder/bin/idea.sh helpbuilderinspect -source-dir . -product $INSTANCE --runner gitlab -output-dir public/
+    - echo "Checking for build errors..."
+    - curl -o public/wrs-checker.jar -L https://packages.jetbrains.team/maven/p/writerside/maven/com/jetbrains/writerside/writerside-ci-checker/1.0/writerside-ci-checker-1.0.jar
+    - /opt/builder/jbr/bin/java -jar public/wrs-checker.jar public/report.json $INSTANCE
+  artifacts:
+    paths:
+      - public/$ARTIFACT
+      - public/report.json
+      - public/$ALGOLIA_ARTIFACT
+    expire_in: 1 week
+  interruptible: true

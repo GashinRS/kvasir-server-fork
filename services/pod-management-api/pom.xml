@@ -3,39 +3,39 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>pod-management-api</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>0.8.0</version>
 
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>services-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>0.8.0</version>
     </parent>
 
     <dependencies>
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.8.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>common-http-extensions</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.8.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>clickhouse-knowledge-graph</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.8.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>kafka-messaging</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.8.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>openfga-policy-agent</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.8.0</version>
         </dependency>
     </dependencies>
 </project>
