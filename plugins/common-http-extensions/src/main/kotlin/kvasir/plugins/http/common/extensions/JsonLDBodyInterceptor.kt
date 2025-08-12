@@ -1,12 +1,15 @@
 package kvasir.plugins.http.common.extensions
 
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 import com.github.jsonldjava.utils.JsonUtils
-import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
+import jakarta.inject.Inject
 import jakarta.ws.rs.ext.*
 import kvasir.definitions.rdf.FgaVocab
+import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
@@ -18,6 +21,10 @@ private val defaultContext = mapOf("kss" to KvasirVocab.baseUri, "kss-fga" to Fg
 
 @Provider
 class JsonLDBodyInterceptor : WriterInterceptor, ReaderInterceptor {
+
+    @Inject
+    lateinit var mapper: ObjectMapper
+
     override fun aroundWriteTo(ctx: WriterInterceptorContext) {
         if (ctx.mediaType?.type == MAIN_MEDIA_TYPE && ctx.mediaType?.subtype == SUB_MEDIA_TYPE) {
             val content = ctx.entity
@@ -30,10 +37,10 @@ class JsonLDBodyInterceptor : WriterInterceptor, ReaderInterceptor {
                     }) {
                     content
                 } else {
-                    // TODO: Optimize, prevent double serialization
+                    val entityList = mapper.convertValue(ctx.entity, object: TypeReference<List<JSONObject>>() {})
                     mapOf(
                         JsonLdKeywords.context to defaultContext,
-                        JsonLdKeywords.graph to (JsonUtils.fromString(Json.encode(ctx.entity)) as List<*>).map {
+                        JsonLdKeywords.graph to entityList.map {
                             JsonLdProcessor.compact(it, defaultContext, JsonLdOptions()).minus(JsonLdKeywords.context)
                         }
                     )
