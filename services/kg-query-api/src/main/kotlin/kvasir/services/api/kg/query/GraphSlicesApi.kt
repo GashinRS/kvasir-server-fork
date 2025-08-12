@@ -1,6 +1,7 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.google.common.hash.Hashing
 import graphql.language.ObjectTypeDefinition
 import graphql.parser.Parser
 import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
@@ -386,7 +387,8 @@ data class SliceInput(
     @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
     @get:JsonProperty(KvasirVocab.name)
-    val name: String,
+    val name: String = Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8)
+        .toString(),
     @get:JsonProperty(KvasirVocab.schema)
     val schema: String,
     @get:JsonProperty(KvasirVocab.description)

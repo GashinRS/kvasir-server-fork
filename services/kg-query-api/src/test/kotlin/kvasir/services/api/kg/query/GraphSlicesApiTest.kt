@@ -1,5 +1,6 @@
 package kvasir.services.api.kg.query
 
+import com.github.jsonldjava.utils.JsonUtils
 import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
@@ -11,8 +12,11 @@ import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.kg.slices.Slice
+import kvasir.definitions.rdf.JSONObject
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFMediaTypes
+import kvasir.definitions.rdf.getJsonArray
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.test.clickhouse.ClickhouseTestResource
 import kvasir.utils.test.commons.*
@@ -42,6 +46,8 @@ class GraphSlicesApiTest {
 
     val testSubject = "ex:jdoe"
     lateinit var revisitChangeId: String
+
+    lateinit var nonNamedSliceUri: String
 
     @Test
     @Order(1)
@@ -79,6 +85,55 @@ class GraphSlicesApiTest {
 
     @Test
     @Order(2)
+    fun testCreateNonNamedSlice() {
+        val sliceDefinition = """
+            type Query {
+                persons: [ex_Person!]!
+                person(id: ID!): ex_Person
+            }
+            
+            type ex_Person {
+                id: ID!
+                so_givenName: String!
+                familyName: String! @predicate(iri: "so:familyName")
+                so_email: [String!]! @filter(if: "it==*$filterEmailDomain")
+            }
+        """.trimIndent()
+        val input = SliceInput(
+            context = TestConstants.CONTEXT,
+            schema = sliceDefinition
+        )
+
+        nonNamedSliceUri = given()
+            .contentType(RDFMediaTypes.JSON_LD)
+            .body(input)
+            .post("{podId}/slices", TestConstants.TEST_POD_2_ID)
+            .then()
+            .statusCode(201)
+            .extract().header(HttpHeaders.LOCATION)
+
+        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().`as`(Slice::class.java)
+        assertFalse(sliceDef.supportsChanges)
+    }
+
+    @Test
+    @Order(3)
+    fun testListSlices() {
+        val result = JsonUtils.fromString(
+            get("{podId}/slices", TestConstants.TEST_POD_2_ID)
+                .then()
+                .statusCode(200)
+                .extract().body().asString()
+        ) as JSONObject
+        assertEquals(setOf(sliceUri, nonNamedSliceUri), result.getJsonArray<JSONObject>(JsonLdKeywords.graph)?.map {
+            it.get(
+                JsonLdKeywords.id
+            )
+        }?.toSet())
+    }
+
+    @Test
+    @Order(4)
     fun testSliceQuery() {
         // Populate some data
         val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_2_ID)
@@ -135,7 +190,7 @@ class GraphSlicesApiTest {
     }
 
     @Test
-    @Order(3)
+    @Order(5)
     fun testUpdateSliceToAddMutations() {
         val sliceDefinition = """
             type Query {
@@ -180,7 +235,7 @@ class GraphSlicesApiTest {
     }
 
     @Test
-    @Order(4)
+    @Order(6)
     fun testInvalidMutation() {
         // This insert should fail, as the email domain does not match the shape
         val q = """
@@ -215,7 +270,7 @@ class GraphSlicesApiTest {
     }
 
     @Test
-    @Order(5)
+    @Order(7)
     fun testValidMutation() {
         // Use the email domain that matches the shape
         var q = """
@@ -284,7 +339,7 @@ class GraphSlicesApiTest {
     }
 
     @Test
-    @Order(6)
+    @Order(8)
     fun testTimeTravel() {
         // Although jdoe was deleted in the previous test, we should still be able to retrieve the data using time travel.
         val readQ = """
