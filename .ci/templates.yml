@@ -1,0 +1,34 @@
+.ignore-tags:
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+
+.maven-cache:
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .m2/repository/
+    policy: pull-push
+
+.docker-in-docker:
+  services:
+    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
+      alias: docker
+  tags: ["docker"]
+
+.branch-only:
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
+
+.main-branch-only:
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
+
+.release-commit-only:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_MESSAGE =~ /^chore\(release\)/'

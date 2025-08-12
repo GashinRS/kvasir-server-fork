@@ -1,7 +1,19 @@
+# .gitlab-ci.yml
+include:
+  - local: /.ci/templates.yml
+  - local: /.ci/build.yml
+  - local: /.ci/test.yml
+  - local: /.ci/deploy.yml
+  - component: $CI_SERVER_FQDN/components/releaser/release@v0.2.2
+    inputs:
+      bump_versions_script_path: $CI_PROJECT_DIR/.ci/scripts/bump-versions.sh
+      release_stage: release
+      proposal_stage: pre
+      sync_stage: sync
+
 variables:
   INSTANCE: "Writerside/kd"
   ARTIFACT: "webHelpKD2-all.zip"
-  DOCKER_VERSION: "2025.04.8412"
   ALGOLIA_ARTIFACT: "algolia-indexes-KD.zip"
   ALGOLIA_APP_NAME: "23BLLNEZ2S"
   ALGOLIA_INDEX_NAME: "prod_KVASIR-NEXT"
@@ -23,12 +35,11 @@ variables:
     -Djava.awt.headless=true
     -XX:+HeapDumpOnOutOfMemoryError
     -XX:HeapDumpPath=target/
-    -XX:ErrorFile=target/hs_err_pid%p.log
-  DOCKER_HOST: tcp://docker:2375
-  DOCKER_TLS_CERTDIR: ""
-  QUARKUS_JIB_BASE_JVM_IMAGE: "gitlab.ilabt.imec.be:4567/obelisk/packages/eclipse-temurin:21.0.6_7-jre-noble"
-  JDK_IMAGE: "gitlab.ilabt.imec.be:4567/obelisk/packages/eclipse-temurin:21.0.6_7-jdk-noble"
-  NODE_IMAGE: "gitlab.ilabt.imec.be:4567/obelisk/packages/node:20"
+  CI_TOOLS_REGISTRY: "gitlab.ilabt.imec.be:4567/discover/ci-tools"
+  WRITERSIDE_IMAGE: "${CI_TOOLS_REGISTRY}/writerside-builder:2025.04.8412"
+  QUARKUS_JIB_BASE_JVM_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:21.0.7_6-jre-noble"
+  JDK_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:21.0.7_6-jdk-noble"
+  CI_TOOLS_IMAGE: "${CI_TOOLS_REGISTRY}:1.2.1"
   QUARKUS_JIB_PLATFORMS: "linux/amd64,linux/arm64/v8"
   QUARKUS_CONTAINER_IMAGE_PUSH: "false"
   QUARKUS_CONTAINER_IMAGE_REGISTRY: $CI_REGISTRY
@@ -36,15 +47,17 @@ variables:
   QUARKUS_CONTAINER_IMAGE_USERNAME: $CI_REGISTRY_USER
   QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
 
+stages:
+  - pre
+  - test
+  - package
+  - verify
+  - deploy
+  - release
+  - sync
+
 workflow:
   rules:
-    - if: $CI_COMMIT_TAG
-      variables:
-        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_TAG"
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "latest"
-        QUARKUS_CONTAINER_IMAGE_PUSH: "true"
-
-    #    Ignore Draft MRs
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /^(\[Draft\]|\(Draft\)|Draft:)/
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -52,279 +65,7 @@ workflow:
         QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
         QUARKUS_CONTAINER_IMAGE_PUSH: "true"
-    #   Don't trigger branch pipeline when there is an open MR
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
     - if: $CI_COMMIT_BRANCH
       variables: *commitBranchVersions
-
-.mavenChanges: &mavenChanges
-  - "!(ui)/**/src/**/*"
-  - "!(ui)/**/pom.xml"
-
-.uiChanges: &uiChanges
-  - "ui/**/*"
-  - "**/package.json"
-  - ".gitlab-ci.yml"
-
-stages:
-  - test
-  - package
-  - verify
-  - deploy
-  - search
-
-build:maven:
-  stage: test
-  image: $JDK_IMAGE
-  tags: ["cache", "docker"]
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    paths:
-      - .m2/repository/
-    policy: pull-push
-    when: always
-  services:
-    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
-      alias: docker
-  rules:
-    - if: "$CI_COMMIT_TAG"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-  script:
-    - ./mvnw $MAVEN_CLI_OPTS test -Pservices
-    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Pservices
-      -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
-      -Dkvasir.plugins.policy-agent.openfga.enabled=true
-  interruptible: true
-  after_script:
-    - awk -F,
-      '{ instructions += $4 + $5; covered += $5 } END
-      { print covered, "/", instructions, "instructions covered";
-      print 100*covered/instructions, "% covered (line coverage)" }'
-      target/coverage/jacoco.csv
-  coverage: '/(\d+\.\d+) % covered/'
-  artifacts:
-    paths:
-      - "**/target"
-    reports:
-      coverage_report:
-        coverage_format: jacoco
-        path: target/coverage/jacoco.xml
-      junit: "**/TEST-*.xml"
-    when: always
-
-# package:maven:
-#   stage: package
-#   needs: [build:maven]
-#   image: $JDK_IMAGE
-#   tags: ["cache"]
-#   cache:
-#     key: ${CI_COMMIT_REF_SLUG}
-#     paths:
-#       - .m2/repository/
-#     policy: pull-push
-#   parallel:
-#     matrix:
-#       - KEYCLOAK_POLICY_ENFORCER: "true"
-#         UMA_POLICY_ENFORCER: "false"
-#         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-keycloak
-#         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_TAG},${IMAGE_ADDITIONAL_TAGS},${IMAGE_ADDITIONAL_TAGS}-keycloak
-#       - KEYCLOAK_POLICY_ENFORCER: "false"
-#         UMA_POLICY_ENFORCER: "true"
-#         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-uma
-#         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-uma
-#       - KEYCLOAK_POLICY_ENFORCER: "false"
-#         UMA_POLICY_ENFORCER: "false"
-#         QUARKUS_CONTAINER_IMAGE_TAG: ${IMAGE_TAG}-noauth
-#         QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: ${IMAGE_ADDITIONAL_TAGS}-noauth
-#   rules:
-#     - if: "$CI_COMMIT_TAG"
-#     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-#     - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-#   script:
-#     - ./mvnw $MAVEN_CLI_OPTS -DskipTests install -Pservices
-#       -Dquarkus.container-image.push=true
-#       -Dkvasir.plugins.policy-agent.keycloak.enabled=$KEYCLOAK_POLICY_ENFORCER
-#       -Dkvasir.plugins.policy-agent.uma.enabled=$UMA_POLICY_ENFORCER
-#   interruptible: true
-#   artifacts:
-#     paths:
-#       - "**/target/*.jar"
-
-build:openapi:
-  image: $JDK_IMAGE
-  stage: package
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    fallback_keys:
-      - ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
-      - ${CI_DEFAULT_BRANCH}
-    paths:
-      - .m2/repository/
-    policy: pull-push
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-  before_script:
-    - curl -sL https://deb.nodesource.com/setup_20.x | bash
-    - apt install -y nodejs yq
-    - node -v
-  script:
-    - ./mvnw -DskipTests package -Dquarkus.container-image.build=false -Dquarkus.container-image.push=false
-    - mkdir -p ./_openapi
-    - yq 'del(.servers)' ./services/monolith/target/openapi/openapi.yaml >./_openapi/openapi.yaml
-    - npx -y @redocly/cli@1.34.3 build-docs -o _openapi/index.html ./_openapi/openapi.yaml --theme.openapi.hideHostname=true --theme.openapi.pathInMiddlePanel=true
-    - rm ./_openapi/openapi.yaml
-  artifacts:
-    paths:
-      - _openapi
-    expire_in: 1 week
-
-build:writerside:
-  needs: [build:maven]
-  stage: test
-  rules:
-    - if: "$CI_COMMIT_TAG"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-  image: registry.jetbrains.team/p/writerside/builder/writerside-builder:$DOCKER_VERSION
-  script:
-    - set -e
-    - export DISPLAY=:99
-    - Xvfb :99 &
-    - /opt/builder/bin/idea.sh helpbuilderinspect -source-dir . -product $INSTANCE --runner gitlab -output-dir public/ || true
-    - echo "Testing existence of $ARTIFACT..."
-    - test -e public/$ARTIFACT
-  artifacts:
-    paths:
-      - public/$ARTIFACT
-      - public/report.json
-      - public/$ALGOLIA_ARTIFACT
-    expire_in: 1 week
-  interruptible: true
-
-test:writerside:
-  needs: [build:writerside]
-  image: $JDK_IMAGE
-  stage: test
-  rules:
-    - if: "$CI_COMMIT_TAG"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-  script:
-    - cd public
-    - curl -o wrs-checker.jar -L https://packages.jetbrains.team/maven/p/writerside/maven/com/jetbrains/writerside/writerside-ci-checker/1.0/writerside-ci-checker-1.0.jar
-    - java -jar wrs-checker.jar report.json $INSTANCE
-
-deploy:docs:
-  stage: deploy
-  image: ubuntu:latest
-  pages: true
-  rules:
-    - if: "$CI_COMMIT_TAG"
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-  needs: [build:writerside, build:openapi, test:writerside]
-  before_script:
-    - apt-get update -y && apt-get install unzip -y
-  script:
-    - cd public
-    - unzip -O UTF-8 $ARTIFACT
-    - ls -l
-    - echo "Copying openapi"
-    - cd ..
-    - $([ -d _openapi ] && mv _openapi public/)
-  dependencies:
-    - build:writerside
-    - build:openapi
-  artifacts:
-    paths:
-      - public
-    expire_in: 1 week
-  interruptible: false
-
-search:
-  stage: search
-  rules:
-    # Never run when the ALGOLIA_KEY is not set
-    - when: never
-      if: "$ALGOLIA_KEY == null"
-    - if: "$CI_COMMIT_TAG"
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-  needs: [build:writerside, test:writerside, deploy:docs]
-  image: registry.jetbrains.team/p/writerside/builder/algolia-publisher:2.0.32-3
-  script:
-    - unzip -O UTF-8 public/$ALGOLIA_ARTIFACT -d algolia-indexes
-    - env "algolia-key=$ALGOLIA_KEY" java -jar /opt/builder/help-publication-agent.jar update-index --application-name "$ALGOLIA_APP_NAME" --index-name "$ALGOLIA_INDEX_NAME" --product "$CONFIG_JSON_PRODUCT" --version "$CONFIG_JSON_VERSION" --index-directory algolia-indexes/ 2>&1 | tee algolia-update-index-log.txt
-  artifacts:
-    paths:
-      - algolia-update-index-log.txt
-    expire_in: 1 week
-  interruptible: false
-
-smoke_test:compose:
-  tags: ["docker"]
-  image: docker
-  stage: verify
-  rules:
-    - if: "$CI_COMMIT_TAG"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-  services:
-    - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
-      alias: docker
-  before_script:
-    - apk add --no-cache bash jq curl
-    - timeout=30
-    - start_time=$(date +%s)
-    - |
-      while ! docker info >/dev/null 2>&1; do
-        if [ $(( $(date +%s) - start_time )) -ge $timeout ]; then
-          echo "Timeout waiting for Docker daemon to be ready." >&2
-          exit 1
-        fi
-        sleep 1
-      done
-    - echo "$DOCKER_TOKEN" | docker login -u $DOCKER_USER --password-stdin
-    - echo "$DOCKER_TOKEN" | docker login docker.redpanda.com -u $DOCKER_USER --password-stdin
-    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
-  script:
-    - cd .deployment/docker-compose
-    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$QUARKUS_CONTAINER_IMAGE_TAG%g" docker-compose.yml
-    - docker compose up -d --wait --quiet-pull --no-color
-    - docker ps
-    - tests/compose-smoke-test.sh
-  after_script:
-    - cd .deployment/docker-compose
-    - docker ps -a > compose-ps.txt
-    - docker compose logs --no-color > compose-logs.txt
-    - docker compose down
-  artifacts:
-    paths:
-      - .deployment/docker-compose/compose-logs.txt
-      - .deployment/docker-compose/docker-compose.yml
-      - .deployment/docker-compose/compose-ps.txt
-    expire_in: 1 week
-    when: on_failure
-
-deploy:cnl:
-  stage: deploy
-  image: ghcr.io/helmfile/helmfile:v0.171.0
-  allow_failure: true
-  rules:
-    # only run on this repo not on forks
-    - if: '$CI_PROJECT_NAME != "kvasir-server" && $CI_PROJECT_NAMESPACE != "kvasir"'
-      when: never
-    - if: "$CI_COMMIT_TAG"
-      when: manual
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-      when: manual
-  before_script:
-    - kubectl config use-context kvasir/clusters:cnl-dev1
-    - echo $DOCKER_TOKEN | helm registry login docker.io -u $DOCKER_USER --password-stdin
-  script:
-    - cd kubernetes
-    - helmfile deps
-    - helmfile sync --state-values-set image.tag=${QUARKUS_CONTAINER_IMAGE_TAG} --state-values-set image.registry=${CI_REGISTRY_IMAGE}

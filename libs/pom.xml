@@ -5,14 +5,14 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>kvasir-libs</groupId>
     <artifactId>libs-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>0.8.0</version>
 
     <packaging>pom</packaging>
 
     <parent>
         <artifactId>kvasir-parent</artifactId>
         <groupId>kvasir</groupId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>0.8.0</version>
     </parent>
 
     <modules>

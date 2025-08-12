@@ -21,7 +21,7 @@ global:
   image:
     registry: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server
     pullPolicy: IfNotPresent
-    tag: "0.5.1"
+    tag: "0.8.0"
 
   imagePullSecrets: []
 
@@ -163,12 +163,12 @@ global:
     clickhouse:
     host: ""
     port: ""
-  #  username: ""
-  #  password: ""
-  #  database: ""
-  #  existingSecret: ""
-  #  usernameSecretKey: ""
-  #  passwordSecretKey: ""
+    #  username: ""
+    #  password: ""
+    #  database: ""
+    #  existingSecret: ""
+    #  usernameSecretKey: ""
+    #  passwordSecretKey: ""
 
 "init-service":
   enabled: true
@@ -188,32 +188,32 @@ global:
     kvasir:
       bootstrap:
         pods:
-        - name: alice
-          configuration: |
-            {
-              "@context": {
-                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
-              },
-              "kss:autoIngestRDF": true,
-              "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
-            }
-          generate-clients:
-            - client-id: demo-client
-              client-secret: testtest
-              enable-service-account: true
-              openfga:
-                relationships:
-                  - target-resource: "/"
-                    relations: [ "reader", "writer", "deleter" ]
-        - name: bob
-          configuration: |
-            {
-              "@context": {
-                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
-              },
-              "kss:autoIngestRDF": true,
-              "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
-            }
+          - name: alice
+            configuration: |
+              {
+                "@context": {
+                  "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+                },
+                "kss:autoIngestRDF": true,
+                "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
+              }
+            generate-clients:
+              - client-id: demo-client
+                client-secret: testtest
+                enable-service-account: true
+                openfga:
+                  relationships:
+                    - target-resource: "/"
+                      relations: ["reader", "writer", "deleter"]
+          - name: bob
+            configuration: |
+              {
+                "@context": {
+                  "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+                },
+                "kss:autoIngestRDF": true,
+                "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
+              }
 
 "kg-change-processor":
   kafka:

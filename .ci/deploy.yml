@@ -1,0 +1,63 @@
+deploy:docs:
+  extends:
+    - .ignore-tags
+    - .main-branch-only
+  stage: deploy
+  image: $CI_TOOLS_REGISTRY/alpine:3.20
+  pages: true
+  needs: [build:writerside, build:openapi]
+  before_script:
+    - apk add unzip
+  script:
+    - set -xe
+    - |
+      unzip -d public public/$ARTIFACT
+      [ -d _openapi ] && mv _openapi public/
+      ls -l
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 week
+  interruptible: false
+
+docs:update-indexes:
+  extends: .ignore-tags
+  stage: deploy
+  rules:
+    - when: never
+      if: "$ALGOLIA_KEY == null"
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
+  needs: [build:writerside]
+  image: registry.jetbrains.team/p/writerside/builder/algolia-publisher:2.0.32-3
+  script:
+    - unzip -O UTF-8 public/$ALGOLIA_ARTIFACT -d algolia-indexes
+    - env "algolia-key=$ALGOLIA_KEY" java -jar /opt/builder/help-publication-agent.jar update-index --application-name "$ALGOLIA_APP_NAME" --index-name "$ALGOLIA_INDEX_NAME" --product "$CONFIG_JSON_PRODUCT" --version "$CONFIG_JSON_VERSION" --index-directory algolia-indexes/ 2>&1 | tee algolia-update-index-log.txt
+  artifacts:
+    paths:
+      - algolia-update-index-log.txt
+    expire_in: 1 week
+  interruptible: false
+
+deploy:cnl:
+  extends: .ignore-tags
+  stage: deploy
+  image: ghcr.io/helmfile/helmfile:v0.171.0
+  allow_failure: true
+  rules:
+    - if: '$CI_PROJECT_NAME != "kvasir-server" && $CI_PROJECT_NAMESPACE != "kvasir"'
+      when: never
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
+      when: manual
+  before_script:
+    - kubectl config use-context kvasir/clusters:cnl-dev1
+    - echo $DOCKER_TOKEN | helm registry login docker.io -u $DOCKER_USER --password-stdin
+  script:
+    - cd kubernetes
+    - helmfile deps
+    - helmfile sync --state-values-set image.tag=${QUARKUS_CONTAINER_IMAGE_TAG} --state-values-set image.registry=${CI_REGISTRY_IMAGE}

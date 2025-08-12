@@ -41,9 +41,6 @@ testem.log
 .DS_Store
 Thumbs.db
 
-# Version file
-/src/environments/version.prod.ts
-.vscode/settings.json
 
 # helm
 helm/*.tgz

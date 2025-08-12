@@ -6,7 +6,7 @@
     <parent>
         <groupId>kvasir-plugins</groupId>
         <artifactId>plugins-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>0.8.0</version>
     </parent>
 
     <artifactId>kafka-messaging</artifactId>
@@ -15,7 +15,7 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>definitions</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.8.0</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
