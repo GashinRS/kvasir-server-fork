@@ -102,7 +102,7 @@ class OpenFgaInitializer(
                         Pair("realm_client", "false"),
                         Pair("post.logout.redirect.uris", "+"),
                     )
-                    this.defaultClientScopes = listOf("service_account", "microprofile-jwt", "basic")
+                    this.defaultClientScopes = listOf("microprofile-jwt", "basic")
                     this.access = mapOf(
                         Pair("view", true),
                         Pair("configure", true),
