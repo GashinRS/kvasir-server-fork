@@ -23,7 +23,6 @@ object ReactiveRDFParser {
                         emitter.complete()
                     }
                 })
-
                 parser.parse(rdfInputStream, baseUri)
             } catch (e: Exception) {
                 emitter.fail(e)
