@@ -15,7 +15,7 @@ object RDFLiteralUtils {
             XSDVocab.double, XSDVocab.decimal -> literalValue.toDoubleOrNull()
             XSDVocab.float -> literalValue.toFloatOrNull()
             XSDVocab.long -> literalValue.toLongOrNull()
-            XSDVocab.boolean -> literalValue.toBooleanStrictOrNull()
+            XSDVocab.boolean -> literalValue.toBoolean()
             XSDVocab.dateTime -> {
                 try {
                     Instant.parse(literalValue)
