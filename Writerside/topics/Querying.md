@@ -2,7 +2,7 @@
 
 <show-structure depth="2"/>
 
-The standard query mechanism for the Pod KG uses schemaless GraphQL (inspired by Ruben
+The standard query mechanism for the Pod KG uses GraphQL (inspired by Ruben
 Taelman's [GraphQL to SPARQL library](https://github.com/rubensworks/graphql-to-sparql.js) and
 the [Stardog GraphQL API](https://docs.stardog.com/query-stardog/graphql)).
 
@@ -15,7 +15,15 @@ see [](Pod-Management.md#default-context)).
 
 > **[1]**: Alternatively, you can also use the `GET` method with query parameters, but you won't be able to provide a
 > JSON-LD context. This approach primarily has it uses when [querying a Slice](Slices.md). See
-> the [API Reference](API-Reference.md) for more information.
+> the [](API-Reference.md) for more information.
+
+While a global query endpoint is useful for exploring the entire Knowledge Graph, in practice it will rarely occur that
+an application requires access to all of a Pod's data (let alone gets granted such a permission). Kvasir introduces to
+concept of [](Slices.md) which allows defining restricted subsets of the Knowledge Graph with which clients can
+then interact with. The query endpoint for a specific Slice is available at `/{podId}/slices/{sliceId}/query`.
+
+The following sections explain the basic usage of the global query endpoint, but the same principles apply to the Slice
+specific GraphQL query endpoints.
 
 ## Why GraphQL?
 

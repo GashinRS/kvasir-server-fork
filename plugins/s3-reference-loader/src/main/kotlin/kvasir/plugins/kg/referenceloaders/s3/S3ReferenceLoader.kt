@@ -13,12 +13,17 @@ import kvasir.definitions.kg.ReferenceLoader
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.XSDVocab
+import kvasir.utils.http.getChildUri
+import kvasir.utils.rdf.RDFLiteralUtils
+import kvasir.utils.rdf.RDFTransformer
 import kvasir.utils.rdf.ReactiveRDFParser
 import kvasir.utils.s3.S3Utils
+import org.eclipse.rdf4j.model.BNode
 import org.eclipse.rdf4j.model.Literal
-import org.eclipse.rdf4j.query.QueryResults
+import org.eclipse.rdf4j.model.Value
 import org.eclipse.rdf4j.rio.RDFFormat
-import org.eclipse.rdf4j.rio.Rio
+import java.net.URI
+import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 @ApplicationScoped
@@ -32,6 +37,8 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
         val key = reference[KvasirVocab.key] as String
         val versionId = reference[KvasirVocab.versionId] as String
         val bucketId = S3Utils.getBucket(podOrSliceId)
+        val docBaseUri = "${podOrSliceId.removeSuffix("/")}/s3/$key#"
+        val bNodeIdMap = mutableMapOf<BNode, String>()
         return Uni.createFrom()
             .future(
                 minioClient.getObject(
@@ -39,19 +46,36 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
                 )
             )
             .onItem().transformToMulti { resp ->
-                // TODO: do we need to set a baseURI here?
-                ReactiveRDFParser.parseRdf(resp, parseLang(resp))
+                ReactiveRDFParser.parseRdf(resp, parseLang(resp), docBaseUri)
             }
             .map { statement ->
                 RDFStatement(
-                    statement.subject.stringValue(),
-                    statement.predicate.stringValue(),
-                    if (statement.`object`.isLiteral) getCompatibleRawValue(statement.`object` as Literal) else statement.`object`.stringValue(),
-                    statement.context?.stringValue() ?: "",
+                    processedNonLiteralValue(statement.subject, podOrSliceId, bNodeIdMap),
+                    RDFTransformer.ensureValidAbsoluteIri(statement.predicate.stringValue()),
+                    if (statement.`object`.isLiteral) getCompatibleRawValue(statement.`object` as Literal) else processedNonLiteralValue(
+                        statement.`object`,
+                        podOrSliceId,
+                        bNodeIdMap
+                    ),
+                    statement.context?.let { processedNonLiteralValue(it, podOrSliceId, bNodeIdMap) } ?: "",
                     statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.datatype?.stringValue(),
                     statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.language?.getOrNull(),
                 )
             }
+    }
+
+    private fun processedNonLiteralValue(
+        rdfValue: Value,
+        podOrSliceId: String,
+        bNodeIdMap: MutableMap<BNode, String>
+    ): String {
+        return if (rdfValue.isBNode) {
+            bNodeIdMap.getOrPut(rdfValue as BNode) {
+                URI.create(podOrSliceId).getChildUri("#${UUID.randomUUID()}").toString()
+            }
+        } else {
+            RDFTransformer.ensureValidAbsoluteIri(rdfValue.stringValue())
+        }
     }
 
     private fun parseLang(resp: GetObjectResponse): RDFFormat {
@@ -66,12 +90,9 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
     }
 
     private fun getCompatibleRawValue(literal: Literal): Any {
-        return when (literal.datatype.stringValue()) {
-            XSDVocab.int, XSDVocab.integer -> literal.stringValue().let { it.toIntOrNull() ?: it.toLong() }
-            XSDVocab.double, XSDVocab.decimal -> literal.doubleValue()
-            XSDVocab.long -> literal.longValue()
-            XSDVocab.boolean -> literal.booleanValue()
-            else -> literal.stringValue()
-        }
+        return RDFLiteralUtils.getCompatibleRawValue(
+            literal.stringValue(),
+            literal.datatype.stringValue() ?: XSDVocab.string
+        )
     }
 }

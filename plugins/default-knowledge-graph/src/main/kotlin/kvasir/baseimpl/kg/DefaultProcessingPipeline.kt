@@ -13,7 +13,6 @@ import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
-import kvasir.definitions.kg.exceptions.SHACLValidationException
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -23,13 +22,7 @@ import kvasir.definitions.reactive.skipToLast
 import kvasir.utils.graphql.ChangeRequestValidator
 import kvasir.utils.idgen.getTimestamp
 import kvasir.utils.rdf.RDFTransformer
-import kvasir.utils.rdf.writeToString
-import kvasir.utils.shacl.GraphQL2SHACL
-import kvasir.utils.shacl.RDF4JSHACLValidator
-import kvasir.utils.shacl.SHACLValidationFailure
-import kvasir.utils.shacl.SHACLValidator
 import org.eclipse.microprofile.config.inject.ConfigProperty
-import org.eclipse.rdf4j.rio.RDFFormat
 
 @ApplicationScoped
 class EvaluateAssertions(
@@ -289,38 +282,6 @@ class MaterializeRecords(
 }
 
 @ApplicationScoped
-class SliceSHACLValidator(private val sliceStore: SliceStore) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
-        return buffer.request.sliceId?.let { sliceId ->
-            val startTs = System.currentTimeMillis()
-            Log.debug("Validating change request ${buffer.request.id} against Slice SHACL schema...")
-            // Load Slice schema
-            sliceStore.getById(buffer.request.podId, sliceId)
-                .chain { sliceSpec ->
-                    if (sliceSpec != null) {
-                        val shaclGen = GraphQL2SHACL(sliceSpec.schema, sliceSpec.context)
-                        Log.debug(shaclGen.getInsertSHACL().writeToString(RDFFormat.TURTLE))
-                        val insertValidator = RDF4JSHACLValidator(shaclGen.getInsertSHACL())
-                        val deleteValidator = RDF4JSHACLValidator(shaclGen.getDeleteSHACL())
-                        // Validate inserts
-                        buffer.stream(ChangeRecordType.INSERT).validate(insertValidator)
-                            .chain { _ ->
-                                // Validate deletes
-                                buffer.stream(ChangeRecordType.DELETE).validate(deleteValidator)
-                            }
-                    } else {
-                        Uni.createFrom().voidItem()
-                    }
-                }
-                .invoke { _ ->
-                    Log.debug("Finished validating change request ${buffer.request.id} against Slice SHACL schema in ${System.currentTimeMillis() - startTs} ms")
-                }
-        } ?: Uni.createFrom().voidItem()
-    }
-
-}
-
-@ApplicationScoped
 class SliceGraphQLBasedValidator(private val sliceStore: SliceStore) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
         return buffer.request.sliceId?.let { sliceId ->
@@ -350,20 +311,4 @@ class SliceGraphQLBasedValidator(private val sliceStore: SliceStore) : ChangePro
         } ?: Uni.createFrom().voidItem()
     }
 
-}
-
-// TODO: this should work for large collections of change records as well
-internal fun Multi<ChangeRecord>.validate(validator: SHACLValidator): Uni<Void> {
-    return this.collect().asSet().chain { records ->
-        try {
-            if (records.isNotEmpty()) {
-                validator.validate(records.map { it.statement })
-            }
-            Uni.createFrom().voidItem()
-        } catch (e: SHACLValidationFailure) {
-            Log.debug(e.report)
-            Uni.createFrom()
-                .failure(SHACLValidationException("Change request does not match the Slice input specification!", e))
-        }
-    }
 }

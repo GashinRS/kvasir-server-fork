@@ -2,9 +2,12 @@ package kvasir.definitions.kg.graphql
 
 import graphql.Scalars.*
 import graphql.introspection.Introspection
+import graphql.language.ArrayValue
+import graphql.language.StringValue
 import graphql.schema.GraphQLArgument
 import graphql.schema.GraphQLDirective
 import graphql.schema.GraphQLList
+import graphql.schema.GraphQLNonNull
 
 object KvasirDirectives {
     /**
@@ -46,7 +49,10 @@ object KvasirDirectives {
      * - in: All values must be from the given list of values.
      */
     val shapeDirective = GraphQLDirective.newDirective().name(DIRECTIVE_SHAPE_NAME)
-        .validLocation(Introspection.DirectiveLocation.INPUT_FIELD_DEFINITION)
+        .validLocations(
+            Introspection.DirectiveLocation.FIELD_DEFINITION,
+            Introspection.DirectiveLocation.INPUT_FIELD_DEFINITION
+        )
         .argument(GraphQLArgument.newArgument().name(ARG_MIN_COUNT_NAME).type(GraphQLInt).build())
         .argument(GraphQLArgument.newArgument().name(ARG_MAX_COUNT_NAME).type(GraphQLInt).build())
         .argument(GraphQLArgument.newArgument().name(ARG_MIN_INCLUSIVE_NAME).type(GraphQLString).build())
@@ -114,6 +120,24 @@ object KvasirDirectives {
         .build()
 
     /**
+     * When defining Slice types: enable auto-generation of matching input types and mutation operations.
+     * (This is a quality-of-life feature that speeds up authoring Slices in common cases.)
+     * Annotate individual Slice types with this directive to enable the generation of mutations for that type or
+     * annotate the Query type to enable generation of mutations for all types.
+     */
+    val generateMutationsDirective = GraphQLDirective.newDirective().name(DIRECTIVE_GENERATE_MUTATIONS_NAME)
+        .validLocations(Introspection.DirectiveLocation.OBJECT)
+        .argument(
+            GraphQLArgument.newArgument().name(ARG_OPERATIONS_NAME)
+                .type(GraphQLList.list(GraphQLNonNull.nonNull(GraphQLString))).defaultValueLiteral(
+                    ArrayValue.newArrayValue().values(
+                        listOf(StringValue.of(MUTATION_ADD_PREFIX), StringValue.of(MUTATION_REMOVE_PREFIX))
+                    ).build()
+                ).build()
+        )
+        .build()
+
+    /**
      * Collection of the Kvasir directives
      */
     val all = setOf(
@@ -124,6 +148,7 @@ object KvasirDirectives {
         filterDirective,
         storageDirective,
         graphDirective,
-        triggerDirective
+        triggerDirective,
+        generateMutationsDirective
     )
 }

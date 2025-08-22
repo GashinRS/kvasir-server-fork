@@ -45,8 +45,7 @@ class KvasirTenantConfigResolver(
         val podId = "${baseUri}$podName"
         return authConfigCache.getAsync(podId) {
             podStore.getById(podId)
-                .onItem().ifNull().failWith { NotFoundException() }
-                .onItem().ifNotNull().transformToUni { pod ->
+                .chain { pod ->
                     pod?.getAuthConfiguration()?.let { authConfig ->
                         // Parse the auth configuration as an OidcTenantConfig
                         Uni.createFrom().item(JsonObject(authConfig).mapTo(OidcTenantConfig::class.java))

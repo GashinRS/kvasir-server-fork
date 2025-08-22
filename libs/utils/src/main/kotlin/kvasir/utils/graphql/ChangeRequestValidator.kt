@@ -20,36 +20,7 @@ class ChangeRequestValidator(
     sliceSchema: String,
     private val context: JSONObject
 ) {
-    private val typeRegistry = SchemaParser().parse(sliceSchema)
-    private val graphQLSchema = run {
-        typeRegistry.addKvasirBuiltins()
-        val dynamicWiringFactory = object : WiringFactory {
-
-            override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
-                return DataFetcher { null }
-            }
-
-            override fun providesTypeResolver(environment: InterfaceWiringEnvironment): Boolean {
-                return true
-            }
-
-            override fun getTypeResolver(environment: InterfaceWiringEnvironment): TypeResolver {
-                return RDFClassTypeResolver(context)
-            }
-
-            override fun providesTypeResolver(environment: UnionWiringEnvironment): Boolean {
-                return true
-            }
-
-            override fun getTypeResolver(environment: UnionWiringEnvironment): TypeResolver {
-                return RDFClassTypeResolver(context)
-            }
-
-        }
-        val runtimeWiring =
-            RuntimeWiring.newRuntimeWiring().scalar(ExtendedScalars.Json).wiringFactory(dynamicWiringFactory).build()
-        SchemaGenerator().makeExecutableSchema(typeRegistry, runtimeWiring)
-    }
+    private val graphQLSchema = SliceGraphQLSchema(sliceSchema, context).getDummySchema()
 
     private val toBeValidatedRecords = mutableSetOf<ChangeRecord>().apply {
         // The records that should be validated, ignore certain system properties
@@ -106,7 +77,10 @@ class ChangeRequestValidator(
                 type.fieldDefinitions.filter { it.name != FIELD_ID_NAME }.groupBy { fieldDefinition ->
                     resolveNameAsIri(fieldDefinition.name) ?: run {
                         // Or else get IRI from predicate directive
-                        fieldDefinition.getDirectiveArg<StringValue>(DIRECTIVE_PREDICATE_NAME, ARG_IRI_NAME)?.value?.let {
+                        fieldDefinition.getDirectiveArg<StringValue>(
+                            DIRECTIVE_PREDICATE_NAME,
+                            ARG_IRI_NAME
+                        )?.value?.let {
                             JsonLdHelper.getFQName(it, context) ?: it
                         }
                     }!!
@@ -244,13 +218,14 @@ class ChangeRequestValidator(
     }
 
     private fun GraphQLInputObjectType.getFQName(): String {
-        return (resolveNameAsIri(this.name)
-            ?: run {
-                // Or else get IRI from class directive
-                this.getDirectiveArg<StringValue>(DIRECTIVE_CLASS_NAME, ARG_IRI_NAME)?.value?.let {
-                    JsonLdHelper.getFQName(it, context) ?: it
-                }
-            } ?: throw IllegalArgumentException("No semantic context found for input type '${this.name}'"))
+        // First check class directive
+        return (this.getDirectiveArg<StringValue>(DIRECTIVE_CLASS_NAME, ARG_IRI_NAME)?.value?.let {
+            JsonLdHelper.getFQName(it, context) ?: it
+        } ?:
+        // If not found, try to resolve the name as an IRI
+        resolveNameAsIri(this.name))
+        // If still not found, throw an exception
+            ?: throw IllegalArgumentException("No semantic context found for input type '${this.name}'")
     }
 
     private fun resolveNameAsIri(

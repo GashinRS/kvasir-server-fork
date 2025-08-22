@@ -1,17 +1,32 @@
 package kvasir.utils.graphql
 
 import graphql.TypeResolutionEnvironment
+import graphql.language.DirectivesContainer
 import graphql.language.Field
+import graphql.language.ListType
+import graphql.language.NonNullType
 import graphql.language.StringValue
+import graphql.language.Type
 import graphql.schema.GraphQLDirectiveContainer
 import graphql.schema.GraphQLNamedType
 import graphql.schema.GraphQLObjectType
 import graphql.schema.TypeResolver
+import graphql.schema.idl.TypeUtil
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.getJsonArray
 import kvasir.utils.json.convertToJsonMap
+
+fun getFQName(nodeName: String, node: DirectivesContainer<*>, context: JSONObject): String {
+    // predicate directive takes precedence over prefix before underscore in graphql schema
+    return run {
+        (node.getDirectiveArg<StringValue>(DIRECTIVE_PREDICATE_NAME, ARG_IRI_NAME)?.value
+            ?: node.getDirectiveArg<StringValue>(DIRECTIVE_CLASS_NAME, ARG_IRI_NAME)?.value)
+            ?.let { JsonLdHelper.getFQName(it, context) ?: it }
+    } ?: JsonLdHelper.getFQName(nodeName, context, "_")?.takeIf { it != nodeName }
+    ?: throw IllegalArgumentException("No semantic context found for $nodeName")
+}
 
 fun getFQName(node: GraphQLDirectiveContainer, context: Map<String, Any>): String {
     // predicate directive takes precedence over prefix before underscore in graphql schema
@@ -57,5 +72,24 @@ class RDFClassTypeResolver(private val context: JSONObject) : TypeResolver {
                 defaultResolvedType
             }
         }
+    }
+}
+
+/**
+ * Replaces the inner type of a (potentially wrapped) GraphQL type with a new type.
+ */
+fun replaceInnerType(type: Type<*>, newType: Type<*>): Type<*> {
+    return when {
+        TypeUtil.isNonNull(type) -> {
+            val result = replaceInnerType(TypeUtil.unwrapOne(type), newType)
+            NonNullType.newNonNullType().type(result).build()
+        }
+
+        TypeUtil.isList(type) -> {
+            val result = replaceInnerType(TypeUtil.unwrapOne(type), newType)
+            ListType.newListType().type(result).build()
+        }
+
+        else -> newType
     }
 }

@@ -1,6 +1,8 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.google.common.hash.Hashing
+import graphql.language.ObjectTypeDefinition
 import graphql.parser.Parser
 import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Multi
@@ -14,6 +16,7 @@ import jakarta.ws.rs.sse.OutboundSseEvent
 import jakarta.ws.rs.sse.Sse
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.kg.slices.SliceSummary
@@ -29,7 +32,6 @@ import kvasir.utils.graphql.SchemaValidator
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
 import kvasir.utils.http.getParentUri
-import kvasir.utils.shacl.GraphQL2SHACL
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
@@ -367,9 +369,10 @@ class GraphSlicesApi(
 
     private fun validateAndPersistSlice(podId: String, sliceId: String, input: SliceInput): Uni<Slice> {
         return try {
-            // Generate shapes
-            val shaclConvertor = GraphQL2SHACL(input.schema, input.context)
-            val slice = input.toSlice(podId, sliceId, shaclConvertor.hasMutations())
+            // Check if the schema contains mutations
+            val doc = Parser.parse(input.schema)
+            val hasMutations = doc.definitions.filterIsInstance<ObjectTypeDefinition>().any { it.name == TYPE_MUTATION }
+            val slice = input.toSlice(podId, sliceId, hasMutations)
             // Validate the schema
             SchemaValidator.validateSchema(slice.schema, slice.context)
             sliceStore.persist(slice).map { slice }
@@ -384,7 +387,8 @@ data class SliceInput(
     @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
     @get:JsonProperty(KvasirVocab.name)
-    val name: String,
+    val name: String = Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8)
+        .toString(),
     @get:JsonProperty(KvasirVocab.schema)
     val schema: String,
     @get:JsonProperty(KvasirVocab.description)

@@ -8,7 +8,7 @@
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>services-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>0.9.0</version>
     </parent>
 
     <dependencies>
@@ -19,7 +19,7 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>definitions</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.9.0</version>
         </dependency>
     </dependencies>
 
@@ -31,6 +31,12 @@
                 <!-- Use the latest released version:
                 https://repo1.maven.org/maven2/com/github/eirslett/frontend-maven-plugin/ -->
                 <version>1.9.1</version>
+
+                <configuration>
+                    <nodeVersion>v22.12.0</nodeVersion>
+                    <installDirectory>target</installDirectory>
+                    <workingDirectory>src/main/frontend</workingDirectory>
+                </configuration>
 
                 <executions>
                     <execution>
@@ -67,10 +73,6 @@
                         </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <nodeVersion>v22.12.0</nodeVersion>
-                    <workingDirectory>src/main/frontend</workingDirectory>
-                </configuration>
             </plugin>
         </plugins>
     </build>

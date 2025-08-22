@@ -1,13 +1,12 @@
 package kvasir.utils.graphql
 
-import graphql.Scalars
 import graphql.language.*
-import graphql.scalars.ExtendedScalars
 import graphql.schema.*
-import graphql.schema.idl.TypeDefinitionRegistry
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
-import kvasir.definitions.kg.graphql.*
+import kvasir.definitions.kg.graphql.ARG_CURSOR_NAME
+import kvasir.definitions.kg.graphql.ARG_PAGE_SIZE_NAME
+import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.cursors.OffsetBasedCursor
 
@@ -126,80 +125,17 @@ fun <T : Value<*>> DirectivesContainer<*>.getDirectiveArg(
     return this.getDirectives(name).firstOrNull()?.getArgument(argName)?.value as? T
 }
 
+fun <T : Value<*>> DirectivesContainer<*>.getDirectiveArg(
+    name: String,
+    argName: String,
+    defaultValue: T
+): T {
+    return this.getDirectiveArg(name, argName) ?: defaultValue
+}
+
 fun <T : Value<*>> GraphQLDirectiveContainer.getDirectiveArg(
     name: String,
     argName: String
 ): T? {
     return this.getAppliedDirective(name)?.getArgument(argName)?.argumentValue?.value?.let { it as T }
-}
-
-fun TypeDefinitionRegistry.addKvasirBuiltins() {
-    this.add(ScalarTypeDefinition.newScalarTypeDefinition().name("JSON").build())
-    this.addAll(KvasirTypes.all.map { type ->
-        when (type) {
-            is GraphQLInterfaceType -> convertInterface(type)
-            is GraphQLObjectType -> convertObject(type)
-            else -> throw RuntimeException("Kvasir built-in setup does not support '${type::class.simpleName}'")
-        }
-    } + KvasirEnums.all.map { enum ->
-        EnumTypeDefinition.newEnumTypeDefinition()
-            .name(enum.name)
-            .enumValueDefinitions(enum.values.map { enumVal ->
-                EnumValueDefinition.newEnumValueDefinition().name(enumVal.name).build()
-            })
-            .build()
-    } + KvasirDirectives.all.map { convertDirective(it) })
-}
-
-private fun convertInterface(type: GraphQLInterfaceType): InterfaceTypeDefinition {
-    return InterfaceTypeDefinition.newInterfaceTypeDefinition()
-        .name(type.name)
-        .implementz(type.interfaces.map { TypeName.newTypeName(it.name).build() })
-        .definitions(type.fieldDefinitions.map(::convertField))
-        .build()
-}
-
-private fun convertObject(type: GraphQLObjectType): ObjectTypeDefinition {
-    return ObjectTypeDefinition.newObjectTypeDefinition()
-        .name(type.name)
-        .implementz(type.interfaces.map { TypeName.newTypeName(it.name).build() })
-        .fieldDefinitions(type.fieldDefinitions.map(::convertField))
-        .build()
-}
-
-private fun convertField(field: GraphQLFieldDefinition): FieldDefinition {
-    return FieldDefinition.newFieldDefinition()
-        .name(field.name)
-        .type(convertType(field.type))
-        .inputValueDefinitions(field.arguments.map(::convertArgument))
-        .build()
-}
-
-private fun convertDirective(directive: GraphQLDirective): DirectiveDefinition {
-    return DirectiveDefinition.newDirectiveDefinition()
-        .name(directive.name)
-        .directiveLocations(
-            directive.validLocations()
-                .map { location -> DirectiveLocation.newDirectiveLocation().name(location.name).build() })
-        .repeatable(directive.isRepeatable)
-        .inputValueDefinitions(directive.arguments.map(::convertArgument))
-        .build()
-}
-
-private fun convertType(type: GraphQLType): Type<*> {
-    return when {
-        GraphQLTypeUtil.isList(type) -> ListType.newListType(convertType(GraphQLTypeUtil.unwrapOne(type))).build()
-        GraphQLTypeUtil.isNonNull(type) -> NonNullType.newNonNullType()
-            .type(convertType(GraphQLTypeUtil.unwrapNonNull(type))).build()
-
-        type is GraphQLNamedType -> TypeName.newTypeName().name(type.name).build()
-        else -> throw IllegalArgumentException("Unsupported GraphQL type $type")
-    }
-}
-
-private fun convertArgument(argument: GraphQLArgument): InputValueDefinition {
-    return InputValueDefinition.newInputValueDefinition()
-        .name(argument.name)
-        .type(convertType(argument.type))
-        .build()
 }

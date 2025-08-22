@@ -91,7 +91,7 @@ object RDFTransformer {
         return defaultStatements + namedGraphStatements
     }
 
-    private fun ensureValidAbsoluteIri(iri: String): String {
+    fun ensureValidAbsoluteIri(iri: String): String {
         if (iri.indexOf(':') < 0) {
             throw IllegalArgumentException("Not a valid (absolute) IRI: '$iri'")
         }
