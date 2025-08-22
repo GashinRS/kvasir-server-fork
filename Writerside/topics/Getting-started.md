@@ -18,9 +18,9 @@ docker compose up -d
 3. This will automatically create a pod at <a href="http://localhost:8080/alice" target="_blank">http://localhost:8080/alice</a> for you to play with.
 The settings for this pod can be modified via the file `application.yaml` in the `kvasir-config` folder.
 
-4. You can view the [Kvasir UI](Kvasir-UI.md) at <a href="http://localhost:8081" target="_blank">http://localhost:8081</a> to play around with your pod. 
+4. You can view the [Kvasir UI](Kvasir-UI.md) at <a href="http://localhost:8080/_ui/" target="_blank">http://localhost:8080/_ui/</a> to play around with your pod. 
 
-> Be sure to read the [Authentication](Authentication.md) section when you want to develop your own clients.
+> Be sure to read the [Authentication & Access Control](Access-Control.md) section when you want to develop your own clients.
 {style="warning"}
 
 

@@ -31,7 +31,7 @@ import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.cursors.OffsetBasedCursor
 import kvasir.utils.graphql.RDFClassTypeResolver
-import kvasir.utils.graphql.addKvasirBuiltins
+import kvasir.utils.graphql.SliceGraphQLSchema
 import kvasir.utils.graphql.getStorageClass
 import kvasir.utils.idgen.ChangeRequestId
 import mutiny.zero.flow.adapters.AdaptersToFlow
@@ -289,8 +289,7 @@ class DefaultKnowledgeGraph(
     protected fun setupPredefinedSchema(request: QueryRequest): Uni<GraphQLSchema> {
         return getRequestedStateAtTimestamp(request)
             .map { atTimestamp ->
-                val typeDefinitionRegistry = SchemaParser().parse(request.predefinedSchema)
-                typeDefinitionRegistry.addKvasirBuiltins()
+                val typeDefinitionRegistry = SliceGraphQLSchema(request.predefinedSchema!!, request.context).getTypeDefinitionRegistry()
                 val dynamicWiringFactory = object : WiringFactory {
 
                     override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {

@@ -3,6 +3,7 @@ package kvasir.definitions.config
 import io.smallrye.config.ConfigMapping
 import io.smallrye.config.WithConverter
 import io.smallrye.config.WithDefault
+import io.smallrye.config.WithName
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.rdf.JSONObject
 import org.eclipse.microprofile.config.spi.Converter
@@ -82,6 +83,10 @@ interface GenerateClientConfig {
      * Optional, as some clients may not require a redirect URI (e.g., service clients).
      */
     fun redirectUris(): Optional<List<String>>
+
+    @WithName("enable-force-pkce")
+    @WithDefault("false")
+    fun enableForcePKCE(): Boolean
 
     /**
      * Optional OpenFGA configuration for the client.

@@ -14,6 +14,18 @@ property, a specific value range, etc. However, unlike views, slices are not res
 also be used for write operations (e.g. restricting the data that can be inserted for a specific slice to a certain
 shape).
 
+The following table summarizes the differences between the capabilities of the global KG GraphQL interface and the Slice
+specific GraphQL interface:
+
+|                                         | Global KG GraphQL interface                                                                                                  | Slice GraphQL interface                                                                                                                                         |
+|-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Endpoint**                            | `/{podId}/kg/query`                                                                                                          | `/{podId}/slices/{sliceId}/query`                                                                                                                               |
+| **Schema**                              | [Auto-generated](Querying.md#auto-generated-schema) based on incoming changes. Best effort, cannot be customized.            | User-defined. Slice author has full control of the exposed Graph structure (and its mapping from RDF).                                                          |
+| **Requires JSON-LD context?**           | Yes <br/> _Although a prefix mapping is auto-generated when no context is provided, resulting in a quite unreadable schema._ | No <br/> _The context is embedded in the Slice definition._                                                                                                     |
+| **Supports GraphQL mutations?**         | No.                                                                                                                          | Yes, see [](#mutation-type).                                                                                                                                    |
+| **Supports GraphQL subscriptions?**     | Yes.                                                                                                                         | Yes, see [](#subscription-type).                                                                                                                                |
+| **Allows fine-grained access control?** | No, all data in the KG is retrievable.                                                                                       | Yes, the schema structure in combination with additional directives, give the author full control on what data can be retrieved from and modified on the Slice. |
+
 ## Defining a Slice
 
 ### Query type
@@ -64,13 +76,6 @@ type schema_Person {
 }
 ```
 
-> The Kvasir system types `RDFNode`, `Resource` and `BoxedLiteral` are available to use in your schema. We could e.g.
-> let `schema_Person` implement the `Resource` interface, to access common functionality such as relation discovery.
-> See [](Querying.md#common-supertypes) for more information.
->
-> (Future revision may automatically extend the provided types with `Resource` as a supertype)
-> {style="tip"}
-
 #### Data restrictions
 
 To further restrict the data retrievable via the Slice, use the [`@filter` directive](Querying.md#filters) similarly to
@@ -94,6 +99,19 @@ type schema_Person {
 }
 ```
 
+#### System types, fields and arguments
+
+Kvasir enhances the user-defined schema with additional types, fields and arguments as a quality-of-life improvement
+when authoring Slices:
+
+- All user-defined types automatically implement the `Resource` interface, which provides a `id` field
+  representing the URI of the resource and other system fields (useful for introspection). For more information,
+  see [Resource](Querying.md#resource-implements-rdfnode). As such, the `id` field in the previous examples can
+  be omitted.
+- All fields that have a List type (e.g. `persons: [schema_Person!]!`), are modified to support arguments for
+  filtering, sorting and pagination. These arguments include `id` (see filtering by id [](Querying.md#arguments)),
+  `pageSize`, `cursor` (see pagination [](Querying.md#pagination)) and `orderBy` (see [](Querying.md#sorting)).
+
 ### Mutation type
 
 A Slice can specify mutations (insertions, deletions) that can be applied using the
@@ -107,7 +125,7 @@ Graph):
 * The mutation must have `ID` as return type. The return value will be the URI of the [Change Request](Changes.md) that
   results from the mutation.
 
-We chose to having to explicitly model the mutations, instead of automatically deriving possible mutations from the
+We chose having to explicitly model the mutations, instead of automatically deriving possible mutations from the
 Query schema. This allows the Slice author to have full control of what data is readable vs. what data can be changed.
 
 As a result, mutations on a Slice can be executed in two ways:
@@ -115,7 +133,7 @@ As a result, mutations on a Slice can be executed in two ways:
 1. Via the Slice-specific Changes API at `/{podId}/slices/{sliceId}/changes`.
 2. Via the Slice-specific GraphQL interface at `/{podId}/slices/{sliceId}/query`, using the defined Mutation Type.
 
-For example: the following GraphQL document, defines mutations for adding or removing Person information (with context
+For example: the following GraphQL document defines mutations for adding or removing Person information (with context
 entry `"schema": "http://schema.org/"`):
 
 ```graphql
@@ -132,7 +150,7 @@ input PersonInput @class(iri: "schema:Person") {
 }
 ```
 
-This example allows clients with write-access to the Slice, to add or remove Persons, which must a `givenName`,
+This example allows clients with write-access to the Slice, to add or remove Persons, which must have a `givenName`,
 `familyName` and zero or multiple email addresses.
 
 #### Input type constraints
@@ -173,6 +191,77 @@ input PersonInput @class(iri: "schema:Person") {
   schema_email: [String!]
 }
 ```
+
+#### Auto-generating input types and mutations
+
+It can be cumbersome to manually define mutations for a Slice, especially when there are many types involved and the
+input types mirror the query types. To ease this process, Kvasir supports auto-generating the input types and mutation
+operations via the `@generateMutations` directive.
+
+When this directive is applied to a query type, Kvasir will automatically generate matching input types and add the
+necessary arguments to the mutation operations. For example, the first example of this section can also be achieved by
+annotating `schema_Person``:
+
+```graphql
+type Query {
+    persons: [schema_Person!]!
+}
+
+type schema_Person @generateMutations {
+    id: ID!
+    schema_givenName: String!
+    schema_familyName: String!
+    schema_email: [String!]
+}
+```
+
+To generate input types and mutations for the entire schema,
+apply the `@generateMutations` directive to the `Query` type
+
+```graphql
+type Query @generateMutations {
+    persons: [schema_Person!]!
+}
+```
+
+We allow the use of the `@shape` directive on the fields of query types that are annotated with `@generateMutations`, so
+this quality-of-life improvement remains useful for a range of common cases. For example, the second example of this
+section (with the `@shape` directives) can also be achieved using the auto-generation feature in the following way:
+
+```graphql
+type schema_Person @generateMutations {
+    id: ID!
+    schema_givenName: String! @shape(minLength: 2)
+    schema_familyName: String! @shape(hasValue: "Doe")
+    schema_email: [String!]
+}
+```
+
+The shape annotations are copied into the definition of the generated input type and have no impact on read operations.
+However, for complex mutations, it is still recommended to manually define the input types and mutations, allowing the
+author to have full control over the definition, while having a clear separation between the query and mutation
+operations.
+
+The `generateMutations` directive has an optional argument `operations`, which allows explicitly specifying which
+operations the author wants to generate. If no operations are explicitly specified, `add` and `remove` are generated by
+default. This feature enables restricting mutations for the type to only insertions or deletions, or customizing the
+mutation name (as long as it starts with `add`, `insert`, `remove` or `delete`).
+
+In the following example, only an `insertPerson` mutation is generated:
+
+```graphql
+type schema_Person @generateMutations(operations: ["insertPerson"]) {
+    id: ID!
+    schema_givenName: String! @shape(minLength: 2)
+    schema_familyName: String! @shape(hasValue: "Doe")
+    schema_email: [String!]
+}
+```
+
+> A `generateMutations` directive on a type takes precedence over a `generateMutations` directive on the `Query` type.
+> If both are present, the one on the type is used. This allows specifying a default behaviour on the `Query` type,
+> while restricting or customizing the mutations for specific types.
+> {style="note"}
 
 ### Subscription type
 
@@ -274,13 +363,12 @@ For example, to retrieve all persons from the `PersonDemoSlice`, you can send a 
 
 ### Mutations on a Slice
 
-When enabled, a Slice can also expose a Changes API (at `/{podId}/slices/{sliceId}/changes`), allowing mutations on the
-Slice. The mutations are restricted by
+By defining Mutation Types in the Slice, a new Slice Changes API is exposed (at `/{podId}/slices/{sliceId}/changes`).
+Change requests sent to this API are always restricted by
 the pre-defined schema, ensuring that only resources that match the criteria of the Slice can be created, updated or
 deleted.
-
-Additionally, if the Slice defines a Mutation Type, mutations may be performed directly using the GraphQL interface (in
-addition to performing mutations via the Changes API).
+Of course, these mutations may also be performed using the GraphQL interface directly, and they are likewise restricted
+by the pre-defined schema.
 
 For example, to add a Person, you can send a `POST` request to the `query` endpoint:
 
