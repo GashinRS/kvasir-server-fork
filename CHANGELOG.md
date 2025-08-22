@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.9.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.8.0..0.9.0) - 2025-08-22
+### Bug Fixes
+- Add /robots.txt to default exclude path prefixes - ([ad32257](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ad32257440be011ce1594d726a8f4b4d0a285f20)) - Thomas Dupont
+- Made ingesting RDF files more robust, fixes #4, #5 - ([c4d0008](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c4d0008b6aa44be810e45d82fd3eea716d0eeef4)) - Wannes Kerckhove
+-  Fixed FQN not properly being resolved for input types when validating a Slice change request - ([57a04b7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/57a04b7a2e9bc12fedec74ba8083d1f2304405b9)) - Wannes Kerckhove
+### Features
+- Slice name is now optional - ([469a2c5](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/469a2c5cd4e0202cd93a145ba5eb7c6be1b8186c)) - Wannes Kerckhove
+- QoL improvements when authoring Slices - ([57a04b7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/57a04b7a2e9bc12fedec74ba8083d1f2304405b9)) - Wannes Kerckhove
+- Added generate-client bootstrap config property that enables enforcing PKCE for public clients. - ([9caeb38](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/9caeb3847ac8aacb2a1ef56b8f2c640b48adef61)) - Wannes Kerckhove
+
+---
+
 ## [0.8.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.7.0..0.8.0) - 2025-07-24
 
 ### Bug Fixes
