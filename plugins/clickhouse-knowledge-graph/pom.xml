@@ -4,24 +4,24 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>clickhouse-knowledge-graph</artifactId>
-    <version>0.8.0</version>
+    <version>0.9.0</version>
 
     <parent>
         <groupId>kvasir-plugins</groupId>
         <artifactId>plugins-parent</artifactId>
-        <version>0.8.0</version>
+        <version>0.9.0</version>
     </parent>
 
     <dependencies>
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>0.8.0</version>
+            <version>0.9.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>default-knowledge-graph</artifactId>
-            <version>0.8.0</version>
+            <version>0.9.0</version>
         </dependency>
         <dependency>
             <groupId>io.smallrye.reactive</groupId>
