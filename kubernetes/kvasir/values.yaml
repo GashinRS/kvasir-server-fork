@@ -21,7 +21,7 @@ global:
   image:
     registry: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server
     pullPolicy: IfNotPresent
-    tag: "0.8.0"
+    tag: "0.9.0"
 
   imagePullSecrets: []
 

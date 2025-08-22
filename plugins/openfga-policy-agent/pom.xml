@@ -6,7 +6,7 @@
     <parent>
         <groupId>kvasir-plugins</groupId>
         <artifactId>plugins-parent</artifactId>
-        <version>0.8.0</version>
+        <version>0.9.0</version>
     </parent>
 
     <artifactId>openfga-policy-agent</artifactId>
@@ -15,17 +15,17 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>definitions</artifactId>
-            <version>0.8.0</version>
+            <version>0.9.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>0.8.0</version>
+            <version>0.9.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>common-http-extensions</artifactId>
-            <version>0.8.0</version>
+            <version>0.9.0</version>
         </dependency>
         <dependency>
             <groupId>idlab.quarkus.ext.pep.openfga</groupId>
