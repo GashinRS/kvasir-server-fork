@@ -236,6 +236,10 @@ class OpenFgaInitializer(
                             this.isDirectAccessGrantsEnabled = preconfiguredClient.enableServiceAccount()
                             this.authorizationServicesEnabled = false
                             this.redirectUris = preconfiguredClient.redirectUris().getOrNull() ?: emptyList()
+                            this.webOrigins = listOf("+")
+                            if (preconfiguredClient.enableForcePKCE()) {
+                                this.attributes = mapOf<String, String>(Pair("pkce.code.challenge.method", "S256"))
+                            }
                         }).checkStatus()
                     }
                 }

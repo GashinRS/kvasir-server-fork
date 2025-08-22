@@ -35,6 +35,16 @@ class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor
             TYPE_BOXED_LITERAL,
             TYPE_UNTYPED_RESOURCE
         )
+
+        val IGNORE_FIELDS = setOf(
+            FIELD_ID_NAME,
+            FIELD_RAW_RDF_NAME,
+            FIELD_OBJECT_NAME,
+            FIELD_RELATIONS_NAME,
+            FIELD_PREDICATES_NAME,
+            FIELD_TYPES_NAME,
+            FIELD_TYPENAME_NAME
+        )
     }
 
     override fun visitTypeDefinition(
@@ -54,7 +64,7 @@ class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor
     override fun visitFieldDefinition(node: FieldDefinition, context: TraverserContext<Node<*>>): TraversalControl? {
         val parent = context.parentNode
         // Naming of the field does not matter when at root level
-        if (node.name != "id" && parent is NamedNode && parent.name !in IGNORE_TYPES) {
+        if (node.name !in IGNORE_FIELDS && parent is NamedNode && parent.name !in IGNORE_TYPES) {
             val iri = resolveNameAsIri(node.name)
             if (iri == null && !node.hasDirective("predicate")) {
                 // Check if a predicate is provided, otherwise throw exception

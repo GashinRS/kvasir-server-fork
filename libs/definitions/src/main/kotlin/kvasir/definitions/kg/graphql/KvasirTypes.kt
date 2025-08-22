@@ -33,7 +33,7 @@ object KvasirTypes {
 
     val commonResourceFields = listOf(
         GraphQLFieldDefinition.newFieldDefinition().name(FIELD_ID_NAME).description("The id of the Resource.")
-            .type(GraphQLID).build(),
+            .type(GraphQLNonNull.nonNull(GraphQLID)).build(),
         GraphQLFieldDefinition.newFieldDefinition().name(FIELD_RELATIONS_NAME)
             .type(GraphQLList.list(GraphQLID))
             .description("Retrieve a list of relations that exists between this Resource and another Resource specified by a URI.")
