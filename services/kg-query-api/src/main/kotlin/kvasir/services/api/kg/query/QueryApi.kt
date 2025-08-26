@@ -56,39 +56,6 @@ class QueryApi(
     }
 
     @Path("{podId}$QUERY_API_PATH")
-    @GET
-    @Produces(MediaType.APPLICATION_JSON)
-    @Operation(
-        summary = "Retrieve data from the KG.",
-        description = "Query the knowledge graph of the specified pod using GraphQL."
-    )
-    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
-    fun queryViaGet(
-        @PathParam("podId") podId: String,
-        @QueryParam("query") query: String,
-        @QueryParam("variables") variables: Optional<String>,
-        @QueryParam("operationName") operationName: Optional<String>,
-        @QueryParam("atTimestamp") atTimestamp: Optional<Instant>,
-        @QueryParam("atChangeRequest") atChangeRequest: Optional<String>
-    ): Uni<QueryResult> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
-            .onItem().ifNotNull().transformToUni { pod ->
-                val req = parseInput(
-                    pod!!,
-                    QueryInputWithContext(
-                        query,
-                        operationName.getOrNull(),
-                        variables.getOrNull()?.let { JsonObject(it).map },
-                        atTimestamp.getOrNull(),
-                        atChangeRequest.getOrNull()
-                    )
-                )
-                knowledgeGraph.query(req).toUni()
-            }
-    }
-
-    @Path("{podId}$QUERY_API_PATH")
     @POST
     @Produces(JSON_LD_MEDIA_TYPE)
     @APIResponse(
@@ -103,40 +70,6 @@ class QueryApi(
         return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input)
-                knowledgeGraph.query(req).map {
-                    it.toJsonLD(req.context)
-                }.toUni()
-            }
-    }
-
-    @Path("{podId}$QUERY_API_PATH")
-    @GET
-    @Produces(JSON_LD_MEDIA_TYPE)
-    @APIResponse(
-        responseCode = "200",
-        content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
-    )
-    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
-    fun queryJsonLDViaGet(
-        @PathParam("podId") podId: String,
-        @QueryParam("query") query: String,
-        @QueryParam("variables") variables: Optional<String>,
-        @QueryParam("operationName") operationName: Optional<String>,
-        @QueryParam("atTimestamp") atTimestamp: Optional<Instant>,
-        @QueryParam("atChangeRequest") atChangeRequest: Optional<String>
-    ): Uni<Any> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
-            .onItem().ifNotNull().transformToUni { pod ->
-                val req = parseInput(
-                    pod!!, QueryInputWithContext(
-                        query,
-                        operationName.getOrNull(),
-                        variables.getOrNull()?.let { JsonObject(it).map },
-                        atTimestamp.getOrNull(),
-                        atChangeRequest.getOrNull()
-                    )
-                )
                 knowledgeGraph.query(req).map {
                     it.toJsonLD(req.context)
                 }.toUni()

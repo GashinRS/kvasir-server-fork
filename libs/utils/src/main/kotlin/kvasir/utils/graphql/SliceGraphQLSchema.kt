@@ -33,7 +33,7 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
             DEFAULT_OPS_ARG
         ).values.filterIsInstance<StringValue>().map { it.value }
 
-    fun getTypeDefinitionRegistry(): TypeDefinitionRegistry {
+    private val processedTypeDefinitionRegistry = run {
         val generatedInputTypes = mutableListOf<Pair<InputObjectTypeDefinition, List<String>>>()
         typeDefinitionRegistry.getTypes(ObjectTypeDefinition::class.java).forEach { type ->
             enhanceObjectType(type)
@@ -63,7 +63,11 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
         generateMutations(generatedInputTypes)
         // Add Kvasir built-in types (e.g. RDFNode, Resource, etc.)
         addKvasirBuiltins()
-        return typeDefinitionRegistry
+        typeDefinitionRegistry
+    }
+
+    fun getTypeDefinitionRegistry(): TypeDefinitionRegistry {
+        return processedTypeDefinitionRegistry
     }
 
     fun getDummySchema(): GraphQLSchema {
@@ -92,7 +96,7 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
         }
         val runtimeWiring =
             RuntimeWiring.newRuntimeWiring().scalar(ExtendedScalars.Json).wiringFactory(dynamicWiringFactory).build()
-        return SchemaGenerator().makeExecutableSchema(getTypeDefinitionRegistry(), runtimeWiring)
+        return SchemaGenerator().makeExecutableSchema(processedTypeDefinitionRegistry, runtimeWiring)
     }
 
     fun getSDL(): String {
@@ -103,6 +107,17 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
                 .includeScalarTypes(false)
                 .includeSchemaElement { it !is GraphQLObjectType || it.name != TYPE_UNTYPED_RESOURCE })
             .print(getDummySchema())
+    }
+
+    fun hasMutations(): Boolean {
+        return typeDefinitionRegistry.getType(TYPE_MUTATION, ObjectTypeDefinition::class.java).isPresent
+    }
+
+    fun validate() {
+        val checkContextVisitor = CheckContextVisitor(context)
+        processedTypeDefinitionRegistry.types().forEach { (_, type) ->
+            AstTransformer().transform(type, checkContextVisitor)
+        }
     }
 
     /**
