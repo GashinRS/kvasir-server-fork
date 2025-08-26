@@ -2,7 +2,6 @@ package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.common.hash.Hashing
-import graphql.language.ObjectTypeDefinition
 import graphql.parser.Parser
 import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Multi
@@ -16,7 +15,6 @@ import jakarta.ws.rs.sse.OutboundSseEvent
 import jakarta.ws.rs.sse.Sse
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.kg.slices.SliceSummary
@@ -28,7 +26,7 @@ import kvasir.definitions.rdf.KvasirVocab
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.plugins.policyagent.openfga.extractors.GraphQLGetRelationExtractor
 import kvasir.plugins.policyagent.openfga.extractors.GraphQLPostRelationExtractor
-import kvasir.utils.graphql.SchemaValidator
+import kvasir.utils.graphql.SliceGraphQLSchema
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
 import kvasir.utils.http.getParentUri
@@ -209,39 +207,6 @@ class GraphSlicesApi(
         }
     }
 
-    @Tag(name = ApiDocTags.KG_QUERYING_API)
-    @GET
-    @Path("{podId}/slices/{sliceId}/query")
-    @Produces(MediaType.APPLICATION_JSON)
-    @Operation(
-        summary = "Interact with a specific subset of the KG.",
-        description = "Execute a query on a predefined slice of the specified pod's Knowledge Graph using GraphQL."
-    )
-    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
-    fun queryVirtualViaGet(
-        @PathParam("podId") podId: String,
-        @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
-        @QueryParam("query") query: String,
-        @QueryParam("variables") variables: Optional<String>,
-        @QueryParam("operationName") operationName: Optional<String>,
-        @QueryParam("atTimestamp") atTimestamp: Optional<Instant>,
-        @QueryParam("atChangeRequest") atChangeRequest: Optional<String>
-    ): Uni<QueryResult> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        val input =
-            QueryInputImpl(
-                query = query,
-                variables = variables.getOrNull()?.let { JsonObject(it).map },
-                operationName = operationName.getOrNull(),
-                atTimestamp = atTimestamp.getOrNull(),
-                atChangeRequest = atChangeRequest.getOrNull()
-            )
-        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
-            executeQuery(fqPodId, slice, input).toUni()
-        }
-    }
-
     @POST
     @Path("{podId}/slices/{sliceId}/query")
     @Consumes(MediaType.APPLICATION_JSON)
@@ -260,6 +225,10 @@ class GraphSlicesApi(
         }
     }
 
+    /**
+     * A GET variant of the query endpoint for Subscriptions is provided for compatibility with SSE clients that
+     * only support GET requests.
+     */
     @GET
     @Path("{podId}/slices/{sliceId}/query")
     @Produces(MediaType.SERVER_SENT_EVENTS)
@@ -272,6 +241,7 @@ class GraphSlicesApi(
         @QueryParam("variables") variables: Optional<String>,
         @QueryParam("operationName") operationName: Optional<String>,
     ): Multi<OutboundSseEvent> {
+        println("In Slice subscription via GET")
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val queryInputImpl =
@@ -308,41 +278,6 @@ class GraphSlicesApi(
         }
     }
 
-    @GET
-    @Path("{podId}/slices/{sliceId}/query")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(JSON_LD_MEDIA_TYPE)
-    @APIResponse(
-        responseCode = "200",
-        content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
-    )
-    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
-    fun queryVirtualJsonLDViaGet(
-        @PathParam("podId") podId: String,
-        @PathParam("sliceId") sliceId: String,
-        @QueryParam("query") query: String,
-        @QueryParam("variables") variables: Optional<String>,
-        @QueryParam("operationName") operationName: Optional<String>,
-        @QueryParam("atTimestamp") atTimestamp: Optional<Instant>,
-        @QueryParam("atChangeRequest") atChangeRequest: Optional<String>
-    ): Uni<Any> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        val input =
-            QueryInputImpl(
-                query = query,
-                variables = variables.getOrNull()?.let { JsonObject(it).map },
-                operationName = operationName.getOrNull(),
-                atTimestamp = atTimestamp.getOrNull(),
-                atChangeRequest = atChangeRequest.getOrNull()
-            )
-        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
-            executeQuery(fqPodId, slice, input).toUni().map {
-                it.toJsonLD(slice.context)
-            }
-        }
-    }
-
     private fun executeQuery(
         podId: String,
         slice: Slice,
@@ -370,11 +305,10 @@ class GraphSlicesApi(
     private fun validateAndPersistSlice(podId: String, sliceId: String, input: SliceInput): Uni<Slice> {
         return try {
             // Check if the schema contains mutations
-            val doc = Parser.parse(input.schema)
-            val hasMutations = doc.definitions.filterIsInstance<ObjectTypeDefinition>().any { it.name == TYPE_MUTATION }
-            val slice = input.toSlice(podId, sliceId, hasMutations)
+            val parsedSchema = SliceGraphQLSchema(input.schema, input.context)
+            val slice = input.toSlice(podId, sliceId, parsedSchema.hasMutations())
             // Validate the schema
-            SchemaValidator.validateSchema(slice.schema, slice.context)
+            parsedSchema.validate()
             sliceStore.persist(slice).map { slice }
         } catch (err: Throwable) {
             Uni.createFrom().failure(err)
