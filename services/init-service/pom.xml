@@ -6,7 +6,7 @@
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>services-parent</artifactId>
-        <version>0.9.0</version>
+        <version>0.9.1</version>
     </parent>
 
     <artifactId>init-service</artifactId>
@@ -15,17 +15,17 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>0.9.0</version>
+            <version>0.9.1</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>clickhouse-knowledge-graph</artifactId>
-            <version>0.9.0</version>
+            <version>0.9.1</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>openfga-policy-agent</artifactId>
-            <version>0.9.0</version>
+            <version>0.9.1</version>
         </dependency>
     </dependencies>
 
