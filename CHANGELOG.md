@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.9.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.0..v0.9.1) - 2025-08-26
+### Bug Fixes
+- Fixed GraphQL & Slice regression bugs - ([2bdaae4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/2bdaae445f75445d39c8cd88fc24d95a610c1a0b)) - Wannes Kerckhove
+
+---
+
 ## [0.9.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.8.0..0.9.0) - 2025-08-22
 ### Bug Fixes
 - Add /robots.txt to default exclude path prefixes - ([ad32257](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ad32257440be011ce1594d726a8f4b4d0a285f20)) - Thomas Dupont
