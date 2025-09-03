@@ -241,7 +241,6 @@ class GraphSlicesApi(
         @QueryParam("variables") variables: Optional<String>,
         @QueryParam("operationName") operationName: Optional<String>,
     ): Multi<OutboundSseEvent> {
-        println("In Slice subscription via GET")
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val queryInputImpl =
