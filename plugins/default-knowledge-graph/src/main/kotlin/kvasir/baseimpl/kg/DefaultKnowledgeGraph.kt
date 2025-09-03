@@ -3,7 +3,11 @@ package kvasir.baseimpl.kg
 import graphql.ExecutionInput
 import graphql.ExecutionResult
 import graphql.GraphQL
+import graphql.GraphqlErrorBuilder
 import graphql.execution.AbortExecutionException
+import graphql.execution.DataFetcherExceptionHandler
+import graphql.execution.DataFetcherExceptionHandlerParameters
+import graphql.execution.DataFetcherExceptionHandlerResult
 import graphql.execution.SubscriptionExecutionStrategy
 import graphql.language.AstPrinter
 import graphql.parser.Parser
@@ -40,6 +44,7 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 import org.reactivestreams.Publisher
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 @ConfigMapping(prefix = "kvasir.changes.processing")
 interface ChangeRequestPipelineConfig {
@@ -172,6 +177,7 @@ class DefaultKnowledgeGraph(
             }.filterIsInstance<StorageBackend>()
                 .associateBy { it::class.qualifiedName } + mapOf(null to defaultStorageBackend)
             val build = GraphQL.newGraphQL(executableSchema)
+                .defaultDataFetcherExceptionHandler(SanitizedExceptionHandler())
                 .subscriptionExecutionStrategy(SubscriptionExecutionStrategy())
                 .instrumentation(
                     PaginationInstrumentation(
@@ -289,7 +295,8 @@ class DefaultKnowledgeGraph(
     protected fun setupPredefinedSchema(request: QueryRequest): Uni<GraphQLSchema> {
         return getRequestedStateAtTimestamp(request)
             .map { atTimestamp ->
-                val typeDefinitionRegistry = SliceGraphQLSchema(request.predefinedSchema!!, request.context).getTypeDefinitionRegistry()
+                val typeDefinitionRegistry =
+                    SliceGraphQLSchema(request.predefinedSchema!!, request.context).getTypeDefinitionRegistry()
                 val dynamicWiringFactory = object : WiringFactory {
 
                     override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
@@ -434,6 +441,19 @@ class DefaultKnowledgeGraph(
             errorMessage = errorMessage
         )
         return changeHistory.register(report).map { report }
+    }
+
+}
+
+class SanitizedExceptionHandler : DataFetcherExceptionHandler {
+    override fun handleException(handlerParameters: DataFetcherExceptionHandlerParameters): CompletableFuture<DataFetcherExceptionHandlerResult> {
+        // Log the original exception
+        Log.warn("Data fetching exception: ${handlerParameters.exception.message}", handlerParameters.exception)
+        val error = GraphqlErrorBuilder.newError().message(handlerParameters.exception.message)
+            .path(handlerParameters.path)
+            .location(handlerParameters.sourceLocation)
+            .build()
+        return CompletableFuture.completedFuture(DataFetcherExceptionHandlerResult.newResult().error(error).build())
     }
 
 }

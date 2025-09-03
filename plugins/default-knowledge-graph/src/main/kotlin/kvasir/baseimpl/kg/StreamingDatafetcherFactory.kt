@@ -112,7 +112,7 @@ class StreamingDatafetcherFactory(
                             ChangeRecordType.DELETE -> changeRequestId.timestamp()
                                 .minusNanos(1) // State before the statements were deleted
                         }
-                        println("Query timestamp: $requestTimestamp (triggerType: $triggerType)")
+
                         val dataFetcher = knowledgeGraph.buildDatafetcher(
                             request,
                             atTimestamp = requestTimestamp,

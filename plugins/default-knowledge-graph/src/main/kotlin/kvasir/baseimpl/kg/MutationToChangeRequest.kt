@@ -14,6 +14,7 @@ import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.utils.graphql.getFQName
 import kvasir.utils.graphql.innerType
 import kvasir.utils.idgen.ChangeRequestId
+import kvasir.utils.rdf.RDFTransformer
 
 class MutationToChangeRequest(private val request: QueryRequest) {
 
@@ -25,15 +26,19 @@ class MutationToChangeRequest(private val request: QueryRequest) {
     private val deletes = mutableListOf<Map<String, Any>>()
 
     fun add(env: DataFetchingEnvironment) {
-        mutationFields.add(env.field)
-        val instances = env.field.arguments.associateWith { env.fieldDefinition.getArgument(it.name) }
-            .map { (argument, argumentDefinition) -> parseArgumentValue(env, argumentDefinition, argument.value) }
-            .filterNotNull().flatten()
-        if (env.field.name.startsWith("add") || env.field.name.startsWith("insert")) {
-            inserts.addAll(instances)
-        }
-        if (env.field.name.startsWith("remove") || env.field.name.startsWith("delete")) {
-            deletes.addAll(instances)
+        try {
+            mutationFields.add(env.field)
+            val instances = env.field.arguments.associateWith { env.fieldDefinition.getArgument(it.name) }
+                .map { (argument, argumentDefinition) -> parseArgumentValue(env, argumentDefinition, argument.value) }
+                .filterNotNull().flatten()
+            if (env.field.name.startsWith("add") || env.field.name.startsWith("insert")) {
+                inserts.addAll(instances)
+            }
+            if (env.field.name.startsWith("remove") || env.field.name.startsWith("delete")) {
+                deletes.addAll(instances)
+            }
+        } catch (e: Throwable) {
+            throw IllegalArgumentException("Failed to parse mutation field '${env.field.name}': ${e.message}", e)
         }
     }
 
@@ -93,9 +98,7 @@ class MutationToChangeRequest(private val request: QueryRequest) {
             val fieldType = type.getField(field.name)
             val rawValue = field.value
             if (field.name == FIELD_ID_NAME) {
-                JsonLdKeywords.id to (rawValue as StringValue).value.let {
-                    JsonLdHelper.getFQName(it, request.context) ?: it
-                }
+                toIDReference(rawValue)
             } else {
                 getFQName(type.getField(field.name), request.context) to if (rawValue is ArrayValue) {
                     rawValue.values.map { listRawValue ->
@@ -107,7 +110,7 @@ class MutationToChangeRequest(private val request: QueryRequest) {
                 } else {
                     if (rawValue is ScalarValue<*>) {
                         val scalarValue = convertScalar(rawValue)
-                        if (fieldType.type == Scalars.GraphQLID) mapOf(JsonLdKeywords.id to scalarValue) else scalarValue
+                        if (fieldType.type == Scalars.GraphQLID) mapOf(toIDReference(scalarValue)) else scalarValue
                     } else {
                         toJSON(
                             rawValue as ObjectValue,
@@ -125,9 +128,7 @@ class MutationToChangeRequest(private val request: QueryRequest) {
             val fieldType = type.getField(fieldName)
             val rawValue = fieldValue
             if (fieldName == FIELD_ID_NAME) {
-                JsonLdKeywords.id to (rawValue as String).let {
-                    JsonLdHelper.getFQName(it, request.context) ?: it
-                }
+                toIDReference(rawValue)
             } else {
                 getFQName(type.getField(fieldName), request.context) to if (rawValue is Iterable<*>) {
                     rawValue.map { listRawValue ->
@@ -143,12 +144,18 @@ class MutationToChangeRequest(private val request: QueryRequest) {
                             type.getFieldDefinition(fieldName).type.innerType()
                         )
                     } else {
-                        val scalarValue = rawValue
-                        if (fieldType.type == Scalars.GraphQLID) mapOf(JsonLdKeywords.id to scalarValue) else scalarValue
+                        if (fieldType.type == Scalars.GraphQLID) mapOf(toIDReference(rawValue)) else rawValue
                     }
                 }
             }
         }.plus(JsonLdKeywords.type to typeFqName)
+    }
+
+    private fun toIDReference(rawValue: Any): Pair<String, String> {
+        val rawValueStr = if (rawValue is StringValue) rawValue.value else rawValue as String
+        val ref = JsonLdHelper.getFQName(rawValueStr, request.context) ?: rawValueStr
+        // Check if the ref is a valid URI
+        return JsonLdKeywords.id to RDFTransformer.ensureValidAbsoluteIri(ref)
     }
 
     private fun convertScalar(value: ScalarValue<*>): Any {
