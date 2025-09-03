@@ -164,8 +164,8 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
                         }?.let { valueType ->
                             InputValueDefinition.newInputValueDefinition()
                                 .name(field.name)
-                                // Copy shape directives
-                                .directives(field.directives.filter { it.name == DIRECTIVE_SHAPE_NAME })
+                                // Copy shape directives AND predicate directives
+                                .directives(field.directives.filter { it.name == DIRECTIVE_SHAPE_NAME || it.name == DIRECTIVE_PREDICATE_NAME })
                                 .type(
                                     if (TypeUtil.isWrapped(field.type)) {
                                         replaceInnerType(field.type, valueType)
