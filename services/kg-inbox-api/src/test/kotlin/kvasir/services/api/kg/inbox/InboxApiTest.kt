@@ -10,6 +10,7 @@ import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.definitions.rdf.getJsonArray
 import kvasir.utils.rdf.RDFTransformer
 import kvasir.utils.test.clickhouse.ClickhouseTestResource
 import kvasir.utils.test.commons.SchemaVocab
@@ -150,6 +151,7 @@ class InboxApiTest {
     fun testWithClause() {
         // Add a person
         val personData = TestDataGenerator.generatePersonData(1)
+        val originalEmails = personData.first().getJsonArray<String>(SchemaVocab.email)!!.toSet()
         val personId = personData.first()[JsonLdKeywords.id]!!
         val personGivenName = personData.first()[SchemaVocab.givenName]!!
         val insert = ChangeRequestInput(insert = personData)
@@ -183,13 +185,21 @@ class InboxApiTest {
         val changeRequestUri = testHelpers.requestChangeViaHTTPSync(update)
 
         // Check the changes
-        println(
+        val changes =
             knowledgeGraph.getChangeRecords(
                 ChangeRecordRequest(
                     testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                     changeRequestUri
                 )
             ).await().indefinitely()
+
+        assertEquals(
+            originalEmails,
+            changes.items.filter { it.type == ChangeRecordType.DELETE }.map { it.statement.`object` as String }.toSet()
+        )
+        assertEquals(
+            setOf(updatedEmail),
+            changes.items.filter { it.type == ChangeRecordType.INSERT }.map { it.statement.`object` as String }.toSet()
         )
 
         // Check the email address
@@ -200,7 +210,6 @@ class InboxApiTest {
                 query = "{ ex_Person(id: \"$personId\") { so_email } }"
             )
         ).toUni().await().indefinitely()
-        println(result)
         val persons = result.data?.get("ex_Person") as List<Map<String, Any>>
         assertEquals(listOf(updatedEmail), persons.first()["so_email"])
 

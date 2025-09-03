@@ -54,14 +54,3 @@ class KvasirTenantConfigResolver(
         }
     }
 }
-
-fun main() {
-    val json = """
-        {
-          "authServerUrl": "https://auth.example.com",
-          "test": "test"
-        }
-    """.trimIndent()
-    val oidcTenantConfig = Json.decodeValue(json, OidcTenantConfig::class.java)
-    println(oidcTenantConfig)
-}
