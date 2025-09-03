@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.9.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.1..v0.9.2) - 2025-09-03
+### Bug Fixes
+- Fixed broken @generateMutations for types with explicit @predicate directives instead of prefix-based qualifications. - ([21b8c13](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/21b8c136eac09a44a47c9043ad46a45e7dc1905f)) - Wannes Kerckhove
+- IRI validation should check if the IRI is an absolute IRI based on a set of known schemes. - ([7e40c1b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7e40c1bdeb29c1e5a292bc5708580370e928db57)) - Wannes Kerckhove
+### Improvements
+- Improved how errors are outputted for the GraphQL endpoints (we used to serialize the entire stack trace as JSON, which is not readable but also caused issues with the GraphiQL client getting stuck). - ([7e40c1b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7e40c1bdeb29c1e5a292bc5708580370e928db57)) - Wannes Kerckhove
+
+---
+
 ## [0.9.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.0..v0.9.1) - 2025-08-26
 ### Bug Fixes
 - Fixed GraphQL & Slice regression bugs - ([2bdaae4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/2bdaae445f75445d39c8cd88fc24d95a610c1a0b)) - Wannes Kerckhove
