@@ -36,6 +36,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestResponse
 import java.net.URI
+import java.security.Principal
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
@@ -45,7 +46,8 @@ class PodManagementApi(
     @ConfigProperty(name = KvasirConfig.WEBCLIENT_URI_PROPERTY, defaultValue = KvasirConfig.WEBCLIENT_URI_DEFAULT)
     private val webclientUri: Optional<URI>,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
-    private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>
+    private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
+    private val principal: Principal
 ) : PodSetupHelper() {
 
     @PermitAll
@@ -66,7 +68,8 @@ class PodManagementApi(
                 lifecycleEventEmitter.send(
                     LifeCycleEvent(
                         type = LifeCycleEventType.POD_CREATED,
-                        podId = fqPodId
+                        podId = fqPodId,
+                        requestingUser = principal.name,
                     )
                 )
             }
@@ -86,8 +89,8 @@ class PodManagementApi(
     )
     @APIResponseSchema(PodInfoGraph::class)
     fun list(): Uni<List<PodInfo>> {
-        return podStore.list().map { result ->
-            result.map { pod -> PodInfo(pod.id, "${pod.id}/.profile") }
+        return podStoreFactory.createPodStore().find().map { result ->
+            result.items.map { pod -> PodInfo(pod.id, "${pod.id}/.profile") }
         }
     }
 
@@ -102,7 +105,7 @@ class PodManagementApi(
     @OpenFgaPolicyEnforcer
     fun get(@PathParam("podId") podId: String): Uni<Pod> {
         val fqPodId = uriInfo.getResourceUri().toASCIIString()
-        return podStore.getById(fqPodId)
+        return podStoreFactory.createPodStore().findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transform { it!! }
     }
@@ -113,7 +116,7 @@ class PodManagementApi(
     @Tag(name = ApiDocTags.PODS_API)
     fun getHtml(@PathParam("podId") podId: String): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().toASCIIString()
-        return podStore.getById(fqPodId)
+        return podStoreFactory.createPodStore().findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { item ->
                 if (webclientUri.isPresent) {
@@ -138,7 +141,7 @@ class PodManagementApi(
         // This is a simple example of a profile endpoint that returns a public profile of the pod.
         // Could fetch data from the KG, but for now, extracts some static info
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return podStore.getById(fqPodId)
+        return podStoreFactory.createPodStore().findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transform { pod ->
                 PodPublicProfile(
@@ -162,7 +165,8 @@ class PodManagementApi(
     @OpenFgaPolicyEnforcer
     fun update(@PathParam("podId") podId: String, input: UpdatePodInput): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().toASCIIString()
-        return podStore.getById(fqPodId).chain { existingPod ->
+        val podStore = podStoreFactory.createPodStore()
+        return podStore.findById(fqPodId).chain { existingPod ->
             if (existingPod == null) {
                 Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build())
             } else {
@@ -172,7 +176,8 @@ class PodManagementApi(
                         lifecycleEventEmitter.send(
                             LifeCycleEvent(
                                 type = LifeCycleEventType.POD_UPDATED,
-                                podId = fqPodId
+                                podId = fqPodId,
+                                requestingUser = principal.name
                             )
                         )
                     }
@@ -193,10 +198,16 @@ class PodManagementApi(
     fun delete(@PathParam("podId") podId: String): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().toASCIIString()
         // TODO: delete all content (incl. S3 bucket, KG data, etc.)
-        return podStore.deleteById(fqPodId)
+        return podStoreFactory.createPodStore().deleteById(fqPodId)
             .chain { _ ->
                 // Emit life-cycle event
-                lifecycleEventEmitter.send(LifeCycleEvent(type = LifeCycleEventType.POD_DELETED, podId = fqPodId))
+                lifecycleEventEmitter.send(
+                    LifeCycleEvent(
+                        type = LifeCycleEventType.POD_DELETED,
+                        podId = fqPodId,
+                        requestingUser = principal.name
+                    )
+                )
             }
             .map { Response.noContent().build() }
     }

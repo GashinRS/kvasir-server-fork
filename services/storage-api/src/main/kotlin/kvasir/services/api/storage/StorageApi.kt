@@ -85,6 +85,7 @@ class S3Interceptor(
     @ConfigProperty(name = "kvasir.services.storage.s3.secret-key")
     private val s3SecretKey: String,
     private val storageEventEmitterProvider: StorageMutationEmitterProvider,
+    private val authHandler: Instance<AuthHandler>
 ) : ProxyInterceptor {
 
     companion object {
@@ -137,6 +138,8 @@ class S3Interceptor(
                     val event = StorageEvent(
                         id = "urn:kvasir:storage-events:${UUID.randomUUID()}",
                         timestamp = Instant.now(),
+                        requestingUser = authHandler.takeIf { it.isResolvable }?.get()
+                            ?.getPrincipalForProxiedRequest(context.request().proxiedRequest())?.name,
                         podId = "$baseUri$podId",
                         sliceId = sliceId?.let { "$baseUri$podId/slices/$it" },
                         objectId = URLDecoder.decode(

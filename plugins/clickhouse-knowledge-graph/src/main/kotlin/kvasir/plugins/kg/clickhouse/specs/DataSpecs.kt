@@ -1,10 +1,7 @@
 package kvasir.plugins.kg.clickhouse.specs
 
-import io.vertx.core.json.Json
 import io.vertx.core.json.JsonArray
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.changes.ChangeReport
-import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.timeseries.Observation
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseRecord
@@ -15,18 +12,11 @@ import java.time.temporal.ChronoUnit
 const val SYSTEM_DB = "_kvasir"
 const val DATA_TABLE = "data"
 const val META_DATA_TABLE = "metadata"
-const val CHANGE_LOG_TABLE = "changelog"
-const val SLICE_TABLE = "slices"
-const val POD_TABLE = "pods"
 const val TIME_SERIES_DATA_TABLE = "observations"
 const val TIME_SERIES_TABLE = "series"
 val DATA_COLUMNS =
     listOf("subject", "predicate", "object", "datatype", "language", "graph", "timestamp", "change_request_id", "sign")
 val META_DATA_COLUMNS = listOf("type_uri", "property_uri", "property_kind", "property_ref")
-val CHANGE_LOG_COLUMNS =
-    listOf("id", "slice_id", "timestamp", "nr_of_inserts", "nr_of_deletes", "status_lines")
-val SLICE_COLUMNS = listOf("id", "pod_id", "timestamp", "json")
-val POD_COLUMNS = listOf("id", "timestamp", "json")
 val SORT_COLUMNS = listOf("subject", "predicate", "object", "datatype", "language", "graph")
 val REVERSED_SORT_COLUMNS = listOf("object", "predicate", "subject", "datatype", "language", "graph")
 
@@ -83,38 +73,6 @@ class MetadataInsertRecordSpec(database: String) :
     }
 }
 
-class ChangelogInsertRecordSpec(database: String) :
-    InsertRecordSpec<ChangeReport>(database, CHANGE_LOG_TABLE, CHANGE_LOG_COLUMNS) {
-    override fun toRecord(t: ChangeReport): ClickhouseRecord {
-        return ClickhouseRecord()
-            .add(t.id)
-            .add(t.sliceId ?: "")
-            .add(t.statusEntry.last().timestamp)
-            .add(t.nrOfInserts)
-            .add(t.nrOfDeletes)
-            .add(Json.encode(t.statusEntry))
-    }
-}
-
-object SliceInsertRecordSpec : InsertRecordSpec<Slice>(SYSTEM_DB, SLICE_TABLE, SLICE_COLUMNS) {
-    override fun toRecord(t: Slice): ClickhouseRecord {
-        return ClickhouseRecord()
-            .add(t.id)
-            .add(t.podId)
-            .add(System.currentTimeMillis())
-            .add(t)
-    }
-}
-
-object PodInsertRecordSpec : InsertRecordSpec<Pod>(SYSTEM_DB, POD_TABLE, POD_COLUMNS) {
-    override fun toRecord(t: Pod): ClickhouseRecord {
-        return ClickhouseRecord()
-            .add(t.id)
-            .add(System.currentTimeMillis())
-            .add(t)
-    }
-}
-
 class KGTypeQuerySpec(database: String) :
     QuerySpec<KGType, String>(database, META_DATA_TABLE, listOf("type_uri", "properties")) {
     override fun fromRecord(record: ClickhouseRecord): KGType {
@@ -144,18 +102,6 @@ class GenericQuerySpec(database: String = SYSTEM_DB, table: String, private val 
         }.toMap()
     }
 
-}
-
-class SliceQuerySpec : QuerySpec<Slice, String>(SYSTEM_DB, SLICE_TABLE, SLICE_COLUMNS) {
-    override fun fromRecord(record: ClickhouseRecord): Slice {
-        return Json.decodeValue(record.getString(1), Slice::class.java)
-    }
-}
-
-class PodQuerySpec : QuerySpec<Pod, String>(SYSTEM_DB, POD_TABLE, POD_COLUMNS) {
-    override fun fromRecord(record: ClickhouseRecord): Pod {
-        return Json.decodeValue(record.getString(1), Pod::class.java)
-    }
 }
 
 class ObservationInsertRecordSpec(database: String) :

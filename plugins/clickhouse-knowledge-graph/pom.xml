@@ -27,5 +27,21 @@
             <groupId>io.smallrye.reactive</groupId>
             <artifactId>smallrye-mutiny-vertx-web-client</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkiverse.qute.web</groupId>
+            <artifactId>quarkus-qute-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-libs</groupId>
+            <artifactId>test-utils</artifactId>
+            <version>0.9.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-libs</groupId>
+            <artifactId>clickhouse-test-utils</artifactId>
+            <version>0.9.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

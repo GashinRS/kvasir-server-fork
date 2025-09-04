@@ -45,6 +45,7 @@ class QueryApiTest {
             ChangeRequest(
                 ChangeRequestId.generate("$podUri/changes").encode(),
                 emptyMap(),
+                "alice",
                 podUri,
                 insert = personData
             )
@@ -258,6 +259,7 @@ class QueryApiTest {
             ChangeRequest(
                 ChangeRequestId.generate("$podUri/changes").encode(),
                 emptyMap(),
+                "alice",
                 podUri,
                 // Include type info for both sides of the relation to help the metadata generator
                 insert = children.map {
@@ -478,6 +480,7 @@ class QueryApiTest {
         val changeRequest = ChangeRequest(
             ChangeRequestId.generate("$podUri/changes").encode(),
             emptyMap(),
+            "alice",
             podUri,
             // Include type info for both sides of the relation to help the metadata generator
             insert = listOf(
@@ -521,6 +524,7 @@ class QueryApiTest {
         val changeRequest2 = ChangeRequest(
             ChangeRequestId.generate("$podUri/changes").encode(),
             emptyMap(),
+            "alice",
             podUri,
             insert = listOf(
                 mapOf(
@@ -550,6 +554,7 @@ class QueryApiTest {
         val reverseChanges = ChangeRequest(
             ChangeRequestId.generate("$podUri/changes").encode(),
             emptyMap(),
+            "alice",
             podUri,
             delete = listOf(
                 mapOf(

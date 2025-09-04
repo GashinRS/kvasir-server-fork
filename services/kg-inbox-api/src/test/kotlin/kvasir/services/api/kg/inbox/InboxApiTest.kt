@@ -8,6 +8,7 @@ import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.Assertion
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
+import kvasir.definitions.kg.slices.SliceStoreFactory
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.getJsonArray
@@ -34,7 +35,7 @@ class InboxApiTest {
     lateinit var knowledgeGraph: KnowledgeGraph
 
     @Inject
-    lateinit var sliceStore: SliceStore
+    lateinit var sliceStoreFactory: SliceStoreFactory
 
     @Test
     fun testBasicInsertAndDelete() {
@@ -58,6 +59,7 @@ class InboxApiTest {
         var result = knowledgeGraph.query(
             QueryRequest(
                 TestConstants.CONTEXT,
+                "alice",
                 testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                 query = "{ ex_Person { id so_givenName so_familyName } }"
             )
@@ -87,6 +89,7 @@ class InboxApiTest {
         result = knowledgeGraph.query(
             QueryRequest(
                 TestConstants.CONTEXT,
+                "alice",
                 testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                 query = "{ ex_Person { id so_givenName so_familyName } }"
             )
@@ -138,6 +141,7 @@ class InboxApiTest {
         val result = knowledgeGraph.query(
             QueryRequest(
                 TestConstants.CONTEXT,
+                "alice",
                 testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                 query = "{ ex_Person { id so_givenName so_familyName } }"
             )
@@ -206,6 +210,7 @@ class InboxApiTest {
         val result = knowledgeGraph.query(
             QueryRequest(
                 TestConstants.CONTEXT,
+                "alice",
                 testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                 query = "{ ex_Person(id: \"$personId\") { so_email } }"
             )
@@ -245,11 +250,11 @@ class InboxApiTest {
         // Define Slice
         val podId = testHelpers.getPodUri()
         val sliceId = "$podId/slices/test"
-        sliceStore.persist(
+        sliceStoreFactory.getSliceStore(podId).persist(
             Slice(
                 sliceId,
                 TestConstants.CONTEXT,
-                podId,
+                "alice",
                 "test",
                 "",
                 """

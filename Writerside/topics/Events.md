@@ -27,6 +27,7 @@ namespace):
 | `podId`             | The ID of the Pod the query was executed on.                                                                                    |
 | `sliceId`           | ID of the Slice the query was executed on (Optional).                                                                           |
 | `atTimestamp`       | The query targeted the state of the KG at a specified moment in time (see [](Querying.md#time-travel)) (Optional).              |
+| `requestingUser`    | ID of the user or client that performed the query request.                                                                      |
 | `atChangeRequestId` | The query targeted a specific state of the KG, by specifiying a change request id (see [](Querying.md#time-travel)) (Optional). |
 | `statusCode`        | The status of the query request (e.g., `COMPLETED`, `FAILED`).                                                                  |
 | `message`           | Error message in case the request was not completed successfully (Optional).                                                    |
@@ -53,14 +54,15 @@ data:{"@id":"urn:kvasir:life-cycle-events:36851bea-7d52-4f34-b73c-59148d117db9",
 
 A life-cycle event contains the following properties (in the `https://kvasir.discover.ilabt.imec.be/vocab#`):
 
-| Property    | Description                                                                                               |
-|-------------|-----------------------------------------------------------------------------------------------------------|
-| `@id`       | The unique identifier of the life-cycle event.                                                            |
-| `@context`  | The context of the life-cycle event, including the namespaces used.                                       |
-| `timestamp` | The timestamp when the life-cycle event occurred (UTC).                                                   |
-| `podId`     | The ID of the Pod the life-cycle event occurred on.                                                       |
-| `sliceId`   | ID of the Slice the life-cycle event occurred on (Optional).                                              |
-| `type`      | The type of the life-cycle event (e.g., `POD_UPDATED`, `SLICE_CREATED`, `SLICE_UPATED`, `SLICE_DELETED`). |
+| Property         | Description                                                                                               |
+|------------------|-----------------------------------------------------------------------------------------------------------|
+| `@id`            | The unique identifier of the life-cycle event.                                                            |
+| `@context`       | The context of the life-cycle event, including the namespaces used.                                       |
+| `timestamp`      | The timestamp when the life-cycle event occurred (UTC).                                                   |
+| `podId`          | The ID of the Pod the life-cycle event occurred on.                                                       |
+| `sliceId`        | ID of the Slice the life-cycle event occurred on (Optional).                                              |
+| `requestingUser` | ID of the user or client that performed the API request that triggered this life-cycle event.             |
+| `type`           | The type of the life-cycle event (e.g., `POD_UPDATED`, `SLICE_CREATED`, `SLICE_UPATED`, `SLICE_DELETED`). |
 
 > For services that have direct access to the Kvasir infrastructure: you can subscribe to the same information by
 > creating a Kafka consumer for the `lifecycle.events` topic. This topic holds the life-cycle events for all Pods, so
@@ -88,6 +90,7 @@ A storage event contains the following properties (in the `https://kvasir.discov
 | `timestamp`         | The timestamp when the operation was performed (UTC).                                                           |
 | `podId`             | The ID of the Pod the operation was performed on.                                                               |
 | `sliceId`           | ID of the Slice the operation was performed on (Optional).                                                      |
+| `requestingUser`    | ID of the user or client that performed the operation.                                                          |
 | `type`              | The type of operation performed on the object (e.g., `READ_OBJECT`, `PUT_OBJECT`, `DELETE_OBJECT`).             |
 | `externalObjectUri` | The external URI of the object in the Pod's S3 store.                                                           |
 | `internalObjectUri` | The URI of the object in the S3 store that is backing the Pod (may not be accessible from outside the cluster). |

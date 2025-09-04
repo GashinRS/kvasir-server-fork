@@ -58,6 +58,7 @@ class ClickhouseClient(
     }
 
     fun <S : QuerySpec<T, *>, T> query(spec: S, sql: String): Uni<List<T>> {
+        val startTs = System.currentTimeMillis()
         Log.debug("Executing Clickhouse select query: $sql")
         return httpClient.get("/")
             .putHeader("X-ClickHouse-Format", "JSONCompact")
@@ -77,6 +78,7 @@ class ClickhouseClient(
                         .failure { RuntimeException("Failed to execute Clickhouse query '$sql': ${response.bodyAsString()}") }
                 }
             }
+            .eventually { Log.debug("Executed Clickhouse select query in ${System.currentTimeMillis() - startTs} ms") }
     }
 
     fun execute(sql: String, database: String? = null): Uni<Void> {

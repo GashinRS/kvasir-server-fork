@@ -8,19 +8,15 @@ import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordRequest
 import kvasir.definitions.kg.ChangeStatusCode
 import kvasir.definitions.kg.KnowledgeGraph
-import kvasir.definitions.kg.changes.ChangeHistory
+import kvasir.definitions.kg.changes.ChangeHistoryFactory
 import kvasir.definitions.kg.changes.ChangeHistoryRequest
+import kvasir.definitions.persistence.Sort
+import kvasir.definitions.persistence.SortOrder
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.test.clickhouse.ClickhouseTestResource
 import kvasir.utils.test.commons.TestHelpers
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.MethodOrderer
-import org.junit.jupiter.api.Order
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.junit.jupiter.api.TestMethodOrder
+import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assertions.*
 import java.time.Instant
 
 private const val TEST_FILE_NUMBER_OF_STATEMENTS = 68976
@@ -35,7 +31,7 @@ class RDFStorageMutationListenerTest {
     lateinit var testHelpers: TestHelpers
 
     @Inject
-    lateinit var changeHistory: ChangeHistory
+    lateinit var changeHistoryFactory: ChangeHistoryFactory
 
     @Inject
     lateinit var kg: KnowledgeGraph
@@ -54,7 +50,7 @@ class RDFStorageMutationListenerTest {
             .then().statusCode(200)
 
         val changeHistoryResult = testHelpers.waitForCondition(
-            { changeHistory.list(ChangeHistoryRequest(podUri)) },
+            { changeHistoryFactory.getChangeHistory(podUri).list(ChangeHistoryRequest()) },
             { it.items.isNotEmpty() }).await().indefinitely()
         val changeRequestId = changeHistoryResult.items.first().id
         testHelpers.waitForChangeRequest(changeRequestId, podUri).await()
@@ -97,7 +93,7 @@ class RDFStorageMutationListenerTest {
             .then().statusCode(200)
 
         val changeHistoryResult = testHelpers.waitForCondition(
-            { changeHistory.list(ChangeHistoryRequest(podUri)) },
+            { changeHistoryFactory.getChangeHistory(podUri).find(sort = Sort.by("writeTs", order = SortOrder.DESC)) },
             { result ->
                 result.items.any { report ->
                     // Find a changerequest that was queued after the timestamp
