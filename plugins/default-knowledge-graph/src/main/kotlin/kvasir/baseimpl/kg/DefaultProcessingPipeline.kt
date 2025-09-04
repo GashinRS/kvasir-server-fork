@@ -14,6 +14,7 @@ import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
 import kvasir.definitions.kg.slices.SliceStore
+import kvasir.definitions.kg.slices.SliceStoreFactory
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirNamedGraphs
@@ -39,6 +40,7 @@ class EvaluateAssertions(
             .transformToUni { assertion ->
                 val q = QueryRequest(
                     context = request.context,
+                    requestingUser = buffer.request.requestingUser,
                     podId = request.podId,
                     sliceId = request.sliceId,
                     query = assertion.queryStr
@@ -171,7 +173,7 @@ class MaterializeS3References(
 @ApplicationScoped
 class MaterializeRecords(
     private val kg: KnowledgeGraph,
-    private val sliceStore: Instance<SliceStore>
+    private val sliceStoreFactory: Instance<SliceStoreFactory>
 ) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
         val startTs = System.currentTimeMillis()
@@ -215,13 +217,14 @@ class MaterializeRecords(
         } else {
             // For change requests on a Slice, load the Slice schema
             (request.sliceId?.let { sliceId ->
-                sliceStore.get().getById(request.podId, sliceId)
+                sliceStoreFactory.get().getSliceStore(sliceId).findById(sliceId)
                     .onItem().ifNull().failWith(IllegalArgumentException("Slice not found: $sliceId"))
                     .onItem().ifNotNull().transform { it!! }
             } ?: Uni.createFrom().nullItem())
                 .chain { slice ->
                     val q = QueryRequest(
                         context = slice?.context ?: request.context,
+                        requestingUser = request.requestingUser,
                         podId = request.podId,
                         sliceId = request.sliceId,
                         query = request.with!!,
@@ -282,13 +285,13 @@ class MaterializeRecords(
 }
 
 @ApplicationScoped
-class SliceGraphQLBasedValidator(private val sliceStore: SliceStore) : ChangeProcessor {
+class SliceGraphQLBasedValidator(private val sliceStoreFactory: SliceStoreFactory) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
         return buffer.request.sliceId?.let { sliceId ->
             val startTs = System.currentTimeMillis()
             Log.debug("Validating change request ${buffer.request.id} against Slice GraphQL schema...")
             // Load Slice schema
-            sliceStore.getById(buffer.request.podId, sliceId)
+            sliceStoreFactory.getSliceStore(buffer.request.podId).findById(sliceId)
                 .chain { sliceSpec ->
                     if (sliceSpec != null) {
                         buffer.stream().collect().asSet().chain { records ->

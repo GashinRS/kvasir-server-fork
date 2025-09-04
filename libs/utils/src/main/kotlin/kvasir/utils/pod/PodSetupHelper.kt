@@ -13,6 +13,7 @@ import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.PodConfig
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStore
+import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.utils.s3.S3Utils
 import kotlin.jvm.optionals.getOrNull
@@ -20,7 +21,7 @@ import kotlin.jvm.optionals.getOrNull
 abstract class PodSetupHelper {
 
     @Inject
-    protected lateinit var podStore: PodStore
+    protected lateinit var podStoreFactory: PodStoreFactory
 
     @Inject
     protected lateinit var minioClient: MinioAsyncClient
@@ -29,7 +30,8 @@ abstract class PodSetupHelper {
     protected lateinit var podAuthInitializer: Instance<AuthInitializer>
 
     fun createPod(podId: String, podConfig: PodConfig, errorWhenExists: Boolean = false): Uni<Void> {
-        return podStore.getById(podId)
+        val podStore = podStoreFactory.createPodStore()
+        return podStore.findById(podId)
             .chain { existingPod ->
                 // Pod exists already, ...
                 if (existingPod != null) {

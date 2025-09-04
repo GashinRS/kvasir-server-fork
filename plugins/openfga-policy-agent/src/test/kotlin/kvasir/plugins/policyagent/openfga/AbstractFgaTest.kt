@@ -6,8 +6,11 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.KvasirConfig
+import kvasir.definitions.kg.PagedResult
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStore
+import kvasir.definitions.kg.PodStoreFactory
+import kvasir.definitions.persistence.Sort
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.TestInstance
@@ -22,7 +25,7 @@ abstract class AbstractFgaTest {
     lateinit var fgaManager: OpenFgaManager
 
     @Inject
-    lateinit var podStore: PodStore
+    lateinit var podStoreFactory: PodStoreFactory
 
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY)
     lateinit var baseUri: String
@@ -32,7 +35,7 @@ abstract class AbstractFgaTest {
         val podId = "${baseUri}alice"
         // Create a pod store for the test
         val pod = Pod(podId, mapOf())
-        podStore.persist(pod).await().indefinitely()
+        podStoreFactory.createPodStore().persist(pod).await().indefinitely()
         // Init openfga-policy-agent
         authInitializer.initialize().chain { _ ->
             authInitializer.initializeForPod(podId, "alice", "alice", pod)
@@ -42,18 +45,32 @@ abstract class AbstractFgaTest {
 }
 
 @ApplicationScoped
+class MockPodStoreFactory : PodStoreFactory {
+    private val store = MockPodStore()
+    override fun createPodStore(): PodStore {
+        return store
+    }
+
+}
+
+
 class MockPodStore : PodStore {
     private val pods = mutableMapOf<String, Pod>()
-    override fun persist(pod: Pod): Uni<Void> {
-        pods[pod.id] = pod
+    override fun persist(entity: Pod): Uni<Void> {
+        pods[entity.id] = entity
         return Uni.createFrom().voidItem()
     }
 
-    override fun list(): Uni<List<Pod>> {
-        return Uni.createFrom().item(pods.values.toList())
+    override fun find(
+        filter: String?,
+        limit: Int?,
+        cursor: String?,
+        sort: Sort
+    ): Uni<PagedResult<Pod>> {
+        return Uni.createFrom().item(PagedResult(pods.values.toList()))
     }
 
-    override fun getById(id: String): Uni<Pod?> {
+    override fun findById(id: String): Uni<Pod?> {
         return Uni.createFrom().item(pods[id])
     }
 

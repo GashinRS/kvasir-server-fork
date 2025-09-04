@@ -7,13 +7,17 @@ import io.quarkiverse.openfga.client.model.RelTupleDefinition
 import io.quarkiverse.openfga.client.model.RelUser
 import io.quarkus.arc.properties.IfBuildProperty
 import io.quarkus.logging.Log
+import io.quarkus.security.runtime.QuarkusSecurityIdentity
 import io.quarkus.vertx.http.runtime.security.QuarkusHttpUser
+import io.vertx.core.http.HttpHeaders
+import io.vertx.core.http.HttpServerRequest
 import io.vertx.ext.web.RoutingContext
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.auth.AuthHandler
 import kvasir.plugins.policyagent.openfga.extractors.DefaultRelationExtractor
 import kvasir.plugins.policyagent.openfga.utils.contextualizeSubject
 import kvasir.plugins.policyagent.openfga.utils.getContextForParents
+import org.jose4j.jwt.consumer.JwtConsumerBuilder
 import java.security.Principal
 
 @ApplicationScoped
@@ -26,6 +30,7 @@ class OpenFgaAuthHandler(
         val relEx = DefaultRelationExtractor()
 
         val securityIdentity = (ctx.user() as QuarkusHttpUser).securityIdentity
+
         fgaManager.storeNames.flatMap { storeNames ->
             val store = extractStore(ctx, storeNames)
             val subject = extractSubject(securityIdentity.principal)
@@ -68,6 +73,23 @@ class OpenFgaAuthHandler(
 
     private fun extractObject(path: String): String {
         return "${openFgaPolicyEnforcerConfig.extractors().types().`object`()}:${path}"
+    }
+
+    override fun getPrincipalForProxiedRequest(proxiedRequest: HttpServerRequest): Principal? {
+        return proxiedRequest.getHeader(HttpHeaders.AUTHORIZATION)?.takeIf { it.startsWith("Bearer") }
+            ?.let { authHeader ->
+                val jwt = authHeader.removePrefix("Bearer ")
+                val firstPassJwtConsumer = JwtConsumerBuilder()
+                    .setSkipAllValidators()
+                    .setDisableRequireSignature()
+                    .setSkipSignatureVerification()
+                    .build()
+
+                val jwtContext = firstPassJwtConsumer.process(jwt)
+                val identityBuilder = QuarkusSecurityIdentity.builder()
+                    .setPrincipal { jwtContext.jwtClaims.getClaimValueAsString("preferred_username") }
+                identityBuilder.build().principal
+            }
     }
 
 }

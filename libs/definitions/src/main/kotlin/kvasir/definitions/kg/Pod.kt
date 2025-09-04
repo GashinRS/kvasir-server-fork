@@ -3,9 +3,10 @@ package kvasir.definitions.kg
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
-import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.persistence.PersistentEntity
+import kvasir.definitions.persistence.Repository
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
@@ -13,25 +14,19 @@ import kvasir.definitions.rdf.getJsonObject
 import java.time.Instant
 import java.util.*
 
-interface PodStore {
-
-    fun persist(pod: Pod): Uni<Void>
-
-    fun list(): Uni<List<Pod>>
-
-    fun getById(id: String): Uni<Pod?>
-
-    fun deleteById(id: String): Uni<Void>
-
+interface PodStoreFactory {
+    fun createPodStore(): PodStore
 }
+
+interface PodStore : Repository<Pod>
 
 @GenerateNoArgConstructor
 data class Pod(
     @get:JsonProperty(JsonLdKeywords.id)
-    val id: String,
+    override var id: String,
     @get:JsonProperty(KvasirVocab.configuration)
-    val configuration: Map<String, Any>,
-) {
+    var configuration: Map<String, Any>
+) : PersistentEntity() {
 
     @JsonIgnore
     fun getDefaultContext(): Map<String, Any> {
@@ -72,6 +67,8 @@ data class LifeCycleEvent(
     val context: JSONObject = KvasirVocab.context,
     @get:JsonProperty(JsonLdKeywords.id)
     val id: String = "urn:kvasir:life-cycle-events:${UUID.randomUUID()}",
+    @get:JsonProperty(KvasirVocab.requestingUser)
+    val requestingUser: String?,
     @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant = Instant.now(),
     @get:JsonProperty(KvasirVocab.type)

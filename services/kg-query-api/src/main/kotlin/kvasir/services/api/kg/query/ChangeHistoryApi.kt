@@ -10,10 +10,13 @@ import jakarta.ws.rs.core.Response
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeHistory
+import kvasir.definitions.kg.changes.ChangeHistoryFactory
 import kvasir.definitions.kg.changes.ChangeHistoryRequest
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.openapi.ApiDocTags
+import kvasir.definitions.persistence.Sort
+import kvasir.definitions.persistence.SortOrder
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
@@ -32,7 +35,7 @@ import java.util.*
 @Path("")
 @Tag(name = ApiDocTags.KG_CHANGES_API)
 class ChangeHistoryApi(
-    val changeHistory: ChangeHistory,
+    val changeHistoryFactory: ChangeHistoryFactory,
     val knowledgeGraph: KnowledgeGraph,
     val uriInfo: KvasirUriInfo,
     private val securityIdentity: SecurityIdentity
@@ -49,12 +52,10 @@ class ChangeHistoryApi(
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<List<ChangeReport>>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return changeHistory.list(
-            ChangeHistoryRequest(
-                podId = fqPodId,
-                cursor = cursor.orElse(null),
-                pageSize = pageSize
-            )
+        return changeHistoryFactory.getChangeHistory(fqPodId).find(
+            cursor = cursor.orElse(null),
+            limit = pageSize,
+            sort = Sort.by("writeTs", order = SortOrder.DESC)
         )
             .map { result ->
                 ResponseBuilder.ok(result.items)
@@ -76,13 +77,11 @@ class ChangeHistoryApi(
     ): Uni<RestResponse<List<ChangeReport>>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return changeHistory.list(
-            ChangeHistoryRequest(
-                podId = fqPodId,
-                sliceId = fqSliceId,
-                cursor = cursor.orElse(null),
-                pageSize = pageSize
-            )
+        return changeHistoryFactory.getChangeHistory(fqPodId).find(
+            filter = "sliceId==\"$fqSliceId\"",
+            cursor = cursor.orElse(null),
+            limit = pageSize,
+            sort = Sort.by("writeTs", order = SortOrder.DESC)
         )
             .map { result ->
                 ResponseBuilder.ok(result.items)
@@ -102,12 +101,7 @@ class ChangeHistoryApi(
     ): Uni<ChangeReport> {
         val id = uriInfo.getResourceUri().toASCIIString()
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
-        return changeHistory.get(
-            ChangeHistoryRequest(
-                podId = fqPodId,
-                changeRequestId = id
-            )
-        )
+        return changeHistoryFactory.getChangeHistory(fqPodId).findById(id)
             .onItem().ifNotNull().transform { it!! }
             .onItem().ifNull().switchTo {
                 try {
@@ -115,6 +109,7 @@ class ChangeHistoryApi(
                     Uni.createFrom().item(
                         ChangeReport(
                             id,
+                            "", // TODO: can we get the requesting user here, without encoding it in the ID?
                             fqPodId,
                             listOf(ChangeReportStatusEntry(changeRequestId.timestamp(), ChangeStatusCode.QUEUED))
                         )
@@ -137,13 +132,7 @@ class ChangeHistoryApi(
         val fqChangeId = uriInfo.getResourceUri().toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqPodId = uriInfo.getResourceUri().getParentUri(4).toASCIIString()
-        return changeHistory.get(
-            ChangeHistoryRequest(
-                podId = fqPodId,
-                sliceId = fqSliceId,
-                changeRequestId = fqChangeId
-            )
-        )
+        return changeHistoryFactory.getChangeHistory(fqPodId).findById(fqChangeId)
             .onItem().ifNotNull().transform { it!! }
             .onItem().ifNull().switchTo {
                 try {
@@ -151,6 +140,7 @@ class ChangeHistoryApi(
                     Uni.createFrom().item(
                         ChangeReport(
                             fqChangeId,
+                            "", // TODO: can we get the requesting user here, without encoding it in the ID?
                             fqPodId,
                             listOf(ChangeReportStatusEntry(changeRequestId.timestamp(), ChangeStatusCode.QUEUED)),
                             fqSliceId

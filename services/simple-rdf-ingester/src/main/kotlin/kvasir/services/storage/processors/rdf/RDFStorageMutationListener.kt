@@ -11,7 +11,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.ChangeRequest
-import kvasir.definitions.kg.PodStore
+import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
@@ -30,7 +30,7 @@ import org.eclipse.microprofile.reactive.messaging.Outgoing
 @ApplicationScoped
 class RDFStorageMutationListener(
     private val minioClient: MinioAsyncClient,
-    private val podStore: PodStore,
+    private val podStoreFactory: PodStoreFactory,
     private val vertx: Vertx
 ) {
 
@@ -39,7 +39,7 @@ class RDFStorageMutationListener(
     fun consumeAndLog(storageEvents: Multi<StorageEvent>): Multi<ChangeRequest> {
         return storageEvents
             .onItem().transformToUniAndConcatenate { event ->
-                podStore.getById(event.podId).map { event to (it?.getAutoIngestRDF() == true) }
+                podStoreFactory.createPodStore().findById(event.podId).map { event to (it?.getAutoIngestRDF() == true) }
             }
             .filter { (event, autoIngestEnabled) -> autoIngestEnabled && event.type.mutation }
             .map { (event, _) -> event }
@@ -87,30 +87,33 @@ class RDFStorageMutationListener(
             .map { (event, _) ->
                 // Transform the object into a Kvasir change request
                 val id = ChangeRequestId.generate(event.externalObjectUri.substringBefore("/s3") + "/changes").encode()
+                println(event)
                 when (event.type) {
                     StorageEventType.PUT_OBJECT, StorageEventType.COMPLETE_MULTIPART_UPLOAD, StorageEventType.RESTORE_OBJECT -> ChangeRequest(
                         id = id,
+                        requestingUser = event.requestingUser ?: "",
                         podId = event.podId,
                         insertFromRefs = listOf(
-                            mapOf(
+                            listOfNotNull(
                                 JsonLdKeywords.type to KvasirVocab.S3Reference,
                                 KvasirVocab.key to event.objectId,
-                                KvasirVocab.versionId to event.versionId
-                            )
+                                event.versionId?.let { KvasirVocab.versionId to it }
+                            ).toMap()
                         ),
                         deleteFromRefs = emptyList()
                     )
 
                     StorageEventType.DELETE_OBJECT -> ChangeRequest(
                         id = id,
+                        requestingUser = event.requestingUser ?: "",
                         podId = event.podId,
                         insertFromRefs = emptyList(),
                         deleteFromRefs = listOf(
-                            mapOf(
+                            listOfNotNull(
                                 JsonLdKeywords.type to KvasirVocab.S3Reference,
                                 KvasirVocab.key to event.objectId,
-                                KvasirVocab.versionId to event.versionId
-                            )
+                                event.versionId?.let { KvasirVocab.versionId to it }
+                            ).toMap()
                         )
                     )
 

@@ -16,6 +16,7 @@ import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.changes.ChangeHistoryFactory
 import kvasir.definitions.rdf.JSONObject
 import java.time.Duration
 import kotlin.math.roundToLong
@@ -33,7 +34,7 @@ private val TERMINAL_STATES = setOf(
 class TestHelpers(
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = "http://localhost:8081/")
     val baseUri: String,
-    val changeHistory: Instance<ChangeHistory>,
+    val changeHistoryFactory: Instance<ChangeHistoryFactory>,
     val kg: Instance<KnowledgeGraph>
 ) {
 
@@ -100,8 +101,9 @@ class TestHelpers(
         retryInitialDelay: Duration = Duration.ofMillis(200),
         delayFactor: Double = 1.2
     ): Uni<Void> {
-        return changeHistory.get()
-            .get(ChangeHistoryRequest(podId = podUri, sliceId = sliceUri, changeRequestId = changeRequestUri))
+        val changeHistory = changeHistoryFactory.get().getChangeHistory(podUri)
+        return changeHistory
+            .get(ChangeHistoryRequest(sliceId = sliceUri, changeRequestId = changeRequestUri))
             .chain { report ->
                 if (report != null) {
                     val lastStatusEntry = report.statusEntry.sortedByDescending { it.timestamp }.first()

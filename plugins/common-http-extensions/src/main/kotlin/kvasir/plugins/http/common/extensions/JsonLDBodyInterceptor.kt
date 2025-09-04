@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 import com.github.jsonldjava.utils.JsonUtils
+import io.quarkus.logging.Log
 import io.vertx.core.json.JsonObject
 import jakarta.inject.Inject
 import jakarta.ws.rs.ext.*
@@ -26,42 +27,53 @@ class JsonLDBodyInterceptor : WriterInterceptor, ReaderInterceptor {
     lateinit var mapper: ObjectMapper
 
     override fun aroundWriteTo(ctx: WriterInterceptorContext) {
-        if (ctx.mediaType?.type == MAIN_MEDIA_TYPE && ctx.mediaType?.subtype == SUB_MEDIA_TYPE) {
-            val content = ctx.entity
-            ctx.entity = if (content is List<*>) {
-                // if the list contains JSON-LD, return as is
-                if (content.any {
-                        it is Map<*, *> && (it.containsKey(JsonLdKeywords.context) || it.containsKey(
-                            JsonLdKeywords.graph
-                        ))
-                    }) {
-                    content
+        val startTs = System.currentTimeMillis()
+        try {
+            if (ctx.mediaType?.type == MAIN_MEDIA_TYPE && ctx.mediaType?.subtype == SUB_MEDIA_TYPE) {
+                val content = ctx.entity
+                ctx.entity = if (content is List<*>) {
+                    // if the list contains JSON-LD, return as is
+                    if (content.any {
+                            it is Map<*, *> && (it.containsKey(JsonLdKeywords.context) || it.containsKey(
+                                JsonLdKeywords.graph
+                            ))
+                        }) {
+                        content
+                    } else {
+                        val entityList = mapper.convertValue(ctx.entity, object : TypeReference<List<JSONObject>>() {})
+                        mapOf(
+                            JsonLdKeywords.context to defaultContext,
+                            JsonLdKeywords.graph to entityList.map {
+                                JsonLdProcessor.compact(it, defaultContext, JsonLdOptions())
+                                    .minus(JsonLdKeywords.context)
+                            }
+                        )
+                    }
                 } else {
-                    val entityList = mapper.convertValue(ctx.entity, object: TypeReference<List<JSONObject>>() {})
-                    mapOf(
-                        JsonLdKeywords.context to defaultContext,
-                        JsonLdKeywords.graph to entityList.map {
-                            JsonLdProcessor.compact(it, defaultContext, JsonLdOptions()).minus(JsonLdKeywords.context)
-                        }
-                    )
+                    val jsonld = JsonObject.mapFrom(content).map
+                    JsonLdProcessor.compact(jsonld, jsonld[JsonLdKeywords.context] ?: defaultContext, JsonLdOptions())
                 }
-            } else {
-                val jsonld = JsonObject.mapFrom(content).map
-                JsonLdProcessor.compact(jsonld, jsonld[JsonLdKeywords.context] ?: defaultContext, JsonLdOptions())
             }
+            ctx.proceed()
+        } finally {
+            Log.debug("Serializing JSON-LD response body took ${System.currentTimeMillis() - startTs} ms")
         }
-        ctx.proceed()
     }
 
     override fun aroundReadFrom(ctx: ReaderInterceptorContext): Any {
-        return if (ctx.mediaType?.type == MAIN_MEDIA_TYPE && ctx.mediaType?.subtype == SUB_MEDIA_TYPE) {
-            val jsonLd = JsonUtils.fromInputStream(ctx.inputStream) as Map<String, Any>
-            val context = jsonLd[JsonLdKeywords.context] as Map<String, Any>? ?: defaultContext
-            val fqJsonLd = JsonLdHelper.toCompactFQForm(jsonLd)
-            // TODO: Only add context if type has a field with @JsonProperty("@context")
-            JsonObject(mapOf(JsonLdKeywords.context to context) + fqJsonLd).mapTo(ctx.type)
-        } else {
-            ctx.proceed()
+        val startTs = System.currentTimeMillis()
+        try {
+            return if (ctx.mediaType?.type == MAIN_MEDIA_TYPE && ctx.mediaType?.subtype == SUB_MEDIA_TYPE) {
+                val jsonLd = JsonUtils.fromInputStream(ctx.inputStream) as Map<String, Any>
+                val context = jsonLd[JsonLdKeywords.context] as Map<String, Any>? ?: defaultContext
+                val fqJsonLd = JsonLdHelper.toCompactFQForm(jsonLd)
+                // TODO: Only add context if type has a field with @JsonProperty("@context")
+                JsonObject(mapOf(JsonLdKeywords.context to context) + fqJsonLd).mapTo(ctx.type)
+            } else {
+                ctx.proceed()
+            }
+        } finally {
+            Log.debug("Parsing JSON-LD request body took ${System.currentTimeMillis() - startTs} ms")
         }
     }
 

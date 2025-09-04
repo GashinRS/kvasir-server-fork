@@ -35,14 +35,18 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
 
     override fun loadReference(podOrSliceId: String, reference: Map<String, Any>): Multi<RDFStatement> {
         val key = reference[KvasirVocab.key] as String
-        val versionId = reference[KvasirVocab.versionId] as String
+        val versionId = reference[KvasirVocab.versionId] as String?
         val bucketId = S3Utils.getBucket(podOrSliceId)
         val docBaseUri = "${podOrSliceId.removeSuffix("/")}/s3/$key#"
         val bNodeIdMap = mutableMapOf<BNode, String>()
         return Uni.createFrom()
             .future(
                 minioClient.getObject(
-                    GetObjectArgs.builder().bucket(bucketId).`object`(key).versionId(versionId).build()
+                    GetObjectArgs.builder().bucket(bucketId).`object`(key).apply {
+                        if (versionId != null) {
+                            this.versionId(versionId)
+                        }
+                    }.build()
                 )
             )
             .onItem().transformToMulti { resp ->

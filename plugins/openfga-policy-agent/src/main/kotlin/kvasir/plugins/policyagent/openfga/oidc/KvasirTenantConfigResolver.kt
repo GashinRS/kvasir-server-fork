@@ -11,9 +11,9 @@ import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.ws.rs.NotFoundException
 import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.PodStore
+import kvasir.definitions.kg.PodStoreFactory
 import kvasir.plugins.policyagent.openfga.OpenFgaConstants
 import org.eclipse.microprofile.config.inject.ConfigProperty
 
@@ -27,7 +27,7 @@ private val EXCLUDE_PATH_PREFIXES = setOf("/q/", "/favicon.ico", "/robots.txt", 
 class KvasirTenantConfigResolver(
     @CacheName(OpenFgaConstants.AUTH_CONFIG_CACHE_NAME)
     private val authConfigCache: Cache,
-    private val podStore: PodStore,
+    private val podStoreFactory: PodStoreFactory,
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
     private val baseUri: String,
 
@@ -44,7 +44,7 @@ class KvasirTenantConfigResolver(
         val podName = pathItems.first()
         val podId = "${baseUri}$podName"
         return authConfigCache.getAsync(podId) {
-            podStore.getById(podId)
+            podStoreFactory.createPodStore().findById(podId)
                 .chain { pod ->
                     pod?.getAuthConfiguration()?.let { authConfig ->
                         // Parse the auth configuration as an OidcTenantConfig

@@ -4,43 +4,44 @@ import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStore
+import kvasir.definitions.kg.PodStoreFactory
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
-import kvasir.plugins.kg.clickhouse.specs.POD_TABLE
-import kvasir.plugins.kg.clickhouse.specs.PodInsertRecordSpec
-import kvasir.plugins.kg.clickhouse.specs.PodQuerySpec
+import kvasir.plugins.kg.clickhouse.persistence.AbstractRepository
+import kvasir.plugins.kg.clickhouse.specs.EntityQuerySpec
+import kvasir.plugins.kg.clickhouse.specs.EntityWriteSpec
 import kvasir.plugins.kg.clickhouse.specs.SYSTEM_DB
 
 @ApplicationScoped
-class ClickhousePodStore(
+class ClickhousePodStoreFactory(
     private val clickhouseClient: ClickhouseClient,
     private val clickhouseInitializer: ClickhouseInitializer
-) : PodStore {
-    override fun persist(pod: Pod): Uni<Void> {
+) : PodStoreFactory {
+    override fun createPodStore(): PodStore {
+        return ClickhousePodStore(clickhouseClient, clickhouseInitializer)
+    }
+
+}
+
+class ClickhousePodStore(
+    clickhouseClient: ClickhouseClient,
+    private val clickhouseInitializer: ClickhouseInitializer
+) : AbstractRepository<Pod>(
+    clickhouseClient,
+    EntityQuerySpec(Pod::class, SYSTEM_DB, "pods"),
+    EntityWriteSpec(Pod::class, SYSTEM_DB, "pods")
+),
+    PodStore {
+
+    override fun persist(entity: Pod): Uni<Void> {
         // If the pod is persisted for the first time, initialize the pod's databases
-        return getById(pod.id)
+        return findById(entity.id)
             .chain { existingPod ->
                 if (existingPod == null) {
-                    clickhouseInitializer.initializePodSchema(pod.id)
+                    clickhouseInitializer.initializePodSchema(entity.id)
                 } else {
                     Uni.createFrom().voidItem()
                 }
             }
-            .chain { _ -> clickhouseClient.insert(PodInsertRecordSpec, listOf(pod)) }
-    }
-
-    override fun list(): Uni<List<Pod>> {
-        return clickhouseClient.query(PodQuerySpec(), "SELECT id, argMax(json, timestamp) FROM $POD_TABLE GROUP BY id")
-    }
-
-    override fun getById(id: String): Uni<Pod?> {
-        return clickhouseClient.query(
-            PodQuerySpec(),
-            "SELECT id, argMax(json, timestamp) FROM $POD_TABLE WHERE id = '$id' GROUP BY id"
-        )
-            .map { results -> results.firstOrNull() }
-    }
-
-    override fun deleteById(id: String): Uni<Void> {
-        return clickhouseClient.execute("ALTER TABLE $POD_TABLE DELETE WHERE id = '$id'", SYSTEM_DB)
+            .chain { _ -> super.persist(entity) }
     }
 }
