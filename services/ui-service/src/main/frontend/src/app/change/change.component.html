@@ -79,9 +79,19 @@
           <ng-template nz-virtual-scroll let-data let-index="index">
             <tr>
               <td>{{ data.sign }}</td>
-              <td>{{ data.subject }}</td>
-              <td>{{ data.predicate }}</td>
-              <td nzEllipsis>{{ data.object }}</td>
+              <td>{{ data.subject.value }}</td>
+              <td>{{ data.predicate.value }}</td>
+              <td nzEllipsis>
+                <nz-space>
+                  @if (data.object.termType == "Literal") {
+                    <app-literal-badge
+                      *nzSpaceItem
+                      [literal]="data.object"
+                    ></app-literal-badge>
+                  }
+                  <span *nzSpaceItem>{{ data.object.value }}</span>
+                </nz-space>
+              </td>
             </tr>
           </ng-template>
         </tbody>
