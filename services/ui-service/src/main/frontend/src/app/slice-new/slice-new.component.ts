@@ -22,7 +22,7 @@ import { DevSettingsService } from '../services/dev-settings.service';
 import { KSS_FQN, KSS_PREFIX } from '../util/constants';
 
 const DEFAULT_CONTEXT = `{
-  "${KSS_PREFIX}: "${KSS_FQN}"
+  "${KSS_PREFIX}": "${KSS_FQN}"
 }`;
 
 @Component({
