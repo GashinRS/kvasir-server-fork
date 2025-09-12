@@ -141,6 +141,8 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                     XSDVocab.double, XSDVocab.decimal, XSDVocab.float -> GraphQLFloat
                     XSDVocab.string, RDFVocab.langString -> GraphQLString
                     XSDVocab.dateTime -> ExtendedScalars.DateTime
+                    XSDVocab.date -> ExtendedScalars.Date
+                    XSDVocab.time -> ExtendedScalars.Time
                     else -> ExtendedScalars.Json
                 } as GraphQLOutputType
 

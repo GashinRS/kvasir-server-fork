@@ -56,12 +56,11 @@ class InboxApi(
         @PathParam("podId") podId: String,
         input: ChangeRequestInput
     ): Uni<Response> {
-        val podUri = uriInfo.getResourceUri().getParentUri()
-        val fqPodId = podUri.toString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toString()
         return podStoreFactory.createPodStore().findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { pod ->
-                val changeCommand = input.toChangeRequest(podUri, uriInfo, principal)
+                val changeCommand = input.toChangeRequest(fqPodId, uriInfo, principal)
                 changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
                     .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
                     .onFailure(RecordTooLargeException::class.java)
@@ -83,14 +82,13 @@ class InboxApi(
         @PathParam("sliceId") sliceId: String,
         input: ChangeRequestInput
     ): Uni<Response> {
-        val podUri = uriInfo.getResourceUri().getParentUri(3)
-        val fqPodId = podUri.toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return sliceStoreFactory.getSliceStore(fqPodId).findById(fqSliceId)
             .onItem().ifNull().failWith(NotFoundException("Slice not found"))
             .onItem().ifNotNull().transformToUni { slice ->
                 if (slice!!.supportsChanges) {
-                    val changeCommand = input.toChangeRequest(podUri, uriInfo, principal, fqSliceId)
+                    val changeCommand = input.toChangeRequest(fqPodId, uriInfo, principal, fqSliceId)
                     // Publish the change request
                     changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
                         .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
@@ -152,7 +150,7 @@ data class ChangeRequestInput(
     }
 
     fun toChangeRequest(
-        podId: URI,
+        fqPodId: String,
         uriInfo: KvasirUriInfo,
         principal: Principal,
         sliceId: String? = null
@@ -161,25 +159,25 @@ data class ChangeRequestInput(
             id = ChangeRequestId.generate(uriInfo.getResourceUri().toASCIIString()).encode(),
             context = context,
             requestingUser = principal.name,
-            podId = podId.toASCIIString(),
+            podId = fqPodId,
             sliceId = sliceId,
             assert = assert,
             with = with,
             insert = insert.map {
-                if (it is Map<*, *>) assignIds(it as Map<String, Any>, podId) else it
+                if (it is Map<*, *>) assignIds(it as Map<String, Any>, fqPodId) else it
             },
             delete = delete
         )
     }
 
     // Assigns a random UUID to the @id field of the entity and all its nested entities (if not already present).
-    private fun assignIds(entity: Map<String, Any>, fqPodId: URI): Map<String, Any> {
-        // If the entity is a literal, do not assign an id
-        if (entity.containsKey(JsonLdKeywords.type) && XSDVocab.literalTypes.contains(entity[JsonLdKeywords.type])) {
+    private fun assignIds(entity: Map<String, Any>, fqPodId: String): Map<String, Any> {
+        // If the entity is a literal (JSON-LD value type), do not assign an id
+        if (entity.containsKey(JsonLdKeywords.type) && entity.containsKey(JsonLdKeywords.value)) {
             return entity
         }
 
-        val id = (entity["@id"] as? String) ?: fqPodId.getChildUri("#${UUID.randomUUID()}").toString()
+        val id = (entity["@id"] as? String) ?: "$fqPodId#${UUID.randomUUID()}"
         return mapOf("@id" to id).plus(entity.entries.filterNot { (key, _) -> key == "@id" }.associate { (key, value) ->
             key to when (key) {
                 JsonLdKeywords.reverse -> value.takeIf { it is Map<*, *> }
@@ -191,7 +189,7 @@ data class ChangeRequestInput(
         })
     }
 
-    private fun assignIdsMapValue(value: Any, fqPodId: URI): Any {
+    private fun assignIdsMapValue(value: Any, fqPodId: String): Any {
         return when (value) {
             is Map<*, *> -> assignIds(value as Map<String, Any>, fqPodId)
             is List<*> -> value.map { if (it is Map<*, *>) assignIds(it as Map<String, Any>, fqPodId) else it }

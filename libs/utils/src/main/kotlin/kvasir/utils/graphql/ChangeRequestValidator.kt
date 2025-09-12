@@ -5,8 +5,10 @@ import graphql.language.ArrayValue
 import graphql.language.IntValue
 import graphql.language.StringValue
 import graphql.scalars.ExtendedScalars
-import graphql.schema.*
-import graphql.schema.idl.*
+import graphql.schema.GraphQLInputObjectField
+import graphql.schema.GraphQLInputObjectType
+import graphql.schema.GraphQLInputType
+import graphql.schema.GraphQLScalarType
 import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
@@ -75,7 +77,7 @@ class ChangeRequestValidator(
 
             val definedProperties =
                 type.fieldDefinitions.filter { it.name != FIELD_ID_NAME }.groupBy { fieldDefinition ->
-                    resolveNameAsIri(fieldDefinition.name) ?: run {
+                    JsonLdHelper.getFQName(fieldDefinition.name, context, "_") ?: run {
                         // Or else get IRI from predicate directive
                         fieldDefinition.getDirectiveArg<StringValue>(
                             DIRECTIVE_PREDICATE_NAME,
@@ -175,9 +177,9 @@ class ChangeRequestValidator(
 
                 fieldType.isScalar() -> {
                     val scalarType = fieldType.innerType<GraphQLScalarType>()
-                    val rdfDataType = scalarType.rdfDatatype()
-                    if (matches.any { it.statement.dataType != rdfDataType && scalarType.name != ExtendedScalars.Json.name }) {
-                        throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' should be of type '$rdfDataType'")
+                    val supportedRDFDataTypes = scalarType.rdfDatatype()
+                    if (matches.any { !supportedRDFDataTypes.contains(it.statement.dataType) && scalarType.name != ExtendedScalars.Json.name }) {
+                        throw InvalidChangeRequestException("Property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName' should be one of data types: $supportedRDFDataTypes")
                     }
                     matches.forEach {
                         checkValueConstraints(
@@ -223,21 +225,9 @@ class ChangeRequestValidator(
             JsonLdHelper.getFQName(it, context) ?: it
         } ?:
         // If not found, try to resolve the name as an IRI
-        resolveNameAsIri(this.name))
+        JsonLdHelper.getFQName(this.name, context, "_"))
         // If still not found, throw an exception
             ?: throw IllegalArgumentException("No semantic context found for input type '${this.name}'")
-    }
-
-    private fun resolveNameAsIri(
-        name: String,
-        separator: String = KvasirNodeVisitor.GRAPHQL_NAME_PREFIX_SEPARATOR
-    ): String? {
-        return context[name]?.toString() ?: name.takeIf { it.contains(separator) }?.let { prefixedName ->
-            val (prefix, localName) = prefixedName.split(separator, limit = 2)
-            context[prefix]?.let { prefixIri ->
-                "$prefixIri$localName"
-            }
-        }
     }
 
     private fun checkValueConstraints(
