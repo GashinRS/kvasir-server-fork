@@ -19,9 +19,10 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { KvasirService } from '../services/kvasir.service';
 import { SliceInput } from '../types';
 import { DevSettingsService } from '../services/dev-settings.service';
+import { KSS_FQN, KSS_PREFIX } from '../util/constants';
 
 const DEFAULT_CONTEXT = `{
-  "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+  "${KSS_PREFIX}: "${KSS_FQN}"
 }`;
 
 @Component({
@@ -65,7 +66,10 @@ export class SliceNewComponent {
 
   submitForm(): void {
     if (this.inputForm.valid) {
-      const context = JSON.parse(this.ctxCtrl.value);
+      const context = {
+        ...JSON.parse(this.ctxCtrl.value),
+        ...{ [KSS_PREFIX]: KSS_FQN },
+      };
       const name = this.nameCtrl.value;
       const schema = this.schemaCtrl.value;
       const description =
