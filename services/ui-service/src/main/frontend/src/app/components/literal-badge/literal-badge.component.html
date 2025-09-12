@@ -1,0 +1,12 @@
+<span
+  ><nz-icon
+    nzType="profile"
+    nzTheme="outline"
+    nz-popover
+    [nzPopoverContent]="contentTemplate"
+/></span>
+<ng-template #contentTemplate>
+  <div>
+    {{ literal().datatypeString }}
+  </div>
+</ng-template>

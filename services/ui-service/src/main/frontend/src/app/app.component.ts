@@ -6,7 +6,8 @@ import { NzMenuModule } from 'ng-zorro-antd/menu';
 import { VersionComponent } from './components/version/version.component';
 import { LoginFSM } from './services/login-fsm';
 import { SessionService } from './services/session.service';
-import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
+import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
+import { NzPopoverModule } from 'ng-zorro-antd/popover';
 
 @Component({
   selector: 'app-root',
@@ -15,7 +16,8 @@ import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
     NzLayoutModule,
     NzMenuModule,
     NzIconModule,
-    NzToolTipModule,
+    NzTooltipModule,
+    NzPopoverModule,
     RouterModule,
     VersionComponent,
   ],
