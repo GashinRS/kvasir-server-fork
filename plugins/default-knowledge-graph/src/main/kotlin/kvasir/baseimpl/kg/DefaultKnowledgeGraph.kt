@@ -319,7 +319,12 @@ class DefaultKnowledgeGraph(
 
                 }
                 val runtimeWiring =
-                    RuntimeWiring.newRuntimeWiring().scalar(ExtendedScalars.Json).wiringFactory(dynamicWiringFactory)
+                    RuntimeWiring.newRuntimeWiring()
+                        .scalar(ExtendedScalars.Json)
+                        .scalar(ExtendedScalars.Time)
+                        .scalar(ExtendedScalars.Date)
+                        .scalar(ExtendedScalars.DateTime)
+                        .wiringFactory(dynamicWiringFactory)
                         .build()
                 val executableSchema =
                     graphql.schema.idl.SchemaGenerator().makeExecutableSchema(typeDefinitionRegistry, runtimeWiring)

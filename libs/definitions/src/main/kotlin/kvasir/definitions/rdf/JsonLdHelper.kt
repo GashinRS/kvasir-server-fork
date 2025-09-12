@@ -48,7 +48,7 @@ object JsonLdHelper {
      */
     fun getFQName(name: String, context: JSONObject, separator: String = ":"): String? {
         return if (!name.contains(separator)) {
-            name
+            if (context.contains(JsonLdKeywords.vocab)) "${context[JsonLdKeywords.vocab]}$name" else name
         } else {
             val (prefix, localName) = name.split(separator, limit = 2)
             context[prefix]?.let { ns -> "$ns$localName" }

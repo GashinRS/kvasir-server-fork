@@ -2,15 +2,19 @@ package kvasir.baseimpl.kg
 
 import graphql.Scalars
 import graphql.language.*
+import graphql.scalars.ExtendedScalars
 import graphql.schema.DataFetchingEnvironment
 import graphql.schema.GraphQLArgument
+import graphql.schema.GraphQLInputObjectField
 import graphql.schema.GraphQLInputObjectType
+import graphql.schema.GraphQLScalarType
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.graphql.getFQName
 import kvasir.utils.graphql.innerType
 import kvasir.utils.idgen.ChangeRequestId
@@ -66,6 +70,7 @@ class MutationToChangeRequest(private val request: QueryRequest) {
         argValue: Value<*>
     ): List<JSONObject>? {
         return when (argValue) {
+            // Separately handle variable references
             is VariableReference -> {
                 val value = env.variables[argValue.name]
                 when (value) {
@@ -93,63 +98,73 @@ class MutationToChangeRequest(private val request: QueryRequest) {
         }
     }
 
+    /**
+     * Converts a GraphQL ObjectValue to a JSON object, using the provided GraphQLInputObjectType to resolve field names.
+     * The resulting JSON object is suitable for inclusion in a ChangeRequest.
+     */
     private fun toJSON(objectValue: ObjectValue, type: GraphQLInputObjectType): JSONObject {
         val typeFqName = getFQName(type, request.context)
         return objectValue.objectFields.associate { field ->
-            val fieldType = type.getField(field.name)
+            val fieldDefinition = type.getField(field.name)
             val rawValue = field.value
             if (field.name == FIELD_ID_NAME) {
                 toIDReference(rawValue)
             } else {
                 getFQName(type.getField(field.name), request.context) to if (rawValue is ArrayValue) {
                     rawValue.values.map { listRawValue ->
-                        if (listRawValue is ScalarValue<*>) convertScalar(listRawValue) else toJSON(
-                            listRawValue as ObjectValue,
-                            type.getFieldDefinition(field.name).type.innerType()
-                        )
+                        singleValueToJSON(listRawValue, fieldDefinition)
                     }
                 } else {
-                    if (rawValue is ScalarValue<*>) {
-                        val scalarValue = convertScalar(rawValue)
-                        if (fieldType.type == Scalars.GraphQLID) mapOf(toIDReference(scalarValue)) else scalarValue
-                    } else {
-                        toJSON(
-                            rawValue as ObjectValue,
-                            type.getFieldDefinition(field.name).type.innerType()
-                        )
-                    }
+                    singleValueToJSON(rawValue, fieldDefinition)
                 }
             }
         }.plus(JsonLdKeywords.type to typeFqName)
     }
 
+    private fun singleValueToJSON(rawValue: Value<*>, encapsulatingFieldDefinition: GraphQLInputObjectField): Any {
+        return if (rawValue is ScalarValue<*>) {
+            val scalarType = encapsulatingFieldDefinition.type.innerType<GraphQLScalarType>()
+            convertScalar(rawValue, scalarType)
+        } else {
+            toJSON(
+                rawValue as ObjectValue,
+                encapsulatingFieldDefinition.type.innerType()
+            )
+        }
+    }
+
+    /**
+     * Contextualizes a JSON object provided as variable input for the Query, to make it suitable for inclusion in the ChangeRequest.
+     */
     private fun contextualizeJson(value: JSONObject, type: GraphQLInputObjectType): JSONObject {
         val typeFqName = getFQName(type, request.context)
         return value.entries.associate { (fieldName, fieldValue) ->
-            val fieldType = type.getField(fieldName)
+            val fieldDefinition = type.getField(fieldName)
             val rawValue = fieldValue
             if (fieldName == FIELD_ID_NAME) {
                 toIDReference(rawValue)
             } else {
                 getFQName(type.getField(fieldName), request.context) to if (rawValue is Iterable<*>) {
                     rawValue.map { listRawValue ->
-                        if (listRawValue is Map<*, *>) contextualizeJson(
-                            listRawValue as JSONObject,
-                            type.getFieldDefinition(fieldName).type.innerType()
-                        ) else listRawValue
+                        contextualizeSingleValue(listRawValue!!, fieldDefinition)
                     }
                 } else {
-                    if (rawValue is Map<*, *>) {
-                        contextualizeJson(
-                            rawValue as JSONObject,
-                            type.getFieldDefinition(fieldName).type.innerType()
-                        )
-                    } else {
-                        if (fieldType.type == Scalars.GraphQLID) mapOf(toIDReference(rawValue)) else rawValue
-                    }
+                    contextualizeSingleValue(rawValue, fieldDefinition)
                 }
             }
         }.plus(JsonLdKeywords.type to typeFqName)
+    }
+
+    private fun contextualizeSingleValue(rawValue: Any, encapsulatingFieldDefinition: GraphQLInputObjectField): Any {
+        return if (rawValue is Map<*, *>) {
+            contextualizeJson(
+                rawValue as JSONObject,
+                encapsulatingFieldDefinition.type.innerType()
+            )
+        } else {
+            val scalarType = encapsulatingFieldDefinition.type.innerType<GraphQLScalarType>()
+            convertJSONScalar(rawValue, scalarType)
+        }
     }
 
     private fun toIDReference(rawValue: Any): Pair<String, String> {
@@ -159,12 +174,54 @@ class MutationToChangeRequest(private val request: QueryRequest) {
         return JsonLdKeywords.id to RDFTransformer.ensureValidAbsoluteIri(ref)
     }
 
-    private fun convertScalar(value: ScalarValue<*>): Any {
-        return when (value) {
-            is BooleanValue -> value.isValue
-            is FloatValue -> value.value
-            is IntValue -> value.value
-            is StringValue -> value.value
+    private fun convertScalar(value: ScalarValue<*>, type: GraphQLScalarType): Any {
+        return when {
+            type == Scalars.GraphQLID -> mapOf(toIDReference(value))
+            type == Scalars.GraphQLBoolean && value is BooleanValue -> value.isValue
+            type == Scalars.GraphQLFloat && value is FloatValue -> value.value
+            type == Scalars.GraphQLInt && value is IntValue -> value.value
+            type == Scalars.GraphQLString && value is StringValue -> value.value
+            type.name == ExtendedScalars.DateTime.name && value is StringValue -> mapOf(
+                JsonLdKeywords.type to XSDVocab.dateTime,
+                JsonLdKeywords.value to value.value
+            )
+
+            type.name == ExtendedScalars.Date.name && value is StringValue -> mapOf(
+                JsonLdKeywords.type to XSDVocab.date,
+                JsonLdKeywords.value to value.value
+            )
+
+            type.name == ExtendedScalars.Time.name && value is StringValue -> mapOf(
+                JsonLdKeywords.type to XSDVocab.time,
+                JsonLdKeywords.value to value.value
+            )
+
+            else -> throw IllegalArgumentException("Unsupported scalar value type: ${value.javaClass}")
+        }
+    }
+
+    private fun convertJSONScalar(value: Any, type: GraphQLScalarType): Any {
+        return when {
+            type == Scalars.GraphQLID -> mapOf(toIDReference(value))
+            type == Scalars.GraphQLBoolean && value is Boolean -> value
+            type == Scalars.GraphQLFloat && (value is Float || value is Double) -> value
+            type == Scalars.GraphQLInt && (value is Int || value is Long) -> value
+            type == Scalars.GraphQLString && value is String -> value
+            type.name == ExtendedScalars.DateTime.name && value is String -> mapOf(
+                JsonLdKeywords.type to XSDVocab.dateTime,
+                JsonLdKeywords.value to value
+            )
+
+            type.name == ExtendedScalars.Date.name && value is String -> mapOf(
+                JsonLdKeywords.type to XSDVocab.date,
+                JsonLdKeywords.value to value
+            )
+
+            type.name == ExtendedScalars.Time.name && value is String -> mapOf(
+                JsonLdKeywords.type to XSDVocab.time,
+                JsonLdKeywords.value to value
+            )
+
             else -> throw IllegalArgumentException("Unsupported scalar value type: ${value.javaClass}")
         }
     }

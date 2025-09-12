@@ -34,6 +34,11 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
         ).values.filterIsInstance<StringValue>().map { it.value }
 
     private val processedTypeDefinitionRegistry = run {
+        typeDefinitionRegistry.add(ScalarTypeDefinition.newScalarTypeDefinition().name("JSON").build())
+        typeDefinitionRegistry.add(ScalarTypeDefinition.newScalarTypeDefinition().name("DateTime").build())
+        typeDefinitionRegistry.add(ScalarTypeDefinition.newScalarTypeDefinition().name("Date").build())
+        typeDefinitionRegistry.add(ScalarTypeDefinition.newScalarTypeDefinition().name("Time").build())
+
         val generatedInputTypes = mutableListOf<Pair<InputObjectTypeDefinition, List<String>>>()
         typeDefinitionRegistry.getTypes(ObjectTypeDefinition::class.java).forEach { type ->
             enhanceObjectType(type)
@@ -95,7 +100,12 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
 
         }
         val runtimeWiring =
-            RuntimeWiring.newRuntimeWiring().scalar(ExtendedScalars.Json).wiringFactory(dynamicWiringFactory).build()
+            RuntimeWiring.newRuntimeWiring()
+                .scalar(ExtendedScalars.Json)
+                .scalar(ExtendedScalars.Time)
+                .scalar(ExtendedScalars.Date)
+                .scalar(ExtendedScalars.DateTime)
+                .wiringFactory(dynamicWiringFactory).build()
         return SchemaGenerator().makeExecutableSchema(processedTypeDefinitionRegistry, runtimeWiring)
     }
 
@@ -294,7 +304,6 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
     }
 
     private fun addKvasirBuiltins() {
-        typeDefinitionRegistry.add(ScalarTypeDefinition.newScalarTypeDefinition().name("JSON").build())
         typeDefinitionRegistry.addAll(KvasirTypes.all.map { type ->
             when (type) {
                 is GraphQLInterfaceType -> convertInterface(type)
