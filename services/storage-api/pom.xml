@@ -46,6 +46,11 @@
             <version>0.9.2</version>
         </dependency>
         <dependency>
+            <groupId>kvasir-plugins</groupId>
+            <artifactId>a4ds-policy-agent</artifactId>
+            <version>0.9.2</version>
+        </dependency>
+        <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>test-utils</artifactId>
             <version>0.9.2</version>

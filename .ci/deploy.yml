@@ -60,4 +60,4 @@ deploy:cnl:
   script:
     - cd kubernetes
     - helmfile deps
-    - helmfile sync --state-values-set image.tag=${QUARKUS_CONTAINER_IMAGE_TAG} --state-values-set image.registry=${CI_REGISTRY_IMAGE}
+    - helmfile sync --state-values-set image.tag=${IMAGE_TAG} --state-values-set image.registry=${CI_REGISTRY_IMAGE}

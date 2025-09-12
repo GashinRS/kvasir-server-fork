@@ -4,12 +4,13 @@ include:
   - local: /.ci/build.yml
   - local: /.ci/test.yml
   - local: /.ci/deploy.yml
-  - component: $CI_SERVER_FQDN/components/releaser/release@v0.2.2
+  - component: $CI_SERVER_FQDN/components/releaser/release@v0.3.0
     inputs:
       bump_versions_script_path: $CI_PROJECT_DIR/.ci/scripts/bump-versions.sh
       release_stage: release
       proposal_stage: pre
       sync_stage: sync
+      image_flavors_array: ["a4ds", "openfga", "noauth"]
 
 variables:
   INSTANCE: "Writerside/kd"
@@ -62,8 +63,8 @@ workflow:
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       variables: &commitBranchVersions
-        QUARKUS_CONTAINER_IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
-        QUARKUS_CONTAINER_IMAGE_ADDITIONAL_TAGS: "$CI_COMMIT_REF_SLUG"
+        IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+        IMAGE_ADDITIONAL_TAG: "$CI_COMMIT_REF_SLUG"
         QUARKUS_CONTAINER_IMAGE_PUSH: "true"
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
