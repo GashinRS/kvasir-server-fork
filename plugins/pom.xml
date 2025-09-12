@@ -21,6 +21,7 @@
         <module>default-knowledge-graph</module>
         <module>openfga-policy-agent</module>
         <module>kafka-messaging</module>
+        <module>a4ds-policy-agent</module>
     </modules>
 
     <build>

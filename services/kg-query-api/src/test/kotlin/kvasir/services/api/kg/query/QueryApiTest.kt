@@ -4,6 +4,7 @@ import com.github.jsonldjava.utils.JsonUtils
 import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
+import io.quarkus.test.security.TestSecurity
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
 import jakarta.ws.rs.core.MediaType
@@ -53,6 +54,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testGetPerson() {
         val selectedPerson = personData.random()
         val selectedPersonId = selectedPerson[JsonLdKeywords.id]!!
@@ -82,6 +84,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testGetPersonByName() {
         val selectedPerson = personData.random()
         val selectedPersonGivenName = selectedPerson[SchemaVocab.givenName]!!
@@ -110,6 +113,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testGetPersons() {
         val query = QueryInputWithContext(
             query = "{ ex_Person { id so_givenName so_familyName so_email } }",
@@ -140,6 +144,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testGetPersonsJsonLD() {
         val query = QueryInputWithContext(
             query = "{ ex_Person { id so_givenName so_familyName so_email } }",
@@ -179,6 +184,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testFilter() {
         val startLetter = personData.random().let { it[SchemaVocab.givenName].toString().first() }
         // Subset of persons whose name starts with a specific letter
@@ -209,6 +215,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testPaginationAndSorting() {
         // Expect persons ordered by familyName and then by id
         val expectedResults =
@@ -250,6 +257,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testTravelInverse() {
         val parentPerson = personData.random()
         val children = personData.shuffled().filter { it[JsonLdKeywords.id] != parentPerson[JsonLdKeywords.id] }.take(3)
@@ -372,6 +380,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testSystemFields() {
         // Use Resource entrypoint to find all resources and their associated types
         var q = QueryInputWithContext(
@@ -464,6 +473,7 @@ class QueryApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testRawRDFField() {
         // Add a new relation to a Person, which can refer both to another Person or literal values
         val selectedPerson = personData.random()

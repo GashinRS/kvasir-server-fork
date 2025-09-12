@@ -1,5 +1,8 @@
 package kvasir.utils.pod
 
+import com.github.jsonldjava.core.JsonLdOptions
+import com.github.jsonldjava.core.JsonLdProcessor
+import com.github.jsonldjava.utils.JsonUtils
 import io.minio.BucketExistsArgs
 import io.minio.MakeBucketArgs
 import io.minio.MinioAsyncClient
@@ -14,9 +17,14 @@ import kvasir.definitions.config.PodConfig
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStore
 import kvasir.definitions.kg.PodStoreFactory
+import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.utils.s3.S3Utils
+import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
+
+const val PLAIN_JSON_VOCAB = "urn:kvasir:plain-json:"
 
 abstract class PodSetupHelper {
 
@@ -61,7 +69,7 @@ abstract class PodSetupHelper {
                 } else {
                     // Create storage entry for the new Pod
                     Log.debug("Adding storage entry for Pod '$podId'")
-                    val newPod = Pod(podId, JsonLdHelper.toCompactFQForm(podConfig.configuration()))
+                    val newPod = Pod(podId, parseConfiguration(podConfig.configuration()))
                     podStore.persist(newPod)
                         .chain { _ -> createS3BucketIfNotExist(podId) }
                         .chain { _ ->
@@ -117,4 +125,27 @@ abstract class PodSetupHelper {
                     }
             }
     }
+
+    /**
+     * Parse Pod config into fully-qualified compact JSON-LD form.
+     * A side effect of this method is that properties that contain regular JSON objects, become empty objects
+     * (if no @vocab is defined) because of the missing context.
+     * To avoid this, we perform a workaround by adding a temporary context that defines the @vocab.
+     */
+    private fun parseConfiguration(configuration: JSONObject): JSONObject {
+        val modifiedConfig = configuration.mapValues { (key, value) ->
+            if (key != JsonLdKeywords.context && value is Map<*, *> && !value.containsKey(JsonLdKeywords.context)) {
+                // Workaround: add temporary context with @vocab to avoid empty objects
+                value + mapOf(JsonLdKeywords.context to mapOf(JsonLdKeywords.vocab to PLAIN_JSON_VOCAB))
+            } else {
+                value
+            }
+        }
+        val result = JsonLdProcessor.compact(
+            JsonLdProcessor.expand(modifiedConfig), mapOf(JsonLdKeywords.vocab to PLAIN_JSON_VOCAB),
+            JsonLdOptions()
+        )
+        return result
+    }
+
 }

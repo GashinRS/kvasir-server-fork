@@ -3,6 +3,7 @@ package kvasir.services.api.kg.inbox
 import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
+import io.quarkus.test.security.TestSecurity
 import jakarta.inject.Inject
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.Assertion
@@ -38,6 +39,7 @@ class InboxApiTest {
     lateinit var sliceStoreFactory: SliceStoreFactory
 
     @Test
+    @TestSecurity(user = "alice")
     fun testBasicInsertAndDelete() {
         val personData = TestDataGenerator.generatePersonData(1)
         val insert = ChangeRequestInput(insert = personData)
@@ -99,6 +101,7 @@ class InboxApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testAssertions() {
         // Add a person
         val personData = TestDataGenerator.generatePersonData(1)
@@ -152,6 +155,7 @@ class InboxApiTest {
 
 
     @Test
+    @TestSecurity(user = "alice")
     fun testWithClause() {
         // Add a person
         val personData = TestDataGenerator.generatePersonData(1)
@@ -246,6 +250,7 @@ class InboxApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testSliceInbox() {
         // Define Slice
         val podId = testHelpers.getPodUri()

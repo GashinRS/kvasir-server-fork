@@ -7,10 +7,11 @@ Kvasir supports multiple authentication and authorization mechanisms via a modul
 A policy agent implementation can be selected at build time using config properties. At the moment, the following
 implementations are available:
 
-|                           | Description                                                                                                                                                                                              | Build property                                        | Status                                     |
-|---------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|--------------------------------------------|
-| `openfga-policy-agent`    | Uses [Keycloak](https://www.keycloak.org/) for authentication and [OpenFGA](https://openfga.dev) for fine-grained access control. Auth flow conforms to OpenID Connect and OAuth 2.1.                    | `kvasir.plugins.policy-agent.openfga.enabled=true`    | Ready for use (included in default builds) |
-| `trustflows-policy-agent` | Turns Kvasir into a Trustflows compatible Resource server. The [Trustflows specification](https://spec.knows.idlab.ugent.be/trustflows/all/e45c02bd3711f5734eeb75548ff37a70f57c465e/) builds on UMA 2.0. | `kvasir.plugins.policy-agent.trustflows.enabled=true` | Work in progress                           |
+|                                               | Description                                                                                                                                                                            | Build property                                     | Image suffix                      | Status                                                              |
+|-----------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|-----------------------------------|---------------------------------------------------------------------|
+| [openfga-policy-agent](#openfga-policy-agent) | Uses [Keycloak](https://www.keycloak.org/) for authentication and [OpenFGA](https://openfga.dev) for fine-grained access control. Auth flow conforms to OpenID Connect and OAuth 2.1.  | `kvasir.plugins.policy-agent.openfga.enabled=true` | `-openfga` or no suffix (default) | Ready for use (included in default builds)                          |
+| [a4ds-policy-agent](#a4ds-policy-agent)       | Turns Kvasir into an 'Authorization for Data Spaces (A4DS)' compatible Resource server. The [A4DS specification](https://spec.knows.idlab.ugent.be/A4DS/L1/latest/) builds on UMA 2.0. | `kvasir.plugins.policy-agent.a4ds.enabled=true`    | `-a4ds`                           | Basic implementation available (check known limitations before use) |
+| No policy agent plugin                        | Disables authentication and access control. May be useful for specific use cases or development purposes.                                                                              | n/a                                                | `-noauth`                         |                                                                     |
 
 ## OpenFGA Policy Agent
 
@@ -25,7 +26,8 @@ for choosing Keycloak are:
 * Client libraries available in multiple languages (not all
   official): [javascript](https://www.keycloak.org/securing-apps/javascript-adapter), [java](https://github.com/keycloak/keycloak-client), [python](https://pypi.org/project/python-keycloak/)
 
-OpenFGA on the other hand is an open-source implementation of the Google Zanzibar paper, a globally distributed authorization
+OpenFGA on the other hand is an open-source implementation of the Google Zanzibar paper, a globally distributed
+authorization
 system that manages permissions at scale (powering authorization policies for Google Services such as YouTube, Drive,
 Calendar, Cloud and Maps.).
 
@@ -90,7 +92,7 @@ bearer token.
 > is
 > better to require PKCE when authenticating via your application. To force-enable PKCE, set the `enable-force-pkce`
 > property to true.
-> 
+>
 > ```yaml
 > generate-clients:
 >   - client-id: my-public-client
@@ -98,7 +100,7 @@ bearer token.
 >       - http://localhost:4200/test
 >     enable-force-pkce: true
 > ```
-> 
+>
 > {style="warning"}
 
 ###### 2. Code the Authorization Code Flow
@@ -392,3 +394,83 @@ Returns:
   "kss-fga:allowed": true
 }
 ```
+
+## A4DS Policy Agent
+
+When enabling the A4DS policy agent, Kvasir acts as a UMA Resource Server, delegating authentication and authorization
+to a configured A4DS/UMA-compliant Authorization Server.
+The A4DS Policy Agent implementation is being developed and tested using
+the [KNoWS UMA Authorization Server](https://github.com/SolidLabResearch/user-managed-access) as a reference. For any
+questions you may have regarding setting up an Authorization server, configuring policies, how to create and
+authenticate users & clients, etc; please refer to the documentation of the Authorization Server you are using.
+
+Contact information for the KNoWS group can be found at [](https://knows.idlab.ugent.be).
+
+### Usage
+
+An A4DS specific build of Kvasir is required to use this feature. When running in dev mode, you can enable the A4DS
+Policy Agent by setting the property `kvasir.plugins.policy-agent.a4ds.enabled` to true.
+
+When using our Container Image builds, look for tags with the `-a4ds` suffix.
+
+The default A4DS/UMA compliant Authorization Server to use, can be configured via the property
+`kvasir.plugins.policy-agent.a4ds.default-uma-server-url`.
+
+Individual Pods can be configured to use a different Authorization Server via the `authServerUrl` property in the Pod
+configuration. If not set, the default server will be used.
+
+Example of a Pod configuration using a custom Authorization Server:
+
+```json
+{
+  "@context": {
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+  },
+  "kss:autoIngestRDF": true,
+  "kss:authConfiguration": {
+    "authServerUrl": "https://alice.example.org/uma"
+  }
+}
+```
+
+For each request to an API endpoint, Kvasir checks for a Bearer token in the `Authorization` header.
+
+* If no token is present, Kvasir will create a ticket with the configured Authorization Server (AS), using the
+  `permission_endpoint` in the UMA configuration of the AS (retrieved by performing a GET at
+  `/.well-known/uma2-configuration`).
+    * If the AS responds with a 201 Created status code, Kvasir will forward the ticket, along with the URL of the AS,
+      to the client in a `WWW-Authenticate` header and respond with a 401 Unauthorized status code.
+    * If the AS responds with a 200 OK status code, Kvasir allows the requests to proceed (the Resource represented by
+      the API call is a public Resource).
+    * For any other response code, Kvasir will respond with a 401 Unauthorized status code (without `WWW-Authenticate`
+      challenge).
+* If a token is present, it is validated by Kvasir using the `introspection_endpoint` of the AS (also retrieved from the
+  UMA configuration).
+    * If the token is valid and active, Kvasir checks if the token contains the required permissions to access the
+      requested Resource. If so, the request is allowed to proceed.
+    * If the above conditions are not met, Kvasir responds with a 401 Unauthorized status code along with a
+      `WWW-Authenticate` header containing the ticket and AS URL.
+
+### Known Limitations
+
+At the moment, the A4DS Policy Agent implementation has the following limitations:
+
+* Kvasir will try to register the requested Resource with the AS every time a ticket is created, to ensure the Resource
+  is known to the AS. This may lead to performance issues when a lot of different Resources are being requested. Once
+  the KNoWS implementation returns a 400 Bad Request when requesting a ticket for a Resource that is not registered with
+  the AS, we can update the implementation to only register the Resource when it is not known to the AS.
+* At the moment, there is no reliable way to extract the user identity from the JWT token issued by the AS. This means
+  that features that rely on knowing the user identity (e.g. removing data produced by a specific user) will not work
+  when using the A4DS Policy Agent.
+* A JWKS keyset (hosted at `/.well-known/uma2-configuration`) is exposed by Kvasir, but the keypair is generated on
+  each startup. This means that any tokens issued by Kvasir will be invalid after a restart. A proper key management
+  solution should be implemented to solve this.
+* At the moment, Kvasir uses a simplified mapping of its internal permissions to UMA requested scopes. Only
+  `urn:example:css:modes:read`,
+  `urn:example:css:modes:write`
+  and `urn:example:css:modes:delete` scopes are used, meaning no distinction is made between creating new data,
+  overriding data or appending
+  data.
+* Kvasir assumes the resource identifier used by the UMA server is the full URL of the requested resource. This
+  currently applies for the KNoWS implementation, but may not be the case for all UMA servers. Future updates will
+  include persistent mapping of Kvasir resources to UMA resource identifiers.

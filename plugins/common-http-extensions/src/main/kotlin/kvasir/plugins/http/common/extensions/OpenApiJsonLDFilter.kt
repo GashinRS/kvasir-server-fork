@@ -28,7 +28,7 @@ class OpenApiJsonLDFilter : OASFilter {
     override fun filterOpenAPI(openAPI: OpenAPI) {
         log.info("Filtering and compacting OpenAPI Schema...")
         // Compact all component type definitions
-        if (openAPI.components != null) {
+        if (openAPI.components != null && openAPI.components.schemas != null) {
             openAPI.components.schemas(
                 openAPI.components.schemas
                     .map { Pair(it.key, compactSchema(it.value, it.key)) }

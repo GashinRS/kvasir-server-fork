@@ -3,6 +3,10 @@
 You can interface with your pod using the Kvasir UI. For advanced operations we always refer to the actual
 [Kvasir APIs](API-Reference.md).
 
+> At this time, Kvasir UI only works when the default access control backend (powered by OpenFGA & Keycloak).
+> See [Authentication & Access control](Access-Control.md) for more information.
+> {style="warning"}
+
 ## S3 Browser
 
 Interface with your pod as an S3 storage space. Files can be uploaded to and downloaded from your pod.
