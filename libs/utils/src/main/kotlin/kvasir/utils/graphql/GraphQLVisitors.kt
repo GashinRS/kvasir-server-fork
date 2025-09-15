@@ -4,25 +4,9 @@ import graphql.language.*
 import graphql.util.TraversalControl
 import graphql.util.TraverserContext
 import kvasir.definitions.kg.graphql.*
+import kvasir.definitions.rdf.JsonLdHelper
 
-abstract class KvasirNodeVisitor(protected val providedContext: Map<String, Any>) : NodeVisitorStub() {
-
-    companion object {
-        const val GRAPHQL_NAME_PREFIX_SEPARATOR = "_"
-        const val RDF_PREFIX_SEPARATOR = ":"
-    }
-
-    protected fun resolveNameAsIri(name: String, separator: String = GRAPHQL_NAME_PREFIX_SEPARATOR): String? {
-        return providedContext[name]?.toString() ?: name.takeIf { it.contains(separator) }?.let { prefixedName ->
-            val (prefix, localName) = prefixedName.split(separator)
-            providedContext[prefix]?.let { prefixIri ->
-                "$prefixIri$localName"
-            }
-        }
-    }
-}
-
-class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor(providedContext) {
+class CheckContextVisitor(private val providedContext: Map<String, Any>) : NodeVisitorStub() {
 
     companion object {
         val IGNORE_TYPES = setOf(
@@ -52,7 +36,7 @@ class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor
         context: TraverserContext<Node<*>>
     ): TraversalControl {
         if (node is NamedNode<*> && node.name !in IGNORE_TYPES) {
-            val iri = resolveNameAsIri(node.name)
+            val iri = JsonLdHelper.getFQName(node.name, providedContext, "_")
             if (iri == null && !node.hasDirective("class")) {
                 // Check if a type predicate is provided, otherwise throw exception
                 throw MissingSemanticContextException("No semantic context found or derivable for type '${node.name}' (${context.location})")
@@ -65,7 +49,7 @@ class CheckContextVisitor(providedContext: Map<String, Any>) : KvasirNodeVisitor
         val parent = context.parentNode
         // Naming of the field does not matter when at root level
         if (node.name !in IGNORE_FIELDS && parent is NamedNode && parent.name !in IGNORE_TYPES) {
-            val iri = resolveNameAsIri(node.name)
+            val iri = JsonLdHelper.getFQName(node.name, providedContext, "_")
             if (iri == null && !node.hasDirective("predicate")) {
                 // Check if a predicate is provided, otherwise throw exception
                 throw MissingSemanticContextException("No semantic context found or derivable for field '${node.name}' in type '${parent.name}' (${node.sourceLocation})")

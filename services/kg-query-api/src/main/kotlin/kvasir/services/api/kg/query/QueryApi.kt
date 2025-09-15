@@ -3,7 +3,6 @@ package kvasir.services.api.kg.query
 import com.fasterxml.jackson.annotation.JsonProperty
 import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Uni
-import io.vertx.core.json.JsonObject
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
@@ -12,7 +11,6 @@ import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
-import kvasir.plugins.policyagent.openfga.extractors.GraphQLGetRelationExtractor
 import kvasir.plugins.policyagent.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
@@ -21,9 +19,8 @@ import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.media.Schema
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
+import java.security.Principal
 import java.time.Instant
-import java.util.*
-import kotlin.jvm.optionals.getOrNull
 
 const val QUERY_API_PATH = "/query"
 
@@ -31,8 +28,9 @@ const val QUERY_API_PATH = "/query"
 @Path("")
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
-    private val podStore: PodStore,
-    private val uriInfo: KvasirUriInfo
+    private val podStoreFactory: PodStoreFactory,
+    private val uriInfo: KvasirUriInfo,
+    private val principal: Principal
 ) {
 
     @Path("{podId}$QUERY_API_PATH")
@@ -48,7 +46,8 @@ class QueryApi(
         input: QueryInputWithContext
     ): Uni<QueryResult> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+        return podStoreFactory.createPodStore().findById(fqPodId).onItem().ifNull()
+            .failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input)
                 knowledgeGraph.query(req).toUni()
@@ -67,7 +66,8 @@ class QueryApi(
         @PathParam("podId") podId: String, input: QueryInputWithContext
     ): Uni<Any> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return podStore.getById(fqPodId).onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
+        return podStoreFactory.createPodStore().findById(fqPodId).onItem().ifNull()
+            .failWith(NotFoundException("Pod not found: $podId"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val req = parseInput(pod!!, input)
                 knowledgeGraph.query(req).map {
@@ -82,6 +82,7 @@ class QueryApi(
     ): QueryRequest {
         return QueryRequest(
             input.providedContext ?: pod.getDefaultContext(),
+            principal.name,
             pod.id,
             null,
             input.query,
@@ -147,13 +148,13 @@ data class QueryInputWithContext(
 ) : QueryInput
 
 internal fun getPodOrThrow404(podStore: PodStore, podId: String): Uni<Pod> {
-    return podStore.getById(podId)
+    return podStore.findById(podId)
         .onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
         .onItem().ifNotNull().transform { it!! }
 }
 
 internal fun getSliceOrThrow404(sliceStore: SliceStore, podId: String, sliceId: String): Uni<Slice> {
-    return sliceStore.getById(podId, sliceId)
+    return sliceStore.findById(sliceId)
         .onItem().ifNull().failWith(NotFoundException("Slice not found: $sliceId"))
         .onItem().ifNotNull().transform { it!! }
 }

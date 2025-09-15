@@ -5,7 +5,6 @@ import { NZ_MODAL_DATA, NzModalModule, NzModalRef } from 'ng-zorro-antd/modal';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
 
 import { Clipboard } from '@angular/cdk/clipboard';
-import { NzNotificationService } from 'ng-zorro-antd/notification';
 
 export interface KvasirError {
   statusCode?: number;
@@ -29,7 +28,6 @@ export class ErrorComponent {
 
   // DI
   private clipboard = inject(Clipboard);
-  private notify = inject(NzNotificationService);
 
   copyError(): void {
     this.clipboard.copy(JSON.stringify(this.error, null, 4));

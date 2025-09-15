@@ -1,12 +1,15 @@
 package kvasir.utils.graphql
 
+import graphql.Scalars
 import graphql.language.*
+import graphql.scalars.ExtendedScalars
 import graphql.schema.*
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
 import kvasir.definitions.kg.graphql.ARG_CURSOR_NAME
 import kvasir.definitions.kg.graphql.ARG_PAGE_SIZE_NAME
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
+import kvasir.definitions.rdf.RDFVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.cursors.OffsetBasedCursor
 
@@ -26,13 +29,16 @@ fun GraphQLType.isScalar(): Boolean {
     return GraphQLTypeUtil.isScalar(this.innerType())
 }
 
-fun GraphQLScalarType.rdfDatatype(): String {
+fun GraphQLScalarType.rdfDatatype(): Set<String> {
     return when (this.name) {
-        "String" -> XSDVocab.string
-        "Int" -> XSDVocab.integer
-        "Float" -> XSDVocab.double
-        "Boolean" -> XSDVocab.boolean
-        else -> "http://www.w3.org/2001/XMLSchema#string"
+        Scalars.GraphQLString.name -> setOf(XSDVocab.string, RDFVocab.langString)
+        Scalars.GraphQLInt.name -> setOf(XSDVocab.integer, XSDVocab.int)
+        Scalars.GraphQLFloat.name -> setOf(XSDVocab.double, XSDVocab.float, XSDVocab.decimal)
+        Scalars.GraphQLBoolean.name -> setOf(XSDVocab.boolean)
+        ExtendedScalars.Time.name -> setOf(XSDVocab.time)
+        ExtendedScalars.Date.name -> setOf(XSDVocab.date)
+        ExtendedScalars.DateTime.name -> setOf(XSDVocab.dateTime)
+        else -> setOf(XSDVocab.string)
     }
 }
 

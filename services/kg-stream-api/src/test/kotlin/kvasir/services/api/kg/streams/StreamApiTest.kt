@@ -2,6 +2,7 @@ package kvasir.services.api.kg.streams
 
 import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.junit.QuarkusTest
+import io.quarkus.test.security.TestSecurity
 import io.restassured.RestAssured.get
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -32,6 +33,7 @@ class StreamApiTest {
     lateinit var testHelpers: TestHelpers
 
     @Test
+    @TestSecurity(user = "alice")
     fun testQueryRequestEvents() {
         val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(
@@ -55,6 +57,7 @@ class StreamApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testLifeCycleEvents() {
         val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(
@@ -96,6 +99,7 @@ class StreamApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testStorageMutationEvents() {
         val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(

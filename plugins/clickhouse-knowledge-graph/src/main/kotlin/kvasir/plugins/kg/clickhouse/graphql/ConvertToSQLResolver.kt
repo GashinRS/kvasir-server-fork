@@ -293,9 +293,10 @@ open class SQLConvertor(
             }
 
             else -> {
-                // Normal behaviour: filter by predicate
+                // Normal behaviour: filter by predicate and expected datatype
                 val predicate = getPredicateForField(field, fieldDefinition!!)
-                "predicate = '$predicate'" to "object"
+                val rdfDataType = fieldDefinition.type.innerType<GraphQLScalarType>().rdfDatatype()
+                "predicate = '$predicate' AND datatype IN (${rdfDataType.joinToString { "'$it'" }})" to "object"
             }
         }
 
@@ -710,10 +711,15 @@ open class SQLConvertor(
     }
 
     protected fun typeFilter(requiredType: GraphQLOutputType): Node? {
-        val matchTypes = when (requiredType) {
-            is GraphQLInterfaceType -> env.graphQLSchema.getImplementations(requiredType)
-            is GraphQLUnionType -> requiredType.types
-            else -> listOf(requiredType)
+        val innerType = requiredType.innerType<GraphQLNamedType>()
+        if(innerType is GraphQLScalarType) {
+            return null
+        }
+        val matchTypes = when {
+            innerType.name in setOf(TYPE_RDF_NODE, TYPE_RESOURCE) -> emptyList()
+            innerType is GraphQLInterfaceType -> env.graphQLSchema.getImplementations(innerType)
+            innerType is GraphQLUnionType -> innerType.types
+            else -> listOf(innerType)
         }.mapNotNull {
             if (it is GraphQLNamedType && it.name in setOf(TYPE_BOXED_LITERAL, ExtendedScalars.Json.name)) {
                 null
@@ -735,7 +741,7 @@ open class SQLConvertor(
 
     protected fun scalarTypeFilter(requiredType: GraphQLScalarType? = null): Node {
         return if (requiredType != null) {
-            ComparisonNode(RSQLOperators.EQUAL, "datatype", listOf(requiredType.rdfDatatype()))
+            ComparisonNode(RSQLOperators.IN, "datatype", requiredType.rdfDatatype().toList())
         } else {
             ComparisonNode(RSQLOperators.NOT_EQUAL, "datatype", listOf(""))
         }

@@ -5,6 +5,7 @@ import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.LifeCycleEvent
+import kvasir.definitions.kg.QueryRequestEvent
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.storage.StorageEvent
 import org.eclipse.microprofile.reactive.messaging.Channel
@@ -25,9 +26,9 @@ class ChannelInitializer(
     @Channel(Channels.OUTBOX_SUBSCRIBE)
     private val outboxSubscriber: Multi<Message<ChangeReport>>,
     @Channel(Channels.QUERY_REQUESTS_PUBLISH)
-    private val queryRequestEmitter: MutinyEmitter<ChangeRequest>,
+    private val queryRequestEmitter: MutinyEmitter<QueryRequestEvent>,
     @Channel(Channels.QUERY_REQUESTS_SUBSCRIBE)
-    private val queryRequestSubscriber: Multi<Message<ChangeRequest>>,
+    private val queryRequestSubscriber: Multi<Message<QueryRequestEvent>>,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
     @Channel(Channels.LIFECYCLE_EVENTS_SUBSCRIBE)

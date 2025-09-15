@@ -72,7 +72,7 @@ interface ChangeRequestPipelineProcessorConfig {
 class DefaultKnowledgeGraph(
     @Channel(Channels.OUTBOX_PUBLISH)
     private val outboxEmitter: MutinyEmitter<ChangeReport>,
-    private val changeHistory: ChangeHistory,
+    private val changeHistoryFactory: ChangeHistoryFactory,
     private val changeRequestTxBufferFactory: ChangeRequestTxBufferFactory,
     private val pipelineConfig: ChangeRequestPipelineConfig,
     private val processors: Instance<ChangeProcessor>,
@@ -109,6 +109,7 @@ class DefaultKnowledgeGraph(
                     val report = ChangeReport(
                         id = request.id,
                         podId = request.podId,
+                        requestingUser = request.requestingUser,
                         statusEntry = listOf(
                             ChangeReportStatusEntry(
                                 ChangeRequestId.fromId(request.id).timestamp(),
@@ -120,7 +121,7 @@ class DefaultKnowledgeGraph(
                         nrOfInserts = stats.nrOfInserts,
                         nrOfDeletes = stats.nrOfDeletes
                     )
-                    changeHistory.register(report).map { report }
+                    changeHistoryFactory.getChangeHistory(request.podId).persist(report).map { report }
                 }
             }
             .invoke { _ -> Log.debug("Processed change request with id '${request.id}' in ${System.currentTimeMillis() - start} ms.") }
@@ -280,11 +281,8 @@ class DefaultKnowledgeGraph(
     private fun getRequestedStateAtTimestamp(request: QueryRequest): Uni<Instant> {
         return when {
             request.atTimestamp != null -> Uni.createFrom().item(request.atTimestamp)
-            request.atChangeRequestId != null -> changeHistory.get(
-                ChangeHistoryRequest(
-                    request.podId,
-                    changeRequestId = request.atChangeRequestId
-                )
+            request.atChangeRequestId != null -> changeHistoryFactory.getChangeHistory(request.podId).get(
+                ChangeHistoryRequest(changeRequestId = request.atChangeRequestId)
             )
                 .map { change -> change?.statusEntry?.find { it.code == ChangeStatusCode.COMMITTED }?.timestamp }
 
@@ -321,7 +319,12 @@ class DefaultKnowledgeGraph(
 
                 }
                 val runtimeWiring =
-                    RuntimeWiring.newRuntimeWiring().scalar(ExtendedScalars.Json).wiringFactory(dynamicWiringFactory)
+                    RuntimeWiring.newRuntimeWiring()
+                        .scalar(ExtendedScalars.Json)
+                        .scalar(ExtendedScalars.Time)
+                        .scalar(ExtendedScalars.Date)
+                        .scalar(ExtendedScalars.DateTime)
+                        .wiringFactory(dynamicWiringFactory)
                         .build()
                 val executableSchema =
                     graphql.schema.idl.SchemaGenerator().makeExecutableSchema(typeDefinitionRegistry, runtimeWiring)
@@ -433,6 +436,7 @@ class DefaultKnowledgeGraph(
         val report = ChangeReport(
             id = request.id,
             podId = request.podId,
+            requestingUser = request.requestingUser,
             statusEntry = listOf(
                 ChangeReportStatusEntry(ChangeRequestId.fromId(request.id).timestamp(), ChangeStatusCode.QUEUED),
                 ChangeReportStatusEntry(Instant.now(), resultCode, errorMessage)
@@ -440,7 +444,7 @@ class DefaultKnowledgeGraph(
             sliceId = request.sliceId,
             errorMessage = errorMessage
         )
-        return changeHistory.register(report).map { report }
+        return changeHistoryFactory.getChangeHistory(request.podId).persist(report).map { report }
     }
 
 }

@@ -20,6 +20,8 @@
       policy-agent:
         openfga:
           enabled: false
+        a4ds:
+          enabled: false
     services:
       storage:
         s3:

@@ -21,6 +21,7 @@ import { KvasirService } from '../services/kvasir.service';
 import { Slice, SliceInput } from '../types';
 import { NzCodeEditorModule } from 'ng-zorro-antd/code-editor';
 import { DevSettingsService } from '../services/dev-settings.service';
+import { KSS_FQN, KSS_PREFIX } from '../util/constants';
 
 @Component({
   selector: 'app-slice-edit',
@@ -82,7 +83,10 @@ export class SliceEditComponent {
 
   saveForm(): void {
     if (this.editForm?.valid) {
-      const context = JSON.parse(this.ctxCtrl.value);
+      const context = {
+        ...JSON.parse(this.ctxCtrl.value),
+        ...{ [KSS_PREFIX]: KSS_FQN },
+      };
       const name = this.nameCtrl.value;
       const schema = this.schemaCtrl.value;
       const description =

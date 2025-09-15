@@ -9,6 +9,7 @@ import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStore
+import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.rdf.*
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.junit.jupiter.api.*
@@ -25,7 +26,7 @@ class FgaResourceTest {
     lateinit var authInitializer: AuthInitializer
 
     @Inject
-    lateinit var podStore: PodStore
+    lateinit var podStoreFactory: PodStoreFactory
 
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY)
     lateinit var baseUri: String
@@ -43,7 +44,7 @@ class FgaResourceTest {
         podId = "${baseUri}bob"
         // Create a pod store for the test
         val pod = Pod(podId, mapOf())
-        podStore.persist(pod).await().indefinitely()
+        podStoreFactory.createPodStore().persist(pod).await().indefinitely()
         // Init openfga-policy-agent
         authInitializer.initializeForPod(podId, "bob", "bob", pod).await().indefinitely()
 

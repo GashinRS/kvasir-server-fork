@@ -18,13 +18,11 @@ import kvasir.definitions.rdf.SAREFVocab
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
-import kvasir.plugins.kg.clickhouse.graphql.SQLConvertor
 import kvasir.plugins.kg.clickhouse.graphql.SQLConvertorMode
 import kvasir.plugins.kg.clickhouse.graphql.saref.SarefDatafetcher
 import kvasir.plugins.kg.clickhouse.graphql.saref.TSQLConvertor
 import kvasir.plugins.kg.clickhouse.specs.*
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
-import kvasir.utils.graphql.KvasirNodeVisitor
 import kvasir.utils.graphql.getFQName
 import kvasir.utils.rdf.RDFTransformer
 import org.eclipse.microprofile.config.inject.ConfigProperty
@@ -212,7 +210,7 @@ class SarefTimeseriesStorageBackend(
 
 }
 
-class MatchingPathVisitor(rdfContext: Map<String, Any>) : KvasirNodeVisitor(rdfContext) {
+class MatchingPathVisitor(private val providedContext: Map<String, Any>) : NodeVisitorStub() {
 
     override fun visitField(node: Field, context: TraverserContext<Node<*>>): TraversalControl {
         // If the selectionSet for the Field includes SAREF timeseries fields...

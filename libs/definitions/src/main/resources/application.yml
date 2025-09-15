@@ -10,6 +10,9 @@ kvasir:
         "kvasir":
           level: DEBUG
           min-level: DEBUG
+        "idlab":
+          level: DEBUG
+          min-level: DEBUG
 
 "%test":
   quarkus:

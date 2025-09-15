@@ -4,6 +4,7 @@ import com.github.jsonldjava.utils.JsonUtils
 import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
+import io.quarkus.test.security.TestSecurity
 import io.restassured.RestAssured.get
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
@@ -51,6 +52,7 @@ class GraphSlicesApiTest {
 
     @Test
     @Order(1)
+    @TestSecurity(user = "alice")
     fun testCreateSlice() {
         val sliceDefinition = """
             type Query {
@@ -85,6 +87,7 @@ class GraphSlicesApiTest {
 
     @Test
     @Order(2)
+    @TestSecurity(user = "alice")
     fun testCreateNonNamedSlice() {
         val sliceDefinition = """
             type Query {
@@ -118,6 +121,7 @@ class GraphSlicesApiTest {
 
     @Test
     @Order(3)
+    @TestSecurity(user = "alice")
     fun testListSlices() {
         val result = JsonUtils.fromString(
             get("{podId}/slices", TestConstants.TEST_POD_2_ID)
@@ -134,6 +138,7 @@ class GraphSlicesApiTest {
 
     @Test
     @Order(4)
+    @TestSecurity(user = "alice")
     fun testSliceQuery() {
         // Populate some data
         val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_2_ID)
@@ -149,6 +154,7 @@ class GraphSlicesApiTest {
             ChangeRequest(
                 ChangeRequestId.generate("$podUri/changes").encode(),
                 emptyMap(),
+                "alice",
                 podUri,
                 insert = allPersonData
             )
@@ -191,6 +197,7 @@ class GraphSlicesApiTest {
 
     @Test
     @Order(5)
+    @TestSecurity(user = "alice")
     fun testUpdateSliceToAddMutations() {
         val sliceDefinition = """
             type Query {
@@ -235,6 +242,7 @@ class GraphSlicesApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     @Order(6)
     fun testInvalidMutation() {
         // This insert should fail, as the email domain does not match the shape
@@ -270,6 +278,7 @@ class GraphSlicesApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     @Order(7)
     fun testValidMutation() {
         // Use the email domain that matches the shape
@@ -339,6 +348,7 @@ class GraphSlicesApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     @Order(8)
     fun testTimeTravel() {
         // Although jdoe was deleted in the previous test, we should still be able to retrieve the data using time travel.

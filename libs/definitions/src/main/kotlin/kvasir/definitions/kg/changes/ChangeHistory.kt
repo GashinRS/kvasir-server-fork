@@ -6,29 +6,44 @@ import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.ChangeStatusCode
 import kvasir.definitions.kg.PagedResult
+import kvasir.definitions.persistence.PersistentEntity
+import kvasir.definitions.persistence.Repository
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import java.time.Instant
 
+interface ChangeHistoryFactory {
+    fun getChangeHistory(podId: String): ChangeHistory
+}
+
 /**
  * Interface defining a service for interacting with the KG ChangeHistory
  */
-interface ChangeHistory {
-
-    /**
-     * Create (or replace) a Change Report.
-     */
-    fun register(report: ChangeReport): Uni<Void>
+interface ChangeHistory : Repository<ChangeReport> {
 
     /**
      * Retrieve an overview of Changes matching the specified request.
      */
-    fun list(request: ChangeHistoryRequest): Uni<PagedResult<ChangeReport>>
+    @Deprecated("Use find with appropriate filter instead")
+    fun list(request: ChangeHistoryRequest): Uni<PagedResult<ChangeReport>> {
+        val filter = listOfNotNull(
+            request.sliceId?.let { "sliceId==\"$it\"" },
+            request.changeRequestId?.let { "id==\"$it\"" },
+            request.fromTimestamp?.let { "writeTs >= \"$it\"" },
+            request.toTimestamp?.let { "writeTs < \"$it\"" }
+        ).takeIf { it.isNotEmpty() }?.joinToString(" and ")
+        return find(filter, request.pageSize, request.cursor)
+    }
 
     /**
      * Get detailed information for a specific Change matching the specified request.
      */
-    fun get(request: ChangeHistoryRequest): Uni<ChangeReport?>
+    @Deprecated("Use findById with instead")
+    fun get(request: ChangeHistoryRequest): Uni<ChangeReport?> {
+        return list(request.copy(pageSize = 1)).map { results ->
+            results.items.firstOrNull()
+        }
+    }
 
 }
 
@@ -36,8 +51,6 @@ interface ChangeHistory {
  * Data class encapsulating a Change History request.
  */
 data class ChangeHistoryRequest(
-    // The id of the pod to fetch change history data from.
-    val podId: String,
     // An optional slice identifier (retrieve changes limited to a specific slice)
     val sliceId: String? = null,
     // An optional from timestamp, in order to limit results to a specific time range.
@@ -56,24 +69,26 @@ data class ChangeHistoryRequest(
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 data class ChangeReport(
     @get:JsonProperty(JsonLdKeywords.id)
-    val id: String,
+    override var id: String,
+    @get:JsonProperty(KvasirVocab.requestingUser)
+    var requestingUser: String,
     @get:JsonProperty(KvasirVocab.podId)
-    val podId: String,
+    var podId: String,
     @get:JsonProperty(KvasirVocab.statusEntry)
-    val statusEntry: List<ChangeReportStatusEntry>,
+    var statusEntry: List<ChangeReportStatusEntry>,
     @get:JsonProperty(KvasirVocab.sliceId)
-    val sliceId: String? = null,
+    var sliceId: String? = null,
     @get:JsonProperty(KvasirVocab.nrOfInserts)
-    val nrOfInserts: Long = 0,
+    var nrOfInserts: Long = 0,
     @get:JsonProperty(KvasirVocab.nrOfDeletes)
-    val nrOfDeletes: Long = 0,
+    var nrOfDeletes: Long = 0,
     @get:JsonProperty(KvasirVocab.message)
-    val errorMessage: String? = null
-)
+    var errorMessage: String? = null
+) : PersistentEntity()
 
 @GenerateNoArgConstructor
 data class ChangeReportStatusEntry(
-    @get:JsonProperty(KvasirVocab.timestamp) val timestamp: Instant,
-    @get:JsonProperty(KvasirVocab.statusCode) val code: ChangeStatusCode,
-    @get:JsonProperty(KvasirVocab.message) val message: String? = null
+    @get:JsonProperty(KvasirVocab.timestamp) var timestamp: Instant,
+    @get:JsonProperty(KvasirVocab.statusCode) var code: ChangeStatusCode,
+    @get:JsonProperty(KvasirVocab.message) var message: String? = null
 )

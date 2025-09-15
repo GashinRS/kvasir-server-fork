@@ -19,10 +19,19 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { KvasirService } from '../services/kvasir.service';
 import { SliceInput } from '../types';
 import { DevSettingsService } from '../services/dev-settings.service';
+import { KSS_FQN, KSS_PREFIX } from '../util/constants';
 
 const DEFAULT_CONTEXT = `{
-  "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+  "${KSS_PREFIX}": "${KSS_FQN}"
 }`;
+
+const SCHEMA_TEMPLATE = `type Query {
+  # Define your query entry-points here (based on the Slice types below)
+}
+
+# Define the Slice types here
+
+`;
 
 @Component({
   selector: 'app-slice-new',
@@ -58,14 +67,17 @@ export class SliceNewComponent {
     this.inputForm = fb.group({
       context: [DEFAULT_CONTEXT, Validators.compose(validators)],
       description: [],
-      name: [null, Validators.required],
-      schema: [null, Validators.required],
+      name: null,
+      schema: [SCHEMA_TEMPLATE, Validators.required],
     });
   }
 
   submitForm(): void {
     if (this.inputForm.valid) {
-      const context = JSON.parse(this.ctxCtrl.value);
+      const context = {
+        ...JSON.parse(this.ctxCtrl.value),
+        ...{ [KSS_PREFIX]: KSS_FQN },
+      };
       const name = this.nameCtrl.value;
       const schema = this.schemaCtrl.value;
       const description =

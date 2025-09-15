@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>kvasir-plugins</groupId>
+        <artifactId>plugins-parent</artifactId>
+        <version>0.10.0</version>
+    </parent>
+
+    <artifactId>a4ds-policy-agent</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>kvasir-libs</groupId>
+            <artifactId>definitions</artifactId>
+            <version>0.10.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-jwt</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-jwt-build</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.authlete</groupId>
+            <artifactId>http-message-signatures</artifactId>
+            <version>1.3</version>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>smallrye-mutiny-vertx-web-client</artifactId>
+        </dependency>
+        <!-- This dependency exists because our simple ORM layer cannot yet dynamically create repositories for entities in other modules (and register these with CDI). This should be addressed in a future update!-->
+        <dependency>
+            <groupId>kvasir-plugins</groupId>
+            <artifactId>clickhouse-knowledge-graph</artifactId>
+            <version>0.10.0</version>
+        </dependency>
+    </dependencies>
+
+</project>

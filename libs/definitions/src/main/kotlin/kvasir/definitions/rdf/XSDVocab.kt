@@ -13,6 +13,7 @@ object XSDVocab {
     val float = "${baseUri}float"
     val decimal = "${baseUri}decimal"
     val dateTime = "${baseUri}dateTime"
+    val date = "${baseUri}date"
+    val time = "${baseUri}time"
 
-    val literalTypes = setOf(string, boolean, int, integer, long, double, decimal, dateTime)
 }

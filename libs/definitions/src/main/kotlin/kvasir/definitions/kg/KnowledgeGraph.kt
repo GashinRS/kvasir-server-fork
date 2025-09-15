@@ -1,6 +1,5 @@
 package kvasir.definitions.kg
 
-import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
@@ -45,6 +44,7 @@ data class ChangeRequest(
      * The context used to produce the Change Request.
      */
     val context: Map<String, Any> = emptyMap(),
+    val requestingUser: String,
     /**
      * The unique identifier of the Pod where the Change Request should be applied.
      */
@@ -107,10 +107,6 @@ data class ChangeRequest(
             "Delete templates require a with-clause"
         }
     }
-
-    companion object {
-        const val URN_PREFIX = "kvasir:change:"
-    }
 }
 
 enum class ChangeStatusCode {
@@ -163,6 +159,7 @@ data class ChangeRollbackRequest(
 @GenerateNoArgConstructor
 data class QueryRequest(
     val context: Map<String, Any> = emptyMap(),
+    val requestingUser: String,
     val podId: String,
     val sliceId: String? = null,
     val query: String,
@@ -329,6 +326,8 @@ data class QueryRequestEvent(
     val timestamp: Instant,
     @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any> = emptyMap(),
+    @get:JsonProperty(KvasirVocab.requestingUser)
+    val requestingUser: String,
     @get:JsonProperty(KvasirVocab.statusCode)
     val statusCode: QueryRequestStatusCode,
     @get:JsonProperty(KvasirVocab.podId)
@@ -361,6 +360,7 @@ data class QueryRequestEvent(
                 id = queryId,
                 timestamp = timestamp,
                 context = queryRequest.context,
+                requestingUser = queryRequest.requestingUser,
                 statusCode = resultCode,
                 podId = queryRequest.podId,
                 sliceId = queryRequest.sliceId,

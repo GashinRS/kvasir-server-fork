@@ -76,6 +76,23 @@ type schema_Person {
 }
 ```
 
+> By adding a `@vocab` entry to the context, you can define types and predicates without the need for a prefix. For
+> example,
+> by adding `"@vocab": "http://schema.org/"` to the previous context, the schema can be further simplified to:
+> ```graphql
+> type Query {
+>    persons: [Person!]!
+> }
+> 
+> type Person {
+>   id: ID!
+>   givenName: String!
+>   familyName: String!
+>   email: [String!]
+> }
+> ```
+> {style="note"}
+
 #### Data restrictions
 
 To further restrict the data retrievable via the Slice, use the [`@filter` directive](Querying.md#filters) similarly to
@@ -98,6 +115,23 @@ type schema_Person {
     schema_email: [String!] @filter(if: "it==*@example.org")
 }
 ```
+
+#### Scalar types and RDF mapping
+
+The Kvasir GraphQL type system is based on the following scalar types:
+
+| GraphQL Type | Compatible RDF literal data type(s)      |
+|--------------|------------------------------------------|
+| ID           | IRI reference                            |
+| String       | `xsd:string`, `rdf:langString`           |
+| Boolean      | `xsd:boolean`                            |
+| Float        | `xsd:float`, `xsd:double`, `xsd:decimal` |
+| Int          | `xsd:int`, `xsd:integer`                 |
+| Time         | `xsd:time` *                             |
+| Date         | `xsd:date` *                             |
+| DateTime     | `xsd:dateTime` *                         |
+
+*: if RFC 3339 compliant
 
 #### System types, fields and arguments
 
@@ -394,3 +428,112 @@ For example, to subscribe to the name and email of Persons being inserted, you c
 
 This will return a Server-Sent-Event (SSE) response in which GraphQL query result instances will be streamed, each time
 a Person is inserted. Make sure your GraphQL client can handle SSE as a transport protocol for GraphQL subscriptions.
+
+## Advanced
+
+### Fields with multiple types
+
+A limitation of GraphQL is that Union types cannot encompass scalar values. By contrast, RDF frequently permits
+properties to reference either resources or literal values, and in some cases, to support multiple literal data types.
+
+You can use the Kvasir common types [`RDFNode`](Querying.md#rdfnode) and [
+`BoxedLiteral`](Querying.md#boxedliteral-implements-rdfnode) to work your way around this when defining a Slice
+schema.
+
+For example, the manufacturer of an instrument can be represented either as an IRI referring to a Resource modeling the
+builder, or as a literal String value. To be able to represent both cases in the Slice schema, we can use `RDFNode`:
+
+```graphql
+type Query {
+    instruments: [ex_Instrument]
+}
+
+type Mutation {
+    add(instruments: [InstrumentInput!]): ID!
+}
+
+type ex_Instrument {
+    ex_manufacturer: RDFNode
+}
+
+input InstrumentInput @class(iri: "ex:Instrument") {
+    id: ID!
+    manufacturer: String @predicate(iri: "ex:manufacturer")
+    manufacturerRef: ID @predicate(iri: "ex:manufacturer")
+}
+```
+
+The mutation supports inserting the manufacturer as either a literal String value (using the `manufacturer` field) or as
+an IRI (using the `manufacturerRef` field). When not adding data using GraphQL, but instead using the Changes API
+directly (by performing a POST at `/{podId}/slices/{slideId}/changes`), you can use either a literal value or an IRI for
+the `ex:manufacturer` predicate, both will be accepted by the Slice data validator.
+
+To retrieve the manufacturer of an instrument, use the `_rawRDF` property of `RDFNode`, for example:
+
+```graphql
+{
+  instruments {
+    id
+    ex_manufacturer {
+      _rawRDF
+    }
+  }
+}
+```
+
+Returns:
+
+```json
+{
+  "data": {
+    "instruments": [
+      {
+        "id": "http://example.org/instruments/1",
+        "ex_manufacturer": {
+          "_rawRDF": {
+            "@value": "Fender",
+            "@type": "http://www.w3.org/2001/XMLSchema#string"
+          }
+        }
+      },
+      {
+        "id": "http://example.org/instruments/2",
+        "ex_manufacturer": {
+          "_rawRDF": {
+            "@id": "https://www.espguitars.com"
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+This approach can also be used when a property can have multiple literal data types, but to restrict the possible values
+to only literals, we recommend using `BoxedLiteral` instead.
+
+For example, say the `ex:price` property of an instrument can be represented either as a decimal value or as a String
+value. To support this, we can extend the previous example as follows:
+
+```graphql
+type Query {
+    instruments: [ex_Instrument]
+}
+
+type Mutation {
+    add(instruments: [InstrumentInput!]): ID!
+}
+
+type ex_Instrument {
+    ex_manufacturer: RDFNode
+    ex_price: BoxedLiteral
+}
+
+input InstrumentInput @class(iri: "ex:Instrument") {
+    id: ID!
+    manufacturer: String @predicate(iri: "ex:manufacturer")
+    manufacturerRef: ID @predicate(iri: "ex:manufacturer")
+    priceString: String @predicate(iri: "ex:price")
+    priceDecimal: Float @predicate(iri: "ex:price")
+}
+```

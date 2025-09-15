@@ -10,6 +10,8 @@ import java.time.Instant
 data class StorageEvent(
     @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
+    @get:JsonProperty(KvasirVocab.requestingUser)
+    val requestingUser: String?,
     @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
     @get:JsonProperty(KvasirVocab.podId)
@@ -23,7 +25,7 @@ data class StorageEvent(
     @get:JsonProperty(KvasirVocab.internalObjectUri)
     val internalStorageUri: String,
     @get:JsonProperty(KvasirVocab.versionId)
-    val versionId: String,
+    val versionId: String? = null,
     @get:JsonProperty(KvasirVocab.type)
     val type: StorageEventType
 )

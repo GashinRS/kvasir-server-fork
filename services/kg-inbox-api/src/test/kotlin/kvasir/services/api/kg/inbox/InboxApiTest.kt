@@ -3,11 +3,13 @@ package kvasir.services.api.kg.inbox
 import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
+import io.quarkus.test.security.TestSecurity
 import jakarta.inject.Inject
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.Assertion
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
+import kvasir.definitions.kg.slices.SliceStoreFactory
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.getJsonArray
@@ -34,9 +36,10 @@ class InboxApiTest {
     lateinit var knowledgeGraph: KnowledgeGraph
 
     @Inject
-    lateinit var sliceStore: SliceStore
+    lateinit var sliceStoreFactory: SliceStoreFactory
 
     @Test
+    @TestSecurity(user = "alice")
     fun testBasicInsertAndDelete() {
         val personData = TestDataGenerator.generatePersonData(1)
         val insert = ChangeRequestInput(insert = personData)
@@ -58,6 +61,7 @@ class InboxApiTest {
         var result = knowledgeGraph.query(
             QueryRequest(
                 TestConstants.CONTEXT,
+                "alice",
                 testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                 query = "{ ex_Person { id so_givenName so_familyName } }"
             )
@@ -87,6 +91,7 @@ class InboxApiTest {
         result = knowledgeGraph.query(
             QueryRequest(
                 TestConstants.CONTEXT,
+                "alice",
                 testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                 query = "{ ex_Person { id so_givenName so_familyName } }"
             )
@@ -96,6 +101,7 @@ class InboxApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testAssertions() {
         // Add a person
         val personData = TestDataGenerator.generatePersonData(1)
@@ -138,6 +144,7 @@ class InboxApiTest {
         val result = knowledgeGraph.query(
             QueryRequest(
                 TestConstants.CONTEXT,
+                "alice",
                 testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                 query = "{ ex_Person { id so_givenName so_familyName } }"
             )
@@ -148,6 +155,7 @@ class InboxApiTest {
 
 
     @Test
+    @TestSecurity(user = "alice")
     fun testWithClause() {
         // Add a person
         val personData = TestDataGenerator.generatePersonData(1)
@@ -206,6 +214,7 @@ class InboxApiTest {
         val result = knowledgeGraph.query(
             QueryRequest(
                 TestConstants.CONTEXT,
+                "alice",
                 testHelpers.getPodUri(TestConstants.TEST_POD_1_ID),
                 query = "{ ex_Person(id: \"$personId\") { so_email } }"
             )
@@ -241,15 +250,16 @@ class InboxApiTest {
     }
 
     @Test
+    @TestSecurity(user = "alice")
     fun testSliceInbox() {
         // Define Slice
         val podId = testHelpers.getPodUri()
         val sliceId = "$podId/slices/test"
-        sliceStore.persist(
+        sliceStoreFactory.getSliceStore(podId).persist(
             Slice(
                 sliceId,
                 TestConstants.CONTEXT,
-                podId,
+                "alice",
                 "test",
                 "",
                 """

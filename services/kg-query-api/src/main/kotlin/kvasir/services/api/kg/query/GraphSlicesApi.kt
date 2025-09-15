@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.common.hash.Hashing
 import graphql.parser.Parser
 import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
@@ -16,7 +17,7 @@ import jakarta.ws.rs.sse.Sse
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
-import kvasir.definitions.kg.slices.SliceStore
+import kvasir.definitions.kg.slices.SliceStoreFactory
 import kvasir.definitions.kg.slices.SliceSummary
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
@@ -39,19 +40,20 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestStreamElementType
 import java.net.URI
-import java.time.Instant
+import java.security.Principal
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 @Path("")
 class GraphSlicesApi(
-    private val sliceStore: SliceStore,
-    private val podStore: PodStore,
+    private val sliceStoreFactory: SliceStoreFactory,
+    private val podStoreFactory: PodStoreFactory,
     private val knowledgeGraph: KnowledgeGraph,
     private val uriInfo: KvasirUriInfo,
     private val sse: Sse,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
-    private val lifeCycleEventEmitter: MutinyEmitter<LifeCycleEvent>
+    private val lifeCycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
+    private val principal: Principal
 ) {
 
     @Tag(name = ApiDocTags.PODS_API)
@@ -66,8 +68,9 @@ class GraphSlicesApi(
     @OpenFgaPolicyEnforcer
     fun listSlices(@PathParam("podId") podId: String): Uni<List<SliceSummary>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getPodOrThrow404(podStore, fqPodId).chain { _ ->
-            sliceStore.list(fqPodId).map { it }
+        return getPodOrThrow404(podStoreFactory.createPodStore(), fqPodId).chain { _ ->
+            sliceStoreFactory.getSliceStore(fqPodId).find()
+                .map { results -> results.items.map { SliceSummary(it.id, it.name, it.description) } }
         }
     }
 
@@ -84,10 +87,10 @@ class GraphSlicesApi(
     fun createSlice(@PathParam("podId") podId: String, input: SliceInput): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getChildUri(input.name).toASCIIString()
-        return getPodOrThrow404(podStore, fqPodId)
+        return getPodOrThrow404(podStoreFactory.createPodStore(), fqPodId)
             .chain { _ ->
                 // A Slice with the same name should not exist
-                sliceStore.getById(fqPodId, fqSliceId)
+                sliceStoreFactory.getSliceStore(fqPodId).findById(fqSliceId)
                     .onItem().ifNotNull().failWith(ClientErrorException(Response.Status.CONFLICT))
                     .onItem().ifNull().switchTo { validateAndPersistSlice(fqPodId, fqSliceId, input) }
             }
@@ -96,6 +99,7 @@ class GraphSlicesApi(
                 lifeCycleEventEmitter.send(
                     LifeCycleEvent(
                         type = LifeCycleEventType.SLICE_CREATED,
+                        requestingUser = principal.name,
                         podId = fqPodId,
                         sliceId = fqSliceId
                     )
@@ -121,7 +125,7 @@ class GraphSlicesApi(
     ): Uni<Slice> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().toASCIIString()
-        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId)
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId)
     }
 
     @Tag(name = ApiDocTags.PODS_API)
@@ -141,7 +145,7 @@ class GraphSlicesApi(
     ): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().toASCIIString()
-        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { _ ->
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { _ ->
             validateAndPersistSlice(fqPodId, fqSliceId, input)
                 .chain { _ ->
                     // Emit life-cycle event
@@ -149,6 +153,7 @@ class GraphSlicesApi(
                         LifeCycleEvent(
                             type = LifeCycleEventType.SLICE_UPDATED,
                             podId = fqPodId,
+                            requestingUser = principal.name,
                             sliceId = fqSliceId
                         )
                     )
@@ -169,13 +174,15 @@ class GraphSlicesApi(
     fun deleteSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().toASCIIString()
+        val sliceStore = sliceStoreFactory.getSliceStore(fqPodId)
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { _ ->
-            sliceStore.deleteById(fqPodId, fqSliceId)
+            sliceStore.deleteById(fqSliceId)
                 .chain { _ ->
                     // Emit life-cycle event
                     lifeCycleEventEmitter.send(
                         LifeCycleEvent(
                             type = LifeCycleEventType.SLICE_DELETED,
+                            requestingUser = principal.name,
                             podId = fqPodId,
                             sliceId = fqSliceId
                         )
@@ -202,7 +209,7 @@ class GraphSlicesApi(
     ): Uni<QueryResult> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
             executeQuery(fqPodId, slice, input).toUni()
         }
     }
@@ -220,9 +227,10 @@ class GraphSlicesApi(
     ): Multi<OutboundSseEvent> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).onItem().transformToMulti { slice ->
-            executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
-        }
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
+            .transformToMulti { slice ->
+                executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
+            }
     }
 
     /**
@@ -249,9 +257,10 @@ class GraphSlicesApi(
                 variables = variables.getOrNull()?.let { JsonObject(it).map },
                 operationName = operationName.getOrNull()
             )
-        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).onItem().transformToMulti { slice ->
-            executeQuery(fqPodId, slice, queryInputImpl).map { sse.newEventBuilder().name("next").data(it).build() }
-        }
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
+            .transformToMulti { slice ->
+                executeQuery(fqPodId, slice, queryInputImpl).map { sse.newEventBuilder().name("next").data(it).build() }
+            }
     }
 
     @POST
@@ -270,7 +279,7 @@ class GraphSlicesApi(
     ): Uni<Any> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { slice ->
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
             executeQuery(fqPodId, slice, input).toUni().map {
                 it.toJsonLD(slice.context)
             }
@@ -289,6 +298,7 @@ class GraphSlicesApi(
         return knowledgeGraph.query(
             QueryRequest(
                 slice.context,
+                principal.name,
                 podId,
                 slice.id,
                 input.query,
@@ -305,10 +315,10 @@ class GraphSlicesApi(
         return try {
             // Check if the schema contains mutations
             val parsedSchema = SliceGraphQLSchema(input.schema, input.context)
-            val slice = input.toSlice(podId, sliceId, parsedSchema.hasMutations())
+            val slice = input.toSlice(principal.name, sliceId, parsedSchema.hasMutations())
             // Validate the schema
             parsedSchema.validate()
-            sliceStore.persist(slice).map { slice }
+            sliceStoreFactory.getSliceStore(podId).persist(slice).map { slice }
         } catch (err: Throwable) {
             Uni.createFrom().failure(err)
         }
@@ -329,11 +339,11 @@ data class SliceInput(
     @get:JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 ) {
-    fun toSlice(podId: String, sliceId: String, supportsChanges: Boolean): Slice {
+    fun toSlice(principal: String, sliceId: String, supportsChanges: Boolean): Slice {
         return Slice(
             id = sliceId,
             context = context,
-            podId = podId,
+            author = principal,
             name = name,
             description = description,
             schema = schema,

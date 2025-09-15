@@ -1,8 +1,4 @@
 kvasir:
-  plugins:
-    policy-agent:
-      openfga:
-        enabled: true
   services:
     storage:
       s3:
@@ -38,9 +34,10 @@ quarkus:
   kvasir:
     plugins:
       policy-agent:
-        keycloak:
-          realm-initializer:
-            request-password-reset: false
+        openfga:
+          enabled: true
+        a4ds:
+          enabled: false
     webclient-uri: http://localhost:8080/_ui
     bootstrap:
       pods:

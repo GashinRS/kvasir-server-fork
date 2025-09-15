@@ -5,22 +5,23 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { NzDescriptionsModule } from 'ng-zorro-antd/descriptions';
+import { NzEmptyModule } from 'ng-zorro-antd/empty';
 import { NzGridModule } from 'ng-zorro-antd/grid';
 import { NzRadioModule } from 'ng-zorro-antd/radio';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
 import { concatWith, from, map, switchMap } from 'rxjs';
+import { LiteralBadgeComponent } from '../components/literal-badge/literal-badge.component';
 import { RangeDiff, ServerPagedDirective } from '../server-paged.directive';
 import { KvasirService } from '../services/kvasir.service';
 import { ChangeReport, ChangeResultCode } from '../types';
 import {
   ensureArray,
-  mapToSignedQuads,
-  SignedQuad,
+  mapToSignedN3Quads,
+  SignedN3Quad,
   sortByTimestamp,
 } from '../util/utils';
-import { NzEmptyModule } from 'ng-zorro-antd/empty';
 
 @Component({
   selector: 'app-change',
@@ -37,6 +38,7 @@ import { NzEmptyModule } from 'ng-zorro-antd/empty';
     ServerPagedDirective,
     RouterModule,
     NzEmptyModule,
+    LiteralBadgeComponent,
   ],
   templateUrl: './change.component.html',
   styleUrl: './change.component.less',
@@ -58,7 +60,7 @@ export class ChangeComponent implements OnInit {
     return entries?.sort(sortByTimestamp('desc'))[0];
   });
 
-  records: SignedQuad[] = [];
+  records: SignedN3Quad[] = [];
   private cursor?: string;
 
   ngOnInit(): void {
@@ -99,8 +101,8 @@ export class ChangeComponent implements OnInit {
           };
         }),
         switchMap(({ deletes, inserts, context }) => {
-          const delObs = from(mapToSignedQuads(deletes, context, '-'));
-          const insObs = from(mapToSignedQuads(inserts, context, '+'));
+          const delObs = from(mapToSignedN3Quads(deletes, context, '-'));
+          const insObs = from(mapToSignedN3Quads(inserts, context, '+'));
           return delObs.pipe(concatWith(insObs));
         }),
       )

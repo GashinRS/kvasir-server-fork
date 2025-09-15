@@ -93,11 +93,52 @@ export async function mapToSignedQuads(
   });
 }
 
+export async function mapToSignedN3Quads(
+  input: ChangeRecord[],
+  context: any,
+  sign: '+' | '-',
+): Promise<SignedN3Quad[]> {
+  const parser = new N3.Parser();
+  const doc = { '@context': context, '@graph': input };
+  const res = await jsonld.toRDF(doc, {
+    format: 'application/n-quads',
+  });
+
+  return new Promise((resolve, reject) => {
+    const results: N3.Quad[] = [];
+    parser.parse(res.toString(), (error, quad, prefixes) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      if (quad) {
+        results.push(quad);
+      } else {
+        resolve(
+          results.map((quad) => ({
+            sign,
+            subject: quad.subject,
+            predicate: quad.predicate,
+            object: quad.object,
+          })),
+        );
+      }
+    });
+  });
+}
+
 export interface SignedQuad {
   sign: '+' | '-';
   subject: string;
   predicate: string;
   object: string;
+}
+
+export interface SignedN3Quad {
+  sign: '+' | '-';
+  subject: N3.Quad_Subject;
+  predicate: N3.Quad_Predicate;
+  object: N3.Quad_Object;
 }
 
 export function sortByTimestamp(direction: 'asc' | 'desc' = 'asc') {
