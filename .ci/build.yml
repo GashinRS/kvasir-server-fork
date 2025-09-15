@@ -47,6 +47,9 @@ package:maven:
       -Dquarkus.container-image.tag=${IMAGE_TAG}-${POLICY}
       -Dquarkus.container-image.additional-tags=${ADDITIONAL_TAGS}
   interruptible: true
+  artifacts:
+    paths:
+      - "services/monolith/target/openapi"
 
 build:openapi:
   extends:
@@ -55,7 +58,7 @@ build:openapi:
     - .main-branch-only
   image: $JDK_IMAGE
   stage: package
-  needs: ["build:maven"]
+  needs: ["package:maven"]
   before_script:
     - set -xe
     - curl -sL https://deb.nodesource.com/setup_20.x | bash
