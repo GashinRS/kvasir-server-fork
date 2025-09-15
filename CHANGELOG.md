@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.10.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.2..v0.10.0) - 2025-09-15
+**Warning**: This update modifies the storage schema for Clickhouse. At this time, we cannot provide a migration script, meaning you will have to manually reset the database (e.g. by clearing storage volumes) before using this update!
+### Features
+- Extended the GraphQL typesystem with support for Date, Time & DateTime - ([a451bbc](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a451bbc6a3a7b63b8d0d2b3a86e2cdaa89d525a8)) - Wannes Kerckhove
+- Implemented (basic) support for Authorization for Data Spaces (A4DS) - ([04bece3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/04bece33e891549a49b0697393591ebc72c76571)) - Wannes Kerckhove
+- [**breaking**] Implemented ORM layer for persisting POJOs. Added identity to storage records. - ([651a4d7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/651a4d74a0ad396824bd166471dc82a8908988ce)) - Wannes Kerckhove
+- **(ui)** show icon for literals in change request records - ([61cc606](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/61cc6067ea55f1b2ad2cd7123aeca27919206edc)) - Thomas Dupont
+- **(ui)** show datatype in change request results - ([b922a96](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b922a965cdab1b99f2004ca30d2852b91b544ff0)) - Thomas Dupont
+- **(ui)** Name is no longer required when creating a slice - ([4cb38ed](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4cb38eddf2dc7153f4be8385ded367959ae9c675)) - Thomas Dupont
+- **(ui)** new slices now have a simple template to start with - ([d169738](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d16973841afd17655337e5c5a15cbe8c9d782ad1)) - Thomas Dupont
+- **(ui)** improved error body handling - ([9d298a2f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/9d298a2fed78ac629d616b9eb154f9b4923faf49)) - Thomas Dupont
+### Bug Fixes
+- **(ui)** removing kss prefix from context no longer breaks Slice edit/create - ([1a6e95a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/1a6e95a9a0550fdc649184bd75b400c42bbc974e)) - Thomas Dupont
+
+---
+
 ## [0.9.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.1..v0.9.2) - 2025-09-03
 ### Bug Fixes
 - Fixed broken @generateMutations for types with explicit @predicate directives instead of prefix-based qualifications. - ([21b8c13](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/21b8c136eac09a44a47c9043ad46a45e7dc1905f)) - Wannes Kerckhove
