@@ -6,7 +6,7 @@
     <parent>
         <groupId>kvasir-plugins</groupId>
         <artifactId>plugins-parent</artifactId>
-        <version>0.9.2</version>
+        <version>0.10.0</version>
     </parent>
 
     <artifactId>default-knowledge-graph</artifactId>
@@ -15,12 +15,12 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>0.9.2</version>
+            <version>0.10.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>kafka-messaging</artifactId>
-            <version>0.9.2</version>
+            <version>0.10.0</version>
         </dependency>
         <dependency>
             <groupId>io.smallrye.reactive</groupId>
