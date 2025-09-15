@@ -9,6 +9,7 @@ import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.json.JsonObject
+import jakarta.activation.MimeType
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
@@ -108,6 +109,20 @@ class GraphSlicesApi(
             .map { _ ->
                 Response.created(URI.create(fqSliceId)).build()
             }
+    }
+
+    @Tag(name = ApiDocTags.PODS_API)
+    @Path("{podId}/slices")
+    @Produces("text/plain")
+    @PUT
+    @Operation(
+        summary = "Generate SDL preview of Slice schema",
+        description = "Generates a SDL preview of the given Slice schema."
+    )
+    @OpenFgaPolicyEnforcer
+    fun previewSliceSDL(input: SliceInput): Uni<String> {
+        val parsedSchema = SliceGraphQLSchema(input.schema, input.context)
+        return Uni.createFrom().item(parsedSchema.getSDL());
     }
 
     @Tag(name = ApiDocTags.PODS_API)

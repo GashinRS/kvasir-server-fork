@@ -4,7 +4,16 @@ import {
   HttpHeaders,
 } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { catchError, map, Observable, throwError } from 'rxjs';
+import {
+  catchError,
+  map,
+  Observable,
+  of,
+  onErrorResumeNext,
+  onErrorResumeNextWith,
+  throwError,
+} from 'rxjs';
+import {} from 'rxjs/operators';
 import { KvasirError } from '../components/error/error.component';
 import {
   ChangeRecords,
@@ -129,6 +138,23 @@ export class KvasirService {
           'application/ld+json',
         ),
       })
+      .pipe(this.convertErrorToKvasirError());
+  }
+
+  previewSlice(input: SliceInput): Observable<string> {
+    return this.http
+      .put(`${this.host}/${this.session.podName()}/slices`, input, {
+        headers: new HttpHeaders().append(
+          'Content-Type',
+          'application/ld+json',
+        ),
+        responseType: 'text',
+      })
+      .pipe(
+        catchError((err, obs) =>
+          of('SDL preview failed... (check your schema and @context again)'),
+        ),
+      )
       .pipe(this.convertErrorToKvasirError());
   }
 
