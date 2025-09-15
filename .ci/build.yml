@@ -50,7 +50,6 @@ package:maven:
   artifacts:
     paths:
       - "services/monolith/target/openapi"
-    expire_in: 1 week
 
 build:openapi:
   extends:
