@@ -25,6 +25,14 @@ const DEFAULT_CONTEXT = `{
   "${KSS_PREFIX}": "${KSS_FQN}"
 }`;
 
+const SCHEMA_TEMPLATE = `type Query {
+  # Define your query entry-points here (based on the Slice types below)
+}
+
+# Define the Slice types here
+
+`;
+
 @Component({
   selector: 'app-slice-new',
   imports: [
@@ -60,7 +68,7 @@ export class SliceNewComponent {
       context: [DEFAULT_CONTEXT, Validators.compose(validators)],
       description: [],
       name: null,
-      schema: [null, Validators.required],
+      schema: [SCHEMA_TEMPLATE, Validators.required],
     });
   }
 
