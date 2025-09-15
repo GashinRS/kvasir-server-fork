@@ -24,6 +24,7 @@ import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStoreFactory
+import kvasir.plugins.policyagent.a4ds.utils.parseAsSecurityIdentity
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.jose4j.jwt.consumer.JwtConsumerBuilder
 import kotlin.jvm.optionals.getOrNull
@@ -71,33 +72,16 @@ class CustomHttpAuthenticationMechanism() :
                                 umaClient.validateToken(jwt, requestedScopes)
                             }
                             .chain { _ ->
-                                // No validation required, as the UMA server took care of this
-                                // Parse the JWT in order to pass along the identity and other relevant information.
-                                val firstPassJwtConsumer = JwtConsumerBuilder()
-                                    .setSkipAllValidators()
-                                    .setDisableRequireSignature()
-                                    .setSkipSignatureVerification()
-                                    .build()
-
-                                val jwtContext = firstPassJwtConsumer.process(jwt)
-                                // TODO: set identity permissions and subject based on correct claim names
-                                val identityBuilder = QuarkusSecurityIdentity.builder()
-                                    .setPrincipal { jwtContext.jwtClaims.subject }
-                                jwtContext.jwtClaims.getStringListClaimValue("scope")
-                                    ?.forEach { scopePermission ->
-                                        identityBuilder.addPermissionAsString(scopePermission)
-                                    }
-
-                                Uni.createFrom().item(identityBuilder.build())
+                                val identity = parseAsSecurityIdentity(jwt)
+                                Uni.createFrom().item(identity)
                             }
-
                     } else {
                         // When no authorization server URL is found for the request context, revert to the default auth mechanism.
                         super.authenticate(context, identityProviderManager)
                     }
                 }
         }) ?: Uni.createFrom().nullItem())
-            .onFailure().recoverWithItem{err ->
+            .onFailure().recoverWithItem { err ->
                 Log.warn("Authentication failed: ${err.message}", err)
                 // In case of failure, return an empty result to trigger a challenge
                 null

@@ -461,7 +461,8 @@ At the moment, the A4DS Policy Agent implementation has the following limitation
   the AS, we can update the implementation to only register the Resource when it is not known to the AS.
 * At the moment, there is no reliable way to extract the user identity from the JWT token issued by the AS. This means
   that features that rely on knowing the user identity (e.g. removing data produced by a specific user) will not work
-  when using the A4DS Policy Agent.
+  when using the A4DS Policy Agent. _The implementation tries to extract the `sub` claim from the token, but as this is
+  not set by the KNoWS implementation, it will fallback to the token identifier (jti)._
 * A JWKS keyset (hosted at `/.well-known/uma2-configuration`) is exposed by Kvasir, but the keypair is generated on
   each startup. This means that any tokens issued by Kvasir will be invalid after a restart. A proper key management
   solution should be implemented to solve this.
