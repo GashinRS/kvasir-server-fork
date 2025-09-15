@@ -19,7 +19,7 @@ import { en_US, provideNzI18n } from 'ng-zorro-antd/i18n';
 import { NzModalModule } from 'ng-zorro-antd/modal';
 import { environment } from '../environments/environment';
 import { routes } from './app.routes';
-import { provideNzIcons } from './icons-provider';
+import { provideIcons } from './icons-provider';
 import { provideRequiredKeycloakProviders } from './keycloak.config';
 import { APP_CONFIG_TOKEN, AppConfig } from './services/config.service';
 
@@ -46,7 +46,7 @@ export function appConfig(config: AppConfig): ApplicationConfig {
         NzModalModule,
       ),
       provideAnimationsAsync(),
-      provideNzIcons(),
+      provideIcons(),
     ],
   };
 }

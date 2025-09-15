@@ -59,7 +59,7 @@ export class SliceNewComponent {
     this.inputForm = fb.group({
       context: [DEFAULT_CONTEXT, Validators.compose(validators)],
       description: [],
-      name: [null, Validators.required],
+      name: null,
       schema: [null, Validators.required],
     });
   }
