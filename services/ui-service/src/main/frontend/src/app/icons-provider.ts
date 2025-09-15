@@ -5,8 +5,13 @@ import {
   QuestionCircleOutline,
   ControlOutline,
   ControlFill,
+  HistoryOutline,
+  IdcardOutline,
+  EditOutline,
+  DeleteOutline,
+  CodeOutline,
 } from '@ant-design/icons-angular/icons';
-import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzIconModule, provideNzIcons } from 'ng-zorro-antd/icon';
 
 const icons = [
   QuestionCircleFill,
@@ -14,8 +19,13 @@ const icons = [
   FolderOutline,
   ControlFill,
   ControlOutline,
+  HistoryOutline,
+  IdcardOutline,
+  EditOutline,
+  DeleteOutline,
+  CodeOutline,
 ];
 
-export function provideNzIcons(): EnvironmentProviders {
-  return importProvidersFrom(NzIconModule.forRoot(icons));
+export function provideIcons(): EnvironmentProviders {
+  return provideNzIcons(icons);
 }

@@ -11,74 +11,81 @@
 </nz-page-header>
 
 @if (slices.hasValue()) {
-  <nz-table #basicTable [nzData]="slices.value()!">
+  <nz-table #basicTable [nzData]="slices.value()!" nzTableLayout="fixed">
     <thead>
       <tr>
-        <th>name</th>
-        <th>id</th>
-        <th>action</th>
+        <th nzWidth="auto">name</th>
+        <th class="actions" nzWidth="150px">action</th>
       </tr>
     </thead>
     <tbody>
       @for (data of basicTable.data; track data) {
         @let dataName = data["kss:name"];
         <tr>
-          <td>
+          <td class="name">
             <nz-space>
-              <span *nzSpaceItem>{{ dataName }} </span>
-              @if (data["kss:description"]; as desc) {
-                <app-help
-                  *nzSpaceItem
-                  [text]="desc"
-                  type="secondary"
-                ></app-help>
-              }
+              <span
+                *nzSpaceItem
+                nz-popover
+                [nzPopoverTitle]="idTitleTpl"
+                [nzPopoverContent]="data['@id']"
+                nzPopoverPlacement="topLeft"
+                class="id"
+                (click)="copyText(data['@id'])"
+                ><nz-icon nzType="idcard"></nz-icon
+              ></span>
+              <ng-template #idTitleTpl>
+                <span>@id</span><span [class]="clickToCopyCss()"><small>(click to copy)</small></span>
+              </ng-template>
+              <span *nzSpaceItem>{{ dataName }}</span>
             </nz-space>
+            <div nz-typography nzEllipsis class="desc">{{ data['kss:description'] ?? '-' }}</div>
           </td>
-          <td>{{ data["@id"] }}</td>
-          <td nz-flex nzJustify="space-between">
+          <td class="actions-td" align="right">
             <nz-space>
+              <nz-space-compact *nzSpaceItem nzSize="default">
+                <button
+                  nz-button
+                  nzType="primary"
+                  (click)="querySlice(dataName)"
+                  nz-tooltip
+                  nzTooltipTitle="Query"
+                >
+                  <nz-icon nzType="code" />
+                </button>
+                <button
+                  nz-button
+                  nzType="primary"
+                  nzGhost
+                  (click)="writeToSlice(dataName)"
+                  nz-tooltip
+                  nzTooltipTitle="Changes"
+                >
+                  <nz-icon nzType="history" />
+                </button>
+                <button
+                  nz-button
+                  nzType="primary"
+                  nzGhost
+                  (click)="editSlice(dataName)"
+                  nz-tooltip
+                  nzTooltipTitle="Edit"
+                >
+                  <nz-icon nzType="edit" />
+                </button>
+              </nz-space-compact>
               <button
                 *nzSpaceItem
                 nz-button
-                type="button"
                 nzType="primary"
-                nzSize="small"
-                (click)="querySlice(dataName)"
+                nzDanger
+                (click)="deleteSlice(dataName)"
+                nz-tooltip
+                nzTooltipTitle="Delete"
               >
-                query
-              </button>
-              <button
-                *nzSpaceItem
-                nz-button
-                type="button"
-                nzType="primary"
-                nzGhost
-                nzSize="small"
-                (click)="writeToSlice(dataName)"
-              >
-                changes
-              </button>
-              <button
-                *nzSpaceItem
-                nz-button
-                type="button"
-                nzSize="small"
-                (click)="editSlice(dataName)"
-              >
-                edit
+                <nz-icon nzType="delete" />
               </button>
             </nz-space>
-            <button
-              nz-button
-              type="button"
-              nzType="primary"
-              nzDanger
-              nzSize="small"
-              (click)="deleteSlice(dataName)"
-            >
-              delete
-            </button>
           </td>
         </tr>
       }
