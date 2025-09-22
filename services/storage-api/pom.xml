@@ -3,19 +3,20 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>storage-api</artifactId>
-    <version>0.10.0</version>
+    <version>0.11.0</version>
 
     <parent>
         <groupId>kvasir-services</groupId>
-        <artifactId>services-parent</artifactId>
-        <version>0.10.0</version>
+        <artifactId>api-services-parent</artifactId>
+        <version>0.11.0</version>
+        <relativePath>../api-services/pom.xml</relativePath>
     </parent>
 
     <dependencies>
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>0.10.0</version>
+            <version>0.11.0</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -24,7 +25,7 @@
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>kafka-messaging</artifactId>
-            <version>0.10.0</version>
+            <version>0.11.0</version>
         </dependency>
         <dependency>
             <groupId>io.smallrye.reactive</groupId>
@@ -38,23 +39,14 @@
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>clickhouse-knowledge-graph</artifactId>
-            <version>0.10.0</version>
-        </dependency>
-        <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>openfga-policy-agent</artifactId>
-            <version>0.10.0</version>
-        </dependency>
-        <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>a4ds-policy-agent</artifactId>
-            <version>0.10.0</version>
+            <version>0.11.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>test-utils</artifactId>
-            <version>0.10.0</version>
+            <version>0.11.0</version>
             <scope>test</scope>
         </dependency>
+        
     </dependencies>
 </project>

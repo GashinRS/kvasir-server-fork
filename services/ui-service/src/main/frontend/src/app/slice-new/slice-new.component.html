@@ -60,27 +60,31 @@
       </nz-form-item>
       <nz-form-item>
         <nz-form-control>
-          <div nz-flex nzJustify="flex-end">
-            <nz-space>
-              <button
-                type="button"
-                *nzSpaceItem
-                nz-button
-                nzType="link"
-                (click)="reset()"
-              >
-                Reset
-              </button>
-              <button
-                *nzSpaceItem
-                nz-button
-                type="submit"
-                nzType="primary"
-                [disabled]="inputForm.invalid"
-              >
-                Save
-              </button>
-            </nz-space>
+          <div class="buttons">
+            <button
+              type="button"
+              nz-button
+              nzType="primary"
+              nzGhost
+              (click)="preview()"
+              nz-popover
+              nzPopoverTitle="Preview SDL schema"
+              nzPopoverContent="Preview the schema like it will be exposed by Kvasir (including generated types and arguments)."
+              nzPopoverPlacement="topLeft"
+            >
+              Preview
+            </button>
+            <button type="button" nz-button nzType="link" (click)="reset()">
+              Reset
+            </button>
+            <button
+              nz-button
+              type="submit"
+              nzType="primary"
+              [disabled]="inputForm.invalid"
+            >
+              Save
+            </button>
           </div>
         </nz-form-control>
       </nz-form-item>

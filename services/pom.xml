@@ -5,14 +5,14 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>kvasir-services</groupId>
     <artifactId>services-parent</artifactId>
-    <version>0.10.0</version>
+    <version>0.11.0</version>
 
     <packaging>pom</packaging>
 
     <parent>
         <artifactId>kvasir-parent</artifactId>
         <groupId>kvasir</groupId>
-        <version>0.10.0</version>
+        <version>0.11.0</version>
     </parent>
 
     <properties>
@@ -21,15 +21,10 @@
 
     <modules>
         <module>kg-change-processor</module>
-        <module>kg-inbox-api</module>
-        <module>kg-query-api</module>
-        <module>kg-stream-api</module>
         <module>monolith</module>
-        <module>pod-management-api</module>
         <module>simple-rdf-ingester</module>
-        <module>storage-api</module>
-        <module>init-service</module>
         <module>ui-service</module>
+        <module>api-services</module>
     </modules>
 
     <dependencies>
@@ -46,6 +41,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>idlab.quarkus.ext.pep.openfga</groupId>
+            <artifactId>openfga-pep-model</artifactId>
+            <version>${idlab.extension.openfga.version}</version>
         </dependency>
     </dependencies>
 
@@ -68,48 +68,5 @@
         </plugins>
     </build>
 
-    <profiles>
-        <profile>
-            <id>openfga</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>${quarkus.platform.group-id}</groupId>
-                        <artifactId>quarkus-maven-plugin</artifactId>
-                    </plugin>
-                </plugins>
-            </build>
-            <properties>
-                <kvasir.plugins.policy-agent.openfga.enabled>true</kvasir.plugins.policy-agent.openfga.enabled>
-            </properties>
-        </profile>
-        <profile>
-            <id>a4ds</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>${quarkus.platform.group-id}</groupId>
-                        <artifactId>quarkus-maven-plugin</artifactId>
-                    </plugin>
-                </plugins>
-            </build>
-            <properties>
-              <kvasir.plugins.policy-agent.uma.enabled>true</kvasir.plugins.policy-agent.uma.enabled>
-            </properties>
-        </profile>
-        <profile>
-            <id>noauth</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>${quarkus.platform.group-id}</groupId>
-                        <artifactId>quarkus-maven-plugin</artifactId>
-                    </plugin>
-                </plugins>
-            </build>
-            <properties>
-                <quarkus.container-image.name>${quarkus.application.name:unset}</quarkus.container-image.name>
-            </properties>
-        </profile>
-    </profiles>
+    
 </project>

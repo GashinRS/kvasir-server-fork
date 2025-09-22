@@ -1,7 +1,7 @@
 package kvasir.plugins.policyagent.openfga.extractors
 
-import idlab.quarkus.ext.pep.openfga.runtime.extractors.CommonExtractParams
-import idlab.quarkus.ext.pep.openfga.runtime.extractors.relation.OpenFgaRelationExtractor
+import idlab.quarkus.ext.pep.openfga.model.extractors.CommonExtractParams
+import idlab.quarkus.ext.pep.openfga.model.extractors.relation.OpenFgaRelationExtractor
 import io.smallrye.mutiny.Uni
 import io.vertx.core.http.HttpMethod
 

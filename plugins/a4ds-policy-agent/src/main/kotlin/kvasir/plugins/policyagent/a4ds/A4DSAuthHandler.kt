@@ -1,6 +1,5 @@
 package kvasir.plugins.policyagent.a4ds
 
-import io.quarkus.arc.properties.IfBuildProperty
 import io.vertx.core.http.HttpServerRequest
 import io.vertx.ext.web.RoutingContext
 import jakarta.enterprise.context.ApplicationScoped
@@ -12,7 +11,6 @@ import java.security.Principal
 /**
  * Handles auth for the storage api, as this is not handled by the Quarkus security layer.
  */
-@IfBuildProperty(name = Constants.SOLID_UMA_POLICY_AGENT_ENABLED, stringValue = "true")
 @ApplicationScoped
 class A4DSAuthHandler(
     private val httpAuthenticationMechanism: CustomHttpAuthenticationMechanism

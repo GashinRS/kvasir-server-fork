@@ -3,8 +3,8 @@ package kvasir.plugins.policyagent.openfga.extractors
 import graphql.language.OperationDefinition
 import graphql.parser.InvalidSyntaxException
 import graphql.parser.Parser
-import idlab.quarkus.ext.pep.openfga.runtime.extractors.CommonExtractParams
-import idlab.quarkus.ext.pep.openfga.runtime.extractors.relation.OpenFgaRelationExtractor
+import idlab.quarkus.ext.pep.openfga.model.extractors.relation.OpenFgaRelationExtractor
+import idlab.quarkus.ext.pep.openfga.model.extractors.CommonExtractParams
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import kotlin.jvm.optionals.getOrNull

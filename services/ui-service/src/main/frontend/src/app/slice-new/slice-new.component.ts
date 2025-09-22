@@ -14,12 +14,15 @@ import { NzFlexModule } from 'ng-zorro-antd/flex';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzGridModule } from 'ng-zorro-antd/grid';
 import { NzInputModule } from 'ng-zorro-antd/input';
+import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
+import { SdlPreviewComponent } from '../modals/sdl-preview/sdl-preview.component';
+import { DevSettingsService } from '../services/dev-settings.service';
 import { KvasirService } from '../services/kvasir.service';
 import { SliceInput } from '../types';
-import { DevSettingsService } from '../services/dev-settings.service';
 import { KSS_FQN, KSS_PREFIX } from '../util/constants';
+import { NzPopoverModule } from 'ng-zorro-antd/popover';
 
 const DEFAULT_CONTEXT = `{
   "${KSS_PREFIX}": "${KSS_FQN}"
@@ -45,6 +48,8 @@ const SCHEMA_TEMPLATE = `type Query {
     NzFlexModule,
     NzSpaceModule,
     NzCodeEditorModule,
+    NzModalModule,
+    NzPopoverModule,
   ],
   templateUrl: './slice-new.component.html',
   styleUrl: './slice-new.component.less',
@@ -53,6 +58,7 @@ export class SliceNewComponent {
   // DI
   private kvasir = inject(KvasirService);
   private router = inject(Router);
+  private modal = inject(NzModalService);
   settings = inject(DevSettingsService);
 
   readonly inputForm: FormGroup;
@@ -107,6 +113,48 @@ export class SliceNewComponent {
 
   reset() {
     this.inputForm.reset();
+  }
+
+  preview() {
+    if (this.inputForm.valid) {
+      const context = {
+        ...JSON.parse(this.ctxCtrl.value),
+        ...{ [KSS_PREFIX]: KSS_FQN },
+      };
+      const name = this.nameCtrl.value;
+      const schema = this.schemaCtrl.value;
+      const description =
+        this.descriptionCtrl.value?.length > 0
+          ? this.descriptionCtrl.value
+          : undefined;
+
+      let sliceInput = {
+        '@context': context,
+        'kss:name': name,
+        'kss:schema': schema,
+      } as SliceInput;
+
+      if (description) {
+        sliceInput['kss:description'] = description;
+      }
+
+      this.kvasir.previewSlice(sliceInput).subscribe({
+        next: (sdl: string) => {
+          const modalRef = this.modal.create<SdlPreviewComponent, string>({
+            nzTitle: 'Preview SDL',
+            nzContent: SdlPreviewComponent,
+            nzData: sdl,
+            nzWidth: '75%',
+            nzFooter: [
+              {
+                label: 'Close',
+                onClick: () => modalRef.destroy(),
+              },
+            ],
+          });
+        },
+      });
+    }
   }
 
   get ctxCtrl() {

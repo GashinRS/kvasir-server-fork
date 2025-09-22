@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>kvasir</groupId>
     <artifactId>kvasir-parent</artifactId>
-    <version>0.10.0</version>
+    <version>0.11.0</version>
 
     <packaging>pom</packaging>
 
@@ -25,7 +25,7 @@
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.21.3</quarkus.platform.version>
         <quarkus.extensions.minio.version>3.7.7</quarkus.extensions.minio.version>
-        <idlab.extension.openfga.version>0.8.1</idlab.extension.openfga.version>
+        <idlab.extension.openfga.version>0.11.0</idlab.extension.openfga.version>
         <jackson.version>2.17.1</jackson.version>
         <guava.version>33.4.0-jre</guava.version>
         <rdf4j.version>5.0.3</rdf4j.version>

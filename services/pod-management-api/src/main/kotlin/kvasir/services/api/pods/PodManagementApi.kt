@@ -2,10 +2,11 @@ package kvasir.services.api.pods
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.annotation.security.PermitAll
+import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
@@ -47,7 +48,9 @@ class PodManagementApi(
     private val webclientUri: Optional<URI>,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
-    private val principal: Principal
+    private val principal: Instance<Principal>,
+    @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
+    private val anonymousUserName: String
 ) : PodSetupHelper() {
 
     @PermitAll
@@ -69,7 +72,7 @@ class PodManagementApi(
                     LifeCycleEvent(
                         type = LifeCycleEventType.POD_CREATED,
                         podId = fqPodId,
-                        requestingUser = principal.name,
+                        requestingUser = principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName,
                     )
                 )
             }
@@ -177,7 +180,7 @@ class PodManagementApi(
                             LifeCycleEvent(
                                 type = LifeCycleEventType.POD_UPDATED,
                                 podId = fqPodId,
-                                requestingUser = principal.name
+                                requestingUser = principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName
                             )
                         )
                     }
@@ -205,7 +208,7 @@ class PodManagementApi(
                     LifeCycleEvent(
                         type = LifeCycleEventType.POD_DELETED,
                         podId = fqPodId,
-                        requestingUser = principal.name
+                        requestingUser = principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName
                     )
                 )
             }

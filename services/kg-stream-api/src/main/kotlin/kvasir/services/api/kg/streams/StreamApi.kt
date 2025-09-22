@@ -1,6 +1,6 @@
 package kvasir.services.api.kg.streams
 
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Multi
 import io.vertx.core.json.Json
 import io.vertx.mutiny.core.Vertx

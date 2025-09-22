@@ -24,7 +24,7 @@ icon) and check `Enable host networking` under the `Resources > Network` section
 Clone this repository and run the following commands:
 
 ```bash
-cd .deployment/docker-compose
+cd docker-compose
 docker compose up -d
 ```
 
