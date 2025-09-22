@@ -184,9 +184,12 @@ global:
     enabled: true
   openfga:
     enabled: true
+  job:
+    enabled: true
   applicationYaml:
     kvasir:
       bootstrap:
+        exit-after-setup: true
         pods:
           - name: alice
             configuration: |

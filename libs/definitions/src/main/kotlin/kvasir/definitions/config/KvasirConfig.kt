@@ -29,6 +29,12 @@ interface BootstrapConfig {
      * Returns the list of pods to be initialized based on the supplied config.
      */
     fun pods(): List<PodConfig>
+
+    /**
+     * If true, the Kvasir init-service will terminate after the setup is completed (or failed).
+     */
+    @WithDefault("false")
+    fun exitAfterSetup(): Boolean
 }
 
 interface PodConfig {
