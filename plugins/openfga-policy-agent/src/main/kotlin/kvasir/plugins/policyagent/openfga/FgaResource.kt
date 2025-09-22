@@ -2,13 +2,12 @@ package kvasir.plugins.policyagent.openfga
 
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonProperty
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import idlab.quarkus.ext.pep.openfga.runtime.OpenFgaManager
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
 import io.quarkiverse.openfga.client.model.RelObject
 import io.quarkiverse.openfga.client.model.RelTuple
 import io.quarkiverse.openfga.client.model.RelTupleDefinition
 import io.quarkiverse.openfga.client.model.RelUser
-import io.quarkus.arc.properties.IfBuildProperty
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Response
@@ -25,7 +24,6 @@ import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 @Path("{podId}/rebac")
-@IfBuildProperty(name = OpenFgaConstants.POLICY_AGENT_ENABLED, stringValue = "true")
 @Consumes(RDFMediaTypes.JSON_LD)
 @Produces(RDFMediaTypes.JSON_LD)
 class FgaResource(

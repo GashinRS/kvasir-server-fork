@@ -1,6 +1,6 @@
 package kvasir.plugins.policyagent.openfga
 
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.quarkiverse.openfga.client.model.FGAValidationException
 import io.quarkiverse.openfga.client.model.RelObject
 import io.quarkiverse.openfga.client.model.RelTupleDefinition

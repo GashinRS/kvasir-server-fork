@@ -1,8 +1,9 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Uni
+import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
@@ -14,6 +15,7 @@ import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.plugins.policyagent.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
+import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.media.Schema
@@ -30,7 +32,9 @@ class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
     private val podStoreFactory: PodStoreFactory,
     private val uriInfo: KvasirUriInfo,
-    private val principal: Principal
+    private val principal: Instance<Principal>,
+    @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
+    private val anonymousUserName: String
 ) {
 
     @Path("{podId}$QUERY_API_PATH")
@@ -82,7 +86,7 @@ class QueryApi(
     ): QueryRequest {
         return QueryRequest(
             input.providedContext ?: pod.getDefaultContext(),
-            principal.name,
+            principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName,
             pod.id,
             null,
             input.query,

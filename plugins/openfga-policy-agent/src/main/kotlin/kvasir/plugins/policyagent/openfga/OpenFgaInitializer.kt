@@ -5,7 +5,6 @@ import io.quarkiverse.openfga.client.model.FGAValidationException
 import io.quarkiverse.openfga.client.model.RelObject
 import io.quarkiverse.openfga.client.model.RelTupleDefinition
 import io.quarkiverse.openfga.client.model.RelUser
-import io.quarkus.arc.properties.IfBuildProperty
 import io.quarkus.logging.Log
 import io.quarkus.vertx.VertxContextSupport
 import io.smallrye.mutiny.Uni
@@ -27,7 +26,6 @@ import kotlin.jvm.optionals.getOrNull
 import kotlin.time.Duration
 
 @ApplicationScoped
-@IfBuildProperty(name = OpenFgaConstants.POLICY_AGENT_ENABLED, stringValue = "true")
 class OpenFgaInitializer(
     private val openFgaManager: OpenFgaManager,
     private val keycloakInstance: Instance<Keycloak>,

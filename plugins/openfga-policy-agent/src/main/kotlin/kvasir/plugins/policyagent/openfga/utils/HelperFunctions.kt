@@ -1,7 +1,7 @@
 package kvasir.plugins.policyagent.openfga.utils
 
-import idlab.quarkus.ext.pep.openfga.runtime.util.Codec.Encoder.encObjectId
-import idlab.quarkus.ext.pep.openfga.runtime.util.Codec.Encoder.encUserId
+import idlab.quarkus.ext.pep.openfga.model.util.Codec.Encoder.encObjectId
+import idlab.quarkus.ext.pep.openfga.model.util.Codec.Encoder.encUserId
 import io.quarkiverse.openfga.client.model.RelObject
 import io.quarkiverse.openfga.client.model.RelTupleKey
 import io.quarkiverse.openfga.client.model.RelTupleKeyed

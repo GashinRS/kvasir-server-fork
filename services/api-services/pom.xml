@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>kvasir-services</groupId>
+        <artifactId>services-parent</artifactId>
+        <version>0.10.0</version>
+        <relativePath>..</relativePath>
+    </parent>
+    <artifactId>api-services-parent</artifactId>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>../kg-inbox-api</module>
+        <module>../kg-query-api</module>
+        <module>../kg-stream-api</module>
+        <module>../pod-management-api</module>
+        <module>../storage-api</module>
+        <module>../init-service</module>
+    </modules>
+
+    
+
+    <profiles>
+        <profile>
+            <id>openfga</id>
+            <dependencies>
+                <dependency>
+                    <groupId>kvasir-plugins</groupId>
+                    <artifactId>openfga-policy-agent</artifactId>
+                    <version>${project.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>a4ds</id>
+            <dependencies>
+                <dependency>
+                    <groupId>kvasir-plugins</groupId>
+                    <artifactId>a4ds-policy-agent</artifactId>
+                    <version>${project.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>

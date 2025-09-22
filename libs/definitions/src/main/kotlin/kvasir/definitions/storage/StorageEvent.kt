@@ -11,7 +11,7 @@ data class StorageEvent(
     @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
     @get:JsonProperty(KvasirVocab.requestingUser)
-    val requestingUser: String?,
+    val requestingUser: String,
     @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
     @get:JsonProperty(KvasirVocab.podId)

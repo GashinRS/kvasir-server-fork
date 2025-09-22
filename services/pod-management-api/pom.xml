@@ -7,8 +7,9 @@
 
     <parent>
         <groupId>kvasir-services</groupId>
-        <artifactId>services-parent</artifactId>
+        <artifactId>api-services-parent</artifactId>
         <version>0.10.0</version>
+        <relativePath>../api-services/pom.xml</relativePath>
     </parent>
 
     <dependencies>
@@ -32,15 +33,6 @@
             <artifactId>kafka-messaging</artifactId>
             <version>0.10.0</version>
         </dependency>
-        <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>openfga-policy-agent</artifactId>
-            <version>0.10.0</version>
-        </dependency>
-        <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>a4ds-policy-agent</artifactId>
-            <version>0.10.0</version>
-        </dependency>
+        
     </dependencies>
 </project>
