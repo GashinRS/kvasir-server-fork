@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.11.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.11.0..v0.11.1) - 2025-09-22
+### Bug Fixes
+- missing builds due to CI misconfig - ([921b5de](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/921b5de25ee2f57ddd83537d9efa2ad6dbc72d06)) - Jasper Vaneessen
+
+---
+
 ## [0.11.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.10.0..v0.11.0) - 2025-09-22
 ### Bug Fixes
 - Introducing proper isolation between the policy modes (via classpath and maven profiles) - ([d0e03c4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d0e03c4786c2902f34533e8b773d79d44396ee3a)) - Wannes Kerckhove
