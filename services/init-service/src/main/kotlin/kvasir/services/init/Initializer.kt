@@ -1,6 +1,7 @@
 package kvasir.services.init
 
 import io.quarkus.logging.Log
+import io.quarkus.runtime.Quarkus
 import io.quarkus.runtime.StartupEvent
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
@@ -28,7 +29,7 @@ class Initializer(
         config: BootstrapConfig,
     ) {
         // Init system db
-        dbInitializer.init()
+        val exitCode = dbInitializer.init()
             // Init auth (global)
             .chain { _ ->
                 if (podAuthInitializer.isResolvable) {
@@ -49,7 +50,21 @@ class Initializer(
                     .concatenate()
                     .onCompletion().invoke { initializationComplete.set(true) }
                     .skipToLast()
-            }.await().indefinitely()
+            }
+            .map {
+                Log.info("Kvasir initialization completed successfully.")
+                0 // Return exit code 0 on success
+            }
+            .onFailure().recoverWithItem { err ->
+                Log.error("Kvasir initialization failed: ${err.message}", err)
+                1 // Return exit code 1 on failure
+            }
+            .await().indefinitely()
+
+        // Exit on failure, or when exitAfterSetup is set
+        if (exitCode != 0 || config.exitAfterSetup()) {
+            Quarkus.asyncExit(exitCode)
+        }
     }
 
     fun isInitialized(): Boolean = initializationComplete.get()

@@ -25,40 +25,40 @@ appVersion: "0.10.0"
 
 dependencies:
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: kg-stream-api
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: storage-api
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: kg-query-api
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: kg-inbox-api
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: kg-change-processor
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: pod-management-api
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: simple-rdf-ingester
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: init-service
     condition: init-service.enabled
   - name: quarkus-template
-    version: 0.2.2
+    version: 0.3.0
     repository: "https://idlab-discover.github.io/charts/"
     alias: ui-service
     condition: ui-service.enabled
