@@ -43,7 +43,8 @@ package:maven:
       else
         export ADDITIONAL_TAGS=${IMAGE_ADDITIONAL_TAG}
       fi
-    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -P${POLICY} -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -P${POLICY} -Pservices
+      -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
       -Dquarkus.container-image.tag=${IMAGE_TAG}-${POLICY}
       -Dquarkus.container-image.additional-tags=${ADDITIONAL_TAGS}
   interruptible: true

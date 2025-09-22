@@ -21,8 +21,6 @@
         <module>../init-service</module>
     </modules>
 
-    
-
     <profiles>
         <profile>
             <id>openfga</id>
