@@ -40,14 +40,14 @@ services:
 
   clickhouse:
     #    24.8 = lts version
-    image: altinity/clickhouse-server:24.8.14.10459.altinitystable
+    image: docker.io/altinity/clickhouse-server:24.8.14.10459.altinitystable
     ports:
       - "8123:8123"
       # tcp port for clickhouse (should not be required externally)
       #- "9000:9000"
     volumes:
       - "clickhouse_data:/var/lib/clickhouse"
-      - "../../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d"
+      - "../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d"
     ulimits:
       nofile:
         soft: 262144
@@ -97,7 +97,7 @@ services:
       retries: 5
 
   keycloak:
-    image: bitnami/keycloak:26.2.2
+    image: quay.io/keycloak/keycloak:26.2
     depends_on:
       - postgresql
     ports:
@@ -108,20 +108,22 @@ services:
       KEYCLOAK_DATABASE_NAME: postgres
       KEYCLOAK_DATABASE_USER: postgres
       KEYCLOAK_DATABASE_PASSWORD: password
+      KC_HEALTH_ENABLED: "true"
     healthcheck:
+      # default Keycloak image doesn't have curl or alternatives, so we have to do some shell wizardry
+      # see https://gist.github.com/sarath-soman/5d9aec06953bbd0990c648605d4dba07
       test:
         [
-          "CMD",
-          "curl",
-          "-f",
-          "http://localhost:8080/realms/master/.well-known/openid-configuration",
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; cat <&3 | grep '200 OK' >/dev/null; exit $?",
         ]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 15
+    command: ["start-dev"]
 
   postgresql:
-    image: postgres:17
+    image: docker.io/library/postgres:17
     command: postgres -c 'max_connections=100'
     networks:
       - default
@@ -134,15 +136,15 @@ services:
       - "postgresql_data:/var/lib/postgresql/data"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      interval: 15s
+      timeout: 2s
+      retries: 15
 
   migrate:
     depends_on:
       postgresql:
         condition: service_healthy
-    image: openfga/openfga:latest
+    image: docker.io/openfga/openfga:v1.10.0
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
       - OPENFGA_DATASTORE_URI=postgres://postgres:password@postgresql:5432/postgres?sslmode=disable
@@ -152,7 +154,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    image: openfga/openfga:latest
+    image: docker.io/openfga/openfga:v1.10.0
     command: run
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
@@ -164,9 +166,9 @@ services:
       - "8381:8081" #grpc
     healthcheck:
       test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=openfga:8081"]
-      interval: 5s
-      timeout: 30s
-      retries: 3
+      interval: 15s
+      timeout: 2s
+      retries: 15
 
 volumes:
   clickhouse_data:

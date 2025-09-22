@@ -107,9 +107,6 @@
                     </plugin>
                 </plugins>
             </build>
-            <properties>
-                <quarkus.container-image.name>${quarkus.application.name:unset}</quarkus.container-image.name>
-            </properties>
         </profile>
     </profiles>
 </project>
