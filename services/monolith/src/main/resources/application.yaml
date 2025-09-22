@@ -32,12 +32,6 @@ quarkus:
       access-key: kvasir
       secret-key: kvasirkvasir
   kvasir:
-    plugins:
-      policy-agent:
-        openfga:
-          enabled: true
-        a4ds:
-          enabled: false
     webclient-uri: http://localhost:8080/_ui
     bootstrap:
       pods:

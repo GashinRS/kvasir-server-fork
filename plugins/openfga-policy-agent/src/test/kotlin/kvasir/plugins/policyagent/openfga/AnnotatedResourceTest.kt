@@ -1,6 +1,6 @@
 package kvasir.plugins.policyagent.openfga
 
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
 import io.restassured.RestAssured.given

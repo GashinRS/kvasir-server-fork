@@ -2,10 +2,11 @@ package kvasir.services.api.kg.inbox
 
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonProperty
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.smallrye.reactive.messaging.kafka.KafkaRecord
+import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.kg.ChangeRequest
@@ -17,12 +18,11 @@ import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
-import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.http.KvasirUriInfo
-import kvasir.utils.http.getChildUri
 import kvasir.utils.http.getParentUri
 import kvasir.utils.idgen.ChangeRequestId
 import org.apache.kafka.common.errors.RecordTooLargeException
+import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Schema
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
@@ -40,7 +40,9 @@ class InboxApi(
     private val sliceStoreFactory: SliceStoreFactory,
     private val podStoreFactory: PodStoreFactory,
     private val uriInfo: KvasirUriInfo,
-    private val principal: Principal
+    private val principal: Instance<Principal>,
+    @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
+    private val anonymousUserName: String
 ) {
 
     @Path("{podId}/changes")
@@ -60,7 +62,11 @@ class InboxApi(
         return podStoreFactory.createPodStore().findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { pod ->
-                val changeCommand = input.toChangeRequest(fqPodId, uriInfo, principal)
+                val changeCommand = input.toChangeRequest(
+                    fqPodId,
+                    uriInfo,
+                    principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName
+                )
                 changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
                     .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
                     .onFailure(RecordTooLargeException::class.java)
@@ -88,7 +94,12 @@ class InboxApi(
             .onItem().ifNull().failWith(NotFoundException("Slice not found"))
             .onItem().ifNotNull().transformToUni { slice ->
                 if (slice!!.supportsChanges) {
-                    val changeCommand = input.toChangeRequest(fqPodId, uriInfo, principal, fqSliceId)
+                    val changeCommand = input.toChangeRequest(
+                        fqPodId,
+                        uriInfo,
+                        principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName,
+                        fqSliceId
+                    )
                     // Publish the change request
                     changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
                         .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
@@ -152,13 +163,13 @@ data class ChangeRequestInput(
     fun toChangeRequest(
         fqPodId: String,
         uriInfo: KvasirUriInfo,
-        principal: Principal,
+        principal: String,
         sliceId: String? = null
     ): ChangeRequest {
         return ChangeRequest(
             id = ChangeRequestId.generate(uriInfo.getResourceUri().toASCIIString()).encode(),
             context = context,
-            requestingUser = principal.name,
+            requestingUser = principal,
             podId = fqPodId,
             sliceId = sliceId,
             assert = assert,

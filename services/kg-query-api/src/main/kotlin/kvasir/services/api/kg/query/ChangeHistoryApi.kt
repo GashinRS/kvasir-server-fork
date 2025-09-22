@@ -1,7 +1,7 @@
 package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
@@ -9,9 +9,7 @@ import jakarta.ws.rs.core.Link
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.changes.ChangeHistory
 import kvasir.definitions.kg.changes.ChangeHistoryFactory
-import kvasir.definitions.kg.changes.ChangeHistoryRequest
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.openapi.ApiDocTags
@@ -37,8 +35,7 @@ import java.util.*
 class ChangeHistoryApi(
     val changeHistoryFactory: ChangeHistoryFactory,
     val knowledgeGraph: KnowledgeGraph,
-    val uriInfo: KvasirUriInfo,
-    private val securityIdentity: SecurityIdentity
+    val uriInfo: KvasirUriInfo
 ) {
 
     @Path("{podId}/changes")

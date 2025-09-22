@@ -68,7 +68,7 @@ data class LifeCycleEvent(
     @get:JsonProperty(JsonLdKeywords.id)
     val id: String = "urn:kvasir:life-cycle-events:${UUID.randomUUID()}",
     @get:JsonProperty(KvasirVocab.requestingUser)
-    val requestingUser: String?,
+    val requestingUser: String,
     @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant = Instant.now(),
     @get:JsonProperty(KvasirVocab.type)

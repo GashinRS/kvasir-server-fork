@@ -3,11 +3,9 @@ package kvasir.plugins.policyagent.a4ds
 import graphql.language.OperationDefinition
 import graphql.parser.InvalidSyntaxException
 import graphql.parser.Parser
-import io.quarkus.arc.properties.IfBuildProperty
 import io.quarkus.logging.Log
 import io.quarkus.security.identity.IdentityProviderManager
 import io.quarkus.security.identity.SecurityIdentity
-import io.quarkus.security.runtime.QuarkusSecurityIdentity
 import io.quarkus.smallrye.jwt.runtime.auth.JWTAuthMechanism
 import io.quarkus.smallrye.jwt.runtime.auth.SmallRyeJwtConfig
 import io.quarkus.vertx.http.runtime.security.ChallengeData
@@ -26,13 +24,11 @@ import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStoreFactory
 import kvasir.plugins.policyagent.a4ds.utils.parseAsSecurityIdentity
 import org.eclipse.microprofile.config.inject.ConfigProperty
-import org.jose4j.jwt.consumer.JwtConsumerBuilder
 import kotlin.jvm.optionals.getOrNull
 
 private val MATCH_GLOBAL_GRAPHQL_ENDPOINT = "/[^/]*/query".toRegex()
 private val MATCH_SLICE_GRAPHQL_ENDPOINT = "/[^/]*/slices/[^/]*/query".toRegex()
 
-@IfBuildProperty(name = Constants.SOLID_UMA_POLICY_AGENT_ENABLED, stringValue = "true")
 @Alternative
 @Priority(1)
 @ApplicationScoped

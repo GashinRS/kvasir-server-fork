@@ -3,13 +3,12 @@ package kvasir.services.api.kg.query
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.common.hash.Hashing
 import graphql.parser.Parser
-import idlab.quarkus.ext.pep.openfga.runtime.annotations.OpenFgaPolicyEnforcer
-import io.quarkus.logging.Log
+import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.json.JsonObject
-import jakarta.activation.MimeType
+import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
@@ -32,6 +31,7 @@ import kvasir.utils.graphql.SliceGraphQLSchema
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
 import kvasir.utils.http.getParentUri
+import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
@@ -54,7 +54,9 @@ class GraphSlicesApi(
     private val sse: Sse,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifeCycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
-    private val principal: Principal
+    private val principal: Instance<Principal>,
+    @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
+    private val anonymousUserName: String
 ) {
 
     @Tag(name = ApiDocTags.PODS_API)
@@ -100,7 +102,7 @@ class GraphSlicesApi(
                 lifeCycleEventEmitter.send(
                     LifeCycleEvent(
                         type = LifeCycleEventType.SLICE_CREATED,
-                        requestingUser = principal.name,
+                        requestingUser = principal.takeIf { it.isResolvable }?.get()?.name?:anonymousUserName,
                         podId = fqPodId,
                         sliceId = fqSliceId
                     )
@@ -168,7 +170,7 @@ class GraphSlicesApi(
                         LifeCycleEvent(
                             type = LifeCycleEventType.SLICE_UPDATED,
                             podId = fqPodId,
-                            requestingUser = principal.name,
+                            requestingUser = principal.takeIf { it.isResolvable }?.get()?.name?:anonymousUserName,
                             sliceId = fqSliceId
                         )
                     )
@@ -197,7 +199,7 @@ class GraphSlicesApi(
                     lifeCycleEventEmitter.send(
                         LifeCycleEvent(
                             type = LifeCycleEventType.SLICE_DELETED,
-                            requestingUser = principal.name,
+                            requestingUser = principal.takeIf { it.isResolvable }?.get()?.name?:anonymousUserName,
                             podId = fqPodId,
                             sliceId = fqSliceId
                         )
@@ -313,7 +315,7 @@ class GraphSlicesApi(
         return knowledgeGraph.query(
             QueryRequest(
                 slice.context,
-                principal.name,
+                principal.takeIf { it.isResolvable }?.get()?.name?:anonymousUserName,
                 podId,
                 slice.id,
                 input.query,
@@ -330,7 +332,11 @@ class GraphSlicesApi(
         return try {
             // Check if the schema contains mutations
             val parsedSchema = SliceGraphQLSchema(input.schema, input.context)
-            val slice = input.toSlice(principal.name, sliceId, parsedSchema.hasMutations())
+            val slice = input.toSlice(
+                principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName,
+                sliceId,
+                parsedSchema.hasMutations()
+            )
             // Validate the schema
             parsedSchema.validate()
             sliceStoreFactory.getSliceStore(podId).persist(slice).map { slice }

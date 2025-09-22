@@ -16,12 +16,6 @@
         grant-type: PASSWORD
   kvasir:
     base-uri: http://localhost:${quarkus.http.test-port}/
-    plugins:
-      policy-agent:
-        openfga:
-          enabled: false
-        a4ds:
-          enabled: false
     services:
       storage:
         s3:

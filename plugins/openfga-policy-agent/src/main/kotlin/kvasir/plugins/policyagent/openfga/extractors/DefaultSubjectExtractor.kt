@@ -1,7 +1,7 @@
 package kvasir.plugins.policyagent.openfga.extractors
 
-import idlab.quarkus.ext.pep.openfga.runtime.extractors.CommonExtractParams
-import idlab.quarkus.ext.pep.openfga.runtime.extractors.subject.AnonymousPrincipalSubjectExtractor
+import idlab.quarkus.ext.pep.openfga.model.extractors.CommonExtractParams
+import idlab.quarkus.ext.pep.openfga.model.extractors.subject.AnonymousPrincipalSubjectExtractor
 import io.smallrye.mutiny.Uni
 import kvasir.plugins.policyagent.openfga.utils.contextualizeSubject
 import java.security.Principal

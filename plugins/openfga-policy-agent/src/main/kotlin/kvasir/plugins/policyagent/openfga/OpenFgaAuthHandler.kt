@@ -5,7 +5,6 @@ import idlab.quarkus.ext.pep.openfga.runtime.config.OpenFgaPolicyEnforcerConfig
 import io.quarkiverse.openfga.client.model.RelObject
 import io.quarkiverse.openfga.client.model.RelTupleDefinition
 import io.quarkiverse.openfga.client.model.RelUser
-import io.quarkus.arc.properties.IfBuildProperty
 import io.quarkus.logging.Log
 import io.quarkus.security.runtime.QuarkusSecurityIdentity
 import io.quarkus.vertx.http.runtime.security.QuarkusHttpUser
@@ -21,7 +20,6 @@ import org.jose4j.jwt.consumer.JwtConsumerBuilder
 import java.security.Principal
 
 @ApplicationScoped
-@IfBuildProperty(name = OpenFgaConstants.POLICY_AGENT_ENABLED, stringValue = "true")
 class OpenFgaAuthHandler(
     private val fgaManager: OpenFgaManager,
     private val openFgaPolicyEnforcerConfig: OpenFgaPolicyEnforcerConfig
