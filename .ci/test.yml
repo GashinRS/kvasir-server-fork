@@ -15,20 +15,20 @@ smoke_test:compose:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - set -xe
-    - cd .deployment/docker-compose
+    - cd docker-compose
     - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$IMAGE_TAG%g" docker-compose.yml
     - docker compose up -d --wait --quiet-pull --no-color
     - docker ps
-    - tests/compose-smoke-test.sh
+    - tests/compose-smoke-test.sh docker
   after_script:
-    - cd .deployment/docker-compose
+    - cd docker-compose
     - docker ps -a > compose-ps.txt
     - docker compose logs --no-color > compose-logs.txt
     - docker compose down
   artifacts:
     paths:
-      - .deployment/docker-compose/compose-logs.txt
-      - .deployment/docker-compose/docker-compose.yml
-      - .deployment/docker-compose/compose-ps.txt
+      - docker-compose/compose-logs.txt
+      - docker-compose/docker-compose.yml
+      - docker-compose/compose-ps.txt
     expire_in: 1 week
     when: on_failure

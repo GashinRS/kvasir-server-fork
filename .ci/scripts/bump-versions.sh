@@ -15,7 +15,7 @@ fi
 VERSION=${VERSION#v}
 
 DOCKER_IMAGE_FILES=(
-  ".deployment/docker-compose/docker-compose.yml"
+  "docker-compose/docker-compose.yml"
 )
 
 for file in "${DOCKER_IMAGE_FILES[@]}"; do

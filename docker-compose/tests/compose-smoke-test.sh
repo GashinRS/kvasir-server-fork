@@ -1,7 +1,9 @@
 #!/bin/bash
 
+DOCKER_HOST=${1:-localhost}
+
 # Smoke test runs in docker enabled runner, localhost does not work here, use 'docker'
-overviewResponse=$(curl -s http://docker:8080)
+overviewResponse=$(curl -s http://${DOCKER_HOST}:8080)
 #{"@context":{"kss":"https://kvasir.discover.ilabt.imec.be/vocab#"},"@graph":[{"@id":"http://localhost:8080/alice","kss:profile":"http://localhost:8080/alice/.profile"}]}
 context=$(echo "$overviewResponse" | jq -r '.["@context"]["kss"]')
 aliceId=$(echo "$overviewResponse" | jq -r '.["@graph"][0]["@id"]')
@@ -15,7 +17,7 @@ else
 fi
 
 # Replace all occurrences of localhost with docker hostname
-aliceProfile=${aliceProfile//localhost/docker}
+aliceProfile=${aliceProfile//localhost/${DOCKER_HOST}}
 
 echo "Testing alice .profile: $aliceProfile"
 aliceProfileResponse=$(curl -s $aliceProfile)
@@ -31,7 +33,7 @@ else
   exit 1
 fi
 
-ui_response=$(curl -s -o /dev/null -w "%{http_code}" http://docker:8080/_ui/)
+ui_response=$(curl -s -o /dev/null -w "%{http_code}" http://${DOCKER_HOST}:8080/_ui/)
 
 if [[ "$ui_response" == "200" ]]; then
   echo "Kvasir UI test passed!"
@@ -39,3 +41,4 @@ else
   echo "Kvasir UI test failed!"
   exit 1
 fi
+
