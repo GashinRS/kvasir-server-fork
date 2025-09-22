@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.11.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.10.0..v0.11.0) - 2025-09-22
+### Bug Fixes
+- Introducing proper isolation between the policy modes (via classpath and maven profiles) - ([d0e03c4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d0e03c4786c2902f34533e8b773d79d44396ee3a)) - Wannes Kerckhove
+### Features
+- preview SDL schema functionality - ([69d2d1b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/69d2d1bedaf0d668b8d78f07b8ddd7d1aa490931)) - Thomas Dupont
+- init-service can now be configured to terminate after completion via kvasir.bootstrap.exit-after-setup=true - ([2250a49](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/2250a496e05c31211a00a063da95c1459c42bf6d)) - Jasper Vaneessen
+
+---
+
 ## [0.10.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.2..v0.10.0) - 2025-09-15
 **Warning**: This update modifies the storage schema for Clickhouse. At this time, we cannot provide a migration script, meaning you will have to manually reset the database (e.g. by clearing storage volumes) before using this update!
 ### Features
