@@ -1,5 +1,6 @@
 package kvasir.utils.test.commons
 
+import com.github.jsonldjava.utils.JsonUtils
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
@@ -13,12 +14,15 @@ import kvasir.definitions.rdf.RDFMediaTypes
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import io.restassured.RestAssured.given
 import jakarta.ws.rs.core.MediaType
+import kvasir.definitions.config.GenerateClientConfig
 import kvasir.definitions.config.KvasirConfig
+import kvasir.definitions.config.PodConfig
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.changes.ChangeHistoryFactory
 import kvasir.definitions.rdf.JSONObject
 import java.time.Duration
+import java.util.Optional
 import kotlin.math.roundToLong
 
 private val TERMINAL_STATES = setOf(
@@ -38,13 +42,13 @@ class TestHelpers(
     val kg: Instance<KnowledgeGraph>
 ) {
 
-    fun getPodUri(podId: String = TestConstants.TEST_POD_1_ID): String {
+    fun getPodUri(podId: String): String {
         return "${baseUri.removeSuffix("/")}/$podId"
     }
 
     fun queryKGViaHTTP(
         q: Any,
-        podUri: String = getPodUri(TestConstants.TEST_POD_1_ID),
+        podUri: String,
         sliceUri: String? = null
     ): QueryResult {
         val requestUri = "${sliceUri ?: podUri}/query"
@@ -64,7 +68,7 @@ class TestHelpers(
      */
     fun requestChangeViaHTTPSync(
         body: Any,
-        podUri: String = getPodUri(TestConstants.TEST_POD_1_ID),
+        podUri: String,
         expectedResult: ChangeStatusCode = ChangeStatusCode.COMMITTED,
         sliceUri: String? = null
     ): String {
@@ -95,7 +99,7 @@ class TestHelpers(
 
     fun waitForChangeRequest(
         changeRequestUri: String,
-        podUri: String = getPodUri(TestConstants.TEST_POD_1_ID),
+        podUri: String,
         expectedResult: ChangeStatusCode = ChangeStatusCode.COMMITTED,
         sliceUri: String? = null,
         retryInitialDelay: Duration = Duration.ofMillis(200),
@@ -167,4 +171,32 @@ inline fun <reified T> QueryResult.getDataField(name: String): T? {
     return this.data?.get(name)?.let {
         if (it is T) it else null
     }
+}
+
+class TestPodConfig(private val name: String, private val ownerUserId: String) : PodConfig {
+    override fun name(): String {
+        return name
+    }
+
+    override fun ownerUserId(): Optional<String> {
+        return Optional.of(ownerUserId)
+    }
+
+    override fun generateClients(): Optional<List<GenerateClientConfig>> {
+        return Optional.empty()
+    }
+
+    override fun configuration(): JSONObject {
+        val json = """
+            {
+              "@context": {
+                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+              },
+              "kss:autoIngestRDF": true,
+              "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
+            }
+        """.trimIndent()
+        return JsonUtils.fromString(json) as JSONObject
+    }
+
 }

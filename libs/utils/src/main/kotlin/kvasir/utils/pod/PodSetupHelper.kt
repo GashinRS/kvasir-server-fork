@@ -2,11 +2,7 @@ package kvasir.utils.pod
 
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
-import com.github.jsonldjava.utils.JsonUtils
-import io.minio.BucketExistsArgs
-import io.minio.MakeBucketArgs
-import io.minio.MinioAsyncClient
-import io.minio.SetBucketVersioningArgs
+import io.minio.*
 import io.minio.messages.VersioningConfiguration
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
@@ -15,13 +11,10 @@ import jakarta.inject.Inject
 import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.PodConfig
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.PodStore
 import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.rdf.JSONObject
-import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.utils.s3.S3Utils
-import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
 const val PLAIN_JSON_VOCAB = "urn:kvasir:plain-json:"
@@ -37,7 +30,12 @@ abstract class PodSetupHelper {
     @Inject
     protected lateinit var podAuthInitializer: Instance<AuthInitializer>
 
-    fun createPod(podId: String, podConfig: PodConfig, errorWhenExists: Boolean = false): Uni<Void> {
+    fun createPod(
+        podId: String,
+        podConfig: PodConfig,
+        errorWhenExists: Boolean = false,
+        enableS3Versioning: Boolean = true
+    ): Uni<Void> {
         val podStore = podStoreFactory.createPodStore()
         return podStore.findById(podId)
             .chain { existingPod ->
@@ -49,7 +47,7 @@ abstract class PodSetupHelper {
                     // ... but in dev mode the OpenFga store will be empty
                     else {
                         // Be sure Bucket exists: try setting up s3 bucket (will not do anything if bucketName already exists)
-                        createS3BucketIfNotExist(podId)
+                        createS3BucketIfNotExist(podId, enableS3Versioning)
                             .chain { _ ->
                                 if (podAuthInitializer.isResolvable) {
                                     val initializer = podAuthInitializer.get()
@@ -71,7 +69,7 @@ abstract class PodSetupHelper {
                     Log.debug("Adding storage entry for Pod '$podId'")
                     val newPod = Pod(podId, parseConfiguration(podConfig.configuration()))
                     podStore.persist(newPod)
-                        .chain { _ -> createS3BucketIfNotExist(podId) }
+                        .chain { _ -> createS3BucketIfNotExist(podId, enableS3Versioning) }
                         .chain { _ ->
                             // Initialize the configured auth policy provider for the Pod (if any)
                             if (podAuthInitializer.isResolvable) {
@@ -93,7 +91,40 @@ abstract class PodSetupHelper {
             }
     }
 
-    fun createS3BucketIfNotExist(podId: String): Uni<Void> {
+    fun deletePod(podId: String, podConfig: PodConfig, deleteData: Boolean, deleteOwner: Boolean): Uni<Void> {
+        val podStore = podStoreFactory.createPodStore()
+        Log.debug("Deleting Pod '$podId' (deleteData=$deleteData)")
+        return podStore.deleteById(podId, deleteData)
+            .chain { _ ->
+                // CLear up S3 bucket (if deleteData is true)
+                if (deleteData) {
+                    val bucketId = S3Utils.getBucket(podId)
+                    Log.debug("Deleting S3 bucket '$bucketId' for Pod '$podId'")
+                    Uni.createFrom().completionStage {
+                        minioClient.removeBucket(
+                            RemoveBucketArgs.builder().bucket(bucketId).build()
+                        )
+                    }
+                } else {
+                    Uni.createFrom().voidItem()
+                }
+            }
+            .chain { _ ->
+                // CLear up Auth model (if any)
+                if (podAuthInitializer.isResolvable) {
+                    val initializer = podAuthInitializer.get()
+                    Log.debug("Clearing auth model for Pod '$podId' using provider (${initializer::class.java.name})")
+                    initializer.cleanupForPod(
+                        podId,
+                        podConfig.name(),
+                        podConfig.ownerUserId().getOrNull().takeIf { deleteOwner })
+                } else {
+                    Uni.createFrom().voidItem()
+                }
+            }
+    }
+
+    fun createS3BucketIfNotExist(podId: String, enableS3Versioning: Boolean): Uni<Void> {
         val bucketId = S3Utils.getBucket(podId)
         // Initialize a new S3 bucket for the pod
         Log.debug("Creating S3 bucket '$bucketId' for Pod '$podId'")
@@ -109,19 +140,23 @@ abstract class PodSetupHelper {
                     )
                     .chain { _ ->
                         // Enable versioning for the bucket
-                        Uni.createFrom().completionStage(
-                            minioClient.setBucketVersioning(
-                                SetBucketVersioningArgs.builder()
-                                    .bucket(bucketId)
-                                    .config(
-                                        VersioningConfiguration(
-                                            VersioningConfiguration.Status.ENABLED,
-                                            true
+                        if (enableS3Versioning) {
+                            Uni.createFrom().completionStage(
+                                minioClient.setBucketVersioning(
+                                    SetBucketVersioningArgs.builder()
+                                        .bucket(bucketId)
+                                        .config(
+                                            VersioningConfiguration(
+                                                VersioningConfiguration.Status.ENABLED,
+                                                true
+                                            )
                                         )
-                                    )
-                                    .build()
+                                        .build()
+                                )
                             )
-                        )
+                        } else {
+                            Uni.createFrom().voidItem()
+                        }
                     }
             }
     }

@@ -1,8 +1,8 @@
 # Getting started
 
-## Running with Docker Compose
+## Running with Compose
 
-The fastest way to get a dev server (with persistent storage) up and running is to use Docker Compose.
+The fastest way to get a dev server (with persistent storage) up and running is to use Compose.
 
 1. Make sure you install <a href="https://www.docker.com/products/docker-desktop/#:~:text=Download%20Docker%20Desktop" target="_blank">Docker Desktop</a> and enable **Docker host networking**:
 
@@ -10,16 +10,20 @@ The fastest way to get a dev server (with persistent storage) up and running is 
 
 2. Now clone [this repository](https://gitlab.ilabt.imec.be/kvasir/kvasir-server) and run the following commands:
 
+**Docker:**
 ```bash
-cd docker-compose
+cd compose
 docker compose up -d
 ```
 
-Alternatively, when using Podman on Fedora/RHEL/CentOS with SELinux enforcing, run:
-
+**Podman:**
+If you are on a system with SELinux enabled (like Fedora), first create a file named `.env` in the `compose` directory with the following content:
+```
+SELINUX_MOUNT_FLAG=:Z
+```
+Then, from the `compose` directory, run:
 ```bash
-cd docker-compose
-podman compose -f docker-compose.yml -f docker-compose.podman.override.yml up -d
+podman compose up -d
 ```
 
 3. This will automatically create a pod at <a href="http://localhost:8080/alice" target="_blank">http://localhost:8080/alice</a> for you to play with.
@@ -110,8 +114,13 @@ helmfile sync --state-values-set kvasirHost=kvasir.example.com \
 If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper.
 This requires you to have Java JDK 21 installed.
 
+First, start the development services from the project root:
 ```bash
-docker compose up -d
+docker compose -f compose/compose.devservices.yml up -d
+```
+
+Then, run the application in dev mode:
+```bash
 ./mvnw compile quarkus:dev
 ```
 

@@ -31,7 +31,14 @@ mp:
         connector: smallrye-kafka
         topic: change.requests
         broadcast: true
+        commit-strategy: throttled
+        throttled:
+          unprocessed-record-max-age:
+            ms: 60000
         auto:
+          commit:
+            interval:
+              ms: 5000
           offset:
             reset: earliest
       outbox_subscribe:

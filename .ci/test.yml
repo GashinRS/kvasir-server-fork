@@ -15,13 +15,12 @@ smoke_test:compose:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - set -xe
-    - cd docker-compose
-    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$IMAGE_TAG%g" docker-compose.yml
+    - cd compose
+    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$IMAGE_TAG%g" compose.kvasir.yml
     - docker compose up -d --wait --quiet-pull --no-color
-    - docker ps
     - tests/compose-smoke-test.sh docker
   after_script:
-    - cd docker-compose
+    - cd compose
     - docker ps -a > compose-ps.txt
     - docker compose logs --no-color > compose-logs.txt
     - docker compose down

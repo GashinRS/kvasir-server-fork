@@ -1,19 +1,9 @@
-kvasir:
-  services:
-    storage:
-      s3:
-        host: ${quarkus.minio.url}
-        port: ${quarkus.minio.port}
-        access-key: ${quarkus.minio.access-key}
-        secret-key: ${quarkus.minio.secret-key}
 quarkus:
   http:
     cors:
       enabled: true
       origins: /.*/
       exposed-headers: Link, Location
-  minio:
-    devservices:
   smallrye-openapi:
     store-schema-directory: target/openapi
 
@@ -25,12 +15,6 @@ quarkus:
       cors:
         enabled: true
         origins: http://localhost:3000,http://localhost:4200, http://localhost:5173
-    minio:
-      url: localhost
-      port: 9000
-      secure: false
-      access-key: kvasir
-      secret-key: kvasirkvasir
   kvasir:
     webclient-uri: http://localhost:8080/_ui
     bootstrap:

@@ -10,6 +10,7 @@ import kvasir.plugins.kg.clickhouse.persistence.AbstractRepository
 import kvasir.plugins.kg.clickhouse.specs.EntityQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.EntityWriteSpec
 import kvasir.plugins.kg.clickhouse.specs.SYSTEM_DB
+import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
 
 @ApplicationScoped
 class ClickhousePodStoreFactory(
@@ -43,5 +44,16 @@ class ClickhousePodStore(
                 }
             }
             .chain { _ -> super.persist(entity) }
+    }
+
+    override fun deleteById(id: String, deleteData: Boolean): Uni<Void> {
+        return super.deleteById(id).chain { _ ->
+            if (deleteData) {
+                clickhouseClient
+                    .execute("DROP DATABASE IF EXISTS `${databaseFromPodId(id)}`")
+            } else {
+                Uni.createFrom().voidItem()
+            }
+        }
     }
 }

@@ -15,6 +15,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import java.util.UUID
 
 @QuarkusTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -31,22 +32,24 @@ class FgaResourceTest {
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY)
     lateinit var baseUri: String
 
-    private lateinit var podId: String
-
     // Grant alice access to perform queries and mutations on a Slice with ID "test123"
     private lateinit var aliceAccessGrant: String
 
     // Grant public access to a specific S3 location
     private lateinit var publicAccessGrant: String
 
+    private val testRunId = UUID.randomUUID().toString()
+
+    private lateinit var podId: String
+
     @BeforeAll
     fun setup() {
-        podId = "${baseUri}bob"
+        podId = "${baseUri}${testRunId}"
         // Create a pod store for the test
         val pod = Pod(podId, mapOf())
         podStoreFactory.createPodStore().persist(pod).await().indefinitely()
         // Init openfga-policy-agent
-        authInitializer.initializeForPod(podId, "bob", "bob", pod).await().indefinitely()
+        authInitializer.initializeForPod(podId, testRunId, "bob", pod).await().indefinitely()
 
         aliceAccessGrant = """
             {
@@ -98,14 +101,14 @@ class FgaResourceTest {
         given()
             .body(aliceAccessGrant)
             .contentType(RDFMediaTypes.JSON_LD)
-            .post("/bob/rebac/relationships")
+            .post("/$testRunId/rebac/relationships")
             .then()
             .statusCode(204)
 
         given()
             .body(publicAccessGrant)
             .contentType(RDFMediaTypes.JSON_LD)
-            .post("/bob/rebac/relationships")
+            .post("/$testRunId/rebac/relationships")
             .then()
             .statusCode(204)
     }
@@ -116,7 +119,7 @@ class FgaResourceTest {
     fun testReadRelationships() {
         // Read relationships for the user "bob"
         val jsonLdResponse = given()
-            .get("/bob/rebac/relationships")
+            .get("/$testRunId/rebac/relationships")
             .then()
             .statusCode(200)
             .extract().body().asString().let { body -> JsonUtils.fromString(body) as JSONObject }
@@ -163,7 +166,7 @@ class FgaResourceTest {
         val check1 = given()
             .body(aliceValidCheck)
             .contentType(RDFMediaTypes.JSON_LD)
-            .post("/bob/rebac/check")
+            .post("/$testRunId/rebac/check")
             .then()
             .extract().body().asString().let { body -> JsonUtils.fromString(body) as JSONObject }
 
@@ -188,7 +191,7 @@ class FgaResourceTest {
         val check2 = given()
             .body(aliceInvalidCheck)
             .contentType(RDFMediaTypes.JSON_LD)
-            .post("/bob/rebac/check")
+            .post("/$testRunId/rebac/check")
             .then()
             .extract().body().asString().let { body -> JsonUtils.fromString(body) as JSONObject }
 
@@ -202,20 +205,20 @@ class FgaResourceTest {
         given()
             .body(aliceAccessGrant.replace("kss:insert", "kss:delete"))
             .contentType(RDFMediaTypes.JSON_LD)
-            .post("/bob/rebac/relationships")
+            .post("/$testRunId/rebac/relationships")
             .then()
             .statusCode(204)
 
         given()
             .body(publicAccessGrant.replace("kss:insert", "kss:delete"))
             .contentType(RDFMediaTypes.JSON_LD)
-            .post("/bob/rebac/relationships")
+            .post("/$testRunId/rebac/relationships")
             .then()
             .statusCode(204)
 
         // Verify deletion
         val jsonLdResponse = given()
-            .get("/bob/rebac/relationships")
+            .get("/$testRunId/rebac/relationships")
             .then()
             .statusCode(200)
             .extract().body().asString().let { body -> JsonUtils.fromString(body) as JSONObject }

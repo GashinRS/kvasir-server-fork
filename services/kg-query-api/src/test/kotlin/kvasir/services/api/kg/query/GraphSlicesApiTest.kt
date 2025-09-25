@@ -1,7 +1,6 @@
 package kvasir.services.api.kg.query
 
 import com.github.jsonldjava.utils.JsonUtils
-import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
@@ -14,12 +13,10 @@ import kvasir.definitions.kg.*
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.rdf.JSONObject
-import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.rdf.getJsonArray
 import kvasir.utils.idgen.ChangeRequestId
-import kvasir.utils.test.clickhouse.ClickhouseTestResource
 import kvasir.utils.test.commons.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.MethodOrderer
@@ -30,16 +27,12 @@ import org.junit.jupiter.api.TestMethodOrder
 
 @QuarkusTest
 @TestHTTPEndpoint(GraphSlicesApi::class)
-@QuarkusTestResource(ClickhouseTestResource::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
-class GraphSlicesApiTest {
+class GraphSlicesApiTest : AbstractPodTest() {
 
     @Inject
     lateinit var kg: KnowledgeGraph
-
-    @Inject
-    lateinit var testHelpers: TestHelpers
 
     val sliceName = "test1"
     val filterEmailDomain = "@slice-test.org"
@@ -76,7 +69,7 @@ class GraphSlicesApiTest {
         sliceUri = given()
             .contentType(RDFMediaTypes.JSON_LD)
             .body(input)
-            .post("{podId}/slices", TestConstants.TEST_POD_2_ID)
+            .post("{podId}/slices", podName)
             .then()
             .statusCode(201)
             .extract().header(HttpHeaders.LOCATION)
@@ -110,7 +103,7 @@ class GraphSlicesApiTest {
         nonNamedSliceUri = given()
             .contentType(RDFMediaTypes.JSON_LD)
             .body(input)
-            .post("{podId}/slices", TestConstants.TEST_POD_2_ID)
+            .post("{podId}/slices", podName)
             .then()
             .statusCode(201)
             .extract().header(HttpHeaders.LOCATION)
@@ -124,7 +117,7 @@ class GraphSlicesApiTest {
     @TestSecurity(user = "alice")
     fun testListSlices() {
         val result = JsonUtils.fromString(
-            get("{podId}/slices", TestConstants.TEST_POD_2_ID)
+            get("{podId}/slices", podName)
                 .then()
                 .statusCode(200)
                 .extract().body().asString()
@@ -141,7 +134,6 @@ class GraphSlicesApiTest {
     @TestSecurity(user = "alice")
     fun testSliceQuery() {
         // Populate some data
-        val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_2_ID)
         // Generate 15 persons and then another 5 persons with an email ending on the domain specified in the slice filter
         val slicePersonData = TestDataGenerator.generatePersonData(5).map { person ->
             person.apply {
@@ -168,7 +160,7 @@ class GraphSlicesApiTest {
                     query = "{ persons { id so_givenName familyName so_email } }"
                 )
             )
-            .post("{podId}/slices/{sliceId}/query", TestConstants.TEST_POD_2_ID, sliceName)
+            .post("{podId}/slices/{sliceId}/query", podName, sliceName)
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
 
         // Check if the expected resources are present (by id)
@@ -185,7 +177,7 @@ class GraphSlicesApiTest {
                     query = "{ persons { id so_givenName familyName } }"
                 )
             )
-            .post("{podId}/slices/{sliceId}/query", TestConstants.TEST_POD_2_ID, sliceName)
+            .post("{podId}/slices/{sliceId}/query", podName, sliceName)
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
 
         // Check if the expected resources are present (by id)
@@ -258,11 +250,10 @@ class GraphSlicesApiTest {
             .post("$sliceUri/query")
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
         val changeId = result.getDataField<String>("insertPerson")!!
-        val podId = testHelpers.getPodUri(TestConstants.TEST_POD_2_ID)
 
-        testHelpers.waitForChangeRequest(changeId, podId, ChangeStatusCode.VALIDATION_ERROR).await()
+        testHelpers.waitForChangeRequest(changeId, podUri, ChangeStatusCode.VALIDATION_ERROR).await()
             .indefinitely()
-        val changeRecords = kg.getChangeRecords(ChangeRecordRequest(podId, changeId)).await().indefinitely()
+        val changeRecords = kg.getChangeRecords(ChangeRecordRequest(podUri, changeId)).await().indefinitely()
         assertTrue(changeRecords.items.isEmpty())
     }
 
@@ -295,9 +286,8 @@ class GraphSlicesApiTest {
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
         var changeId = result.getDataField<String>("insertPerson")!!
         revisitChangeId = changeId
-        val podId = testHelpers.getPodUri(TestConstants.TEST_POD_2_ID)
 
-        testHelpers.waitForChangeRequest(changeId, podId, ChangeStatusCode.COMMITTED).await()
+        testHelpers.waitForChangeRequest(changeId, podUri, ChangeStatusCode.COMMITTED).await()
             .indefinitely()
 
         // The added person should be retrievable
@@ -335,7 +325,7 @@ class GraphSlicesApiTest {
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
         changeId = result.getDataField<String>("deletePerson")!!
 
-        testHelpers.waitForChangeRequest(changeId, podId, ChangeStatusCode.COMMITTED).await()
+        testHelpers.waitForChangeRequest(changeId, podUri, ChangeStatusCode.COMMITTED).await()
             .indefinitely()
 
         // The person should no longer be retrievable

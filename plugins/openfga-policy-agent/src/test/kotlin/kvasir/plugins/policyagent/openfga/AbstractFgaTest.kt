@@ -12,8 +12,10 @@ import kvasir.definitions.kg.PodStore
 import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.persistence.Sort
 import org.eclipse.microprofile.config.inject.ConfigProperty
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.TestInstance
+import java.util.UUID
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 abstract class AbstractFgaTest {
@@ -30,16 +32,25 @@ abstract class AbstractFgaTest {
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY)
     lateinit var baseUri: String
 
+    protected val testRunId = UUID.randomUUID().toString()
+    protected lateinit var podId : String
+
     @BeforeAll
     fun setup() {
-        val podId = "${baseUri}alice"
+        podId = "${baseUri}${testRunId}"
         // Create a pod store for the test
         val pod = Pod(podId, mapOf())
         podStoreFactory.createPodStore().persist(pod).await().indefinitely()
         // Init openfga-policy-agent
         authInitializer.initialize().chain { _ ->
-            authInitializer.initializeForPod(podId, "alice", "alice", pod)
+            authInitializer.initializeForPod(podId, testRunId, "alice", pod)
         }.await().indefinitely()
+    }
+
+    @AfterAll
+    fun teardown() {
+        podStoreFactory.createPodStore().deleteById(podId, true).await().indefinitely()
+        authInitializer.cleanupForPod(podId, testRunId).await().indefinitely()
     }
 
 }
@@ -77,6 +88,10 @@ class MockPodStore : PodStore {
     override fun deleteById(id: String): Uni<Void> {
         pods.remove(id)
         return Uni.createFrom().voidItem()
+    }
+
+    override fun deleteById(id: String, deleteData: Boolean): Uni<Void> {
+        return deleteById(id)
     }
 
 }

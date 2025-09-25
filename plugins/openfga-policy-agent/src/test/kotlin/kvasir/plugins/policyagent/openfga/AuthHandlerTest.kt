@@ -23,7 +23,7 @@ class AuthHandlerTest : AbstractFgaTest() {
     @TestSecurity(user = "alice")
     fun testAliceCanAccessPod() {
         given()
-            .get("/alice/")
+            .get("/$testRunId/")
             .then()
             .statusCode(204)
     }
@@ -32,7 +32,7 @@ class AuthHandlerTest : AbstractFgaTest() {
     @TestSecurity(user = "alice")
     fun testAliceCanAccessChildResource() {
         given()
-            .get("/alice/router-test/a/b/c")
+            .get("/$testRunId/router-test/a/b/c")
             .then()
             .statusCode(204)
     }
@@ -41,7 +41,7 @@ class AuthHandlerTest : AbstractFgaTest() {
     @TestSecurity(user = "bob")
     fun testBobCannotAccessPod() {
         given()
-            .get("/alice/router-test/")
+            .get("/$testRunId/router-test/")
             .then()
             .statusCode(403) // Forbidden
     }
@@ -51,13 +51,13 @@ class AuthHandlerTest : AbstractFgaTest() {
     fun testBobCanAccessExplicitlyAllowedResource() {
         // Grant access
         fgaManager.addTuples(
-            "alice", setOf(
+            testRunId, setOf(
                 RelTupleDefinition.builder().user(RelUser.of("user", contextualizeSubject("bob"))).relation("reader")
-                    .`object`(RelObject.of("resource", "/alice/router-test/allowed-resource")).build()
+                    .`object`(RelObject.of("resource", "/$testRunId/router-test/allowed-resource")).build()
             )
         ).await().indefinitely()
         given()
-            .get("/alice/router-test/allowed-resource")
+            .get("/$testRunId/router-test/allowed-resource")
             .then()
             .statusCode(204) // No Content
     }
@@ -65,7 +65,7 @@ class AuthHandlerTest : AbstractFgaTest() {
     @Test
     fun testAnonymousUserCannotAccessPod() {
         given()
-            .get("/alice/")
+            .get("/$testRunId/")
             .then()
             .statusCode(403) // Forbidden
     }
@@ -74,14 +74,14 @@ class AuthHandlerTest : AbstractFgaTest() {
     fun testAnonymousUserCanAccessExplicitlyAllowedResource() {
         // Grant access to anonymous users
         fgaManager.addTuples(
-            "alice", setOf(
+            testRunId, setOf(
                 RelTupleDefinition.builder().user(RelUser.of("user", contextualizeSubject("anonymous")))
                     .relation("reader")
-                    .`object`(RelObject.of("resource", "/alice/router-test/public-resource")).build()
+                    .`object`(RelObject.of("resource", "/$testRunId/router-test/public-resource")).build()
             )
         ).await().indefinitely()
         given()
-            .get("/alice/router-test/public-resource")
+            .get("/$testRunId/router-test/public-resource")
             .then()
             .statusCode(204) // No Content
     }

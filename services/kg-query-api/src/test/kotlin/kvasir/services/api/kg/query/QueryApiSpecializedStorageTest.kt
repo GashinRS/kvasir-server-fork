@@ -1,6 +1,5 @@
 package kvasir.services.api.kg.query
 
-import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
@@ -10,14 +9,14 @@ import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.rdf.*
 import kvasir.utils.idgen.ChangeRequestId
-import kvasir.utils.test.clickhouse.ClickhouseTestResource
+import kvasir.utils.test.commons.AbstractPodTest
 import kvasir.utils.test.commons.TestConstants
 import kvasir.utils.test.commons.TestDataGenerator
 import kvasir.utils.test.commons.TestHelpers
 import kvasir.utils.test.commons.TimeseriesData
-import org.junit.Ignore
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
@@ -26,25 +25,18 @@ import org.junit.jupiter.api.TestMethodOrder
 
 @QuarkusTest
 @TestHTTPEndpoint(QueryApi::class)
-@QuarkusTestResource(ClickhouseTestResource::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
-@Ignore("Specialized storage implementation needs to be revised. Disabling this test for now as it inconsistently fails in CI, hindering our progress.")
-class QueryApiSpecializedStorageTest {
+@Disabled("Specialized storage implementation needs to be revised. Disabling this test for now as it inconsistently fails in CI, hindering our progress.")
+class QueryApiSpecializedStorageTest : AbstractPodTest() {
 
     @Inject
     lateinit var kg: KnowledgeGraph
 
-    @Inject
-    lateinit var testHelpers: TestHelpers
-
-
-    lateinit var podUri: String
     lateinit var sensorData: TimeseriesData
 
     @BeforeAll
     fun populateData() {
-        podUri = testHelpers.getPodUri(TestConstants.TEST_POD_3_ID)
         sensorData = TestDataGenerator.generateTimeseriesData(3, 1000)
         kg.process(
             ChangeRequest(

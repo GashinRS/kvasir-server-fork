@@ -1,20 +1,20 @@
 package kvasir.plugins.kg.clickhouse
 
-import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.rdf.KvasirVocab
-import kvasir.utils.test.clickhouse.ClickhouseTestResource
-import kvasir.utils.test.commons.TestConstants
+import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
+import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.util.UUID
 
 @QuarkusTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@QuarkusTestResource(ClickhouseTestResource::class)
 class TestClickhouseSliceStore {
 
 
@@ -24,14 +24,24 @@ class TestClickhouseSliceStore {
     @Inject
     lateinit var clichouseInitializer: ClickhouseInitializer
 
+    @Inject
+    lateinit var clickhouseClient: ClickhouseClient
+
+    private val testRunId = UUID.randomUUID().toString()
+
     @BeforeAll
     fun setup() {
-        clichouseInitializer.initializePodSchema(TestConstants.TEST_POD_1_ID).await().indefinitely()
+        clichouseInitializer.initializePodSchema(testRunId).await().indefinitely()
+    }
+
+    @AfterAll
+    fun teardown() {
+        clickhouseClient.execute("DROP DATABASE IF EXISTS ${databaseFromPodId(testRunId)}").await().indefinitely()
     }
 
     @Test
     fun testInsertAndQuery() {
-        val sliceStore = sliceStoreFactory.getSliceStore(TestConstants.TEST_POD_1_ID)
+        val sliceStore = sliceStoreFactory.getSliceStore(testRunId)
 
         // Insert some slices
         val slices = (1..10).map { i ->
