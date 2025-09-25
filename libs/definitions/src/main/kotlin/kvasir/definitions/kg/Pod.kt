@@ -3,6 +3,7 @@ package kvasir.definitions.kg
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
+import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.persistence.PersistentEntity
@@ -18,7 +19,9 @@ interface PodStoreFactory {
     fun createPodStore(): PodStore
 }
 
-interface PodStore : Repository<Pod>
+interface PodStore : Repository<Pod> {
+    fun deleteById(id: String, deleteData: Boolean=false): Uni<Void>
+}
 
 @GenerateNoArgConstructor
 data class Pod(

@@ -1,7 +1,6 @@
 package kvasir.services.api.kg.query
 
 import com.github.jsonldjava.utils.JsonUtils
-import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
@@ -14,7 +13,6 @@ import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.*
 import kvasir.utils.idgen.ChangeRequestId
-import kvasir.utils.test.clickhouse.ClickhouseTestResource
 import kvasir.utils.test.commons.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -24,23 +22,16 @@ import org.junit.jupiter.api.TestInstance
 
 @QuarkusTest
 @TestHTTPEndpoint(QueryApi::class)
-@QuarkusTestResource(ClickhouseTestResource::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class QueryApiTest {
+class QueryApiTest : AbstractPodTest() {
 
     @Inject
     lateinit var kg: KnowledgeGraph
 
-    @Inject
-    lateinit var testHelpers: TestHelpers
-
-
-    lateinit var podUri: String
     lateinit var personData: List<Map<String, Any>>
 
     @BeforeAll
     fun populateData() {
-        podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         personData = TestDataGenerator.generatePersonData(100)
         kg.process(
             ChangeRequest(
@@ -68,7 +59,7 @@ class QueryApiTest {
         val result = given()
             .contentType(MediaType.APPLICATION_JSON)
             .body(query)
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -99,7 +90,7 @@ class QueryApiTest {
         val result = given()
             .contentType(MediaType.APPLICATION_JSON)
             .body(query)
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -124,7 +115,7 @@ class QueryApiTest {
         val result = given()
             .contentType(MediaType.APPLICATION_JSON)
             .body(query)
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -157,7 +148,7 @@ class QueryApiTest {
                 .accept(RDFMediaTypes.JSON_LD)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(query)
-                .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+                .post("{podId}$QUERY_API_PATH", podName)
                 .then()
                 .statusCode(200)
                 .extract().body().asString()
@@ -203,7 +194,7 @@ class QueryApiTest {
         val result = given()
             .contentType(MediaType.APPLICATION_JSON)
             .body(QueryInputWithContext(query = q, providedContext = TestConstants.CONTEXT))
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -228,7 +219,7 @@ class QueryApiTest {
             val result = given()
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(getPaginationAndSortingQuery(cursor))
-                .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+                .post("{podId}$QUERY_API_PATH", podName)
                 .then()
                 .statusCode(200)
                 .extract().body().`as`(QueryResult::class.java)
@@ -302,7 +293,7 @@ class QueryApiTest {
                     """.trimIndent(), providedContext = TestConstants.CONTEXT
                 )
             )
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -331,7 +322,7 @@ class QueryApiTest {
                     """.trimIndent(), providedContext = TestConstants.CONTEXT
                 )
             )
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -365,7 +356,7 @@ class QueryApiTest {
                     )
                 )
             )
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -397,7 +388,7 @@ class QueryApiTest {
         var result = given()
             .contentType(MediaType.APPLICATION_JSON)
             .body(q)
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -428,7 +419,7 @@ class QueryApiTest {
         result = given()
             .contentType(MediaType.APPLICATION_JSON)
             .body(q)
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)
@@ -463,7 +454,7 @@ class QueryApiTest {
         result = given()
             .contentType(MediaType.APPLICATION_JSON)
             .body(q)
-            .post("{podId}$QUERY_API_PATH", TestConstants.TEST_POD_1_ID)
+            .post("{podId}$QUERY_API_PATH", podName)
             .then()
             .statusCode(200)
             .extract().body().`as`(QueryResult::class.java)

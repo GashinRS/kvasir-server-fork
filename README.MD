@@ -7,47 +7,40 @@ Technical preview of the Kvasir Data Storage Server
 Visit the documentation pages at
 [https://kvasir.pages.ilabt.imec.be/kvasir-server/](https://kvasir.pages.ilabt.imec.be/kvasir-server/).
 
-## Running with Docker Compose
+## Quick Start
 
-The fastest way to get a dev server (with persistent storage) up and running is
-to use Docker Compose.
+This guide provides basic instructions for running the server using Compose. For more advanced scenarios, including Podman support, please see the [compose/README.md](compose/README.md) file.
 
-### Prerequisite
+### Prerequisites
 
-In the **Docker Desktop** application, go to `Settings` (top right cogwheel
-icon) and check `Enable host networking` under the `Resources > Network` section.
+- Docker Desktop with `Enable host networking` checked in `Settings > Resources > Network`.
 
-![docker_desktop.png](Writerside/images/docker_host_networking.png)
+### Run the Full Stack
 
-### Run docker compose
-
-Clone this repository and run the following commands:
+To start the Kvasir server along with all its backing services, run the following commands:
 
 ```bash
-cd docker-compose
+cd compose
 docker compose up -d
 ```
 
-This will automatically create a pod at `http://localhost:8080/alice` for you to
-play with.
-The settings for this pod can be modified via the file `application.yaml` in the
-`kvasir-config` folder.
+This will create a demo pod at `http://localhost:8080/alice`.
 
-It also starts the Kvasir-UI at `http://localhost:8081`. You can select a pod to
-play with (`alice`).
-To log in, use the temporary credentials `alice:alice`. You will be prompted to
-change them on first login.
+## Development and Testing
 
-## Running in dev mode
+If you want to modify the code, you can run the application in development mode.
 
-If you want to experiment with modifications to the code, you can run the server
-in dev mode via the Maven wrapper.
-This requires you to have Java JDK 21 installed.
+1.  **Start backing services:**
+    From the project root, run:
+    ```bash
+    docker compose -f compose/compose.devservices.yml up -d
+    ```
 
-```bash
-docker compose up -d
-./mvnw compile quarkus:dev
-```
+2.  **Run the application in dev mode:**
+    This requires Java JDK 21.
+    ```bash
+    ./mvnw compile quarkus:dev
+    ```
 
 ## Issues
 

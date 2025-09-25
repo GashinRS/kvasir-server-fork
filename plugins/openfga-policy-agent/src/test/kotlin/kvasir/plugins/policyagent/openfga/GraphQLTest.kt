@@ -29,7 +29,7 @@ class GraphQLTest : AbstractFgaTest() {
         given()
             .body(QueryInputImpl(query = "{ someQuery }"))
             .contentType("application/json")
-            .post("/alice/graphql")
+            .post("/$testRunId/graphql")
             .then()
             .statusCode(200)
     }
@@ -40,7 +40,7 @@ class GraphQLTest : AbstractFgaTest() {
         given()
             .body(QueryInputImpl(query = "mutation { someMutation }"))
             .contentType("application/json")
-            .post("/alice/graphql")
+            .post("/$testRunId/graphql")
             .then()
             .statusCode(200)
     }
@@ -50,7 +50,7 @@ class GraphQLTest : AbstractFgaTest() {
     fun testAliceCanExecuteQueryViaGet() {
         given()
             .queryParam("query", "{ someQuery }")
-            .get("/alice/graphql")
+            .get("/$testRunId/graphql")
             .then()
             .statusCode(200)
     }
@@ -60,7 +60,7 @@ class GraphQLTest : AbstractFgaTest() {
     fun testAliceCanExecuteMutationViaGet() {
         given()
             .queryParam("query", "mutation { someMutation }")
-            .get("/alice/graphql")
+            .get("/$testRunId/graphql")
             .then()
             .statusCode(200)
     }
@@ -70,9 +70,9 @@ class GraphQLTest : AbstractFgaTest() {
     fun testBobIsRestrictedToQuery() {
         // Grant access
         fgaManager.addTuples(
-            "alice", setOf(
+            testRunId, setOf(
                 RelTupleDefinition.builder().user(RelUser.of("user", contextualizeSubject("bob"))).relation("reader")
-                    .`object`(RelObject.of("resource", "/alice/graphql")).build()
+                    .`object`(RelObject.of("resource", "/$testRunId/graphql")).build()
             )
         ).onFailure(FGAValidationException::class.java).recoverWithUni(Uni.createFrom().voidItem()).await()
             .indefinitely()
@@ -80,14 +80,14 @@ class GraphQLTest : AbstractFgaTest() {
         // Bob should be able to execute queries
         given()
             .queryParam("query", "{ someQuery }")
-            .get("/alice/graphql")
+            .get("/$testRunId/graphql")
             .then()
             .statusCode(200)
 
         // Bob should not be able to execute mutations
         given()
             .queryParam("query", "mutation { someMutation }")
-            .get("/alice/graphql")
+            .get("/$testRunId/graphql")
             .then()
             .statusCode(403) // Forbidden
     }
@@ -97,9 +97,9 @@ class GraphQLTest : AbstractFgaTest() {
     fun testBobIsRestrictedToQueryViaGet() {
         // Grant access
         fgaManager.addTuples(
-            "alice", setOf(
+            testRunId, setOf(
                 RelTupleDefinition.builder().user(RelUser.of("user", contextualizeSubject("bob"))).relation("reader")
-                    .`object`(RelObject.of("resource", "/alice/graphql")).build()
+                    .`object`(RelObject.of("resource", "/$testRunId/graphql")).build()
             )
         ).onFailure(FGAValidationException::class.java).recoverWithUni(Uni.createFrom().voidItem()).await()
             .indefinitely()
@@ -108,7 +108,7 @@ class GraphQLTest : AbstractFgaTest() {
         given()
             .body(QueryInputImpl(query = "{ someQuery }"))
             .contentType("application/json")
-            .post("/alice/graphql")
+            .post("/$testRunId/graphql")
             .then()
             .statusCode(200)
 
@@ -116,7 +116,7 @@ class GraphQLTest : AbstractFgaTest() {
         given()
             .body(QueryInputImpl(query = "mutation { someMutation }"))
             .contentType("application/json")
-            .post("/alice/graphql")
+            .post("/$testRunId/graphql")
             .then()
             .statusCode(403) // Forbidden
     }
@@ -127,7 +127,7 @@ class GraphQLTest : AbstractFgaTest() {
         given()
             .body(QueryInputImpl(query = "{ someQuery }"))
             .contentType("application/json")
-            .post("/alice/graphql")
+            .post("/$testRunId/graphql")
             .then()
             .statusCode(403) // Forbidden
     }

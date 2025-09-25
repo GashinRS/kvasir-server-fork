@@ -50,3 +50,6 @@ _openapi
 
 # Local folder
 .local
+
+# Ignore environment files in the compose directory
+/compose/.env
