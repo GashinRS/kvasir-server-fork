@@ -30,17 +30,25 @@ This will create a demo pod at `http://localhost:8080/alice`.
 
 If you want to modify the code, you can run the application in development mode.
 
-1.  **Start backing services:**
-    From the project root, run:
-    ```bash
-    docker compose -f compose/compose.devservices.yml up -d
-    ```
+The lifecycle of the backing services for development is managed by Maven. They will be started automatically when running the application in dev mode.
 
-2.  **Run the application in dev mode:**
-    This requires Java JDK 21.
-    ```bash
-    ./mvnw compile quarkus:dev
-    ```
+**Run the application in dev mode:**
+This requires Java JDK 21.
+By default, running `quarkus:dev` will start the server with no authentication or authorization (`noauth`).
+
+To run in development mode with a specific policy agent (which is required for many features to work correctly), you must activate it with the `policy.agent` property. For example, to use the `openfga` agent:
+```bash
+./mvnw compile quarkus:dev -Dpolicy.agent=openfga
+```
+Other possible values are `a4ds` or `noauth` (the default).
+
+**Stopping services:**
+To stop the backing services and remove their volumes, run:
+```bash
+./mvnw clean
+```
+
+You can skip the compose lifecycle entirely by adding `-Dcompose.skip=true` to your Maven command.
 
 ## Issues
 

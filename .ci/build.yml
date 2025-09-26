@@ -18,8 +18,8 @@ build:maven:
     KAFKA_BOOTSTRAP_SERVERS: docker:9092
   script:
     - set -xe
-    - docker compose -f compose/compose.devservices.yml up --wait --quiet-pull
-    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dkafka.bootstrap.servers=$KAFKA_BOOTSTRAP_SERVERS
+    - docker compose -f compose/compose.devservices.yml up --wait --quiet-pull --no-color
+    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true
   interruptible: true
   after_script:
     - awk -F, '{ instructions += $4 + $5; covered += $5 } END { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered (line coverage)" }' target/coverage/jacoco.csv
@@ -56,7 +56,7 @@ package:maven:
       else
         export ADDITIONAL_TAGS=${IMAGE_ADDITIONAL_TAG}
       fi
-    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -P${POLICY} -Pservices
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Dpolicy.agent=${POLICY} -Pservices -Dcompose.skip=true
       -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
       -Dquarkus.container-image.tag=${IMAGE_TAG}-${POLICY}
       -Dquarkus.container-image.additional-tags=${ADDITIONAL_TAGS}

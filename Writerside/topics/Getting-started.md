@@ -111,18 +111,25 @@ helmfile sync --state-values-set kvasirHost=kvasir.example.com \
 
 ## Running in dev mode
 
-If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper.
-This requires you to have Java JDK 21 installed.
+If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper. This requires you to have Java JDK 21 installed.
 
-First, start the development services from the project root:
+The backing services for development are managed by Maven and will be started automatically.
+
+By default, the application starts with no policy agent enabled (`noauth`). To run with a specific agent, which is necessary for most features, you must activate it using the `policy.agent` property.
+
+To run the application in dev mode with the recommended `openfga` agent:
 ```bash
-docker compose -f compose/compose.devservices.yml up -d
+./mvnw compile quarkus:dev -Dpolicy.agent=openfga
+```
+You can also use `a4ds` or `noauth` (the default).
+
+To stop the backing services and remove their volumes, run:
+```bash
+./mvnw clean
 ```
 
-Then, run the application in dev mode:
-```bash
-./mvnw compile quarkus:dev
-```
+You can skip the compose lifecycle by adding `-Dcompose.skip=true` to your Maven command.
+
 
 ## Issues
 
