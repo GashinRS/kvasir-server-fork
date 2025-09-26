@@ -4,14 +4,17 @@
 
 Kvasir supports multiple authentication and authorization mechanisms via a modular, pluggable architecture.
 
-A policy agent implementation can be selected at build time using config properties. At the moment, the following
-implementations are available:
+A policy agent implementation can be selected at build time by setting the `policy.agent` Maven property. If no property is provided, no policy agent will be used (`noauth`).
 
-|                                               | Description                                                                                                                                                                            | Build property                                     | Image suffix                      | Status                                                              |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| [openfga-policy-agent](#openfga-policy-agent) | Uses [Keycloak](https://www.keycloak.org/) for authentication and [OpenFGA](https://openfga.dev) for fine-grained access control. Auth flow conforms to OpenID Connect and OAuth 2.1.  | `kvasir.plugins.policy-agent.openfga.enabled=true` | `-openfga` or no suffix (default) | Ready for use (included in default builds)                          |
-| [a4ds-policy-agent](#a4ds-policy-agent)       | Turns Kvasir into an 'Authorization for Data Spaces (A4DS)' compatible Resource server. The [A4DS specification](https://spec.knows.idlab.ugent.be/A4DS/L1/latest/) builds on UMA 2.0. | `kvasir.plugins.policy-agent.a4ds.enabled=true`    | `-a4ds`                           | Basic implementation available (check known limitations before use) |
-| No policy agent plugin                        | Disables authentication and access control. May be useful for specific use cases or development purposes.                                                                              | n/a                                                | `-noauth`                         |                                                                     |
+To enable an agent, provide the property during the build (e.g., `-Dpolicy.agent=openfga`).
+
+The following implementations are available:
+
+|                                               | Description                                                                                                                                                                            | `policy.agent` value | Image suffix | Status                                                              |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------ | ------------------------------------------------------------------- |
+| [openfga-policy-agent](#openfga-policy-agent) | Uses [Keycloak](https://www.keycloak.org/) for authentication and [OpenFGA](https://openfga.dev) for fine-grained access control. Auth flow conforms to OpenID Connect and OAuth 2.1.  | `openfga`            | `-openfga`   | Ready for use (included in default builds)                          |
+| [a4ds-policy-agent](#a4ds-policy-agent)       | Turns Kvasir into an 'Authorization for Data Spaces (A4DS)' compatible Resource server. The [A4DS specification](https://spec.knows.idlab.ugent.be/A4DS/L1/latest/) builds on UMA 2.0. | `a4ds`               | `-a4ds`      | Basic implementation available (check known limitations before use) |
+| No policy agent plugin                        | Disables authentication and access control. May be useful for specific use cases or development purposes.                                                                              | `noauth` (default)   | `-noauth`    |                                                                     |
 
 ## OpenFGA Policy Agent
 
@@ -406,8 +409,12 @@ Contact information for the KNoWS group can be found at [](https://knows.idlab.u
 
 ### Usage
 
-An A4DS specific build of Kvasir is required to use this feature. When running in dev mode, you can enable the A4DS
-Policy Agent by setting the property `kvasir.plugins.policy-agent.a4ds.enabled` to true.
+To use this feature, a build of Kvasir with the A4DS policy agent enabled is required. You can create one by setting the `policy.agent` property to `a4ds` during the build.
+
+When running in dev mode, this can be done via:
+```bash
+./mvnw compile quarkus:dev -Dpolicy.agent=a4ds
+```
 
 When using our Container Image builds, look for tags with the `-a4ds` suffix.
 

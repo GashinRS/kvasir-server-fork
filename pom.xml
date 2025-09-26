@@ -1,20 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>kvasir</groupId>
     <artifactId>kvasir-parent</artifactId>
     <version>0.11.1</version>
-
     <packaging>pom</packaging>
-
     <modules>
         <module>libs</module>
         <module>plugins</module>
         <module>services</module>
     </modules>
-
     <properties>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>
         <kotlin.version>2.1.20</kotlin.version>
@@ -31,15 +26,15 @@
         <rdf4j.version>5.0.3</rdf4j.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.2</surefire-plugin.version>
+        <compose.executable>docker</compose.executable>
+        <compose.skip>false</compose.skip>
     </properties>
-
     <repositories>
         <repository>
             <id>gitlab-maven</id>
             <url>https://gitlab.ilabt.imec.be/api/v4/groups/discover/-/packages/maven</url>
         </repository>
     </repositories>
-
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -51,7 +46,6 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-
     <dependencies>
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>
@@ -110,7 +104,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
     <build>
         <sourceDirectory>src/main/kotlin</sourceDirectory>
         <testSourceDirectory>src/test/kotlin</testSourceDirectory>
@@ -232,8 +225,56 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.1</version>
+                <inherited>false</inherited>
+                <executions>
+                    <!-- Compose up for dev and test -->
+                    <execution>
+                        <id>compose-up</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${compose.skip}</skip>
+                            <executable>${compose.executable}</executable>
+                            <arguments>
+                                <argument>compose</argument>
+                                <argument>-f</argument>
+                                <argument>${maven.multiModuleProjectDirectory}/compose/compose.devservices.yml</argument>
+                                <argument>up</argument>
+                                <argument>-d</argument>
+                                <argument>--quiet-pull</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <!-- Compose down -v on clean -->
+                    <execution>
+                        <id>compose-down</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${compose.skip}</skip>
+                            <executable>${compose.executable}</executable>
+                            <arguments>
+                                <argument>compose</argument>
+                                <argument>-f</argument>
+                                <argument>${maven.multiModuleProjectDirectory}/compose/compose.devservices.yml</argument>
+                                <argument>down</argument>
+                                <argument>-v</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
-
     <profiles>
         <profile>
             <id>native</id>

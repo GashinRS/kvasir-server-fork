@@ -21,7 +21,6 @@
 
     <modules>
         <module>kg-change-processor</module>
-        <module>monolith</module>
         <module>simple-rdf-ingester</module>
         <module>ui-service</module>
         <module>api-services</module>

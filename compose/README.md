@@ -29,7 +29,20 @@ SELINUX_MOUNT_FLAG=:Z
 
 ### Development: Dev Services Only
 
-For development or testing, you can run only the backing services (databases, Kafka, etc.).
+For development or testing, the lifecycle of the backing services (databases, Kafka, etc.) is managed by Maven. From the project root (`../`), you can run:
+
+- **Start services:**
+  ```bash
+  ./mvnw compile
+  ```
+- **Stop and remove services:**
+  ```bash
+  ./mvnw clean
+  ```
+
+You can skip this by adding the property `-Dcompose.skip=true`.
+
+Alternatively, you can manage the services manually from this directory:
 
 **Docker:**
 
