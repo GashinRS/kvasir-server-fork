@@ -1,12 +1,7 @@
 package kvasir.plugins.kg.referenceloaders.s3
 
-import io.minio.GetObjectArgs
-import io.minio.GetObjectResponse
-import io.minio.MinioAsyncClient
 import io.smallrye.mutiny.Multi
-import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.RDFStatement
 import kvasir.definitions.kg.ReferenceLoader
@@ -18,16 +13,18 @@ import kvasir.utils.rdf.RDFLiteralUtils
 import kvasir.utils.rdf.RDFTransformer
 import kvasir.utils.rdf.ReactiveRDFParser
 import kvasir.utils.s3.S3Utils
+import kvasir.utils.s3.getObject
 import org.eclipse.rdf4j.model.BNode
 import org.eclipse.rdf4j.model.Literal
 import org.eclipse.rdf4j.model.Value
 import org.eclipse.rdf4j.rio.RDFFormat
+import software.amazon.awssdk.services.s3.S3AsyncClient
 import java.net.URI
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 @ApplicationScoped
-class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLoader {
+class S3ReferenceLoader(private val s3Client: S3AsyncClient) : ReferenceLoader {
 
     override fun isSupported(reference: Map<String, Any>): Boolean {
         return reference[JsonLdKeywords.type] == KvasirVocab.S3Reference
@@ -39,18 +36,9 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
         val bucketId = S3Utils.getBucket(podOrSliceId)
         val docBaseUri = "${podOrSliceId.removeSuffix("/")}/s3/$key#"
         val bNodeIdMap = mutableMapOf<BNode, String>()
-        return Uni.createFrom()
-            .future(
-                minioClient.getObject(
-                    GetObjectArgs.builder().bucket(bucketId).`object`(key).apply {
-                        if (versionId != null) {
-                            this.versionId(versionId)
-                        }
-                    }.build()
-                )
-            )
+        return s3Client.getObject(bucketId, key, versionId)
             .onItem().transformToMulti { resp ->
-                ReactiveRDFParser.parseRdf(resp, parseLang(resp), docBaseUri)
+                ReactiveRDFParser.parseRdf(resp.inputStream, parseLang(resp.contentType), docBaseUri)
             }
             .map { statement ->
                 RDFStatement(
@@ -82,9 +70,8 @@ class S3ReferenceLoader(private val minioClient: MinioAsyncClient) : ReferenceLo
         }
     }
 
-    private fun parseLang(resp: GetObjectResponse): RDFFormat {
-        return when (val contentType =
-            MediaType.valueOf(resp.headers()[HttpHeaders.CONTENT_TYPE]).let { "${it.type}/${it.subtype}" }) {
+    private fun parseLang(rawContentType: String): RDFFormat {
+        return when (val contentType = MediaType.valueOf(rawContentType).let { "${it.type}/${it.subtype}" }) {
             "text/turtle" -> RDFFormat.TURTLE
             "text/n3" -> RDFFormat.N3
             "application/n-triples" -> RDFFormat.NTRIPLES

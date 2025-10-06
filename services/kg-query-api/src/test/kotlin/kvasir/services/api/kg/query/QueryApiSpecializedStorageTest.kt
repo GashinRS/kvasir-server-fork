@@ -14,14 +14,8 @@ import kvasir.utils.test.commons.TestConstants
 import kvasir.utils.test.commons.TestDataGenerator
 import kvasir.utils.test.commons.TestHelpers
 import kvasir.utils.test.commons.TimeseriesData
+import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Disabled
-import org.junit.jupiter.api.MethodOrderer
-import org.junit.jupiter.api.Order
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.junit.jupiter.api.TestMethodOrder
 
 @QuarkusTest
 @TestHTTPEndpoint(QueryApi::class)

@@ -10,6 +10,7 @@ import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
 import jakarta.inject.Singleton
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.kg.graphql.ARG_CLASS_NAME
 import kvasir.definitions.kg.graphql.DIRECTIVE_STORAGE_NAME
@@ -39,7 +40,7 @@ class SarefTimeseriesStorageBackend(
     clickhouseClient: ClickhouseClient,
 ) : AbstractStorageBackend(TIME_SERIES_DATA_TABLE, TIME_SERIES_DATA_COLUMNS, clickhouseClient) {
 
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         // Look for subjects that have a SAREF timestamp property (there is a high change that these represent an observation).
         return buffer.stream(filterByPredicate = SAREFVocab.hasTimestamp)
             .map { it.statement.subject }
@@ -90,6 +91,9 @@ class SarefTimeseriesStorageBackend(
                 }
             }
             .skipToLast()
+            .map {
+                null // No status entry needed
+            }
     }
 
     override fun datafetcher(podId: String, context: Map<String, Any>, atTimestamp: Instant?): DataFetcher<Any>? {

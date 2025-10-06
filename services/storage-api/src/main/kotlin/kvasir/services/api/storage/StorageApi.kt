@@ -42,22 +42,18 @@ internal const val HEADER_X_AMZ_DATE = "x-amz-date"
  */
 @ApplicationScoped
 class StorageApi(
-    @ConfigProperty(name = "kvasir.services.storage.s3.host")
-    private val s3Host: String,
-    @ConfigProperty(name = "kvasir.services.storage.s3.port")
-    private val s3Port: Int,
-    @ConfigProperty(name = "quarkus.minio.url")
-    private val minioHost: String,
+    @ConfigProperty(name = "kvasir.services.storage.s3.endpoint")
+    private val s3Endpoint: String,
     private val s3Interceptor: S3Interceptor,
     private val authHandler: Instance<AuthHandler>
 ) {
 
     fun onStart(@Observes router: Router, vertx: Vertx) {
-        Log.debug("storage-api sees '$minioHost' as minio host")
-        Log.debug("storage-api proxying S3 requests to $s3Host:$s3Port")
+        Log.debug("storage-api proxying S3 requests to $s3Endpoint")
+        val s3Url = URI.create(s3Endpoint)
         val proxyClient = vertx.createHttpClient()
         val proxy = HttpProxy.reverseProxy(proxyClient)
-        proxy.origin(s3Port, s3Host).addInterceptor(s3Interceptor)
+        proxy.origin(s3Url.port, s3Url.host).addInterceptor(s3Interceptor)
 
         val setupRoute = {
             if (authHandler.isResolvable) {
@@ -76,10 +72,8 @@ class StorageApi(
 class S3Interceptor(
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
     private val baseUri: String,
-    @ConfigProperty(name = "kvasir.services.storage.s3.host")
-    private val s3Host: String,
-    @ConfigProperty(name = "kvasir.services.storage.s3.port")
-    private val s3Port: Int,
+    @ConfigProperty(name = "kvasir.services.storage.s3.endpoint")
+    private val s3Endpoint: String,
     @ConfigProperty(name = "kvasir.services.storage.s3.access-key")
     private val s3AccessKey: String,
     @ConfigProperty(name = "kvasir.services.storage.s3.secret-key")
@@ -96,6 +90,8 @@ class S3Interceptor(
 
     }
 
+    private val s3Url = URI.create(s3Endpoint)
+
     override fun handleProxyRequest(context: ProxyContext): Future<ProxyResponse> {
         return context.request().proxiedRequest().resume().body().compose { buffer ->
             context.request().body = Body.body(buffer)
@@ -110,7 +106,7 @@ class S3Interceptor(
             val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
             val sig = Signer.builder()
                 .awsCredentials(AwsCredentials(s3AccessKey, s3SecretKey))
-                .header("host", "$s3Host:$s3Port")
+                .header("host", "${s3Url.host}:${s3Url.port}")
                 .header("x-amz-date", isoDateTime)
                 .header("x-amz-content-sha256", payloadHash)
                 .region("us-east-1") // TODO: Make configurable
@@ -119,8 +115,8 @@ class S3Interceptor(
             context.request().putHeader("Authorization", sig)
             context.request().putHeader("x-amz-date", isoDateTime)
             context.request().putHeader("x-amz-content-sha256", payloadHash)
-            context.request().putHeader("Host", "$s3Host:$s3Port")
-            context.request().authority = HostAndPort.authority(s3Host, s3Port)
+            context.request().putHeader("Host", "${s3Url.host}:${s3Url.port}")
+            context.request().authority = HostAndPort.authority(s3Url.host, s3Url.port)
             context.sendRequest()
         }
     }
@@ -150,7 +146,7 @@ class S3Interceptor(
                             Charsets.UTF_8.name()
                         ),
                         externalObjectUri = "${baseUri.removeSuffix("/")}${context.request().proxiedRequest().path()}",
-                        internalStorageUri = "http://$s3Host:$s3Port${context.request().uri}",
+                        internalStorageUri = "$s3Endpoint${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),
                         type = operationType
                     )

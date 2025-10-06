@@ -145,8 +145,8 @@ interface ChangeProcessor {
      * Perform the processing implemented by this Hook.
      *
      * @param buffer Reference to the ChangeRequestTxBuffer which allows fetching the queued Change Records and manipulating these.
-     * @return A Uni representing the future execution of the operation. Completing with a Void means the processing was successful.
+     * @return A Uni emitting the ChangeReportStatusEntry representing the result of this processing step (if applicable, otherwise null).
      */
-    fun process(buffer: ChangeRequestTxBuffer): Uni<Void>
+    fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?>
 
 }

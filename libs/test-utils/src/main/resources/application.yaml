@@ -15,6 +15,21 @@
         username: admin
         password: admin
         grant-type: PASSWORD
+    s3:
+      endpoint-override: http://localhost:9000
+      path-style-access: true
+      aws:
+        region: eu-west-1
+        credentials:
+          type: static
+          static-provider:
+            access-key-id: kvasir
+            secret-access-key: kvasirkvasir
   kvasir:
     base-uri: http://localhost:${quarkus.http.test-port}/
-
+    services:
+      storage:
+        s3:
+          endpoint: ${quarkus.s3.endpoint-override}
+          access-key: ${quarkus.s3.aws.credentials.static-provider.access-key-id}
+          secret-key: ${quarkus.s3.aws.credentials.static-provider.secret-access-key}

@@ -2,8 +2,6 @@ package kvasir.utils.pod
 
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
-import io.minio.*
-import io.minio.messages.VersioningConfiguration
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.inject.Instance
@@ -14,7 +12,12 @@ import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.reactive.skipToLast
+import kvasir.definitions.reactive.toMulti
+import kvasir.definitions.reactive.toUni
 import kvasir.utils.s3.S3Utils
+import software.amazon.awssdk.services.s3.S3AsyncClient
+import software.amazon.awssdk.services.s3.model.*
 import kotlin.jvm.optionals.getOrNull
 
 const val PLAIN_JSON_VOCAB = "urn:kvasir:plain-json:"
@@ -25,7 +28,7 @@ abstract class PodSetupHelper {
     protected lateinit var podStoreFactory: PodStoreFactory
 
     @Inject
-    protected lateinit var minioClient: MinioAsyncClient
+    protected lateinit var s3AsyncClient: S3AsyncClient
 
     @Inject
     protected lateinit var podAuthInitializer: Instance<AuthInitializer>
@@ -33,8 +36,7 @@ abstract class PodSetupHelper {
     fun createPod(
         podId: String,
         podConfig: PodConfig,
-        errorWhenExists: Boolean = false,
-        enableS3Versioning: Boolean = true
+        errorWhenExists: Boolean = false
     ): Uni<Void> {
         val podStore = podStoreFactory.createPodStore()
         return podStore.findById(podId)
@@ -47,7 +49,7 @@ abstract class PodSetupHelper {
                     // ... but in dev mode the OpenFga store will be empty
                     else {
                         // Be sure Bucket exists: try setting up s3 bucket (will not do anything if bucketName already exists)
-                        createS3BucketIfNotExist(podId, enableS3Versioning)
+                        createS3BucketIfNotExist(podId)
                             .chain { _ ->
                                 if (podAuthInitializer.isResolvable) {
                                     val initializer = podAuthInitializer.get()
@@ -69,7 +71,7 @@ abstract class PodSetupHelper {
                     Log.debug("Adding storage entry for Pod '$podId'")
                     val newPod = Pod(podId, parseConfiguration(podConfig.configuration()))
                     podStore.persist(newPod)
-                        .chain { _ -> createS3BucketIfNotExist(podId, enableS3Versioning) }
+                        .chain { _ -> createS3BucketIfNotExist(podId) }
                         .chain { _ ->
                             // Initialize the configured auth policy provider for the Pod (if any)
                             if (podAuthInitializer.isResolvable) {
@@ -100,11 +102,35 @@ abstract class PodSetupHelper {
                 if (deleteData) {
                     val bucketId = S3Utils.getBucket(podId)
                     Log.debug("Deleting S3 bucket '$bucketId' for Pod '$podId'")
-                    Uni.createFrom().completionStage {
-                        minioClient.removeBucket(
-                            RemoveBucketArgs.builder().bucket(bucketId).build()
-                        )
-                    }
+                    // First delete all objects (and versions) in the bucket
+                    s3AsyncClient.listObjectVersionsPaginator(
+                        ListObjectVersionsRequest.builder().bucket(bucketId).prefix("").build()
+                    ).toMulti()
+                        .group().intoLists().of(500)
+                        .onItem().transformToUniAndConcatenate { batch ->
+                            val deletes = batch.flatMap { v ->
+                                v.versions()
+                                    .map { ObjectIdentifier.builder().key(it.key()).versionId(it.versionId()).build() }
+                            }.toList() + batch.flatMap { v ->
+                                v.deleteMarkers()
+                                    .map { ObjectIdentifier.builder().key(it.key()).versionId(it.versionId()).build() }
+                            }.toList()
+                            if (deletes.isNotEmpty()) {
+                                s3AsyncClient.deleteObjects(
+                                    DeleteObjectsRequest.builder().bucket(bucketId)
+                                        .delete(Delete.builder().objects(deletes).build()).build()
+                                ).toUni().replaceWithVoid()
+                            } else {
+                                Uni.createFrom().voidItem()
+                            }
+                        }
+                        .skipToLast()
+                        .chain { _ ->
+                            // Then delete the bucket
+                            s3AsyncClient.deleteBucket(
+                                DeleteBucketRequest.builder().bucket(bucketId).build()
+                            ).toUni()
+                        }
                 } else {
                     Uni.createFrom().voidItem()
                 }
@@ -124,40 +150,35 @@ abstract class PodSetupHelper {
             }
     }
 
-    fun createS3BucketIfNotExist(podId: String, enableS3Versioning: Boolean): Uni<Void> {
+    fun createS3BucketIfNotExist(podId: String): Uni<Void> {
         val bucketId = S3Utils.getBucket(podId)
         // Initialize a new S3 bucket for the pod
         Log.debug("Creating S3 bucket '$bucketId' for Pod '$podId'")
         return Uni.createFrom()
-            .completionStage(minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketId).build()))
-            .flatMap { bucketExists ->
-                if (bucketExists) Uni.createFrom().voidItem()
-                else Uni.createFrom()
-                    .completionStage(
-                        minioClient.makeBucket(
-                            MakeBucketArgs.builder().bucket(bucketId).build()
-                        )
-                    )
-                    .chain { _ ->
-                        // Enable versioning for the bucket
-                        if (enableS3Versioning) {
-                            Uni.createFrom().completionStage(
-                                minioClient.setBucketVersioning(
-                                    SetBucketVersioningArgs.builder()
-                                        .bucket(bucketId)
-                                        .config(
-                                            VersioningConfiguration(
-                                                VersioningConfiguration.Status.ENABLED,
-                                                true
-                                            )
-                                        )
-                                        .build()
-                                )
+            .completionStage(
+                s3AsyncClient.createBucket(
+                    CreateBucketRequest.builder().bucket(bucketId).build()
+                )
+            )
+            .chain { _ ->
+                // Enable versioning for the bucket
+                Uni.createFrom().completionStage(
+                    s3AsyncClient.putBucketVersioning(
+                        PutBucketVersioningRequest.builder()
+                            .bucket(bucketId)
+                            .versioningConfiguration(
+                                VersioningConfiguration.builder()
+                                    .status(BucketVersioningStatus.ENABLED)
+                                    .build()
                             )
-                        } else {
-                            Uni.createFrom().voidItem()
-                        }
-                    }
+                            .build()
+                    )
+                ).replaceWithVoid()
+            }
+            .onFailure { err -> err is BucketAlreadyOwnedByYouException || err is BucketAlreadyExistsException }
+            .recoverWithUni { _ ->
+                Log.warn("S3 Bucket '$bucketId' for Pod '$podId' already exists.")
+                Uni.createFrom().voidItem()
             }
     }
 

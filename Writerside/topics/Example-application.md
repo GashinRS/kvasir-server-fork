@@ -3,7 +3,7 @@
 # Introduction
 
 Music-tracker is a fully functional example application that demonstrates the capabilities of the Kvasir data broker.
-Visit its repository at [kvasir-music-tracker](https://gitlab.ilabt.imec.be/kvasir/kvasir-music-tracker) for up-to-date
+Visit its repository at [kvasir-music-tracker](https://gitlab.ilabt.imec.be/kvasir/music-tracker-demo) for up-to-date
 information and source code.
 
 It consists of three components:

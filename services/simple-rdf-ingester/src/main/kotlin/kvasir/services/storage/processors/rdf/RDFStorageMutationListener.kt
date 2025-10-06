@@ -1,14 +1,9 @@
 package kvasir.services.storage.processors.rdf
 
-import io.minio.GetObjectArgs
-import io.minio.ListObjectsArgs
-import io.minio.MinioAsyncClient
-import io.minio.messages.Item
+import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
-import io.vertx.mutiny.core.Vertx
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.PodStoreFactory
@@ -20,8 +15,11 @@ import kvasir.definitions.storage.StorageEventType
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.s3.S3Utils
+import kvasir.utils.s3.getObjectContentType
 import org.eclipse.microprofile.reactive.messaging.Incoming
 import org.eclipse.microprofile.reactive.messaging.Outgoing
+import software.amazon.awssdk.services.s3.S3AsyncClient
+import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest
 
 /**
  * Processor that listens for storage mutations on files that contain RDF data
@@ -29,9 +27,8 @@ import org.eclipse.microprofile.reactive.messaging.Outgoing
  */
 @ApplicationScoped
 class RDFStorageMutationListener(
-    private val minioClient: MinioAsyncClient,
-    private val podStoreFactory: PodStoreFactory,
-    private val vertx: Vertx
+    private val s3Client: S3AsyncClient,
+    private val podStoreFactory: PodStoreFactory
 ) {
 
     @Incoming(Channels.STORAGE_EVENTS_SUBSCRIBE)
@@ -49,16 +46,18 @@ class RDFStorageMutationListener(
 
                 // If the operation is of type DELETE_OBJECT, we need to look up the version previous to the deletion
                 if (event.type == StorageEventType.DELETE_OBJECT) {
-                    vertx.executeBlocking {
-                        val versions: List<io.minio.Result<Item>> = minioClient.listObjects(
-                            ListObjectsArgs.builder().bucket(bucketId).prefix(event.objectId)
-                                .includeVersions(true).build()
-                        ).toList().sortedByDescending { it.get().lastModified() }
-                        versions.find { it.get().versionId() == event.versionId }?.let {
-                            val previousVersion = versions[versions.indexOf(it) + 1]
-                            event.copy(versionId = previousVersion.get().versionId())
-                        }
+                    Uni.createFrom().completionStage {
+                        s3Client.listObjectVersions(
+                            ListObjectVersionsRequest.builder().bucket(bucketId).prefix(event.objectId).build()
+                        )
                     }
+                        .map { resp ->
+                            // Find the version just before the deleted one (the one with the highest lastModified date)
+                            resp.versions().takeIf { it.isNotEmpty() }?.maxBy { it.lastModified() }
+                                ?.let { previousVersion ->
+                                    event.copy(versionId = previousVersion.versionId())
+                                }
+                        }
                 } else {
                     Uni.createFrom().item(event)
                 }
@@ -66,22 +65,12 @@ class RDFStorageMutationListener(
             .onItem()
             .transformToUniAndConcatenate { event ->
                 val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
-                Uni.createFrom().completionStage(
-                    minioClient.getObject(
-                        GetObjectArgs.builder().bucket(bucketId).`object`(event.objectId).versionId(event.versionId)
-                            .build()
-                    )
-                ).map { resp ->
-                    // Copy headers and then close the response
-                    resp.use {
-                        event to it.headers()
-                    }
-                }
+                s3Client.getObjectContentType(bucketId, event.objectId, event.versionId).map { event to it }
             }
-            .filter { (_, headers) ->
+            .filter { (_, rawContentType) ->
                 // Only process objects that are RDF data
                 val contentType =
-                    MediaType.valueOf(headers[HttpHeaders.CONTENT_TYPE]).let { "${it.type}/${it.subtype}" }
+                    MediaType.valueOf(rawContentType).let { "${it.type}/${it.subtype}" }
                 RDFMediaTypes.supportedTypes.contains(contentType)
             }
             .map { (event, _) ->
@@ -119,6 +108,9 @@ class RDFStorageMutationListener(
 
                     else -> throw IllegalStateException("Unsupported storage event type: ${event.type}")
                 }
+            }
+            .onFailure().invoke { err ->
+                Log.warn("Error processing storage event", err)
             }
     }
 

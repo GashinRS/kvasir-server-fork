@@ -10,7 +10,7 @@ build:maven:
   variables:
     KVASIR_KG_CLICKHOUSE_HOST: docker
     KVASIR_SERVICES_STORAGE_S3_HOST: docker
-    QUARKUS_MINIO_URL: http://docker:9000/
+    QUARKUS_S3_ENDPOINT_OVERRIDE: http://docker:9000
     QUARKUS_KEYCLOAK_ADMIN_CLIENT_SERVER_URL: http://docker:8280
     QUARKUS_OIDC_AUTH_SERVER_URL: http://docker:8280/realms/quarkus
     QUARKUS_OPENFGA_URL: http://docker:8380

@@ -3,6 +3,8 @@ package kvasir.definitions.reactive
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.kg.ChangeStatusCode
+import mutiny.zero.flow.adapters.AdaptersToFlow
+import org.reactivestreams.Publisher
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
 
@@ -16,4 +18,8 @@ fun <T> CompletableFuture<T>.toUni(): Uni<T> {
 
 fun <T> Iterable<T>.asMulti(): Multi<T> {
     return Multi.createFrom().iterable(this)
+}
+
+fun <T> Publisher<T>.toMulti(): Multi<T> {
+    return Multi.createFrom().publisher(AdaptersToFlow.publisher(this))
 }
