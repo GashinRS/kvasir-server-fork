@@ -30,14 +30,24 @@
         </nz-descriptions-item>
         @let statusCode = statusEntry()["kss:statusCode"];
         <nz-descriptions-item nzTitle="Result Code">
-          {{ statusCode }}
+          <div nz-flex nzJustify="space-between">
+            {{ statusCode }}
+            <button
+              nz-button
+              nzType="default"
+              (click)="openStatusCodeHistory()"
+              nz-tooltip="Result code history"
+            >
+              <nz-icon nzType="history" />
+            </button>
+          </div>
         </nz-descriptions-item>
         <nz-descriptions-item nzTitle="Timestamp">
           {{ statusEntry()["kss:timestamp"] | date: "d MMM, yyyy @ hh:mm:ss" }}
         </nz-descriptions-item>
-        @if (isError(statusCode)) {
+        @if (statusEntry()["kss:message"]; as msg) {
           <nz-descriptions-item [nzSpan]="2">
-            {{ statusEntry()["kss:message"] }}
+            {{ msg }}
           </nz-descriptions-item>
         }
       </nz-descriptions>

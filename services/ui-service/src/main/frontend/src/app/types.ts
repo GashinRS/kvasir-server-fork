@@ -89,7 +89,7 @@ export enum ChangeResultCode {
   /**
    * The Change Request has been preprocessed by the configured preprocessing chain.
    */
-  PREPROCESSED,
+  PROCESSING,
 
   /**
    * The Change Request was successfully applied.

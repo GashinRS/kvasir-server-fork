@@ -1,18 +1,24 @@
-import {} from '@angular/cdk';
+import { } from '@angular/cdk';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input, OnInit } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterModule } from '@angular/router';
+import { NzButtonComponent } from "ng-zorro-antd/button";
 import { NzDescriptionsModule } from 'ng-zorro-antd/descriptions';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
+import { NzFlexModule } from "ng-zorro-antd/flex";
 import { NzGridModule } from 'ng-zorro-antd/grid';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzRadioModule } from 'ng-zorro-antd/radio';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTableModule } from 'ng-zorro-antd/table';
+import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
 import { concatWith, from, map, switchMap } from 'rxjs';
 import { LiteralBadgeComponent } from '../components/literal-badge/literal-badge.component';
+import { StatusEntriesComponent } from '../modals/status-entries/status-entries.component';
 import { RangeDiff, ServerPagedDirective } from '../server-paged.directive';
 import { KvasirService } from '../services/kvasir.service';
 import { ChangeReport, ChangeResultCode } from '../types';
@@ -20,7 +26,7 @@ import {
   ensureArray,
   mapToSignedN3Quads,
   SignedN3Quad,
-  sortByTimestamp,
+  sortStatusEntries
 } from '../util/utils';
 
 @Component({
@@ -33,12 +39,16 @@ import {
     NzSpaceModule,
     NzRadioModule,
     NzTypographyModule,
+    NzTooltipModule,
     FormsModule,
     NzGridModule,
     ServerPagedDirective,
     RouterModule,
     NzEmptyModule,
     LiteralBadgeComponent,
+    NzIconModule,
+    NzFlexModule,
+    NzButtonComponent
   ],
   templateUrl: './change.component.html',
   styleUrl: './change.component.less',
@@ -47,6 +57,7 @@ export class ChangeComponent implements OnInit {
   // DI
   private route = inject(ActivatedRoute);
   private kvasir = inject(KvasirService);
+  private modal = inject(NzModalService)
 
   // Input params
   readonly changeReportId = input.required<string>();
@@ -57,7 +68,7 @@ export class ChangeComponent implements OnInit {
 
   statusEntry = computed<any>(() => {
     const entries = this.change.value()?.['kss:statusEntry'];
-    return entries?.sort(sortByTimestamp('desc'))[0];
+    return entries?.sort(sortStatusEntries('desc'))[0];
   });
 
   records: SignedN3Quad[] = [];
@@ -84,6 +95,15 @@ export class ChangeComponent implements OnInit {
       default:
         return true;
     }
+  }
+
+  openStatusCodeHistory() {
+    this.modal.info({
+      nzTitle: 'StatusEntries',
+      nzContent: StatusEntriesComponent,
+      nzData: this.change.value()?.['kss:statusEntry'] ?? [],
+      nzWidth: '40%',
+    });
   }
 
   private fetchPage(cursor?: string) {
