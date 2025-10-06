@@ -101,10 +101,11 @@ class DefaultKnowledgeGraph(
         return changeRequestTxBufferFactory.open(request)
             .chain { txBuffer ->
                 Multi.createFrom().iterable(pipeline)
-                    .onItem().transformToUni { processor -> processor.process(txBuffer) }
-                    .concatenate().skipToLast().map { txBuffer }
+                    .onItem().transformToUniAndConcatenate { processor -> processor.process(txBuffer) }
+                    .collect().asList().map { txBuffer to it }
             }
-            .chain { txBuffer ->
+            // TODO: In the current implementation, progress events are not stored between stages. Process flow will be overhauled in future, so this is acceptable for now.
+            .chain { (txBuffer, progressEvent) ->
                 txBuffer.statistics().chain { stats ->
                     val report = ChangeReport(
                         id = request.id,
@@ -115,6 +116,7 @@ class DefaultKnowledgeGraph(
                                 ChangeRequestId.fromId(request.id).timestamp(),
                                 ChangeStatusCode.QUEUED
                             ),
+                            *progressEvent.filterNotNull().toTypedArray(),
                             ChangeReportStatusEntry(Instant.now(), ChangeStatusCode.COMMITTED),
                         ),
                         sliceId = request.sliceId,

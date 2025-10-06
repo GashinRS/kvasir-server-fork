@@ -5,15 +5,16 @@ import io.quarkus.arc.All
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
+import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeProcessor
+import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
-import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.kg.slices.SliceStoreFactory
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -31,7 +32,7 @@ class EvaluateAssertions(
     @ConfigProperty(name = "kvasir.changes.processing.assertion-checking-parallelism", defaultValue = "4")
     private val assertionCheckingParallelism: Int,
 ) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
         Log.debug("Evaluating assertions for change request ${buffer.request.id}...")
         val request = buffer.request
@@ -90,8 +91,14 @@ class EvaluateAssertions(
             }
             .merge(assertionCheckingParallelism)
             .skipToLast()
-            .invoke { _ ->
-                Log.debug("Finished evaluating assertions for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
+            .map {
+                val log =
+                    "Finished evaluating assertions (${request.assert.size}) for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms"
+                Log.debug(log)
+                ChangeReportStatusEntry(
+                    code = ChangeStatusCode.PROCESSING,
+                    message = log
+                ).takeIf { request.assert.isNotEmpty() }
             }
     }
 
@@ -104,14 +111,17 @@ class MaterializeS3References(
     @ConfigProperty(name = "kvasir.changes.processing.ref-handling-buffer", defaultValue = "50000")
     private val referenceHandlingBuffer: Int,
 ) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
         Log.debug("Processing external references for change request ${buffer.request.id}...")
         val request = buffer.request
+        val deletedS3Objects = mutableListOf<String>()
+        val insertedS3Objects = mutableListOf<String>()
         return if (request.insertFromRefs.isNotEmpty() || request.deleteFromRefs.isNotEmpty()) {
             // Delete from external sources
             Multi.createFrom().iterable(request.deleteFromRefs)
                 .onItem().transformToMultiAndConcatenate { ref ->
+                    extractObject(ref)?.let { deletedS3Objects.add(it) }
                     loadReference(request.podId, ref)
                 }
                 .group().intoLists().of(referenceHandlingBuffer)
@@ -132,6 +142,7 @@ class MaterializeS3References(
                     // Insert from external sources
                     Multi.createFrom().iterable(request.insertFromRefs)
                         .onItem().transformToMultiAndConcatenate { ref ->
+                            extractObject(ref)?.let { insertedS3Objects.add(it) }
                             loadReference(request.podId, ref)
                         }
                         .group().intoLists().of(referenceHandlingBuffer)
@@ -153,8 +164,15 @@ class MaterializeS3References(
         } else {
             Uni.createFrom().voidItem()
         }
-            .invoke { _ ->
-                Log.debug("Finished processing external references for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
+            .map {
+                val report = Json.encode(mapOf("insert_refs" to insertedS3Objects, "delete_refs" to deletedS3Objects))
+                val log =
+                    "Finished processing external references for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms. Details: $report"
+                Log.debug(log)
+                ChangeReportStatusEntry(
+                    code = ChangeStatusCode.PROCESSING,
+                    message = log
+                ).takeIf { insertedS3Objects.isNotEmpty() || deletedS3Objects.isNotEmpty() }
             }
     }
 
@@ -168,6 +186,10 @@ class MaterializeS3References(
             ?: Multi.createFrom().failure(RuntimeException("Unsupported reference type: $reference"))
     }
 
+    private fun extractObject(reference: Map<String, Any>): String? {
+        return if (reference[JsonLdKeywords.type] == KvasirVocab.S3Reference) reference[KvasirVocab.key] as String? else null
+    }
+
 }
 
 @ApplicationScoped
@@ -175,16 +197,19 @@ class MaterializeRecords(
     private val kg: KnowledgeGraph,
     private val sliceStoreFactory: Instance<SliceStoreFactory>
 ) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
         Log.debug("Processing with clauses for change request ${buffer.request.id}...")
         // Process embedded inserts/deletes
         val request = buffer.request
+        var deleteStatementsCount = 0
+        var insertStatementsCount = 0
         return bindWhere(request)
             .chain { bindings ->
                 // Delete the specified records
                 val deleteJsonLd = materializeRecords(request, request.delete, bindings)
                 val deleteStatements = RDFTransformer.toStatements(deleteJsonLd)
+                deleteStatementsCount = deleteStatements.size
                 buffer.add(
                     deleteStatements.map {
                         ChangeRecord(
@@ -196,6 +221,7 @@ class MaterializeRecords(
                     .chain { _ ->
                         val insertJsonLd = materializeRecords(request, request.insert, bindings)
                         val insertStatements = RDFTransformer.toStatements(insertJsonLd)
+                        insertStatementsCount = insertStatements.size
                         buffer.add(
                             insertStatements.map {
                                 ChangeRecord(
@@ -206,8 +232,14 @@ class MaterializeRecords(
                         )
                     }
             }
-            .invoke { _ ->
-                Log.debug("Finished processing with clauses for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
+            .map {
+                val log =
+                    "Finished processing with clauses for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms. Materialized $insertStatementsCount inserts and $deleteStatementsCount deletes."
+                Log.debug(log)
+                ChangeReportStatusEntry(
+                    code = ChangeStatusCode.PROCESSING,
+                    message = log
+                ).takeIf { insertStatementsCount + deleteStatementsCount > 0 }
             }
     }
 
@@ -286,7 +318,7 @@ class MaterializeRecords(
 
 @ApplicationScoped
 class SliceGraphQLBasedValidator(private val sliceStoreFactory: SliceStoreFactory) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         return buffer.request.sliceId?.let { sliceId ->
             val startTs = System.currentTimeMillis()
             Log.debug("Validating change request ${buffer.request.id} against Slice GraphQL schema...")
@@ -308,10 +340,13 @@ class SliceGraphQLBasedValidator(private val sliceStoreFactory: SliceStoreFactor
                             .failure(InvalidChangeRequestException("Cannot validate change request: no spec found for Slice '$sliceId'!"))
                     }
                 }
-                .invoke { _ ->
-                    Log.debug("Finished validating change request ${buffer.request.id} against Slice GraphQL schema in ${System.currentTimeMillis() - startTs} ms")
+                .map {
+                    val log =
+                        "Finished validating change request ${buffer.request.id} against Slice GraphQL schema in ${System.currentTimeMillis() - startTs} ms"
+                    Log.debug(log)
+                    ChangeReportStatusEntry(code = ChangeStatusCode.PROCESSING, message = log)
                 }
-        } ?: Uni.createFrom().voidItem()
+        } ?: Uni.createFrom().nullItem()
     }
 
 }

@@ -88,7 +88,7 @@ data class ChangeReport(
 
 @GenerateNoArgConstructor
 data class ChangeReportStatusEntry(
-    @get:JsonProperty(KvasirVocab.timestamp) var timestamp: Instant,
+    @get:JsonProperty(KvasirVocab.timestamp) var timestamp: Instant = Instant.now(),
     @get:JsonProperty(KvasirVocab.statusCode) var code: ChangeStatusCode,
     @get:JsonProperty(KvasirVocab.message) var message: String? = null
 )

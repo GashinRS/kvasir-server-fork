@@ -109,46 +109,46 @@ data class ChangeRequest(
     }
 }
 
-enum class ChangeStatusCode {
+enum class ChangeStatusCode(val terminalState: Boolean = false) {
     /**
      * The Change Request was added to the processing queue
      */
     QUEUED,
 
     /**
-     * The Change Request has been preprocessed by the configured preprocessing chain.
+     * The Change Request is being processed.
      */
-    PREPROCESSED,
+    PROCESSING,
 
     /**
      * The Change Request was successfully applied.
      */
-    COMMITTED,
+    COMMITTED(true),
 
     /**
      * The Change Request was not applied because one or more assertions failed.
      */
-    ASSERTION_FAILED,
+    ASSERTION_FAILED(true),
 
     /**
      * The Change Request was not applied because the with-clause did not return any results.
      */
-    NO_MATCHES,
+    NO_MATCHES(true),
 
     /**
      * The Change Request was not applied because the with-clause returned too many results.
      */
-    TOO_MANY_MATCHES,
+    TOO_MANY_MATCHES(true),
 
     /**
      * The Change Request was not applied because of a validation error.
      */
-    VALIDATION_ERROR,
+    VALIDATION_ERROR(true),
 
     /**
      * The Change Request was not applied because of an internal error.
      */
-    INTERNAL_ERROR
+    INTERNAL_ERROR(true)
 }
 
 data class ChangeRollbackRequest(

@@ -1,3 +1,10 @@
+kvasir:
+  services:
+    storage:
+      s3:
+        endpoint: ${quarkus.s3.endpoint-override}
+        access-key: ${quarkus.s3.aws.credentials.static-provider.access-key-id}
+        secret-key: ${quarkus.s3.aws.credentials.static-provider.secret-access-key}
 quarkus:
   http:
     cors:
@@ -6,6 +13,16 @@ quarkus:
       exposed-headers: Link, Location
   smallrye-openapi:
     store-schema-directory: target/openapi
+  s3:
+    path-style-access: true
+    aws:
+      region: us-east-1
+      credentials:
+        type: static
+        static-provider:
+          access-key-id: kvasir
+          secret-access-key: kvasirkvasir
+    endpoint-override: http://localhost:9000
 
 "%dev":
   quarkus:
@@ -35,7 +52,7 @@ quarkus:
               openfga:
                 relationships:
                   - target-resource: "/"
-                    relations: [ "reader", "writer", "deleter" ]
+                    relations: ["reader", "writer", "deleter"]
         - name: bob
           configuration: |
             {
@@ -45,3 +62,4 @@ quarkus:
               "kss:autoIngestRDF": true,
               "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
             }
+

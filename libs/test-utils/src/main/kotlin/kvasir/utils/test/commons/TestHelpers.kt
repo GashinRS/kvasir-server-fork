@@ -110,11 +110,12 @@ class TestHelpers(
             .get(ChangeHistoryRequest(sliceId = sliceUri, changeRequestId = changeRequestUri))
             .chain { report ->
                 if (report != null) {
-                    val lastStatusEntry = report.statusEntry.sortedByDescending { it.timestamp }.first()
-                    when (lastStatusEntry.code) {
-                        expectedResult -> Uni.createFrom().voidItem()
-                        in TERMINAL_STATES.minus(expectedResult) -> Uni.createFrom()
-                            .failure(RuntimeException("Change request resulted in status '${lastStatusEntry.code}', expected '$expectedResult'"))
+                    val completedStatus =
+                        report.statusEntry.filter { it.code.terminalState }.map { it.code }.firstOrNull()
+                    when {
+                        completedStatus == expectedResult -> Uni.createFrom().voidItem()
+                        completedStatus != null -> Uni.createFrom()
+                            .failure(RuntimeException("Change request resulted in status '$completedStatus', expected '$expectedResult'"))
 
                         else -> Uni.createFrom().failure(StillProcessingException())
                     }
