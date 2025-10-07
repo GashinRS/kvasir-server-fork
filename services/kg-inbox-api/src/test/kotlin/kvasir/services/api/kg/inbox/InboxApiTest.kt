@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.assertNotNull
 import java.util.*
 
 @QuarkusTest
@@ -93,6 +94,59 @@ class InboxApiTest : AbstractPodTest() {
         ).toUni().await().indefinitely()
         persons = result.data?.get("ex_Person") as List<Map<String, Any>>
         assertTrue(persons.isEmpty())
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
+    fun testIngestBlankNodes() {
+        val changeRequest = """
+            {
+              "@context": {
+                "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
+              },
+              "kss:insert": [
+                {
+                  "@id": "http://example.org/Actors/YiRxGhekmwgCbpknJ",
+                  "@type": [
+                    "http://example.org/Actor"
+                  ],
+                  "http://example.org/message": [
+                    {
+                      "@id": "_:Nfe52679860ad478eba43a7cef1d334ae"
+                    }
+                  ]
+                },
+                {
+                  "@id": "_:Nfe52679860ad478eba43a7cef1d334ae",
+                  "@type": [
+                    "http://example.org/Message"
+                  ],
+                  "http://example.org/body": [
+                    {
+                      "@value": "Hello World!"
+                    }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+        // Perform change request for inserts
+        val insertChangeRequestUri = testHelpers.requestChangeViaHTTPSync(changeRequest, podUri)
+
+        // Fetch the committed records for the change via KG
+        val changeRecords = knowledgeGraph.getChangeRecords(
+            ChangeRecordRequest(
+                podUri,
+                insertChangeRequestUri
+            )
+        ).await().indefinitely()
+        val actorMessageStmt =
+            changeRecords.items.firstOrNull { it.statement.predicate == "http://example.org/message" }
+        val messageBodyStmt = changeRecords.items.firstOrNull { it.statement.predicate == "http://example.org/body" }
+        assertNotNull(actorMessageStmt)
+        assertNotNull(messageBodyStmt)
+        assertTrue(!actorMessageStmt.statement.`object`.let { it as String }.startsWith("_:"))
+        assertEquals(actorMessageStmt.statement.`object`, messageBodyStmt.statement.subject)
     }
 
     @Test
