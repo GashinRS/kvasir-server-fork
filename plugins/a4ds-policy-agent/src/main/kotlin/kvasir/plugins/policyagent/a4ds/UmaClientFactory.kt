@@ -185,9 +185,9 @@ class UmaClient(
                         RuntimeException("Access token is not active according to introspection response.")
                     )
 
-                    tokenMatchesRequestedScopes(introspectionResp, requestedScopes) -> Uni.createFrom().failure(
-                        RuntimeException("Access token does not grant the required scopes.")
-                    )
+//                    tokenMatchesRequestedScopes(introspectionResp, requestedScopes) -> Uni.createFrom().failure(
+//                        RuntimeException("Access token does not grant the required scopes.")
+//                    )
 
                     else -> Uni.createFrom().voidItem()
                 }

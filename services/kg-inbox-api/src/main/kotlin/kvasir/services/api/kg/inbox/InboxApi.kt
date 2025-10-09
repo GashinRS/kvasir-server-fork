@@ -3,6 +3,7 @@ package kvasir.services.api.kg.inbox
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonProperty
 import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
+import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import io.smallrye.reactive.messaging.kafka.KafkaRecord
@@ -29,7 +30,6 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import java.net.URI
-import java.security.Principal
 import java.util.*
 
 @Tag(name = ApiDocTags.KG_CHANGES_API)
@@ -40,7 +40,7 @@ class InboxApi(
     private val sliceStoreFactory: SliceStoreFactory,
     private val podStoreFactory: PodStoreFactory,
     private val uriInfo: KvasirUriInfo,
-    private val principal: Instance<Principal>,
+    private val securityIdentity: Instance<SecurityIdentity>,
     @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
     private val anonymousUserName: String
 ) {
@@ -65,7 +65,7 @@ class InboxApi(
                 val changeCommand = input.toChangeRequest(
                     fqPodId,
                     uriInfo,
-                    principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName
+                    securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName
                 )
                 changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
                     .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
@@ -97,7 +97,7 @@ class InboxApi(
                     val changeCommand = input.toChangeRequest(
                         fqPodId,
                         uriInfo,
-                        principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName,
+                        securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
                         fqSliceId
                     )
                     // Publish the change request

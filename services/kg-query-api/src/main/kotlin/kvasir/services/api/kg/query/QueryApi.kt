@@ -2,10 +2,12 @@ package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
+import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
+import kvasir.definitions.auth.GraphQLQueryChecker
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
@@ -21,7 +23,6 @@ import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.media.Schema
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
-import java.security.Principal
 import java.time.Instant
 
 const val QUERY_API_PATH = "/query"
@@ -32,7 +33,8 @@ class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
     private val podStoreFactory: PodStoreFactory,
     private val uriInfo: KvasirUriInfo,
-    private val principal: Instance<Principal>,
+    private val securityIdentity: Instance<SecurityIdentity>,
+    private val graphQLQueryChecker: Instance<GraphQLQueryChecker>,
     @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
     private val anonymousUserName: String
 ) {
@@ -49,13 +51,20 @@ class QueryApi(
         @PathParam("podId") podId: String,
         input: QueryInputWithContext
     ): Uni<QueryResult> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return podStoreFactory.createPodStore().findById(fqPodId).onItem().ifNull()
-            .failWith(NotFoundException("Pod not found: $podId"))
-            .onItem().ifNotNull().transformToUni { pod ->
-                val req = parseInput(pod!!, input)
-                knowledgeGraph.query(req).toUni()
-            }
+        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
+            uriInfo.getResourceUri().toASCIIString(),
+            securityIdentity.get(),
+            input.query,
+            input.operationName
+        ) ?: Uni.createFrom().voidItem()).chain { _ ->
+            val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+            podStoreFactory.createPodStore().findById(fqPodId).onItem().ifNull()
+                .failWith(NotFoundException("Pod not found: $podId"))
+                .onItem().ifNotNull().transformToUni { pod ->
+                    val req = parseInput(pod!!, input)
+                    knowledgeGraph.query(req).toUni()
+                }
+        }
     }
 
     @Path("{podId}$QUERY_API_PATH")
@@ -69,15 +78,22 @@ class QueryApi(
     fun queryJsonLD(
         @PathParam("podId") podId: String, input: QueryInputWithContext
     ): Uni<Any> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return podStoreFactory.createPodStore().findById(fqPodId).onItem().ifNull()
-            .failWith(NotFoundException("Pod not found: $podId"))
-            .onItem().ifNotNull().transformToUni { pod ->
-                val req = parseInput(pod!!, input)
-                knowledgeGraph.query(req).map {
-                    it.toJsonLD(req.context)
-                }.toUni()
-            }
+        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
+            uriInfo.getResourceUri().toASCIIString(),
+            securityIdentity.get(),
+            input.query,
+            input.operationName
+        ) ?: Uni.createFrom().voidItem()).chain { _ ->
+            val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+            podStoreFactory.createPodStore().findById(fqPodId).onItem().ifNull()
+                .failWith(NotFoundException("Pod not found: $podId"))
+                .onItem().ifNotNull().transformToUni { pod ->
+                    val req = parseInput(pod!!, input)
+                    knowledgeGraph.query(req).map {
+                        it.toJsonLD(req.context)
+                    }.toUni()
+                }
+        }
     }
 
     private fun parseInput(
@@ -86,7 +102,7 @@ class QueryApi(
     ): QueryRequest {
         return QueryRequest(
             input.providedContext ?: pod.getDefaultContext(),
-            principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName,
+            securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
             pod.id,
             null,
             input.query,
