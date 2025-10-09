@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.common.hash.Hashing
 import graphql.parser.Parser
 import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
+import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
@@ -15,6 +16,7 @@ import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.sse.OutboundSseEvent
 import jakarta.ws.rs.sse.Sse
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.auth.GraphQLQueryChecker
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStoreFactory
@@ -41,7 +43,6 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestStreamElementType
 import java.net.URI
-import java.security.Principal
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
@@ -54,7 +55,8 @@ class GraphSlicesApi(
     private val sse: Sse,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifeCycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
-    private val principal: Instance<Principal>,
+    private val securityIdentity: Instance<SecurityIdentity>,
+    private val graphQLQueryChecker: Instance<GraphQLQueryChecker>,
     @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
     private val anonymousUserName: String
 ) {
@@ -102,7 +104,8 @@ class GraphSlicesApi(
                 lifeCycleEventEmitter.send(
                     LifeCycleEvent(
                         type = LifeCycleEventType.SLICE_CREATED,
-                        requestingUser = principal.takeIf { it.isResolvable }?.get()?.name?:anonymousUserName,
+                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+                            ?: anonymousUserName,
                         podId = fqPodId,
                         sliceId = fqSliceId
                     )
@@ -170,7 +173,8 @@ class GraphSlicesApi(
                         LifeCycleEvent(
                             type = LifeCycleEventType.SLICE_UPDATED,
                             podId = fqPodId,
-                            requestingUser = principal.takeIf { it.isResolvable }?.get()?.name?:anonymousUserName,
+                            requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+                                ?: anonymousUserName,
                             sliceId = fqSliceId
                         )
                     )
@@ -199,7 +203,8 @@ class GraphSlicesApi(
                     lifeCycleEventEmitter.send(
                         LifeCycleEvent(
                             type = LifeCycleEventType.SLICE_DELETED,
-                            requestingUser = principal.takeIf { it.isResolvable }?.get()?.name?:anonymousUserName,
+                            requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+                                ?: anonymousUserName,
                             podId = fqPodId,
                             sliceId = fqSliceId
                         )
@@ -224,10 +229,17 @@ class GraphSlicesApi(
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
         input: QueryInputImpl,
     ): Uni<QueryResult> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
-            executeQuery(fqPodId, slice, input).toUni()
+        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
+            uriInfo.getResourceUri().toASCIIString(),
+            securityIdentity.get(),
+            input.query,
+            input.operationName
+        ) ?: Uni.createFrom().voidItem()).chain { _ ->
+            val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+            val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+            getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
+                executeQuery(fqPodId, slice, input).toUni()
+            }
         }
     }
 
@@ -242,12 +254,19 @@ class GraphSlicesApi(
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
         input: QueryInputImpl,
     ): Multi<OutboundSseEvent> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
-            .transformToMulti { slice ->
-                executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
-            }
+        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
+            uriInfo.getResourceUri().toASCIIString(),
+            securityIdentity.get(),
+            input.query,
+            input.operationName
+        ) ?: Uni.createFrom().voidItem()).onItem().transformToMulti { _ ->
+            val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+            val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+            getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
+                .transformToMulti { slice ->
+                    executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
+                }
+        }
     }
 
     /**
@@ -266,18 +285,27 @@ class GraphSlicesApi(
         @QueryParam("variables") variables: Optional<String>,
         @QueryParam("operationName") operationName: Optional<String>,
     ): Multi<OutboundSseEvent> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        val queryInputImpl =
-            QueryInputImpl(
-                query = query,
-                variables = variables.getOrNull()?.let { JsonObject(it).map },
-                operationName = operationName.getOrNull()
-            )
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
-            .transformToMulti { slice ->
-                executeQuery(fqPodId, slice, queryInputImpl).map { sse.newEventBuilder().name("next").data(it).build() }
-            }
+        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
+            uriInfo.getResourceUri().toASCIIString(),
+            securityIdentity.get(),
+            query,
+            operationName.getOrNull()
+        ) ?: Uni.createFrom().voidItem()).onItem().transformToMulti { _ ->
+            val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+            val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+            val queryInputImpl =
+                QueryInputImpl(
+                    query = query,
+                    variables = variables.getOrNull()?.let { JsonObject(it).map },
+                    operationName = operationName.getOrNull()
+                )
+            getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
+                .transformToMulti { slice ->
+                    executeQuery(fqPodId, slice, queryInputImpl).map {
+                        sse.newEventBuilder().name("next").data(it).build()
+                    }
+                }
+        }
     }
 
     @POST
@@ -294,11 +322,18 @@ class GraphSlicesApi(
         @PathParam("sliceId") sliceId: String,
         input: QueryInputImpl,
     ): Uni<Any> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
-            executeQuery(fqPodId, slice, input).toUni().map {
-                it.toJsonLD(slice.context)
+        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
+            uriInfo.getResourceUri().toASCIIString(),
+            securityIdentity.get(),
+            input.query,
+            input.operationName
+        ) ?: Uni.createFrom().voidItem()).chain { _ ->
+            val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+            val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+            getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
+                executeQuery(fqPodId, slice, input).toUni().map {
+                    it.toJsonLD(slice.context)
+                }
             }
         }
     }
@@ -315,7 +350,7 @@ class GraphSlicesApi(
         return knowledgeGraph.query(
             QueryRequest(
                 slice.context,
-                principal.takeIf { it.isResolvable }?.get()?.name?:anonymousUserName,
+                securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
                 podId,
                 slice.id,
                 input.query,
@@ -333,7 +368,7 @@ class GraphSlicesApi(
             // Check if the schema contains mutations
             val parsedSchema = SliceGraphQLSchema(input.schema, input.context)
             val slice = input.toSlice(
-                principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName,
+                securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
                 sliceId,
                 parsedSchema.hasMutations()
             )

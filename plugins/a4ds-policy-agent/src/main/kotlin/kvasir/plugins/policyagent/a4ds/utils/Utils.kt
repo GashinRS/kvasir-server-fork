@@ -17,5 +17,6 @@ internal fun parseAsSecurityIdentity(jwt: String): SecurityIdentity {
     // TODO: set identity based on the agreed upon attribute (currently using subject with a fallback to jti)
     val identityBuilder = QuarkusSecurityIdentity.builder()
         .setPrincipal { jwtContext.jwtClaims.subject ?: jwtContext.jwtClaims.jwtId }
+        .addAttributes(jwtContext.jwtClaims.claimsMap)
     return identityBuilder.build()
 }

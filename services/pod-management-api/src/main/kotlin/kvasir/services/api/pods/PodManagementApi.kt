@@ -3,6 +3,7 @@ package kvasir.services.api.pods
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
+import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
 import jakarta.annotation.security.PermitAll
@@ -37,7 +38,6 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestResponse
 import java.net.URI
-import java.security.Principal
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
@@ -48,7 +48,7 @@ class PodManagementApi(
     private val webclientUri: Optional<URI>,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
-    private val principal: Instance<Principal>,
+    private val securityIdentity: Instance<SecurityIdentity>,
     @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
     private val anonymousUserName: String
 ) : PodSetupHelper() {
@@ -72,7 +72,7 @@ class PodManagementApi(
                     LifeCycleEvent(
                         type = LifeCycleEventType.POD_CREATED,
                         podId = fqPodId,
-                        requestingUser = principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName,
+                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
                     )
                 )
             }
@@ -180,7 +180,7 @@ class PodManagementApi(
                             LifeCycleEvent(
                                 type = LifeCycleEventType.POD_UPDATED,
                                 podId = fqPodId,
-                                requestingUser = principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName
+                                requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName
                             )
                         )
                     }
@@ -208,7 +208,7 @@ class PodManagementApi(
                     LifeCycleEvent(
                         type = LifeCycleEventType.POD_DELETED,
                         podId = fqPodId,
-                        requestingUser = principal.takeIf { it.isResolvable }?.get()?.name ?: anonymousUserName
+                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName
                     )
                 )
             }
