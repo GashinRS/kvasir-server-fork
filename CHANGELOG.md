@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.12.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.11.1..v0.12.0) - 2025-10-10
+### Bug Fixes
+- Blank nodes are now skolemized for change requests - ([5838c3a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5838c3af10205932323c581325d552cac3cb1246)) - Wannes Kerckhove
+- Workaround for reading body in HttpAuthenticationMechanism - ([a827b23](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a827b2370638ecea13cbbf967727c484b3c6638e)) - Wannes Kerckhove
+- Resource IDs should not be included in results after removal of all its properties - ([cbc82da](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/cbc82daa6f8586d96f8321ae8aed2564765575d4)) - Wannes Kerckhove
+### Features
+- **(ui)** Support for result code history in change request details - ([4d94cc4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4d94cc4f5acc9387dcc5d75a18cc017c6a562136)) - Thomas Dupont
+- Expose the policy.agent property to the ui - ([447c426](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/447c426571a1a8391046ccec3b290506bd27a06c)) - Thomas Dupont
+
+---
+
 ## [0.11.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.11.0..v0.11.1) - 2025-09-22
 ### Bug Fixes
 - missing builds due to CI misconfig - ([921b5de](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/921b5de25ee2f57ddd83537d9efa2ad6dbc72d06)) - Jasper Vaneessen
