@@ -10,6 +10,8 @@ import graphql.schema.GraphQLInputObjectType
 import graphql.schema.GraphQLScalarType
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.QueryRequest
+import kvasir.definitions.kg.graphql.ARG_REVERSE_NAME
+import kvasir.definitions.kg.graphql.DIRECTIVE_PREDICATE_NAME
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
@@ -19,6 +21,9 @@ import kvasir.utils.graphql.getFQName
 import kvasir.utils.graphql.innerType
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.rdf.RDFTransformer
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.OffsetTime
 
 class MutationToChangeRequest(private val request: QueryRequest) {
 
@@ -110,12 +115,21 @@ class MutationToChangeRequest(private val request: QueryRequest) {
             if (field.name == FIELD_ID_NAME) {
                 toIDReference(rawValue)
             } else {
-                getFQName(type.getField(field.name), request.context) to if (rawValue is ArrayValue) {
+                // Handling for reverse
+                val reverse =
+                    fieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
+                        ?.getValue<Boolean>() ?: false
+                val output = getFQName(type.getField(field.name), request.context) to if (rawValue is ArrayValue) {
                     rawValue.values.map { listRawValue ->
                         singleValueToJSON(listRawValue, fieldDefinition)
                     }
                 } else {
                     singleValueToJSON(rawValue, fieldDefinition)
+                }
+                if (reverse) {
+                    JsonLdKeywords.reverse to mapOf(output)
+                } else {
+                    output
                 }
             }
         }.plus(JsonLdKeywords.type to typeFqName)
@@ -144,12 +158,20 @@ class MutationToChangeRequest(private val request: QueryRequest) {
             if (fieldName == FIELD_ID_NAME) {
                 toIDReference(rawValue)
             } else {
-                getFQName(type.getField(fieldName), request.context) to if (rawValue is Iterable<*>) {
+                val reverse =
+                    fieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
+                        ?.getValue<Boolean>() ?: false
+                val output = getFQName(type.getField(fieldName), request.context) to if (rawValue is Iterable<*>) {
                     rawValue.map { listRawValue ->
                         contextualizeSingleValue(listRawValue!!, fieldDefinition)
                     }
                 } else {
                     contextualizeSingleValue(rawValue, fieldDefinition)
+                }
+                if (reverse) {
+                    JsonLdKeywords.reverse to mapOf(output)
+                } else {
+                    output
                 }
             }
         }.plus(JsonLdKeywords.type to typeFqName)
@@ -207,17 +229,17 @@ class MutationToChangeRequest(private val request: QueryRequest) {
             type == Scalars.GraphQLFloat && (value is Float || value is Double) -> value
             type == Scalars.GraphQLInt && (value is Int || value is Long) -> value
             type == Scalars.GraphQLString && value is String -> value
-            type.name == ExtendedScalars.DateTime.name && value is String -> mapOf(
+            type.name == ExtendedScalars.DateTime.name && (value is String || value is OffsetDateTime) -> mapOf(
                 JsonLdKeywords.type to XSDVocab.dateTime,
                 JsonLdKeywords.value to value
             )
 
-            type.name == ExtendedScalars.Date.name && value is String -> mapOf(
+            type.name == ExtendedScalars.Date.name && (value is String || value is LocalDate) -> mapOf(
                 JsonLdKeywords.type to XSDVocab.date,
                 JsonLdKeywords.value to value
             )
 
-            type.name == ExtendedScalars.Time.name && value is String -> mapOf(
+            type.name == ExtendedScalars.Time.name && (value is String || value is OffsetTime) -> mapOf(
                 JsonLdKeywords.type to XSDVocab.time,
                 JsonLdKeywords.value to value
             )

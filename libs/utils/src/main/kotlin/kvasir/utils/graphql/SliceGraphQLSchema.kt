@@ -148,12 +148,6 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
             .inputValueDefinitions(
                 type.fieldDefinitions
                     .filterNot { INPUT_FIELD_IGNORE_LIST.contains(it.name) }
-                    .filterNot {
-                        // Don't include reverse fields in input type (these are declared on the other side of the relation)
-                        it.getDirectiveArg<BooleanValue>(
-                            DIRECTIVE_PREDICATE_NAME, ARG_REVERSE_NAME
-                        )?.isValue ?: false
-                    }
                     .mapNotNull { field ->
                         val referredType = typeDefinitionRegistry.getType(TypeUtil.unwrapAll(field.type)).get()
                         when (referredType) {
