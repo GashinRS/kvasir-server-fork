@@ -2,20 +2,27 @@ kvasir:
   services:
     storage:
       s3:
-        host: ${quarkus.minio.url}
-        port: ${quarkus.minio.port}
-        access-key: ${quarkus.minio.access-key}
-        secret-key: ${quarkus.minio.secret-key}
+        endpoint: ${quarkus.s3.endpoint-override}
+        access-key: ${quarkus.s3.aws.credentials.static-provider.access-key-id}
+        secret-key: ${quarkus.s3.aws.credentials.static-provider.secret-access-key}
 quarkus:
   http:
     cors:
       enabled: true
       origins: /.*/
       exposed-headers: Link, Location
-  minio:
-    devservices:
   smallrye-openapi:
     store-schema-directory: target/openapi
+  s3:
+    path-style-access: true
+    aws:
+      region: us-east-1
+      credentials:
+        type: static
+        static-provider:
+          access-key-id: kvasir
+          secret-access-key: kvasirkvasir
+    endpoint-override: http://localhost:9000
 
 "%dev":
   quarkus:
@@ -25,12 +32,6 @@ quarkus:
       cors:
         enabled: true
         origins: http://localhost:3000,http://localhost:4200, http://localhost:5173
-    minio:
-      url: localhost
-      port: 9000
-      secure: false
-      access-key: kvasir
-      secret-key: kvasirkvasir
   kvasir:
     webclient-uri: http://localhost:8080/_ui
     bootstrap:
@@ -51,7 +52,7 @@ quarkus:
               openfga:
                 relationships:
                   - target-resource: "/"
-                    relations: [ "reader", "writer", "deleter" ]
+                    relations: ["reader", "writer", "deleter"]
         - name: bob
           configuration: |
             {
@@ -61,3 +62,4 @@ quarkus:
               "kss:autoIngestRDF": true,
               "kss:defaultContext": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"mo\":\"http://purl.org/ontology/mo/\",\"dc\":\"http://purl.org/dc/elements/1.1/\",\"foaf\":\"http://xmlns.com/foaf/0.1/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
             }
+

@@ -8,6 +8,7 @@ import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.kg.changes.StorageBackend
 import kvasir.definitions.rdf.RDFSVocab
@@ -55,7 +56,7 @@ class MetadataStorageBackend(
         return Uni.createFrom().item(0)
     }
 
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
         Log.debug("Processing metadata for change request ${buffer.request.id}...")
         val targetPodId = buffer.request.podId
@@ -96,8 +97,11 @@ class MetadataStorageBackend(
                 }
                 clickhouseClient.insert(MetadataInsertRecordSpec(databaseFromPodId(targetPodId)), metadataEntries)
             }
-            .invoke { _ ->
-                Log.debug("Processed metadata for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
+            .map {
+                val log =
+                    "Processed metadata for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms"
+                Log.debug(log)
+                null // No status entry needed
             }
     }
 

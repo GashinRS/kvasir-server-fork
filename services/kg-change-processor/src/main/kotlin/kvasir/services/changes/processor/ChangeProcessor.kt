@@ -18,14 +18,12 @@ class ChangeProcessor(
     private val knowledgeGraph: KnowledgeGraph,
     @Channel(Channels.CHANGE_REQUESTS_SUBSCRIBE)
     private val changeRequestsSubscriber: Multi<Message<ChangeRequest>>,
-//    @ConfigProperty(name = "kvasir.change-processor.commits.buffer-size", defaultValue = "100")
-//    private val bufferSize: Int,
-//    @ConfigProperty(name = "kvasir.change-processor.commits.max-delay-ms", defaultValue = "250")
-//    private val maxDelayMs: Long,
     @ConfigProperty(name = "kvasir.change-processor.overflow.buffer-size", defaultValue = "100000")
     private val overflowBufferSize: Int,
     @ConfigProperty(name = "kvasir.change-processor.shutdown-on-error", defaultValue = "true")
-    private val shutdownOnError: Boolean
+    private val shutdownOnError: Boolean,
+    @ConfigProperty(name = "kvasir.change-processor.ignore-non-existing-pod", defaultValue = "false")
+    private val ignoreNonExistingPod: Boolean
 ) {
 
     @Startup
@@ -36,7 +34,13 @@ class ChangeProcessor(
             .invoke { _ -> Log.warn("Change request processing is overflowing, trying to temporarily buffer...") }
             .buffer(overflowBufferSize)
             .onItem().transformToUniAndConcatenate { change ->
-                knowledgeGraph.process(change.payload).map { change }
+                knowledgeGraph.process(change.payload)
+                    .onFailure { err -> ignoreNonExistingPod && err.message?.contains("does not exist") == true }
+                    .recoverWithUni { err ->
+                        Log.warn("Encountered change request for non-existing Pod ('${change.payload.podId}'), ignoring as configured: ${err.message}")
+                        Uni.createFrom().voidItem()
+                    }
+                    .map { change }
                     .chain { _ ->
                         // Ack on success
                         Uni.createFrom().completionStage { change.ack() }

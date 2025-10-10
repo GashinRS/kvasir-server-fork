@@ -6,11 +6,12 @@
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>services-parent</artifactId>
-        <version>0.11.1</version>
+        <version>0.12.0</version>
         <relativePath>..</relativePath>
     </parent>
     <artifactId>api-services-parent</artifactId>
     <packaging>pom</packaging>
+
 
     <modules>
         <module>../kg-inbox-api</module>
@@ -19,11 +20,18 @@
         <module>../pod-management-api</module>
         <module>../storage-api</module>
         <module>../init-service</module>
+        <module>../monolith</module>
     </modules>
 
     <profiles>
         <profile>
             <id>openfga</id>
+            <activation>
+                <property>
+                    <name>policy.agent</name>
+                    <value>openfga</value>
+                </property>
+            </activation>
             <dependencies>
                 <dependency>
                     <groupId>kvasir-plugins</groupId>
@@ -34,6 +42,12 @@
         </profile>
         <profile>
             <id>a4ds</id>
+            <activation>
+                <property>
+                    <name>policy.agent</name>
+                    <value>a4ds</value>
+                </property>
+            </activation>
             <dependencies>
                 <dependency>
                     <groupId>kvasir-plugins</groupId>

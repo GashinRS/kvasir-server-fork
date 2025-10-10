@@ -1,8 +1,8 @@
 # Getting started
 
-## Running with Docker Compose
+## Running with Compose
 
-The fastest way to get a dev server (with persistent storage) up and running is to use Docker Compose.
+The fastest way to get a dev server (with persistent storage) up and running is to use Compose.
 
 1. Make sure you install <a href="https://www.docker.com/products/docker-desktop/#:~:text=Download%20Docker%20Desktop" target="_blank">Docker Desktop</a> and enable **Docker host networking**:
 
@@ -10,16 +10,20 @@ The fastest way to get a dev server (with persistent storage) up and running is 
 
 2. Now clone [this repository](https://gitlab.ilabt.imec.be/kvasir/kvasir-server) and run the following commands:
 
+**Docker:**
 ```bash
-cd docker-compose
+cd compose
 docker compose up -d
 ```
 
-Alternatively, when using Podman on Fedora/RHEL/CentOS with SELinux enforcing, run:
-
+**Podman:**
+If you are on a system with SELinux enabled (like Fedora), first create a file named `.env` in the `compose` directory with the following content:
+```
+SELINUX_MOUNT_FLAG=:Z
+```
+Then, from the `compose` directory, run:
 ```bash
-cd docker-compose
-podman compose -f docker-compose.yml -f docker-compose.podman.override.yml up -d
+podman compose up -d
 ```
 
 3. This will automatically create a pod at <a href="http://localhost:8080/alice" target="_blank">http://localhost:8080/alice</a> for you to play with.
@@ -107,13 +111,25 @@ helmfile sync --state-values-set kvasirHost=kvasir.example.com \
 
 ## Running in dev mode
 
-If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper.
-This requires you to have Java JDK 21 installed.
+If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper. This requires you to have Java JDK 21 installed.
 
+The backing services for development are managed by Maven and will be started automatically.
+
+By default, the application starts with no policy agent enabled (`noauth`). To run with a specific agent, which is necessary for most features, you must activate it using the `policy.agent` property.
+
+To run the application in dev mode with the recommended `openfga` agent:
 ```bash
-docker compose up -d
-./mvnw compile quarkus:dev
+./mvnw compile quarkus:dev -Dpolicy.agent=openfga
 ```
+You can also use `a4ds` or `noauth` (the default).
+
+To stop the backing services and remove their volumes, run:
+```bash
+./mvnw clean
+```
+
+You can skip the compose lifecycle by adding `-Dcompose.skip=true` to your Maven command.
+
 
 ## Issues
 

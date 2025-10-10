@@ -5,17 +5,30 @@ build:maven:
     - .docker-in-docker
     - .branch-only
   stage: test
-  image: $JDK_IMAGE
+  image: $CI_TOOLS_IMAGE
   tags: ["cache", "docker"]
+  variables:
+    KVASIR_KG_CLICKHOUSE_HOST: docker
+    KVASIR_SERVICES_STORAGE_S3_HOST: docker
+    QUARKUS_S3_ENDPOINT_OVERRIDE: http://docker:9000
+    QUARKUS_KEYCLOAK_ADMIN_CLIENT_SERVER_URL: http://docker:8280
+    QUARKUS_OIDC_AUTH_SERVER_URL: http://docker:8280/realms/quarkus
+    QUARKUS_OPENFGA_URL: http://docker:8380
+    KAFKA_ADVERTISED_HOSTNAME: docker
+    KAFKA_BOOTSTRAP_SERVERS: docker:9092
   script:
     - set -xe
-    - ./mvnw $MAVEN_CLI_OPTS test -Pservices
+    - docker compose -f compose/compose.devservices.yml up --wait --quiet-pull --no-color
+    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true
   interruptible: true
   after_script:
     - awk -F, '{ instructions += $4 + $5; covered += $5 } END { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered (line coverage)" }' target/coverage/jacoco.csv
+    - docker compose -f compose/compose.devservices.yml logs > compose-logs.txt
+    - docker compose -f compose/compose.devservices.yml down --volumes --remove-orphans
   coverage: "/(d+.d+) % covered/"
   artifacts:
     paths:
+      - compose-logs.txt
       - "**/target"
     reports:
       coverage_report:
@@ -43,7 +56,7 @@ package:maven:
       else
         export ADDITIONAL_TAGS=${IMAGE_ADDITIONAL_TAG}
       fi
-    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -P${POLICY} -Pservices
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Dpolicy.agent=${POLICY} -Pservices -Dcompose.skip=true
       -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
       -Dquarkus.container-image.tag=${IMAGE_TAG}-${POLICY}
       -Dquarkus.container-image.additional-tags=${ADDITIONAL_TAGS}

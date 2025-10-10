@@ -15,7 +15,7 @@ fi
 VERSION=${VERSION#v}
 
 DOCKER_IMAGE_FILES=(
-  "docker-compose/docker-compose.yml"
+  "compose/compose.kvasir.yml"
 )
 
 for file in "${DOCKER_IMAGE_FILES[@]}"; do

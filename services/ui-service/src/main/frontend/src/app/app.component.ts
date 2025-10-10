@@ -8,6 +8,7 @@ import { LoginFSM } from './services/login-fsm';
 import { SessionService } from './services/session.service';
 import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import { NzPopoverModule } from 'ng-zorro-antd/popover';
+import { NzTimelineModule } from 'ng-zorro-antd/timeline';
 
 @Component({
   selector: 'app-root',
@@ -18,6 +19,7 @@ import { NzPopoverModule } from 'ng-zorro-antd/popover';
     NzIconModule,
     NzTooltipModule,
     NzPopoverModule,
+    NzTimelineModule,
     RouterModule,
     VersionComponent,
   ],

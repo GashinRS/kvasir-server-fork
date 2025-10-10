@@ -1,0 +1,16 @@
+<div nz-modal-content>
+  <nz-timeline>
+    @for (event of dataSorted(); track $index) {
+      @let time = (getTime(event) | date: "yyyy-MM-dd hh:mm:ss") ?? "";
+      <nz-timeline-item [nzColor]="getColor(event)">
+        <p>
+          <span class="time">{{ time }}</span>
+          <span class="code">{{ event["kss:statusCode"] }}</span>
+        </p>
+        @if (event["kss:message"]; as msg) {
+          <p class="message" nz-typography nzType="secondary">{{ msg }}</p>
+        }
+      </nz-timeline-item>
+    }
+  </nz-timeline>
+</div>

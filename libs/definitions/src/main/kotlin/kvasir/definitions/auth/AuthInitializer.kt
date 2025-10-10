@@ -32,4 +32,16 @@ interface AuthInitializer {
         generateClients: List<GenerateClientConfig>? = null
     ): Uni<Void>
 
+
+    /**
+     * TODO: rename interface to AuthLifecycleManager (or similar) or split into separate interface
+     * Cleans up any resources associated with the given Pod in the auth subsystem.
+     *
+     * @param podId The ID of the Pod to clean up.
+     * @param podName The name of the pod to clean up.
+     * @param ownerId Optional ID of the owner of the pod. If not null, can be used to clean up user data.
+     * @return A Uni that completes when the cleanup is done.
+     */
+    fun cleanupForPod(podId: String, podName: String, ownerId: String? = null): Uni<Void>
+
 }

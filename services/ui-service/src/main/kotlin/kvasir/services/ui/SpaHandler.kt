@@ -16,6 +16,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.util.*
 
 const val KEY_KVASIR_HOST = "KVASIR_HOST"
+const val KEY_POLICY_AGENT = "POLICY_AGENT"
 const val PATH_PREFIX = "/_ui"
 const val WEBROOT = "webroot"
 const val CONFIG_PREFIX = "${PATH_PREFIX}/_cfg/config.json"
@@ -25,6 +26,7 @@ const val FALLBACK_PATH = "$PATH_PREFIX/$INDEX_PAGE"
 @ApplicationScoped
 class SpaHandler(
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY) private val host: String,
+    @ConfigProperty(name = "policy.agent") private val policyAgent: Optional<String>
 ) {
     private val staticHandler = StaticHandler.create().setIndexPage(INDEX_PAGE)
         .setCachingEnabled(true)
@@ -64,7 +66,7 @@ class SpaHandler(
     private fun handleUITraffic(rc: RoutingContext) {
         // WebUI config object
         if (CONFIG_PREFIX.equals(rc.normalizedPath(), true)) {
-            Log.info("Intercepting UI Traffic: config")
+            Log.debug("Intercepting UI Traffic: /_ui/_cfg/config.jsonra")
             rc.response().end(generateConfig().encode())
         }
         // If requested path is in scanned web resources: serve with StaticHandler
@@ -78,6 +80,10 @@ class SpaHandler(
     }
 
     private fun generateConfig(): JsonObject {
-        return JsonObject.of(KEY_KVASIR_HOST, host);
+        val policyAgent = policyAgent.orElse(null).takeIf { it in setOf("openfga", "a4ds") };
+        return JsonObject.of(
+            KEY_KVASIR_HOST, host,
+            KEY_POLICY_AGENT, policyAgent
+        );
     }
 }

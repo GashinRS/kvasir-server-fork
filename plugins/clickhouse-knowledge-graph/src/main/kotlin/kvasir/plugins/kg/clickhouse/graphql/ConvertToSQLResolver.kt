@@ -179,6 +179,7 @@ open class SQLConvertor(
     protected val subjectSelectors: List<String>? = null
 ) {
 
+    protected val idField = "_id"
     protected val tableRef = "$database.$table"
     protected val targetGraphFilterNode = getTargetGraphs()?.let { targetGraphs ->
         val node = ComparisonNode(
@@ -193,13 +194,11 @@ open class SQLConvertor(
         val outputType = GraphQLTypeUtil.unwrapAll(targetFieldDefinition.type) as GraphQLOutputType
         val (pageSize, offset) = targetField.getPaginationInfo(env.variables)
         val orderBy = orderByStatement(targetField, "_")
-        val idField = when (mode) {
-            SQLConvertorMode.GET_DATA -> "_id"
-            SQLConvertorMode.COUNT -> "subject"
-        }
+        val havingClause = typeFilterMatches(outputType).takeIf { it.isNotEmpty() }?.let { matchTypes ->
+            "HAVING hasAll(__types, ${matchTypes.joinToString(", ", "[", "]") { "'$it'" }})"
+        } ?: "HAVING __types != [null]"
         val whereClause = listOfNotNull(
             targetGraphFilterNode,
-            outputType.takeIf { !KvasirTypes.all.contains(it) }?.let { typeFilter(it) },
             getNodeFilter(targetField, targetFieldDefinition, targetFieldDefinition.type.innerType()),
             getArgsFilter(targetField),
             subjectSelectors?.let { ComparisonNode(RSQLOperators.IN, "id", it) }
@@ -233,29 +232,20 @@ open class SQLConvertor(
                         }
                     }
                     ).joinToString()
+        val dataQuery = "SELECT $projection FROM $tableRef ${
+            nestedFields.filterNot { it.rawRDF }.joinToString(" ") { it.joinStatement }
+        } $whereClause GROUP BY subject $havingClause $orderBy"
         return when (mode) {
             SQLConvertorMode.GET_DATA -> {
                 SQLQuery(
-                    "SELECT $projection FROM $tableRef ${
-                        nestedFields.filterNot { it.rawRDF }.joinToString(" ") { it.joinStatement }
-                    } $whereClause GROUP BY subject $orderBy LIMIT $offset, $pageSize",
+                    "$dataQuery LIMIT $offset, $pageSize",
                     listOf(idField) + nestedFields.map { "_${it.fieldName}" }
                 )
             }
 
             SQLConvertorMode.COUNT -> {
-                // TODO: what was the point of this modifiedWhere?
-                val modifiedWhere = /*getRelationshipFilter()?.let { extraFilter ->
-                    if (whereClause.isNotEmpty()) {
-                        "$whereClause AND $extraFilter"
-                    } else {
-                        "WHERE $extraFilter"
-                    }
-                } ?:*/ whereClause
                 SQLQuery(
-                    "SELECT count(distinct subject) as totalCount FROM $tableRef ${
-                        nestedFields.joinToString(" ") { it.joinStatement }
-                    } $modifiedWhere ",
+                    "SELECT count(*) as totalCount FROM ($dataQuery)",
                     listOf("totalCount")
                 )
             }
@@ -711,11 +701,25 @@ open class SQLConvertor(
     }
 
     protected fun typeFilter(requiredType: GraphQLOutputType): Node? {
-        val innerType = requiredType.innerType<GraphQLNamedType>()
-        if(innerType is GraphQLScalarType) {
-            return null
+        val matchTypes = typeFilterMatches(requiredType)
+        return if (matchTypes.isNotEmpty()) {
+            AndNode(
+                listOf(
+                    ComparisonNode(RSQLOperators.EQUAL, "predicate", listOf(RDFVocab.type)),
+                    ComparisonNode(RSQLOperators.IN, "object", matchTypes)
+                )
+            )
+        } else {
+            null
         }
-        val matchTypes = when {
+    }
+
+    protected fun typeFilterMatches(requiredType: GraphQLOutputType): List<String> {
+        val innerType = requiredType.innerType<GraphQLNamedType>()
+        if (innerType is GraphQLScalarType) {
+            return emptyList()
+        }
+        return when {
             innerType.name in setOf(TYPE_RDF_NODE, TYPE_RESOURCE) -> emptyList()
             innerType is GraphQLInterfaceType -> env.graphQLSchema.getImplementations(innerType)
             innerType is GraphQLUnionType -> innerType.types
@@ -726,16 +730,6 @@ open class SQLConvertor(
             } else {
                 getFQName(it as GraphQLDirectiveContainer, context)
             }
-        }
-        return if (matchTypes.isNotEmpty()) {
-            AndNode(
-                listOf(
-                    ComparisonNode(RSQLOperators.EQUAL, "predicate", listOf(RDFVocab.type)),
-                    ComparisonNode(RSQLOperators.IN, "object", matchTypes)
-                )
-            )
-        } else {
-            null
         }
     }
 

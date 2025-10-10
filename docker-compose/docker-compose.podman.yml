@@ -1,9 +1,0 @@
-services:
-  kvasir:
-    volumes:
-      - "./kvasir-config:/home/jboss/config:Z"
-
-  clickhouse:
-    volumes:
-      - "clickhouse_data:/var/lib/clickhouse:Z"
-      - "../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d:Z"

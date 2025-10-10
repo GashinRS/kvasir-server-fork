@@ -1,26 +1,26 @@
 package kvasir.plugins.kg.clickhouse
 
+import io.quarkus.test.junit.QuarkusTest
+import jakarta.inject.Inject
 import kvasir.definitions.kg.ChangeStatusCode
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.kg.changes.ChangeReportStatusEntry
-import java.time.Instant
-import java.time.temporal.ChronoUnit
-import kotlin.random.Random
-import io.quarkus.test.common.QuarkusTestResource
-import io.quarkus.test.junit.QuarkusTest
-import jakarta.inject.Inject
-import kvasir.utils.test.clickhouse.ClickhouseTestResource
-import kvasir.utils.test.commons.TestConstants
+import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
+import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import java.util.UUID
+import kotlin.random.Random
 
 private val sliceRefs = setOf(null, "http://example.org/someSlice1", "http://example.org/someSlice2")
 
 @QuarkusTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@QuarkusTestResource(ClickhouseTestResource::class)
 class TestClickhouseChangeLog {
 
 
@@ -30,14 +30,24 @@ class TestClickhouseChangeLog {
     @Inject
     lateinit var clichouseInitializer: ClickhouseInitializer
 
+    @Inject
+    lateinit var clickhouseClient: ClickhouseClient
+
+    private val testRunId = UUID.randomUUID().toString()
+
     @BeforeAll
     fun setup() {
-        clichouseInitializer.initializePodSchema(TestConstants.TEST_POD_1_ID).await().indefinitely()
+        clichouseInitializer.initializePodSchema(testRunId).await().indefinitely()
+    }
+
+    @AfterAll
+    fun teardown() {
+        clickhouseClient.execute("DROP DATABASE IF EXISTS ${databaseFromPodId(testRunId)}").await().indefinitely()
     }
 
     @Test
     fun testInsertAndQuery() {
-        val changeHistory = changeLogFactory.getChangeHistory(TestConstants.TEST_POD_1_ID)
+        val changeHistory = changeLogFactory.getChangeHistory(testRunId)
 
         // Insert some history entries
         val historyRecords = (1..10).map { i ->
@@ -45,7 +55,7 @@ class TestClickhouseChangeLog {
             ChangeReport(
                 id = "http://example.com/change$i",
                 requestingUser = "alice",
-                podId = TestConstants.TEST_POD_1_ID,
+                podId = testRunId,
                 statusEntry = listOf(
                     ChangeReportStatusEntry(
                         Instant.now().minus(Random.nextLong(15), ChronoUnit.MILLIS),

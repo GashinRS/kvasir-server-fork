@@ -1,0 +1,3 @@
+include:
+  - compose.devservices.yml
+  - compose.kvasir.yml

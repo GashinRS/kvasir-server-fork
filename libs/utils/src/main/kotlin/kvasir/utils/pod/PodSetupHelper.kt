@@ -2,12 +2,6 @@ package kvasir.utils.pod
 
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
-import com.github.jsonldjava.utils.JsonUtils
-import io.minio.BucketExistsArgs
-import io.minio.MakeBucketArgs
-import io.minio.MinioAsyncClient
-import io.minio.SetBucketVersioningArgs
-import io.minio.messages.VersioningConfiguration
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.inject.Instance
@@ -15,13 +9,15 @@ import jakarta.inject.Inject
 import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.PodConfig
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.PodStore
 import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.rdf.JSONObject
-import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
+import kvasir.definitions.reactive.skipToLast
+import kvasir.definitions.reactive.toMulti
+import kvasir.definitions.reactive.toUni
 import kvasir.utils.s3.S3Utils
-import java.util.UUID
+import software.amazon.awssdk.services.s3.S3AsyncClient
+import software.amazon.awssdk.services.s3.model.*
 import kotlin.jvm.optionals.getOrNull
 
 const val PLAIN_JSON_VOCAB = "urn:kvasir:plain-json:"
@@ -32,12 +28,16 @@ abstract class PodSetupHelper {
     protected lateinit var podStoreFactory: PodStoreFactory
 
     @Inject
-    protected lateinit var minioClient: MinioAsyncClient
+    protected lateinit var s3AsyncClient: S3AsyncClient
 
     @Inject
     protected lateinit var podAuthInitializer: Instance<AuthInitializer>
 
-    fun createPod(podId: String, podConfig: PodConfig, errorWhenExists: Boolean = false): Uni<Void> {
+    fun createPod(
+        podId: String,
+        podConfig: PodConfig,
+        errorWhenExists: Boolean = false
+    ): Uni<Void> {
         val podStore = podStoreFactory.createPodStore()
         return podStore.findById(podId)
             .chain { existingPod ->
@@ -93,36 +93,92 @@ abstract class PodSetupHelper {
             }
     }
 
+    fun deletePod(podId: String, podConfig: PodConfig, deleteData: Boolean, deleteOwner: Boolean): Uni<Void> {
+        val podStore = podStoreFactory.createPodStore()
+        Log.debug("Deleting Pod '$podId' (deleteData=$deleteData)")
+        return podStore.deleteById(podId, deleteData)
+            .chain { _ ->
+                // CLear up S3 bucket (if deleteData is true)
+                if (deleteData) {
+                    val bucketId = S3Utils.getBucket(podId)
+                    Log.debug("Deleting S3 bucket '$bucketId' for Pod '$podId'")
+                    // First delete all objects (and versions) in the bucket
+                    s3AsyncClient.listObjectVersionsPaginator(
+                        ListObjectVersionsRequest.builder().bucket(bucketId).prefix("").build()
+                    ).toMulti()
+                        .group().intoLists().of(500)
+                        .onItem().transformToUniAndConcatenate { batch ->
+                            val deletes = batch.flatMap { v ->
+                                v.versions()
+                                    .map { ObjectIdentifier.builder().key(it.key()).versionId(it.versionId()).build() }
+                            }.toList() + batch.flatMap { v ->
+                                v.deleteMarkers()
+                                    .map { ObjectIdentifier.builder().key(it.key()).versionId(it.versionId()).build() }
+                            }.toList()
+                            if (deletes.isNotEmpty()) {
+                                s3AsyncClient.deleteObjects(
+                                    DeleteObjectsRequest.builder().bucket(bucketId)
+                                        .delete(Delete.builder().objects(deletes).build()).build()
+                                ).toUni().replaceWithVoid()
+                            } else {
+                                Uni.createFrom().voidItem()
+                            }
+                        }
+                        .skipToLast()
+                        .chain { _ ->
+                            // Then delete the bucket
+                            s3AsyncClient.deleteBucket(
+                                DeleteBucketRequest.builder().bucket(bucketId).build()
+                            ).toUni()
+                        }
+                } else {
+                    Uni.createFrom().voidItem()
+                }
+            }
+            .chain { _ ->
+                // CLear up Auth model (if any)
+                if (podAuthInitializer.isResolvable) {
+                    val initializer = podAuthInitializer.get()
+                    Log.debug("Clearing auth model for Pod '$podId' using provider (${initializer::class.java.name})")
+                    initializer.cleanupForPod(
+                        podId,
+                        podConfig.name(),
+                        podConfig.ownerUserId().getOrNull().takeIf { deleteOwner })
+                } else {
+                    Uni.createFrom().voidItem()
+                }
+            }
+    }
+
     fun createS3BucketIfNotExist(podId: String): Uni<Void> {
         val bucketId = S3Utils.getBucket(podId)
         // Initialize a new S3 bucket for the pod
         Log.debug("Creating S3 bucket '$bucketId' for Pod '$podId'")
         return Uni.createFrom()
-            .completionStage(minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketId).build()))
-            .flatMap { bucketExists ->
-                if (bucketExists) Uni.createFrom().voidItem()
-                else Uni.createFrom()
-                    .completionStage(
-                        minioClient.makeBucket(
-                            MakeBucketArgs.builder().bucket(bucketId).build()
-                        )
-                    )
-                    .chain { _ ->
-                        // Enable versioning for the bucket
-                        Uni.createFrom().completionStage(
-                            minioClient.setBucketVersioning(
-                                SetBucketVersioningArgs.builder()
-                                    .bucket(bucketId)
-                                    .config(
-                                        VersioningConfiguration(
-                                            VersioningConfiguration.Status.ENABLED,
-                                            true
-                                        )
-                                    )
+            .completionStage(
+                s3AsyncClient.createBucket(
+                    CreateBucketRequest.builder().bucket(bucketId).build()
+                )
+            )
+            .chain { _ ->
+                // Enable versioning for the bucket
+                Uni.createFrom().completionStage(
+                    s3AsyncClient.putBucketVersioning(
+                        PutBucketVersioningRequest.builder()
+                            .bucket(bucketId)
+                            .versioningConfiguration(
+                                VersioningConfiguration.builder()
+                                    .status(BucketVersioningStatus.ENABLED)
                                     .build()
                             )
-                        )
-                    }
+                            .build()
+                    )
+                ).replaceWithVoid()
+            }
+            .onFailure { err -> err is BucketAlreadyOwnedByYouException || err is BucketAlreadyExistsException }
+            .recoverWithUni { _ ->
+                Log.warn("S3 Bucket '$bucketId' for Pod '$podId' already exists.")
+                Uni.createFrom().voidItem()
             }
     }
 

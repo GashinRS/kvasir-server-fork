@@ -3,7 +3,7 @@
 # Introduction
 
 Music-tracker is a fully functional example application that demonstrates the capabilities of the Kvasir data broker.
-Visit its repository at [kvasir-music-tracker](https://gitlab.ilabt.imec.be/kvasir/kvasir-music-tracker) for up-to-date
+Visit its repository at [kvasir-music-tracker](https://gitlab.ilabt.imec.be/kvasir/music-tracker-demo) for up-to-date
 information and source code.
 
 It consists of three components:
@@ -34,11 +34,12 @@ Make sure you have Docker Desktop installed, with Docker host networking enabled
 
 ## Starting the main components
 
-We've bundled a Docker Compose file that can be used to start a Kvasir server and all of its dependecies, initialized
+We've bundled a Compose file that can be used to start a Kvasir server and all of its dependecies, initialized
 with a demo pod for a test user `alice` at `http://localhost:8080/alice` and preconfigured clients for the various
 components of the music-tracker.
 
-```
+```bash
+cd compose
 docker compose up -d
 ```
 
@@ -122,4 +123,4 @@ You can now visit the web-app at http://localhost:5173 and authenticate using al
   py-change-processor is operating correctly (by checking the logs of its container). Try restarting it! Alternatively:
   try clicking on the menu tabs at the top. Someties viewing the page in incognito mode can also work.
 * **I've made changes to the py-change-processor or web-app, but these are not showing up when running the deployment.**
-  => Run `docker compose up -d --build`, this will trigger a rebuild of those components.
+  => Run `cd compose && docker compose up -d --build`, this will trigger a rebuild of those components.

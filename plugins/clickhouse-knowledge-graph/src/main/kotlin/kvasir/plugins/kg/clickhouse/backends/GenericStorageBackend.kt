@@ -7,6 +7,7 @@ import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import jakarta.inject.Singleton
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
@@ -30,7 +31,7 @@ class GenericStorageBackend(
 ) : AbstractStorageBackend(DATA_TABLE, DATA_COLUMNS, clickhouseClient) {
 
 
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<Void> {
+    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
         Log.debug("Storing change request ${buffer.request.id}...")
         return buffer.stream().group().intoLists().of(bufferSize)
@@ -41,8 +42,10 @@ class GenericStorageBackend(
             .chain { _ ->
                 buffer.destroy(stored = true)
             }
-            .invoke { _ ->
-                Log.debug("Stored change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms")
+            .map {
+                val log = "Stored change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms"
+                Log.debug(log)
+                null // No status entry needed
             }
     }
 

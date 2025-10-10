@@ -1,12 +1,11 @@
 package kvasir.services.api.kg.streams
 
-import io.quarkus.test.common.QuarkusTestResource
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
+import io.restassured.RestAssured.delete
 import io.restassured.RestAssured.get
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.kg.LifeCycleEvent
 import kvasir.definitions.kg.LifeCycleEventType
@@ -16,9 +15,8 @@ import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
 import kvasir.services.api.kg.query.QueryInputImpl
 import kvasir.services.api.kg.query.SliceInput
-import kvasir.utils.test.clickhouse.ClickhouseTestResource
+import kvasir.utils.test.commons.AbstractPodTest
 import kvasir.utils.test.commons.TestConstants
-import kvasir.utils.test.commons.TestHelpers
 import kvasir.utils.test.http.ParseEventsFromJsonLD
 import kvasir.utils.test.http.SSEClient
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -26,16 +24,11 @@ import org.junit.jupiter.api.Test
 import java.time.Duration
 
 @QuarkusTest
-@QuarkusTestResource(ClickhouseTestResource::class)
-class StreamApiTest {
-
-    @Inject
-    lateinit var testHelpers: TestHelpers
+class StreamApiTest : AbstractPodTest() {
 
     @Test
     @TestSecurity(user = "alice")
     fun testQueryRequestEvents() {
-        val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(
             "${podUri}/events/query?receiveBacklog=true",
             ParseEventsFromJsonLD(QueryRequestEvent::class.java)
@@ -59,7 +52,6 @@ class StreamApiTest {
     @Test
     @TestSecurity(user = "alice")
     fun testLifeCycleEvents() {
-        val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(
             "${podUri}/events/life-cycle?receiveBacklog=true",
             ParseEventsFromJsonLD(LifeCycleEvent::class.java)
@@ -101,7 +93,6 @@ class StreamApiTest {
     @Test
     @TestSecurity(user = "alice")
     fun testStorageMutationEvents() {
-        val podUri = testHelpers.getPodUri(TestConstants.TEST_POD_1_ID)
         SSEClient(
             "${podUri}/events/s3?receiveBacklog=true",
             ParseEventsFromJsonLD(StorageEvent::class.java)
@@ -124,6 +115,9 @@ class StreamApiTest {
             assertEquals("$podUri/s3/test.txt", secondEvent.externalObjectUri)
             assertEquals(StorageEventType.GET_OBJECT, secondEvent.type)
         }
+
+        delete("$podUri/s3/test.txt")
+            .then().statusCode(204)
     }
 
 }

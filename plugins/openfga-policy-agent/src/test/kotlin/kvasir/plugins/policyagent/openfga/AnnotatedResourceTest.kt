@@ -17,7 +17,7 @@ class AnnotatedResourceTest : AbstractFgaTest() {
     @TestSecurity(user = "alice")
     fun testAliceCanRead() {
         given()
-            .get("/alice/annotated-test")
+            .get("/$testRunId/annotated-test")
             .then()
             .statusCode(204) // No Content
     }
@@ -26,7 +26,7 @@ class AnnotatedResourceTest : AbstractFgaTest() {
     @TestSecurity(user = "alice")
     fun testAliceCanWrite() {
         given()
-            .post("/alice/annotated-test")
+            .post("/$testRunId/annotated-test")
             .then()
             .statusCode(204) // No Content
     }
@@ -35,7 +35,7 @@ class AnnotatedResourceTest : AbstractFgaTest() {
     @TestSecurity(user = "alice")
     fun testAliceCanReadChild() {
         given()
-            .get("/alice/annotated-test/child/123")
+            .get("/$testRunId/annotated-test/child/123")
             .then()
             .statusCode(204) // No Content
     }
@@ -44,7 +44,7 @@ class AnnotatedResourceTest : AbstractFgaTest() {
     @TestSecurity(user = "bob")
     fun testBobCannotRead() {
         given()
-            .get("/alice/annotated-test")
+            .get("/$testRunId/annotated-test")
             .then()
             .statusCode(403) // Forbidden
     }
@@ -52,7 +52,7 @@ class AnnotatedResourceTest : AbstractFgaTest() {
     @Test
     fun testAnonymousCannotRead() {
         given()
-            .get("/alice/annotated-test")
+            .get("/$testRunId/annotated-test")
             .then()
             .statusCode(403) // Forbidden
     }

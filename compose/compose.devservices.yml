@@ -1,43 +1,5 @@
-services:
-  kvasir:
-    # The Kvasir monolith bundles all Kvasir microservices into a single image (handy for development and testing)
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:0.11.1
-    volumes:
-      # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
-      - "./kvasir-config:/home/jboss/config"
-    environment:
-      - KVASIR_KG_CLICKHOUSE_HOST=localhost
-      - KVASIR_KG_CLICKHOUSE_PORT=8123
-      - KVASIR_SERVICES_STORAGE_S3_HOST=localhost
-      - KVASIR_SERVICES_STORAGE_S3_PORT=9000
-      - QUARKUS_MINIO_URL=http://localhost:9000/
-      - QUARKUS_MINIO_SECURE=false
-      - QUARKUS_MINIO_ACCESS_KEY=kvasir
-      - QUARKUS_MINIO_SECRET_KEY=kvasirkvasir
-      - KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-      - QUARKUS_KEYCLOAK_ADMIN_CLIENT_SERVER_URL=http://localhost:8280
-      - QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8280/realms/quarkus
-      - QUARKUS_OIDC_CLIENT_ID=quarkus-app
-      - QUARKUS_OIDC_CREDENTIALS_SECRET=secret
-      - QUARKUS_OPENFGA_STORE=kvasir
-      - QUARKUS_OPENFGA_URL=http://localhost:8380
-    #    entrypoint: ["sleep", "3600"] # debug
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      keycloak:
-        condition: service_healthy
-    network_mode: host
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9100/q/health/ready"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
+services:
   clickhouse:
     #    24.8 = lts version
     image: docker.io/altinity/clickhouse-server:24.8.14.10459.altinitystable
@@ -46,8 +8,8 @@ services:
       # tcp port for clickhouse (should not be required externally)
       #- "9000:9000"
     volumes:
-      - "clickhouse_data:/var/lib/clickhouse"
-      - "../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d"
+      - "clickhouse_data:/var/lib/clickhouse${SELINUX_MOUNT_FLAG}"
+      - "../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d${SELINUX_MOUNT_FLAG}"
     ulimits:
       nofile:
         soft: 262144
@@ -63,13 +25,13 @@ services:
       retries: 5
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - "minio_data:/data"
+      - "minio_data:/data${SELINUX_MOUNT_FLAG}"
     environment:
       # Doubles as access key and secret key for the MinIO server
       - MINIO_ROOT_USER=kvasir
@@ -85,9 +47,9 @@ services:
       - redpanda
       - start
       - --kafka-addr internal://0.0.0.0:9092
-      - --advertise-kafka-addr internal://localhost:9092
+      - --advertise-kafka-addr internal://${KAFKA_ADVERTISED_HOSTNAME:-localhost}:9092
       - --mode dev-container
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.11
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.18
     ports:
       - "9092:9092"
     healthcheck:
@@ -97,7 +59,7 @@ services:
       retries: 5
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.2
+    image: quay.io/keycloak/keycloak:26.3
     depends_on:
       - postgresql
     ports:
@@ -133,7 +95,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
     volumes:
-      - "postgresql_data:/var/lib/postgresql/data"
+      - "postgresql_data:/var/lib/postgresql/data${SELINUX_MOUNT_FLAG}"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 15s
@@ -144,7 +106,7 @@ services:
     depends_on:
       postgresql:
         condition: service_healthy
-    image: docker.io/openfga/openfga:v1.10.0
+    image: docker.io/openfga/openfga:v1.10.1
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
       - OPENFGA_DATASTORE_URI=postgres://postgres:password@postgresql:5432/postgres?sslmode=disable
@@ -154,7 +116,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    image: docker.io/openfga/openfga:v1.10.0
+    image: docker.io/openfga/openfga:v1.10.1
     command: run
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres

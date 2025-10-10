@@ -199,6 +199,39 @@ class OpenFgaInitializer(
         }
     }
 
+    override fun cleanupForPod(podId: String, podName: String, ownerId: String?): Uni<Void> {
+        val cleanupUser = if(ownerId != null) {
+            VertxContextSupport.executeBlocking {
+                // In case of embedded Keycloak: Delete user from KC
+                if (keycloakInstance.isResolvable) {
+                    Log.debug("Keycloak admin client is resolvable, deleting user '$ownerId' from Keycloak...")
+                    val keycloak = keycloakInstance.get()
+                    val users = keycloak.realm(kvasirRealm).users().search(ownerId, true)
+                    users.forEach {
+                        keycloak.realm(kvasirRealm).users().delete(it.id).checkStatus()
+                        Log.debug("Deleted user '$ownerId' from Keycloak realm '$kvasirRealm'.")
+                    }
+                } else {
+                    Log.debug("Keycloak admin client is not resolvable, skipping user deletion for '$ownerId'.")
+                }
+            }.replaceWithVoid()
+        } else {
+            Uni.createFrom().voidItem()
+        }
+
+        return cleanupUser.chain { _ ->
+            // Remove openfga store associated with the pod
+            openFgaManager.storeNames.chain { storeNames ->
+                if (storeNames.contains(podName)) {
+                    Log.debug("Deleting OpenFGA store '$podName' associated with pod...")
+                    openFgaManager.getStoreClient(podName).chain { storeClient -> storeClient.delete() }
+                } else {
+                    Uni.createFrom().voidItem()
+                }
+            }
+        }
+    }
+
     fun configureOwner(podId: String, podName: String, ownerId: String): Uni<Void> {
         Log.debug("Configuring owner '$ownerId' for pod '$podName' with ID '$podId' in OpenFGA...")
         return openFgaManager.addTuples(

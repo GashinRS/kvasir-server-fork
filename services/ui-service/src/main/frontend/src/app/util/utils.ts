@@ -1,6 +1,6 @@
 import jsonld from 'jsonld';
 import * as N3 from 'n3';
-import { ChangeRecord, Timestamped } from '../types';
+import { ChangeRecord, ChangeResultCode, ChangeStatusEntry, Timestamped } from '../types';
 
 export function ensureArray<T>(input: T[] | T): T[] {
   if (input == null) {
@@ -139,6 +139,14 @@ export interface SignedN3Quad {
   subject: N3.Quad_Subject;
   predicate: N3.Quad_Predicate;
   object: N3.Quad_Object;
+}
+
+export function sortStatusEntries(direction: 'asc' | 'desc' = 'asc') {
+  return function (a: ChangeStatusEntry, b: ChangeStatusEntry): number {
+    const statusA = Object.values(ChangeResultCode).indexOf(a['kss:statusCode'].toString());
+    const statusB = Object.values(ChangeResultCode).indexOf(b['kss:statusCode'].toString());
+    return direction == 'asc' ? statusA - statusB : statusB - statusA;
+  }
 }
 
 export function sortByTimestamp(direction: 'asc' | 'desc' = 'asc') {

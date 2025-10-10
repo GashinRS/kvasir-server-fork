@@ -1,8 +1,5 @@
 package kvasir.plugins.policyagent.a4ds
 
-import graphql.language.OperationDefinition
-import graphql.parser.InvalidSyntaxException
-import graphql.parser.Parser
 import io.quarkus.logging.Log
 import io.quarkus.security.identity.IdentityProviderManager
 import io.quarkus.security.identity.SecurityIdentity
@@ -12,7 +9,6 @@ import io.quarkus.vertx.http.runtime.security.ChallengeData
 import io.quarkus.vertx.http.runtime.security.HttpAuthenticationMechanism
 import io.smallrye.mutiny.Uni
 import io.vertx.core.http.HttpMethod
-import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import jakarta.annotation.Priority
 import jakarta.enterprise.context.ApplicationScoped
@@ -24,7 +20,6 @@ import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStoreFactory
 import kvasir.plugins.policyagent.a4ds.utils.parseAsSecurityIdentity
 import org.eclipse.microprofile.config.inject.ConfigProperty
-import kotlin.jvm.optionals.getOrNull
 
 private val MATCH_GLOBAL_GRAPHQL_ENDPOINT = "/[^/]*/query".toRegex()
 private val MATCH_SLICE_GRAPHQL_ENDPOINT = "/[^/]*/slices/[^/]*/query".toRegex()
@@ -153,10 +148,8 @@ class CustomHttpAuthenticationMechanism() :
                     )
                 }
 
-                HttpMethod.POST -> getBodyAsString(context).map { bodyStr ->
-                    val body = JsonObject(bodyStr)
-                    extractScopeForGraphQLRequest(body.getString("query"), body.getString("operationName"))
-                }
+                // We cannot read the body here, so for POST requests we assume both read and write scopes are needed.
+                HttpMethod.POST -> Uni.createFrom().item(setOf(Scope.READ, Scope.WRITE))
 
                 else -> Uni.createFrom().failure(
                     IllegalArgumentException(
@@ -177,39 +170,4 @@ class CustomHttpAuthenticationMechanism() :
             }
         }
     }
-
-    private fun getBodyAsString(context: RoutingContext): Uni<String> {
-        return Uni.createFrom()
-            .completionStage {
-                context.request().body().map { buffer -> buffer.toString(Charsets.UTF_8) }.toCompletionStage()
-            }
-    }
-
-    private fun extractScopeForGraphQLRequest(query: String, operationName: String?): Set<Scope> {
-        try {
-            val graphqlRequest = Parser.parse(query)
-            val operations = graphqlRequest.definitions.filterIsInstance<OperationDefinition>().map { it.operation }
-            return when {
-                operationName != null -> graphqlRequest.getOperationDefinition(operationName)?.getOrNull()
-                    ?.let { setOf(mapOperationType(it.operation)) }
-                    ?: throw IllegalArgumentException("GraphQL request does not contain an operation with name '$operationName'.")
-
-                operations.isEmpty() -> throw IllegalArgumentException("GraphQL request does not contain any operations.")
-
-                else -> operations.map { mapOperationType(it) }.toSet()
-            }
-        } catch (e: InvalidSyntaxException) {
-            throw IllegalArgumentException(e)
-        }
-    }
-
-    private fun mapOperationType(
-        operation: OperationDefinition.Operation
-    ): Scope {
-        return when (operation) {
-            OperationDefinition.Operation.QUERY, OperationDefinition.Operation.SUBSCRIPTION -> Scope.READ
-            OperationDefinition.Operation.MUTATION -> Scope.WRITE
-        }
-    }
-
 }
