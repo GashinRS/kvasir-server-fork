@@ -97,8 +97,9 @@ export class LoginFSM {
       });
     } else {
       console.error(
-        'Keycloak should have been initialised and loaded after page reload!',
+        'Keycloak should have been initialised and loaded after page reload! --Logging out!',
       );
+      this.logout();
     }
   }
 

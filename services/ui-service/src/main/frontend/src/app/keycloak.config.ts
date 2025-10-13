@@ -37,8 +37,8 @@ export const provideRequiredKeycloakProviders = (config: AppConfig) => {
           clientId: 'kvasir-ui',
           realm:
             result?.groups?.['realm'] ??
-            loginSession.keycloakUrl.substring(
-              loginSession.keycloakUrl.lastIndexOf('/'),
+            loginSession.keycloakUrl?.substring(
+              loginSession.keycloakUrl?.lastIndexOf('/'),
             ),
           url: result?.groups?.['host'] ?? loginSession.keycloakUrl,
         },
@@ -48,6 +48,7 @@ export const provideRequiredKeycloakProviders = (config: AppConfig) => {
             window.location.origin + '/_ui/silent-check-sso.html',
           redirectUri: window.location.origin + '/_ui/',
           pkceMethod: 'S256',
+          messageReceiveTimeout: 3000,
         },
         features: [
           withAutoRefreshToken({
