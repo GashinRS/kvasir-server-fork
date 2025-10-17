@@ -14,6 +14,7 @@ import jakarta.enterprise.event.Observes
 import kvasir.definitions.config.KvasirConfig
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.util.*
+import kotlin.jvm.optionals.getOrNull
 
 const val KEY_KVASIR_HOST = "KVASIR_HOST"
 const val KEY_POLICY_AGENT = "POLICY_AGENT"
@@ -23,10 +24,13 @@ const val CONFIG_PREFIX = "${PATH_PREFIX}/_cfg/config.json"
 const val INDEX_PAGE = "index.html"
 const val FALLBACK_PATH = "$PATH_PREFIX/$INDEX_PAGE"
 
+const val SKIP_UI_SYSTEM_PROPERTY = "ui-service.phase";
+
 @ApplicationScoped
 class SpaHandler(
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY) private val host: String,
-    @ConfigProperty(name = "policy.agent") private val policyAgent: Optional<String>
+    @ConfigProperty(name = "policy.agent") private val policyAgent: Optional<String>,
+    @ConfigProperty(name = SKIP_UI_SYSTEM_PROPERTY) private val uiServicePhase: Optional<String>
 ) {
     private val staticHandler = StaticHandler.create().setIndexPage(INDEX_PAGE)
         .setCachingEnabled(true)
@@ -35,10 +39,14 @@ class SpaHandler(
     private lateinit var fsPaths: TreeSet<String>;
 
     fun init(@Observes event: StartupEvent, vertx: Vertx) {
-        Log.info("SpaHandler starting, scanning web resources under $WEBROOT...")
-        fsPaths = listChildren(vertx.fileSystem(), WEBROOT)
-            .collect().`in`({ TreeSet<String>() }, { col, items -> col.addAll(items) }).await().indefinitely();
-        Log.info("SpaHandler started: ${fsPaths.size} web resources found.")
+        if ("none" == uiServicePhase.getOrNull()) {
+            Log.warn("Ui Service Phase is NONE: skipping ui-service resource scanning!");
+        } else {
+            Log.info("SpaHandler starting, scanning web resources under $WEBROOT...")
+            fsPaths = listChildren(vertx.fileSystem(), WEBROOT)
+                .collect().`in`({ TreeSet<String>() }, { col, items -> col.addAll(items) }).await().indefinitely();
+            Log.info("SpaHandler started: ${fsPaths.size} web resources found.")
+        }
     }
 
     private fun listChildren(fs: FileSystem, path: String): Multi<List<String>> {
