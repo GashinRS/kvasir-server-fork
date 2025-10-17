@@ -74,7 +74,7 @@ class SpaHandler(
     private fun handleUITraffic(rc: RoutingContext) {
         // WebUI config object
         if (CONFIG_PREFIX.equals(rc.normalizedPath(), true)) {
-            Log.debug("Intercepting UI Traffic: /_ui/_cfg/config.jsonra")
+            Log.debug("Intercepting UI Traffic: /_ui/_cfg/config.json")
             rc.response().end(generateConfig().encode())
         }
         // If requested path is in scanned web resources: serve with StaticHandler
