@@ -48,6 +48,12 @@ To stop the backing services and remove their volumes, run:
 ./mvnw clean
 ```
 
+**Run without ui overhead:**
+Sometimes you want to run without the overhead of UI resources  scanning and npm install/build.
+```bash
+./mvnw compile quarkus:dev -Dui-service.phase=none
+```
+
 You can skip the compose lifecycle entirely by adding `-Dcompose.skip=true` to your Maven command.
 
 ## Issues
