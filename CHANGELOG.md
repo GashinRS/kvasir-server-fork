@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.13.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.12.0..v0.13.0) - 2025-10-28
+### Features
+- Add Solid compliant storage API - ([855932c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/855932c497f5c4e34cf046ddb84abe2272dbbe2f)) - Wannes Kerckhove
+- **(ui)** Enforces UI logout on Keycloak state error - ([a522ef3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a522ef3b01a69a59a03dc7545c13834aa1b5a4ba)) - Thomas Dupont
+### Bug Fixes
+- Support reverse relations via predicate directive for GraphQL mutations - ([bc5c11a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/bc5c11a975003c53e2cb1886b161054be0b392f3)) - Wannes Kerckhove
+
+---
+
 ## [0.12.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.11.1..v0.12.0) - 2025-10-10
 ### Bug Fixes
 - Blank nodes are now skolemized for change requests - ([5838c3a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5838c3af10205932323c581325d552cac3cb1246)) - Wannes Kerckhove
