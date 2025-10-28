@@ -32,6 +32,8 @@ data class StorageEvent(
 
 enum class StorageEventType(val mutation: Boolean = false) {
     GET_OBJECT_METADATA,
+    WRITE_OBJECT_METADATA,
+    CREATE_OBJECT(true),
     GET_OBJECT,
     PUT_OBJECT(true),
     COMPLETE_MULTIPART_UPLOAD(true),

@@ -21,6 +21,7 @@
         <module>../storage-api</module>
         <module>../init-service</module>
         <module>../monolith</module>
+        <module>../solid-api</module>
     </modules>
 
     <profiles>
