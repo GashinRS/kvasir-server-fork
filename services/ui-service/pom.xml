@@ -8,7 +8,7 @@
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>services-parent</artifactId>
-        <version>0.12.0</version>
+        <version>0.13.0</version>
     </parent>
 
     <dependencies>
@@ -19,9 +19,13 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>definitions</artifactId>
-            <version>0.12.0</version>
+            <version>0.13.0</version>
         </dependency>
     </dependencies>
+
+    <properties>
+        <ui-service.phase>generate-resources</ui-service.phase>
+    </properties>
 
     <build>
         <plugins>
@@ -45,7 +49,7 @@
                             <goal>install-node-and-npm</goal>
                         </goals>
                         <!-- optional: default phase is "generate-resources" -->
-                        <phase>generate-resources</phase>
+                        <phase>${ui-service.phase}</phase>
                     </execution>
                     <execution>
                         <id>npm install</id>
@@ -53,7 +57,7 @@
                             <goal>npm</goal>
                         </goals>
                         <!-- optional: default phase is "generate-resources" -->
-                        <phase>generate-resources</phase>
+                        <phase>${ui-service.phase}</phase>
                         <configuration>
                             <!-- optional: The default argument is actually
                             "install", so unless you need to run some other npm command,
@@ -67,7 +71,7 @@
                         <goals>
                             <goal>npm</goal>
                         </goals>
-                        <phase>generate-resources</phase>
+                        <phase>${ui-service.phase}</phase>
                         <configuration>
                             <arguments>run build</arguments>
                         </configuration>

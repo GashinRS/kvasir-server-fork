@@ -6,7 +6,7 @@
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>services-parent</artifactId>
-        <version>0.12.0</version>
+        <version>0.13.0</version>
         <relativePath>..</relativePath>
     </parent>
     <artifactId>api-services-parent</artifactId>
@@ -21,6 +21,7 @@
         <module>../storage-api</module>
         <module>../init-service</module>
         <module>../monolith</module>
+        <module>../solid-api</module>
     </modules>
 
     <profiles>

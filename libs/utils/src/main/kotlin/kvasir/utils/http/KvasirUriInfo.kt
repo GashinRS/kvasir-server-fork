@@ -11,7 +11,7 @@ import java.net.URI
 class KvasirUriInfo(
     @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
     private val baseUri: String,
-    private val delegate: UriInfo
+    val delegate: UriInfo
 ) {
 
     /**
