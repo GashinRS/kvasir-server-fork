@@ -55,6 +55,11 @@
         </dependency>
         <dependency>
             <groupId>kvasir-services</groupId>
+            <artifactId>solid-api</artifactId>
+            <version>0.12.0</version>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-services</groupId>
             <artifactId>simple-rdf-ingester</artifactId>
             <version>0.12.0</version>
         </dependency>

@@ -14,6 +14,7 @@ import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.utils.http.KvasirUriInfo
 
 private const val MAIN_MEDIA_TYPE = "application"
 private const val SUB_MEDIA_TYPE = "ld+json"
@@ -26,7 +27,14 @@ class JsonLDBodyInterceptor : WriterInterceptor, ReaderInterceptor {
     @Inject
     lateinit var mapper: ObjectMapper
 
+    @Inject
+    lateinit var uriInfo: KvasirUriInfo
+
     override fun aroundWriteTo(ctx: WriterInterceptorContext) {
+        if( !isApplicable()) {
+            ctx.proceed()
+            return
+        }
         val startTs = System.currentTimeMillis()
         try {
             if (ctx.mediaType?.type == MAIN_MEDIA_TYPE && ctx.mediaType?.subtype == SUB_MEDIA_TYPE) {
@@ -60,7 +68,10 @@ class JsonLDBodyInterceptor : WriterInterceptor, ReaderInterceptor {
         }
     }
 
-    override fun aroundReadFrom(ctx: ReaderInterceptorContext): Any {
+    override fun aroundReadFrom(ctx: ReaderInterceptorContext): Any? {
+        if( !isApplicable()) {
+            return ctx.proceed()
+        }
         val startTs = System.currentTimeMillis()
         try {
             return if (ctx.mediaType?.type == MAIN_MEDIA_TYPE && ctx.mediaType?.subtype == SUB_MEDIA_TYPE) {
@@ -77,4 +88,8 @@ class JsonLDBodyInterceptor : WriterInterceptor, ReaderInterceptor {
         }
     }
 
+    private fun isApplicable(): Boolean {
+        val podPath = uriInfo.delegate.path.removePrefix("/").substringAfter("/")
+        return !podPath.startsWith("s3")  && !podPath.startsWith("solid")
+    }
 }
