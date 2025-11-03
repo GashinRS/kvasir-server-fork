@@ -20,7 +20,7 @@
         <dependency>
             <groupId>idlab.quarkus.ext.pep.openfga</groupId>
             <artifactId>openfga-pep-model</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>${idlab.extension.openfga.version}</version>
         </dependency>
     </dependencies>
 </project>

@@ -21,10 +21,10 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NZ_MODAL_DATA, NzModalModule, NzModalRef } from 'ng-zorro-antd/modal';
 import { NzSelectModule } from 'ng-zorro-antd/select';
 import { ConfigService } from '../../services/config.service';
+import { LoginSessionService } from '../../services/login-session.service';
 import { RelationshipDefinition } from '../../types';
 import { KSS_FGA_RESOURCE_TYPE, KSS_FGA_USER_TYPE } from '../../util/constants';
 import { ensureSlashAtStart } from '../../util/utils';
-import { LoginSessionService } from '../../services/login-session.service';
 
 type SubjectAddon = 'email' | 'webid' | 'user' | 'everyone';
 
