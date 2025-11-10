@@ -1,7 +1,7 @@
 services:
   kvasir:
     # The Kvasir monolith bundles all Kvasir microservices into a single image (handy for development and testing)
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:0.13.0
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:feat-ui-access-control
     volumes:
       # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
       - "./kvasir-config:/home/jboss/config${SELINUX_MOUNT_FLAG}"
@@ -33,7 +33,7 @@ services:
         condition: service_healthy
     network_mode: host
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9100/q/health/ready"]
-      interval: 30s
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9100 && echo -e 'GET /q/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 2 cat <&3 | head -1 | grep -q '200 OK'"]
+      interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 10

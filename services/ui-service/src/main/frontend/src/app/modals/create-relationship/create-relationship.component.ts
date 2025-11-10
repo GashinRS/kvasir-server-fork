@@ -17,6 +17,7 @@ import {
 } from '@angular/forms';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzFormModule } from 'ng-zorro-antd/form';
+import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NZ_MODAL_DATA, NzModalModule, NzModalRef } from 'ng-zorro-antd/modal';
 import { NzSelectModule } from 'ng-zorro-antd/select';
@@ -40,13 +41,50 @@ export interface IRelationship {
   object?: string;
 }
 
-const RELATIONS = [
-  { value: 'kss-fga:reader', label: 'reader', groupLabel: 'normal' },
-  { value: 'kss-fga:writer', label: 'writer', groupLabel: 'normal' },
-  { value: 'kss-fga:deleter', label: 'deleter', groupLabel: 'normal' },
-  { value: 'kss-fga:blocked', label: 'blocked', groupLabel: 'special' },
-  { value: 'kss-fga:manager', label: 'manager', groupLabel: 'elevated' },
-  { value: 'kss-fga:owner', label: 'owner', groupLabel: 'elevated' },
+export interface RelationOption {
+  value: string;
+  label: string;
+  groupLabel: 'normal' | 'special' | 'elevated';
+  icon: string;
+}
+
+const RELATIONS: RelationOption[] = [
+  {
+    value: 'kss-fga:reader',
+    label: 'reader',
+    groupLabel: 'normal',
+    icon: 'read',
+  },
+  {
+    value: 'kss-fga:writer',
+    label: 'writer',
+    groupLabel: 'normal',
+    icon: 'signature',
+  },
+  {
+    value: 'kss-fga:deleter',
+    label: 'deleter',
+    groupLabel: 'normal',
+    icon: 'delete',
+  },
+  {
+    value: 'kss-fga:blocked',
+    label: 'blocked',
+    groupLabel: 'special',
+    icon: 'stop',
+  },
+  {
+    value: 'kss-fga:manager',
+    label: 'manager',
+    groupLabel: 'elevated',
+    icon: 'key',
+  },
+  {
+    value: 'kss-fga:owner',
+    label: 'owner',
+    groupLabel: 'elevated',
+    icon: 'crown',
+  },
 ];
 
 @Component({
@@ -57,6 +95,7 @@ const RELATIONS = [
     NzInputModule,
     NzSelectModule,
     NzModalModule,
+    NzIconModule,
     ReactiveFormsModule,
     FormsModule,
   ],
@@ -67,7 +106,16 @@ const RELATIONS = [
 export class CreateRelationshipComponent {
   relationshipForm: FormGroup<RelationshipModel>;
   subjectAddon = model<SubjectAddon>('user');
-  relations = RELATIONS;
+  relations = RELATIONS.reduce(
+    (prev, curr) => {
+      prev[curr.groupLabel].push(curr);
+      return prev;
+    },
+    { normal: [], special: [], elevated: [] } as Record<
+      'normal' | 'special' | 'elevated',
+      RelationOption[]
+    >,
+  );
   prefix = computed(() => this.convertToPrefix(this.subjectAddon()));
 
   //DI
@@ -135,6 +183,40 @@ export class CreateRelationshipComponent {
       default:
       case 'user':
         return 'urn:kvasir-user:';
+    }
+  }
+
+  getIcon(selected: 'email' | 'webid' | 'user' | 'everyone'): string {
+    switch (selected) {
+      case 'email':
+        return 'mail';
+      case 'webid':
+        return 'idcard';
+      case 'user':
+        return 'user';
+      default:
+        return 'question-circle';
+    }
+  }
+
+  getRelationIcon(
+    selected: 'reader' | 'writer' | 'deleter' | 'blocked' | 'manager' | 'owner',
+  ): string {
+    switch (selected) {
+      case 'reader':
+        return 'read';
+      case 'writer':
+        return 'signature';
+      case 'deleter':
+        return 'delete';
+      case 'blocked':
+        return 'stop';
+      case 'manager':
+        return 'key';
+      case 'owner':
+        return 'crown';
+      default:
+        return 'question-circle';
     }
   }
 

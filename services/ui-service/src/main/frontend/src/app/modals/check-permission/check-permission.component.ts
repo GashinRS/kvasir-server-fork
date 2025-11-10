@@ -2,6 +2,7 @@ import {
   Component,
   computed,
   effect,
+  EventEmitter,
   inject,
   model,
   OnInit,
@@ -30,6 +31,7 @@ import { RelationshipDefinition } from '../../types';
 import { KSS_FGA_RESOURCE_TYPE, KSS_FGA_USER_TYPE } from '../../util/constants';
 import { ensureSlashAtStart } from '../../util/utils';
 import { LoginSessionService } from '../../services/login-session.service';
+import { NzIconModule } from 'ng-zorro-antd/icon';
 
 type SubjectAddon = 'email' | 'webid' | 'user' | 'everyone';
 
@@ -61,6 +63,7 @@ const PERMISSIONS = [
     NzSelectModule,
     NzModalModule,
     NzFlexModule,
+    NzIconModule,
     ReactiveFormsModule,
     FormsModule,
   ],
@@ -154,6 +157,19 @@ export class CheckPermissionComponent implements OnInit {
       default:
       case 'user':
         return 'urn:kvasir-user:';
+    }
+  }
+
+  getIcon(selected: 'email' | 'webid' | 'user' | 'everyone'): string {
+    switch (selected) {
+      case 'email':
+        return 'mail';
+      case 'webid':
+        return 'idcard';
+      case 'user':
+        return 'user';
+      default:
+        return 'question-circle';
     }
   }
 

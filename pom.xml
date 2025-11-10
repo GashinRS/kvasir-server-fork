@@ -12,8 +12,9 @@
     </modules>
     <properties>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>
-        <kotlin.version>2.1.20</kotlin.version>
-        <maven.compiler.release>21</maven.compiler.release>
+        <kotlin.version>2.2.21</kotlin.version>
+        <kotlin.jvmTarget>24</kotlin.jvmTarget>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
@@ -203,7 +204,7 @@
                     </dependencies>
                     <configuration>
                         <javaParameters>true</javaParameters>
-                        <jvmTarget>21</jvmTarget>
+                        <jvmTarget>${kotlin.jvmTarget}</jvmTarget>
                         <compilerPlugins>
                             <plugin>all-open</plugin>
                             <plugin>no-arg</plugin>
