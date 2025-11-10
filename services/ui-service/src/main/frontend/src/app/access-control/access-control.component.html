@@ -24,29 +24,22 @@
   <nz-table #basicTable [nzData]="relationships.value()!">
     <thead>
       <tr>
-        <th>subject &#64;id</th>
-        <th>subject &#64;type</th>
+        <th>user</th>
         <th>relation</th>
-        <th>object &#64;id</th>
-        <th>object &#64;type</th>
-        <th>&nbsp;</th>
+        <th>resource</th>
+        <th nzAlign="right">&nbsp;</th>
       </tr>
     </thead>
     <tbody>
       @for (data of basicTable.data; track $index) {
         <tr>
-          <td>{{ data["@id"] }}</td>
-          <td>{{ data["@type"] }}</td>
-          <td>{{ data.getRelationName() }}</td>
-          <td>{{ data.getRelationObject()["@id"] }}</td>
-          <td>{{ data.getRelationObject()["@type"] }}</td>
-          <td>
-            <button nz-button nzDanger nzSize="small">
-              <nz-icon
-                nzType="delete"
-                nzTheme="outline"
-                (click)="remove(data)"
-              />
+          <td><app-access-control-subject [relationship]="data" /></td>
+          <td><app-access-control-relation [relationship]="data" /></td>
+          <td><app-access-control-resource [relationship]="data" /></td>
+          <td nzAlign="right">
+            <button nz-button nzDanger nzSize="small" (click)="remove(data)">
+              <span nz-icon nzType="delete" nzTheme="outline"></span>
+              <span>remove</span>
             </button>
           </td>
         </tr>

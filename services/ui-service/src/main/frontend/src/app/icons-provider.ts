@@ -1,29 +1,45 @@
-import { EnvironmentProviders, importProvidersFrom } from '@angular/core';
+import { EnvironmentProviders } from '@angular/core';
 import {
-  FolderOutline,
-  QuestionCircleFill,
-  QuestionCircleOutline,
-  ControlOutline,
+  CodeOutline,
   ControlFill,
+  ControlOutline,
+  CrownOutline,
+  DeleteOutline,
+  EditOutline,
+  FolderOutline,
   HistoryOutline,
   IdcardOutline,
-  EditOutline,
-  DeleteOutline,
-  CodeOutline,
+  KeyOutline,
+  LockOutline,
+  MailOutline,
+  QuestionCircleFill,
+  QuestionCircleOutline,
+  ReadOutline,
+  SignatureOutline,
+  StopOutline,
+  UserOutline,
 } from '@ant-design/icons-angular/icons';
-import { NzIconModule, provideNzIcons } from 'ng-zorro-antd/icon';
+import { provideNzIcons } from 'ng-zorro-antd/icon';
 
 const icons = [
-  QuestionCircleFill,
-  QuestionCircleOutline,
-  FolderOutline,
+  CodeOutline,
   ControlFill,
   ControlOutline,
+  DeleteOutline,
+  EditOutline,
+  FolderOutline,
   HistoryOutline,
   IdcardOutline,
-  EditOutline,
+  MailOutline,
+  QuestionCircleFill,
+  QuestionCircleOutline,
+  UserOutline,
+  ReadOutline,
+  SignatureOutline,
   DeleteOutline,
-  CodeOutline,
+  StopOutline,
+  KeyOutline,
+  CrownOutline,
 ];
 
 export function provideIcons(): EnvironmentProviders {

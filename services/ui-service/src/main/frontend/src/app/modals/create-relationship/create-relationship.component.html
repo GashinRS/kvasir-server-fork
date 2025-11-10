@@ -22,12 +22,32 @@
                 name="subjectAddon"
                 [(ngModel)]="subjectAddon"
                 [ngModelOptions]="{ standalone: true }"
+                [nzCustomTemplate]="subjectTpl"
               >
-                <nz-option nzLabel="E-mail" nzValue="email"></nz-option>
-                <nz-option nzLabel="WebID" nzValue="webid"></nz-option>
-                <nz-option nzLabel="User" nzValue="user"></nz-option>
+                <nz-option nzCustomContent nzLabel="E-mail" nzValue="email">
+                  <ng-content>
+                    <nz-icon nzType="mail"></nz-icon>
+                    E-mail
+                  </ng-content>
+                </nz-option>
+                <nz-option nzCustomContent nzLabel="WebID" nzValue="webid">
+                  <ng-content>
+                    <nz-icon nzType="idcard"></nz-icon>
+                    WebID
+                  </ng-content>
+                </nz-option>
+                <nz-option nzCustomContent nzLabel="User" nzValue="user">
+                  <ng-content>
+                    <nz-icon nzType="user"></nz-icon>
+                    User
+                  </ng-content>
+                </nz-option>
                 <!-- <nz-option nzLabel="Anyone" nzValue="everyone"></nz-option> -->
               </nz-select>
+              <ng-template #subjectTpl let-selected>
+                <nz-icon [nzType]="getIcon(selected.nzValue)"></nz-icon>
+                {{ selected.nzLabel }}
+              </ng-template>
             </ng-template>
           </nz-form-control>
         </nz-form-item>
@@ -40,10 +60,56 @@
           <nz-form-control>
             <nz-select
               name="relation"
-              [nzOptions]="relations"
               formControlName="relation"
+              [nzCustomTemplate]="relationTpl"
             >
+              <nz-option-group nzLabel="normal">
+                @for (rel of relations.normal; track rel.value) {
+                  <nz-option
+                    [nzLabel]="rel.label"
+                    [nzValue]="rel.value"
+                    nzCustomContent
+                  >
+                    <ng-content>
+                      <nz-icon [nzType]="rel.icon"></nz-icon>
+                      {{ rel.label }}
+                    </ng-content>
+                  </nz-option>
+                }
+              </nz-option-group>
+              <nz-option-group nzLabel="special">
+                @for (rel of relations.special; track rel.value) {
+                  <nz-option
+                    [nzLabel]="rel.label"
+                    [nzValue]="rel.value"
+                    nzCustomContent
+                  >
+                    <ng-content>
+                      <nz-icon [nzType]="rel.icon"></nz-icon>
+                      {{ rel.label }}
+                    </ng-content>
+                  </nz-option>
+                }
+              </nz-option-group>
+              <nz-option-group nzLabel="elevated">
+                @for (rel of relations.elevated; track rel.value) {
+                  <nz-option
+                    [nzLabel]="rel.label"
+                    [nzValue]="rel.value"
+                    nzCustomContent
+                  >
+                    <ng-content>
+                      <nz-icon [nzType]="rel.icon"></nz-icon>
+                      {{ rel.label }}
+                    </ng-content>
+                  </nz-option>
+                }
+              </nz-option-group>
             </nz-select>
+            <ng-template #relationTpl let-selected>
+              <nz-icon [nzType]="getRelationIcon(selected.nzLabel)"></nz-icon>
+              {{ selected.nzLabel }}
+            </ng-template>
           </nz-form-control>
         </nz-form-item>
       </nz-col>

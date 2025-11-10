@@ -26,8 +26,8 @@ smoke_test:compose:
     - docker compose down
   artifacts:
     paths:
-      - docker-compose/compose-logs.txt
-      - docker-compose/docker-compose.yml
-      - docker-compose/compose-ps.txt
+      - compose/compose-logs.txt
+      - compose/docker-compose.yml
+      - compose/compose-ps.txt
     expire_in: 1 week
     when: on_failure
