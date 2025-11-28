@@ -4,34 +4,44 @@
 
 The fastest way to get a dev server (with persistent storage) up and running is to use Compose.
 
-1. Make sure you install <a href="https://www.docker.com/products/docker-desktop/#:~:text=Download%20Docker%20Desktop" target="_blank">Docker Desktop</a> and enable **Docker host networking**:
+1. Make sure you
+   install <a href="https://www.docker.com/products/docker-desktop/#:~:text=Download%20Docker%20Desktop" target="_blank">
+   Docker Desktop</a> and enable **Docker host networking**:
 
 ![](docker_host_networking.png)
 
 2. Now clone [this repository](https://gitlab.ilabt.imec.be/kvasir/kvasir-server) and run the following commands:
 
 **Docker:**
+
 ```bash
 cd compose
 docker compose up -d
 ```
 
 **Podman:**
-If you are on a system with SELinux enabled (like Fedora), first create a file named `.env` in the `compose` directory with the following content:
+If you are on a system with SELinux enabled (like Fedora), first create a file named `.env` in the `compose` directory
+with the following content:
+
 ```
 SELINUX_MOUNT_FLAG=:Z
 ```
+
 Then, from the `compose` directory, run:
+
 ```bash
 podman compose up -d
 ```
 
-3. This will automatically create a pod at <a href="http://localhost:8080/alice" target="_blank">http://localhost:8080/alice</a> for you to play with.
+3. This will automatically create a pod
+   at <a href="http://localhost:8080/alice" target="_blank">http://localhost:8080/alice</a> for you to play with.
    The settings for this pod can be modified via the file `application.yaml` in the `kvasir-config` folder.
 
-4. You can view the [Kvasir UI](Kvasir-UI.md) at <a href="http://localhost:8080/_ui/" target="_blank">http://localhost:8080/\_ui/</a> to play around with your pod.
+4. You can view the [Kvasir UI](Kvasir-UI.md)
+   at <a href="http://localhost:8080/_ui/" target="_blank">http://localhost:8080/\_ui/</a> to play around with your pod.
 
-> Be sure to read the [Authentication & Access Control](Access-Control.md) section when you want to develop your own clients.
+> Be sure to read the [Authentication & Access Control](Access-Control.md) section when you want to develop your own
+> clients.
 > {style="warning"}
 
 ## Running on Kubernetes
@@ -49,7 +59,8 @@ curl -fsSL https://get.jetpack.io/devbox | bash
 
 ### Local setup using Kind
 
-You can run Kvasir on a local Kubernetes cluster with [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/) by using the provided helper script.
+You can run Kvasir on a local Kubernetes cluster with [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/) by using
+the provided helper script.
 
 Then run the Kvasir local-cluster setup script:
 
@@ -74,7 +85,8 @@ Keycloak Admin UI: https://keycloak-10-10-134-243.nip.io/auth/admin
 
 ### Hosted Kubernetes cluster
 
-The entire stack can be setup with helmfile, `helmfile.yaml.gotmpl` holds the configuration for all dependencies, Kvasir and Kvasir UI. Though some initial input is required, see `environments/default.yaml.gotmpl`:
+The entire stack can be setup with helmfile, `helmfile.yaml.gotmpl` holds the configuration for all dependencies, Kvasir
+and Kvasir UI. Though some initial input is required, see `environments/default.yaml.gotmpl`:
 
 ```yaml
 kvasirHost: { { requiredEnv "KVASIR_HOST" } }
@@ -86,7 +98,8 @@ tlsEnabled: { { env "TLS_ENABLED" | default "false" } }
 proxy: { { env "PROXY" | default "edge" } }
 ```
 
-After setting the necessary environment variables, you can run the following command to deploy Kvasir and all dependencies:
+After setting the necessary environment variables, you can run the following command to deploy Kvasir and all
+dependencies:
 
 ```bash
 helmfile sync
@@ -111,27 +124,32 @@ helmfile sync --state-values-set kvasirHost=kvasir.example.com \
 
 ## Running in dev mode
 
-If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper. This requires you to have Java JDK 21 installed.
+If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper. This
+requires you to have Java JDK 21 installed.
 
 The backing services for development are managed by Maven and will be started automatically.
 
-By default, the application starts with no policy agent enabled (`noauth`). To run with a specific agent, which is necessary for most features, you must activate it using the `policy.agent` property.
+By default, the application starts with no policy agent enabled (`noauth`). To run with a specific agent, which is
+necessary for most features, you must activate it using the `policy.agent` property.
 
 To run the application in dev mode with the recommended `openfga` agent:
+
 ```bash
 ./mvnw compile quarkus:dev -Dpolicy.agent=openfga
 ```
+
 You can also use `a4ds` or `noauth` (the default).
 
 To stop the backing services and remove their volumes, run:
+
 ```bash
 ./mvnw clean
 ```
 
 You can skip the compose lifecycle by adding `-Dcompose.skip=true` to your Maven command.
 
-
 ## Issues
 
-The project is still in a very early stage of development, so there are many issues and missing features. If you find
-any, please report them in the [Issues](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/issues) section.
+The project is still under active development and new releases come quickly. If you find any mistakes, bugs, or if you
+have feature requests, please report them in the [Issues](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/issues)
+section.
