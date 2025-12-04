@@ -44,6 +44,7 @@ podman compose up -d
 > clients.
 > {style="warning"}
 
+<!--
 ## Running on Kubernetes
 
 Provided here is a short overview of how to deploy Kvasir on Kubernetes.
@@ -121,6 +122,7 @@ helmfile sync --state-values-set kvasirHost=kvasir.example.com \
     --state-values-set tlsEnabled=true \
     --state-values-set proxy=edge
 ```
+-->
 
 ## Running in dev mode
 
