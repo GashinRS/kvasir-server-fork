@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.14.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.13.0..v0.14.0) - 2025-12-08
+### Notable changes
+1. Auth system overhaul - ([4ca4f6c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4ca4f6c9a05344424222b43d47f6e16999082f3f)) - Wannes
+  - New auth framework allows multiple policy mechanism to be active within the same runtime.
+  - Supported policy mechanisms are:
+    - OpenFGA
+    - A4DS/UMA
+    - External HTTP endpoint PEP
+  - Added support for DPoP (can be configured to be required for additional security)
+  - Added support for Solid-OIDC (authenticating via a WebID)
+2. New Pod configuration system  - ([4ca4f6c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4ca4f6c9a05344424222b43d47f6e16999082f3f)) - Wannes
+  - Updated model provides clear distinction between default system Pod settings, Pod bootstrap settings and User-defined Pod settings
+  - User-defined Pod settings (`kss:configuration`) are now represented as a string that follows the exact same structure as the Kvasir config files (vs. having a separate RDF-based model).
+  - User-defined Pod settings are overlayed on top of the system settings using the [SmallRye Config system](https://smallrye.io/smallrye-config/Latest/) (vs. the custom built solution before)
+3. Kvasir UI updated to reflect backend changes - ([5c306e0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5c306e0269ae6dca63208286729c9faef6802a12)) - Thomas Dupont
+  - When a Keycloak user is available with owner-level-access to the pod (configured in OpenFGA), you can login and use the Kvasir UI, even when UMA is enabled for the Pod.
+  - Improved access control UI
+  - Added forms for managing the Pod configuration.
+
+---
+
 ## [0.13.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.12.0..v0.13.0) - 2025-10-28
 ### Features
 - Add Solid compliant storage API - ([855932c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/855932c497f5c4e34cf046ddb84abe2272dbbe2f)) - Wannes Kerckhove

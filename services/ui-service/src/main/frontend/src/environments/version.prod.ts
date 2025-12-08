@@ -1,2 +1,2 @@
-  export const version = '0.13.0';
-  export const buildDate = '2025-10-28T14:53:41Z';
+  export const version = '0.14.0';
+  export const buildDate = '2025-12-08T13:57:02Z';
