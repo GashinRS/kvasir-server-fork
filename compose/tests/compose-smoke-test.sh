@@ -3,7 +3,7 @@
 DOCKER_HOST=${1:-localhost}
 
 # Smoke test runs in docker enabled runner, localhost does not work here, use 'docker'
-overviewResponse=$(curl -s http://${DOCKER_HOST}:8080)
+overviewResponse=$(curl -H "Accept:application/ld+json" -s http://${DOCKER_HOST}:8080)
 #{"@context":{"kss":"https://kvasir.discover.ilabt.imec.be/vocab#"},"@graph":[{"@id":"http://localhost:8080/alice"}]}
 context=$(echo "$overviewResponse" | jq -r '.["@context"]["kss"]')
 aliceId=$(echo "$overviewResponse" | jq -r '.["@graph"][0]["@id"]')

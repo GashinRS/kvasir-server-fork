@@ -16,6 +16,7 @@ export class DevSettingsService {
     },
     roundedSelection: false,
     renderLineHighlight: 'none',
+    readOnly: false,
   } as editor.IStandaloneEditorConstructionOptions;
 
   private readonly MONACO_OPTS_JSON = {
@@ -29,6 +30,7 @@ export class DevSettingsService {
     fontSize: 13,
     roundedSelection: false,
     renderLineHighlight: 'none',
+    readOnly: false,
     // links: false,
   } as editor.IStandaloneEditorConstructionOptions;
 

@@ -1,3 +1,6 @@
+import { timeInterval } from 'rxjs';
+import { KSS_FGA_EXTERNAL_ACCESS } from './util/constants';
+
 export interface GraphLD<T> {
   '@context': Record<string, string>;
   '@graph': T[];
@@ -44,6 +47,7 @@ export interface WriteTransaction {
 export interface TriplePart {
   '@id': string;
   '@type': string;
+  [KSS_FGA_EXTERNAL_ACCESS]: {'@id': string}
 }
 
 export type RelationshipDefinition = Record<string, TriplePart> & TriplePart;
@@ -133,22 +137,81 @@ export interface Slice {
 
 export type SliceInput = Omit<Slice, '@id'>;
 
+export interface PodSerialized {
+  '@context': Record<string, string>;
+  '@id': string;
+  'kss:configuration': string;
+}
+
 export interface Pod {
+  '@id': string;
+  '@type': string;
+}
+
+export interface PodDetails {
   '@context': Record<string, string>;
   '@id': string;
   'kss:configuration': PodConfiguration;
 }
 
 export interface PodConfiguration {
-  'kss:autoIngestRDF': boolean;
-  'kss:defaultContext': string;
-  'kss:authConfiguration': PodAuthConfiguration;
+  'default-context': string;
+  'auto-ingest-rdf': boolean;
+  auth: PodAuthConfiguration;
 }
 
 export interface PodAuthConfiguration {
-  'kss:clientId': string;
-  'kss:clientSecret': string;
-  'kss:serverUrl': string;
+  'enable-solid-web-id': boolean;
+  'require-dpop': boolean;
+  'skip-dpop-ath-check': boolean;
+  oidc: OIDCConfig | null;
+  uma: UMAConfig | null;
+  'http-endpoint-policy-enforcer': HttpEndpointPolicyEnforcerConfig | null;
+}
+
+export interface JWTProviderConfig {
+  'server-url': string;
+  'principal-extractor'?: JWTPrincipalExtractorConfig;
+  'jwt-allowed-clock-skew-seconds'?: number;
+}
+
+export interface JWTPrincipalExtractorConfig {
+  'class-name': string;
+  config: Record<string, string>;
+}
+
+export interface OIDCConfig extends JWTProviderConfig {}
+
+export interface UMAConfig extends JWTProviderConfig {}
+
+export interface HttpEndpointPolicyEnforcerConfig {
+  url: string;
+  'basic-auth': BasicAuthConfig | null;
+  'api-key': ApiKeyConfig | null;
+}
+
+export interface BasicAuthConfig {
+  username: string;
+  password: string;
+}
+
+export interface ApiKeyConfig {
+  'key-name': string;
+  'key-value': string;
+  'send-via'?: ApiKeySendVia;
+}
+
+export enum ApiKeySendVia {
+  HEADER,
+  QUERY,
+}
+
+export interface RegisterPodInput {
+  'kss:name': string;
+  'kss:ownerUserId': string;
+  'kss:configuration': string;
+  'kss:enableUma'?: boolean;
+  'kss:enableHttpEndpointPolicyEnforcer'?: boolean;
 }
 
 export interface Paged<T> {
@@ -159,3 +222,5 @@ export interface Paged<T> {
 export interface Timestamped {
   'kss:timestamp': string;
 }
+
+export type LD<T> = T & { '@context': Record<string, string> };

@@ -13,20 +13,24 @@ import {
   onErrorResumeNextWith,
   throwError,
 } from 'rxjs';
-import {} from 'rxjs/operators';
+import { tap } from 'rxjs/operators';
 import { KvasirError } from '../components/error/error.component';
 import {
   ChangeRecords,
   ChangeReport,
   ChangeRequest,
   GraphLD,
+  LD,
   Paged,
   Pod,
   PodConfiguration,
+  PodDetails,
+  PodSerialized,
+  RegisterPodInput,
   Slice,
   SliceInput,
 } from '../types';
-import { parseLinkHeader } from '../util/utils';
+import { deserialize, parseLinkHeader, serialize } from '../util/utils';
 import { ConfigService } from './config.service';
 import { ErrorHandlerService } from './error-handler.service';
 import { SessionService } from './session.service';
@@ -194,15 +198,22 @@ export class KvasirService {
 
   listPods(): Observable<Pod[]> {
     return this.http
-      .get<GraphLD<Pod>>(this.host)
-      .pipe(this.convertErrorToKvasirError())
-      .pipe(map((podsLd) => podsLd['@graph']));
+      .get<GraphLD<Pod>>(this.host, {
+        headers: new HttpHeaders().append('Accept', 'application/ld+json'),
+      })
+      .pipe(
+        map((podsLd) => podsLd['@graph']),
+        this.convertErrorToKvasirError(),
+      );
   }
 
-  getPod(): Observable<Pod> {
+  getPod(): Observable<PodDetails> {
     return this.http
-      .get<Pod>(`${this.host}/${this.session.podName()}`)
-      .pipe(this.convertErrorToKvasirError());
+      .get<PodSerialized>(`${this.host}/${this.session.podName()}`)
+      .pipe(
+        map((podSer) => deserialize(podSer)),
+        this.convertErrorToKvasirError(),
+      );
   }
 
   updatePod(podConfig: PodConfiguration): Observable<void> {
@@ -210,7 +221,7 @@ export class KvasirService {
       '@context': {
         kss: 'https://kvasir.discover.ilabt.imec.be/vocab#',
       },
-      'kss:configuration': podConfig,
+      'kss:configuration': JSON.stringify(podConfig),
     };
     return this.http
       .put<void>(`${this.host}/${this.session.podName()}`, cfg, {
@@ -223,13 +234,13 @@ export class KvasirService {
   }
 
   createPod(podName: string): Observable<void> {
-    const input = {
+    const input: LD<RegisterPodInput> = {
       '@context': {
         kss: 'https://kvasir.discover.ilabt.imec.be/vocab#',
       },
       'kss:name': podName,
       'kss:ownerUserId': podName,
-      'kss:configuration': {},
+      'kss:configuration': '{}',
     };
     return this.http
       .post<any>(`${this.host}`, input, {

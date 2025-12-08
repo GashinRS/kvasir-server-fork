@@ -2,6 +2,8 @@ import { inject, Injectable } from '@angular/core';
 import Keycloak, { KeycloakLoginOptions } from 'keycloak-js';
 import { LoginSessionService, LoginState } from './login-session.service';
 import { SessionService } from './session.service';
+import { ErrorHandlerService } from './error-handler.service';
+import { AuthenticationError } from '../util/AuthenticationError';
 
 @Injectable({
   providedIn: 'root',
@@ -10,6 +12,7 @@ export class LoginFSM {
   private kc = inject(Keycloak, { optional: true });
   private session = inject(SessionService);
   private loginSessionService = inject(LoginSessionService);
+  private errorHandler = inject(ErrorHandlerService);
 
   constructor() {
     this.loginSessionService.restoreLoginState();
@@ -67,7 +70,14 @@ export class LoginFSM {
       // Reload in order to execute the next state function
       window.location.reload();
     } catch (err: any) {
-      console.error(err);
+      if (err instanceof AuthenticationError) {
+        this.errorHandler.showCannotAuthenticate({
+          message: err.message,
+          description: `Www-Authenticate did not provide a proper 'as_uri' to authenticate against.`,
+        });
+      } else {
+        console.error(err);
+      }
     }
   }
 

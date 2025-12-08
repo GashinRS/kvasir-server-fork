@@ -13,3 +13,9 @@ export const AT_CONTEXT_KSS_FGA = {
 
 export const KSS_FGA_USER_TYPE = 'kss-fga:User';
 export const KSS_FGA_RESOURCE_TYPE = 'kss-fga:Resource';
+export const KSS_FGA_EXTERNAL_ACCESS = 'kss-fga:external_access';
+export const KSS_FGA_EXTERNAL_ACCESS_UMA = 'kss-fga:Uma';
+export const KSS_FGA_EXTERNAL_ACCESS_HTTP_ENDPOINT = 'kss-fga:HttpEndpoint';
+
+export const KSS_FGA_USER_ANONYMOUS = 'urn:kvasir-user:anonymous';
+export const KSS_FGA_USER_WILDCARD = 'urn:kvasir-wildcard';
