@@ -17,11 +17,10 @@
     <modules>
         <module>clickhouse-knowledge-graph</module>
         <module>common-http-extensions</module>
-        <module>s3-reference-loader</module>
+        <module>s3-storage</module>
         <module>default-knowledge-graph</module>
-        <module>openfga-policy-agent</module>
+        <module>openfga-pep</module>
         <module>kafka-messaging</module>
-        <module>a4ds-policy-agent</module>
     </modules>
 
     <build>

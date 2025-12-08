@@ -19,22 +19,19 @@ import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
 import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
 import kvasir.plugins.kg.clickhouse.specs.RDFDatasetQuadInsertSpec
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
-import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.time.Instant
 
 @Singleton
 class GenericStorageBackend(
     clickhouseClient: ClickhouseClient,
-    private val convertToSQLResolver: ConvertToSQLResolver,
-    @ConfigProperty(name = "kvasir.plugins.kg.clickhouse.storage-buffer", defaultValue = "100000")
-    private val bufferSize: Int,
+    private val convertToSQLResolver: ConvertToSQLResolver
 ) : AbstractStorageBackend(DATA_TABLE, DATA_COLUMNS, clickhouseClient) {
 
 
     override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
         Log.debug("Storing change request ${buffer.request.id}...")
-        return buffer.stream().group().intoLists().of(bufferSize)
+        return buffer.stream().group().intoLists().of(DEFAULT_BUFFER_SIZE)
             .onItem().transformToUniAndConcatenate { records ->
                 clickhouseClient.insert(RDFDatasetQuadInsertSpec(databaseFromPodId(buffer.request.podId)), records)
             }

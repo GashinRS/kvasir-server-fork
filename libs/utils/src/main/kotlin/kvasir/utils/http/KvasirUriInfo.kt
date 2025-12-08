@@ -3,13 +3,12 @@ package kvasir.utils.http
 import jakarta.enterprise.context.RequestScoped
 import jakarta.ws.rs.core.UriBuilder
 import jakarta.ws.rs.core.UriInfo
-import kvasir.definitions.config.KvasirConfig
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.net.URI
 
 @RequestScoped
 class KvasirUriInfo(
-    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
+    @ConfigProperty(name = "kvasir.http.base-uri")
     private val baseUri: String,
     val delegate: UriInfo
 ) {

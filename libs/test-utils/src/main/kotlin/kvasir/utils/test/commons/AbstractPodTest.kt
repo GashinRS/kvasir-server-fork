@@ -1,11 +1,12 @@
 package kvasir.utils.test.commons
 
+import io.vertx.core.json.Json
 import jakarta.inject.Inject
 import kvasir.utils.pod.PodSetupHelper
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.TestInstance
-import java.util.UUID
+import java.util.*
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 abstract class AbstractPodTest(
@@ -25,7 +26,7 @@ abstract class AbstractPodTest(
     @BeforeAll
     fun setup() {
         podUri = testHelpers.getPodUri(podName)
-        podSetupHelper.createPod(podUri, config, errorWhenExists = true).await()
+        podSetupHelper.createPod(podUri, config, Json.encode(config.configuration()), errorWhenExists = true).await()
             .indefinitely()
     }
 

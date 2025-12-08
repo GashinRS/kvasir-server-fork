@@ -1,6 +1,7 @@
 kvasir:
-  base-uri: http://localhost:8080/
-  webclient-uri: ${kvasir.base-uri}_ui/
+  http:
+    base-uri: http://localhost:8080/
+    webclient-uri: ${kvasir.http.base-uri}_ui/
 
 "%dev":
   quarkus:

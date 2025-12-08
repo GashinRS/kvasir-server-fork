@@ -9,17 +9,17 @@ build:maven:
   tags: ["cache", "docker"]
   variables:
     KVASIR_KG_CLICKHOUSE_HOST: docker
-    KVASIR_SERVICES_STORAGE_S3_HOST: docker
-    QUARKUS_S3_ENDPOINT_OVERRIDE: http://docker:9000
-    QUARKUS_KEYCLOAK_ADMIN_CLIENT_SERVER_URL: http://docker:8280
-    QUARKUS_OIDC_AUTH_SERVER_URL: http://docker:8280/realms/quarkus
-    QUARKUS_OPENFGA_URL: http://docker:8380
-    KAFKA_ADVERTISED_HOSTNAME: docker
+    KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS: docker:9092
+    KVASIR_MESSAGING_KAFKA_ADVERTISED_HOSTNAME: docker
+    KVASIR_STORAGE_S3_ENDPOINT: http://docker:9000
+    KVASIR_AUTH_KEYCLOAK_URL: http://docker:8280
+    KVASIR_PEP_OPENFGA_URL: http://docker:8380
     KAFKA_BOOTSTRAP_SERVERS: docker:9092
+    KAFKA_ADVERTISED_HOSTNAME: docker
   script:
     - set -xe
     - docker compose -f compose/compose.devservices.yml up --wait --quiet-pull --no-color
-    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true
+    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true
   interruptible: true
   after_script:
     - awk -F, '{ instructions += $4 + $5; covered += $5 } END { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered (line coverage)" }' target/coverage/jacoco.csv
@@ -41,25 +41,17 @@ package:maven:
   extends:
     - .ignore-tags
     - .maven-cache
+    - .docker-in-docker
     - .branch-only
   stage: package
   needs: ["build:maven"]
   image: $JDK_IMAGE
-  parallel:
-    matrix:
-      - POLICY: ["a4ds", "openfga", "noauth"]
+  tags: ["cache", "docker"]
   script:
-    - |
-      if [ "$POLICY" = "openfga" ];
-      then
-        export ADDITIONAL_TAGS=${IMAGE_TAG},${IMAGE_ADDITIONAL_TAG},${IMAGE_ADDITIONAL_TAG}-$POLICY
-      else
-        export ADDITIONAL_TAGS=${IMAGE_ADDITIONAL_TAG}
-      fi
-    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Dpolicy.agent=${POLICY} -Pservices -Dcompose.skip=true
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true
       -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
-      -Dquarkus.container-image.tag=${IMAGE_TAG}-${POLICY}
-      -Dquarkus.container-image.additional-tags=${ADDITIONAL_TAGS}
+      -Dquarkus.container-image.tag=${IMAGE_TAG}
+      -Dquarkus.container-image.additional-tags=${IMAGE_ADDITIONAL_TAG}
   interruptible: true
   artifacts:
     paths:

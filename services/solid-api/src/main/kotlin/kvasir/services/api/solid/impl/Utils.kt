@@ -3,58 +3,51 @@ package kvasir.services.api.solid.impl
 import io.smallrye.mutiny.Uni
 import io.vertx.ext.web.RoutingContext
 import jakarta.ws.rs.core.MediaType
-import kvasir.definitions.config.KvasirConfig
 import kvasir.definitions.reactive.toMulti
 import kvasir.definitions.reactive.toUni
 import kvasir.services.api.solid.vocab.LDPVocab
-import kvasir.utils.s3.S3Utils
-import org.eclipse.microprofile.config.ConfigProvider
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import java.io.InputStream
-import java.net.URI
-import kotlin.jvm.optionals.getOrNull
 
 internal const val METADATA_RESOURCE_SUFFIX = ".meta"
 
-internal fun String.isContainerPath(): Boolean {
-    return this.removeSuffix(METADATA_RESOURCE_SUFFIX).endsWith("/")
-}
+//internal fun String.isContainerPath(): Boolean {
+//    return this.removeSuffix(METADATA_RESOURCE_SUFFIX).endsWith("/")
+//}
 
-internal fun RoutingContext.getPodName(): String {
-    return this.pathParam("podId")
-}
-
-internal fun RoutingContext.getPodId(): String {
-    return "${getBaseUri()}/${this.getPodName()}"
-}
-
-internal fun RoutingContext.getBucketId(): String {
-    return S3Utils.getBucket("${this.getBaseUri()}/${this.getPodName()}")
-}
-
-internal fun RoutingContext.getBaseUri(): String {
-    return (ConfigProvider.getConfig().getOptionalValue(KvasirConfig.BASE_URI_PROPERTY, String::class.java).getOrNull()
-        ?: KvasirConfig.BASE_URI_DEFAULT)
-        .removeSuffix("/")
-}
-
-internal fun RoutingContext.getResourceUri(): URI {
-    return URI.create("${getBaseUri()}${this.request().path()}")
-}
-
-internal fun RoutingContext.getRoot(): URI {
-    return URI.create("${getBaseUri()}/${this.getPodName()}/solid/")
-}
-
-internal fun RoutingContext.isRoot(): Boolean {
-    return this.request().path() == "/${this.pathParam("podId")}/solid/"
-}
-
-internal fun RoutingContext.isMetadataRequest(): Boolean {
-    return this.getResourceUri().path.endsWith(METADATA_RESOURCE_SUFFIX)
-}
+//internal fun RoutingContext.getPodName(): String {
+//    return this.pathParam("podId")
+//}
+//
+//internal fun RoutingContext.getPodId(): String {
+//    return "${getBaseUri()}/${this.getPodName()}"
+//}
+//
+//internal fun RoutingContext.getBucketId(): String {
+//    return S3Utils.getBucket("${this.getBaseUri()}/${this.getPodName()}")
+//}
+//
+//internal fun RoutingContext.getBaseUri(): String {
+//    return CDI.current().select(HttpConfig::class.java).get().baseUri().removeSuffix("/")
+//}
+//
+//internal fun RoutingContext.getResourceUri(): URI {
+//    return URI.create("${getBaseUri()}${this.request().path()}")
+//}
+//
+//internal fun RoutingContext.getRoot(): URI {
+//    return URI.create("${getBaseUri()}/${this.getPodName()}/solid/")
+//}
+//
+//internal fun RoutingContext.isRoot(): Boolean {
+//    return this.request().path() == "/${this.pathParam("podId")}/solid/"
+//}
+//
+//internal fun RoutingContext.isMetadataRequest(): Boolean {
+//    return this.getResourceUri().path.endsWith(METADATA_RESOURCE_SUFFIX)
+//}
 
 internal fun RoutingContext.bodyAsInputStream(): InputStream {
     val buffer = this.body().buffer()
@@ -92,8 +85,8 @@ internal fun isSupportedContainerType(type: String?): Boolean {
     return type == LDPVocab.BasicContainer
 }
 
-internal fun MediaType.isRDFConvertableTo(other: MediaType): Boolean {
-    return this.isSupportedRDFType() && other.isSupportedRDFType()
+internal fun MediaType.isRDFConvertableTo(other: MediaType?): Boolean {
+    return other != null && this.isSupportedRDFType() && other.isSupportedRDFType()
 }
 
 internal fun MediaType.isSupportedRDFType(): Boolean {

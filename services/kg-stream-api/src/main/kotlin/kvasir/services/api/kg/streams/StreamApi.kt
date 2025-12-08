@@ -15,10 +15,10 @@ import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.storage.StorageEvent
 import kvasir.plugins.messaging.kafka.Channels
+import kvasir.plugins.messaging.kafka.KafkaMessagingConfig
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
 import kvasir.utils.rdf.RDFTransformer
-import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema
@@ -30,24 +30,15 @@ import org.jboss.resteasy.reactive.server.spi.ServerRequestContext
 import java.time.Duration
 import java.util.*
 
+private const val STREAMING_BUFFER_SIZE = 500
+private const val STREAMING_BUFFERING_MAX_DELAY_MS = 1000L
+private const val RESUME_TOKEN_HTTP_HEADER_NAME = "X-Kvasir-Resume-Token"
+
 @Path("")
 class StreamApi(
     private val vertx: Vertx,
     private val knowledgeGraph: KnowledgeGraph,
-    @ConfigProperty(
-        name = "kafka.bootstrap.servers"
-    )
-    private val kafkaBootstrapServers: String,
-    @ConfigProperty(
-        name = "kvasir.streaming.buffer-size",
-        defaultValue = "500"
-    )
-    private val bufferSize: Int,
-    @ConfigProperty(
-        name = "kvasir.streaming.buffering-max-delay-ms",
-        defaultValue = "1000"
-    )
-    private val bufferingMaxDelayMs: Long,
+    private val kafkaConfig: KafkaMessagingConfig,
     private val uriInfo: KvasirUriInfo,
     @Channel(Channels.QUERY_REQUESTS_SUBSCRIBE)
     private val queryRequestsSubscriber: Multi<QueryRequestEvent>,
@@ -55,9 +46,7 @@ class StreamApi(
     private val lifecycleEventsSubscriber: Multi<LifeCycleEvent>,
     @Channel(Channels.STORAGE_EVENTS_SUBSCRIBE)
     private val storageMutationSubscriber: Multi<StorageEvent>,
-    private val requestContext: ServerRequestContext,
-    @ConfigProperty(name = "kvasir.streaming.resume-token-http-header-name", defaultValue = "X-Kvasir-Resume-Token")
-    private val resumeTokenHeaderName: String
+    private val requestContext: ServerRequestContext
 ) {
 
     @Path("{podId}/events/changes")
@@ -86,7 +75,7 @@ class StreamApi(
     ): Multi<JSONObject> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
-        requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
+        requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
             Channels.OUTBOX_TOPIC, ChangeReport::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
@@ -102,7 +91,7 @@ class StreamApi(
                     )
                 )
             }
-            .group().intoLists().of(bufferSize, Duration.ofMillis(bufferingMaxDelayMs))
+            .group().intoLists().of(STREAMING_BUFFER_SIZE, Duration.ofMillis(STREAMING_BUFFERING_MAX_DELAY_MS))
             .map { buffer ->
                 buffer.groupBy { it.changeRequestId }.map { (changeRequestId, records) ->
                     ChangeRecords(
@@ -148,7 +137,7 @@ class StreamApi(
     ): Multi<JSONObject> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
-        requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
+        requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
             Channels.QUERY_REQUESTS_TOPIC, QueryRequestEvent::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
@@ -184,7 +173,7 @@ class StreamApi(
     ): Multi<JSONObject> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
-        requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
+        requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
             Channels.LIFECYCLE_EVENTS_TOPIC, LifeCycleEvent::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
@@ -220,7 +209,7 @@ class StreamApi(
     ): Multi<JSONObject> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
-        requestContext.serverResponse().setResponseHeader(resumeTokenHeaderName, streamId)
+        requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
             Channels.STORAGE_EVENTS_TOPIC, StorageEvent::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
@@ -238,7 +227,7 @@ class StreamApi(
         enableAutoCommit: Boolean = true
     ): Multi<Message<T>> {
         val config = mutableMapOf(
-            "bootstrap.servers" to kafkaBootstrapServers,
+            "bootstrap.servers" to kafkaConfig.bootstrapServers(),
             "key.deserializer" to "org.apache.kafka.common.serialization.StringDeserializer",
             "value.deserializer" to "org.apache.kafka.common.serialization.StringDeserializer",
             "group.id" to consumerName,

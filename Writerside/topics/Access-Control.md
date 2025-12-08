@@ -2,25 +2,28 @@
 
 <show-structure depth="4"/>
 
-Kvasir supports multiple authentication and authorization mechanisms via a modular, pluggable architecture.
+Kvasir implements authentication by processing JWT tokens in the `Authorization` header of incoming requests, both
+`Bearer` and `DPoP` tokens are supported. The tokens are validated according to the OpenID Connect and OAuth 2
+standards.
+When a WebID claim is present in the token, Kvasir performs additional verification to ensure the token was issued by an
+OIDC server that is trusted by the WebID owner (per [Solid OIDC specification](https://solidproject.org/TR/oidc)).
+_WebIDs can be disabled by setting `auth.enable-solid-web-id` to false in the Pod configuration._
 
-A policy agent implementation can be selected at build time by setting the `policy.agent` Maven property. If no property is provided, no policy agent will be used (`noauth`).
+On top of this authentication layer, Kvasir integrates multiple authorization mechanisms via a modular, pluggable
+architecture, based around [OpenFGA](https://openfga.dev):
 
-To enable an agent, provide the property during the build (e.g., `-Dpolicy.agent=openfga`).
+- Using **OpenFGA** relationship-based access control (ReBAC), fine-grained access control policies can be expressed and
+  enforced for Kvasir HTTP resources. These policies are local to the Kvasir server instance.
+- OpenFGA relationships can also be used to express that policy decisions for specific resources (or resource
+  hierarchies) should be delegated to external systems. Kvasir currently supports the following integrations:
+    - Delegate to **[A4DS](https://spec.knows.idlab.ugent.be/A4DS/L1/latest/)/UMA 2.0** compliant Authorization Servers.
+    - Delegate to any external system that implements a specific **HTTP endpoint** for policy decision requests.
 
-The following implementations are available:
+## Keycloak and OpenFGA
 
-|                                               | Description                                                                                                                                                                            | `policy.agent` value | Image suffix | Status                                                              |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------ | ------------------------------------------------------------------- |
-| [openfga-policy-agent](#openfga-policy-agent) | Uses [Keycloak](https://www.keycloak.org/) for authentication and [OpenFGA](https://openfga.dev) for fine-grained access control. Auth flow conforms to OpenID Connect and OAuth 2.1.  | `openfga`            | `-openfga`   | Ready for use (included in default builds)                          |
-| [a4ds-policy-agent](#a4ds-policy-agent)       | Turns Kvasir into an 'Authorization for Data Spaces (A4DS)' compatible Resource server. The [A4DS specification](https://spec.knows.idlab.ugent.be/A4DS/L1/latest/) builds on UMA 2.0. | `a4ds`               | `-a4ds`      | Basic implementation available (check known limitations before use) |
-| No policy agent plugin                        | Disables authentication and access control. May be useful for specific use cases or development purposes.                                                                              | `noauth` (default)   | `-noauth`    |                                                                     |
-
-## OpenFGA Policy Agent
-
-The OpenFGA Policy Agent uses Keycloak as authentication solution. OpenFGA is used to manage authorization. Some of the
-main benefits
-for choosing Keycloak are:
+By default, Kvasir installations come with a Keycloak server that is used as a OIDC-compliant Identity Provider for
+authentication.
+OpenFGA is used to manage authorization. Some of the main benefits for choosing Keycloak are:
 
 - Uses battle-tested
   standards ([OpenID Connect 1.0](https://openid.net/specs/openid-connect-core-1_0.html), [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-11))
@@ -43,11 +46,10 @@ or [Dev mode](Getting-started.md#running-in-dev-mode)) the following will happen
 
 - A keycloak instance is spun up, it will have a default `master` realm and a generated `quarkus` realm for initial
   setup
-- In the `quarkus` realm, two clients are created:
-  - **quarkus-app**: this client is used by the Kvasir backend to verify tokens issued by this Keycloak instance.
-  - **kvasir-ui**: this client manages authentication for the Kvasir UI client, which is a Single Page Application. It
-    is there mainly to be able to log into the pod's realm and thus get a token. This
-    bearer token can then be sent to the [Kvasir APIs](API-Reference.md).
+- In the `quarkus` realm, one client is created automatically:
+    - **kvasir-ui**: this client manages authentication for the Kvasir UI client, which is a Single Page Application. It
+      is there mainly to be able to log into the pod's realm and thus get a token. This
+      bearer token can then be sent to the [Kvasir APIs](API-Reference.md).
 - A default user is created for each Pod. Temporary credentials for that user are set to
   `podname:podname` (eg. `alice:alice`). Upon a first login, these will be prompted for change.
 
@@ -60,9 +62,9 @@ When creating your own client, an important distinction must be made: _Is the cl
   client_.
 
 Examples of public clients are Single Page Applications (client-side code), examples of confidential clients are
-Unattended backend services.
+Unattended backend services. Usage examples for both types of clients are provided below.
 
-##### Public client
+##### Public client {collapsible="true"}
 
 To be able to get a bearer token that can access the [Kvasir APIs](API-Reference.md), a public (browser) client has to
 authenticate on behalf of that user. This means it will follow
@@ -79,8 +81,6 @@ kvasir:
   bootstrap:
     pods:
       - name: alice
-        configuration: |
-          {}
         generate-clients:
           - client-id: my-public-client
             redirect-uris:
@@ -111,64 +111,107 @@ bearer token.
 In the example below, you can see how to request a token via the Authorization Code Flow in typescript.
 
 ```ts
-/** Fetch important urls */
+/** Fetch important urls. (helper class below) */
 async function init() {
-  // Discover authServerUrl of the pod
-  const kvasirHost = "http://localhost:8080";
-  const pods = (await fetch(kvasirHost)).json();
-  const profileUrl = (await pods)["@graph"].find(
-    (pod: any) => `${kvasirHost}/alice` == pod["@id"],
-  )["kss:profile"];
-  const profile = (await fetch(profileUrl)).json();
-  const authUrl = (await profile)["kss:authServerUrl"];
+    // Discover authServerUrl of the pod
+    const kvasirHost = "http://localhost:8080";
+    // Hit authed endpoint to get Www-Authenticate header
+    const {headers} = (await fetch(`${kvasirHost}/alice/changes`));
+    const wwwAuthParser = new WwwAuthParser(["Bearer", "UMA"]);
+    const authUrl = wwwAuthParser.parseHeader(headers.get("Www-Authenticate")).Bearer.as_uri;
 
-  // Fetch auth and token url from openid config
-  const config = (
-    await fetch(`${authUrl}/.well-known/openid-configuration`)
-  ).json();
-  const { authorization_endpoint, token_endpoint } = await config;
+    // Fetch auth and token url from openid config
+    const config = (
+        await fetch(`${authUrl}/.well-known/openid-configuration`)
+    ).json();
+    const {authorization_endpoint, token_endpoint} = await config;
 
-  // Printout
-  console.log(authorization_endpoint);
-  console.log(token_endpoint);
+    // Printout
+    console.log(authorization_endpoint);
+    console.log(token_endpoint);
 }
 
 /** Trigger a login and redirect back to this page */
 async function login() {
-  const params = new URLSearchParams({
-    client_id: "my-public-client",
-    redirect_uri: "http://localhost:4200/test",
-    response_type: "code",
-    response_mode: "fragment",
-    scope: "openid",
-  });
-  // Redirect user agent to login page
-  window.location.assign(`${authorization_endpoint}?${params.toString()}`);
+    const params = new URLSearchParams({
+        client_id: "my-public-client",
+        redirect_uri: "http://localhost:4200/test",
+        response_type: "code",
+        response_mode: "fragment",
+        scope: "openid",
+    });
+    // Redirect user agent to login page
+    window.location.assign(`${authorization_endpoint}?${params.toString()}`);
 }
 
 /** Function to check for code in fragment parameters, once page loads */
 async function checkCodeResponse() {
-  const fragment = new URLSearchParams(window.location.hash);
-  const code = fragment.get("code");
-  if (code) {
-    const tokenRequest = new URLSearchParams({
-      code: code,
-      grant_type: "authorization_code",
-      client_id: "my-public-client",
-      redirect_uri: "http://localhost:4200/test",
-    });
+    const fragment = new URLSearchParams(window.location.hash);
+    const code = fragment.get("code");
+    if (code) {
+        const tokenRequest = new URLSearchParams({
+            code: code,
+            grant_type: "authorization_code",
+            client_id: "my-public-client",
+            redirect_uri: "http://localhost:4200/test",
+        });
 
-    // send code back to token endpoint
-    const response = await fetch(token_endpoint, {
-      method: "post",
-      body: tokenRequest,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    });
-    const token = await response.json();
-    console.log("Bearer token", token["access_token"]);
-  }
+        // send code back to token endpoint
+        const response = await fetch(token_endpoint, {
+            method: "post",
+            body: tokenRequest,
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+        });
+        const token = await response.json();
+        console.log("Bearer token", token["access_token"]);
+    }
+}
+
+/* Helper class */
+
+export class WwwAuthParser<A = any> {
+    constructor(private schemes: (keyof A)[]) {
+    }
+
+    /**
+     * Parse a Www-Authenticate header into a map of scheme -> parameters
+     * @param wwwAuthenticationHeader
+     */
+    parseHeader(wwwAuthenticationHeader: string): A {
+        const tokens = wwwAuthenticationHeader
+            .trim()
+            .split(',')
+            .flatMap((tok) => tok.trim().split(/\s+/));
+        let currentScheme: keyof A | null = null;
+        let responseMap = {} as any;
+        tokens.forEach((tok) => {
+            if (this.schemes.map((sch) => sch as string).includes(tok) && currentScheme != tok) {
+                currentScheme = tok as keyof A;
+                responseMap[currentScheme] = {} as Record<string, string>;
+            } else if (currentScheme != null) {
+                const params = tok.split('=');
+                if (params.length == 2) {
+                    responseMap[currentScheme][params[0]] = unquote(params[1]);
+                } else {
+                    responseMap[currentScheme][params[0]] = true;
+                }
+            } else {
+                throw new Error('Www-Authenticate header is invalid!');
+            }
+        });
+        return responseMap as A;
+    }
+}
+
+function unquote(str: string): string {
+    if (str != null) {
+        if (str.startsWith('"') && str.endsWith('"')) {
+            return str.slice(1, str.length - 1);
+        }
+    }
+    return str;
 }
 ```
 
@@ -179,7 +222,7 @@ a [Kvasir API](API-Reference.md) request:
 Authorization: Bearer <token>
 ```
 
-##### Confidential client
+##### Confidential client {collapsible="true"}
 
 To be able to get a bearer token that can access the Kvasir APIs, a confidential client can authenticate as itself.
 To do this, it can use its client credentials to request a bearer token directly from the `token_endpoint`.
@@ -194,8 +237,6 @@ kvasir:
   bootstrap:
     pods:
       - name: alice
-        configuration: |
-          {}
         generate-clients:
           - client-id: my-confidential-client
             client-secret: my-secret
@@ -239,7 +280,7 @@ generate-clients:
     openfga:
       relationships:
         - target-resource: "/slices/my-slice"
-          relations: ["reader", "writer", "deleter"]
+          relations: [ "reader", "writer", "deleter" ]
 ```
 
 This grants the client `my-confidential-client` read, write and delete permissions on the Slice
@@ -277,20 +318,20 @@ A **Resource** can have a `parent` relation to another resource, which allows fo
 Access checks are then resolved as follows:
 
 - A **User** `can_read` a **Resource** if:
-  - The user has a `reader` relation on the resource, or
-  - The user has an `owner` relation on the resource, or
-  - A `can_read` check on a parent resource returns true.
-  - And the user does not have a `blocked` relation on the resource.
+    - The user has a `reader` relation on the resource, or
+    - The user has an `owner` relation on the resource, or
+    - A `can_read` check on a parent resource returns true.
+    - And the user does not have a `blocked` relation on the resource.
 - A **User** `can_write` a **Resource** if:
-  - The user has a `writer` relation on the resource, or
-  - The user has an `owner` relation on the resource, or
-  - A `can_write` check on a parent resource returns true.
-  - And the user does not have a `blocked` relation on the resource.
+    - The user has a `writer` relation on the resource, or
+    - The user has an `owner` relation on the resource, or
+    - A `can_write` check on a parent resource returns true.
+    - And the user does not have a `blocked` relation on the resource.
 - A **User** `can_delete` a **Resource** if:
-  - The user has a `deleter` relation on the resource, or
-  - The user has an `owner` relation on the resource, or
-  - A `can_delete` check on a parent resource returns true.
-  - And the user does not have a `blocked` relation on the resource.
+    - The user has a `deleter` relation on the resource, or
+    - The user has an `owner` relation on the resource, or
+    - A `can_delete` check on a parent resource returns true.
+    - And the user does not have a `blocked` relation on the resource.
 
 #### Managing access control
 
@@ -361,6 +402,11 @@ Note that the `@id` of the user must be a valid URI, hence the `urn:kvasir-user:
 address (e.g. represented as `mailto:bob@example.org`) or a full URI (e.g. a WebID
 `https://kvasir.example.org/users/bob`), depending on the configured OIDC provider for the Pod.
 
+There are two special user identifiers that can be used:
+
+- `urn:kvasir-user:anonymous`: represents any unauthenticated user.
+- `urn:kvasir-wildcard`: represents any user, authenticated or not.
+
 ###### Check access
 
 To check if a user has access to a resource, you can use the following HTTP request:
@@ -396,69 +442,85 @@ Returns:
 }
 ```
 
-## A4DS Policy Agent
+#### Delegating to external systems
 
-When enabling the A4DS policy agent, Kvasir acts as a UMA Resource Server, delegating authentication and authorization
+##### A4DS/UMA 2.0 Authorization Servers
+
+When a [UMA server is configured for a Pod](Pod-Management.md#uma-configuration), Kvasir can delegate policy decisions
+for specific resources to that server.
+
+This is done by adding a delegation rule via the [ReBAC API](#adding-or-removing-a-relationship) or Kvasir UI, for
+example:
+
+```json
+{
+  "@context": {
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
+    "kss-fga": "https://kvasir.discover.ilabt.imec.be/fine-grained-access#"
+  },
+  "kss:insert": [
+    {
+      "@id": "urn:kvasir-wildcard",
+      "@type": "kss-fga:User",
+      "kss-fga:owner": {
+        "@id": "https://kvasir.example.org/slices/",
+        "@type": "kss-fga:Resource",
+        "kss-fga:external_access": {
+          "@id": "kss-fga:Uma"
+        }
+      }
+    }
+  ]
+}
+```
+
+Read this relationship as: _"When no direct access is granted by regular OpenFGA rules, delegate policy decisions up
+to `owner`-level access, to the external system identified by `kss-fga:uma`, regardless of the requesting user."_
+
+It is important to note that:
+
+- Internal OpenFGA relationships always take precedence over delegated access control.
+- Delegation rules can only be defined for the wildcard user (`urn:kvasir-wildcard`). Delegation for specific users
+  only, would not make sense, as the external system is responsible for evaluating user permissions.
+- A delegation rule cannot be combined with a regular relation of the same type on the same resource. E.g. in this case
+  it is not possible to also grant all users owner-level access to `/slices/` via a regular OpenFGA relationship. This
+  also would not make sense, as the external system would never be consulted.
+
+Alternatively, UMA delegation for the entire Pod can also be activated at Pod creation time, via the
+`auto-register-uma` (using bootstrap config) or `kss:autoRegisterUma` (using the API) properties.
+
+When enabling the A4DS delegation, Kvasir acts as a UMA Resource Server, delegating authentication and authorization
 to a configured A4DS/UMA-compliant Authorization Server.
-The A4DS Policy Agent implementation is being developed and tested using
+The A4DS implementation is being developed and tested using
 the [KNoWS UMA Authorization Server](https://github.com/SolidLabResearch/user-managed-access) as a reference. For any
 questions you may have regarding setting up an Authorization server, configuring policies, how to create and
 authenticate users & clients, etc; please refer to the documentation of the Authorization Server you are using.
 
 Contact information for the KNoWS group can be found at [](https://knows.idlab.ugent.be).
 
-### Usage
-
-To use this feature, a build of Kvasir with the A4DS policy agent enabled is required. You can create one by setting the `policy.agent` property to `a4ds` during the build.
-
-When running in dev mode, this can be done via:
-```bash
-./mvnw compile quarkus:dev -Dpolicy.agent=a4ds
-```
-
-When using our Container Image builds, look for tags with the `-a4ds` suffix.
-
-The default A4DS/UMA compliant Authorization Server to use, can be configured via the property
-`kvasir.plugins.policy-agent.a4ds.default-uma-server-url`.
-
-Individual Pods can be configured to use a different Authorization Server via the `authServerUrl` property in the Pod
-configuration. If not set, the default server will be used.
-
-Example of a Pod configuration using a custom Authorization Server:
-
-```json
-{
-  "@context": {
-    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#"
-  },
-  "kss:autoIngestRDF": true,
-  "kss:authConfiguration": {
-    "authServerUrl": "https://alice.example.org/uma"
-  }
-}
-```
+##### How it works
 
 For each request to an API endpoint, Kvasir checks for a Bearer token in the `Authorization` header.
 
 - If no token is present, Kvasir will create a ticket with the configured Authorization Server (AS), using the
   `permission_endpoint` in the UMA configuration of the AS (retrieved by performing a GET at
   `/.well-known/uma2-configuration`).
-  - If the AS responds with a 201 Created status code, Kvasir will forward the ticket, along with the URL of the AS,
-    to the client in a `WWW-Authenticate` header and respond with a 401 Unauthorized status code.
-  - If the AS responds with a 200 OK status code, Kvasir allows the requests to proceed (the Resource represented by
-    the API call is a public Resource).
-  - For any other response code, Kvasir will respond with a 401 Unauthorized status code (without `WWW-Authenticate`
-    challenge).
+    - If the AS responds with a 201 Created status code, Kvasir will forward the ticket, along with the URL of the AS,
+      to the client in a `WWW-Authenticate` header and respond with a 401 Unauthorized status code.
+    - If the AS responds with a 200 OK status code, Kvasir allows the requests to proceed (the Resource represented by
+      the API call is a public Resource).
+    - For any other response code, Kvasir will respond with a 401 Unauthorized status code (without `WWW-Authenticate`
+      challenge).
 - If a token is present, it is validated by Kvasir using the `introspection_endpoint` of the AS (also retrieved from the
   UMA configuration).
-  - If the token is valid and active, Kvasir checks if the token contains the required permissions to access the
-    requested Resource. If so, the request is allowed to proceed.
-  - If the above conditions are not met, Kvasir responds with a 401 Unauthorized status code along with a
-    `WWW-Authenticate` header containing the ticket and AS URL.
+    - If the token is valid and active, Kvasir checks if the token contains the required permissions to access the
+      requested Resource. If so, the request is allowed to proceed.
+    - If the above conditions are not met, Kvasir responds with a 401 Unauthorized status code along with a
+      `WWW-Authenticate` header containing the ticket and AS URL.
 
-### Known Limitations
+##### Known Limitations
 
-At the moment, the A4DS Policy Agent implementation has the following limitations:
+At the moment, the A4DS delegation implementation has the following limitations:
 
 - Kvasir will try to register the requested Resource with the AS every time a ticket is created, to ensure the Resource
   is known to the AS. This may lead to performance issues when a lot of different Resources are being requested. Once
@@ -466,8 +528,11 @@ At the moment, the A4DS Policy Agent implementation has the following limitation
   the AS, we can update the implementation to only register the Resource when it is not known to the AS.
 - At the moment, there is no reliable way to extract the user identity from the JWT token issued by the AS. This means
   that features that rely on knowing the user identity (e.g. removing data produced by a specific user) will not work
-  when using the A4DS Policy Agent. _The implementation tries to extract the `sub` claim from the token, but as this is
-  not set by the KNoWS implementation, it will fallback to the token identifier (jti)._
+  when using the A4DS Policy Agent. By default, the implementation tries to extract the `sub` claim from the token, but
+  this is
+  not set by the KNoWS implementation. However, Kvasir
+  allows [configuring custom principal extractors](Configuration-Reference.md#pod-configuration) to work around this
+  issue.
 - A JWKS keyset (hosted at `/.well-known/uma2-configuration`) is exposed by Kvasir, but the keypair is generated on
   each startup. This means that any tokens issued by Kvasir will be invalid after a restart. A proper key management
   solution should be implemented to solve this.
@@ -481,3 +546,67 @@ At the moment, the A4DS Policy Agent implementation has the following limitation
   currently applies for the KNoWS implementation, but may not be the case for all UMA servers. Future updates will
   include persistent mapping of Kvasir resources to UMA resource identifiers.
 
+#### Delegating to an external HTTP Endpoint Policy Enforcer
+
+When
+a [HTTP Endpoint Policy Enforcer is configured for a Pod](Pod-Management.md#external-http-endpoint-policy-enforcer),
+Kvasir can delegate policy decisions for specific resources to that HTTP endpoint.
+
+This is done by adding a delegation rule via the [ReBAC API](#adding-or-removing-a-relationship) or Kvasir UI, for
+example:
+
+```json
+{
+  "@context": {
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
+    "kss-fga": "https://kvasir.discover.ilabt.imec.be/fine-grained-access#"
+  },
+  "kss:insert": [
+    {
+      "@id": "urn:kvasir-wildcard",
+      "@type": "kss-fga:User",
+      "kss-fga:owner": {
+        "@id": "https://kvasir.example.org/slices/",
+        "@type": "kss-fga:Resource",
+        "kss-fga:external_access": {
+          "@id": "kss-fga:HttpEndpoint"
+        }
+      }
+    }
+  ]
+}
+```
+
+Read this relationship as: _"When no direct access is granted by regular OpenFGA rules, delegate policy decisions up
+to `owner`-level access, to the external system identified by `kss-fga:HttEndpoint`, regardless of the requesting
+user."_
+
+##### HTTP Endpoint Policy Enforcer contract
+
+When Kvasir needs to delegate a policy decision to the configured HTTP Endpoint Policy Enforcer, it will send a POST
+request to the configured URL with a JSON body similar to:
+
+```json
+{
+  "principal": "urn:kvasir-user:bob",
+  "requiredPermission": "read",
+  "requestUri": "https://kvasir.example.org/alice/slices/music-tracker/query",
+  "requestHeaders": {
+    "Authorization": "Bearer <token>",
+    "Other-Header": "value"
+  },
+  "requestMethod": "GET"
+}
+```
+
+This provides the HTTP Endpoint Policy Enforcer implementation with all the necessary information to make a policy
+decision. The implementation is expected to respond with the following JSON structure:
+
+```json
+{
+  "allowed": true
+}
+```
+
+If the `allowed` property is set to `true`, Kvasir will allow the request to proceed. In all other cases, the request
+will be denied.

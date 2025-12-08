@@ -1,11 +1,11 @@
 package kvasir.plugins.kg.clickhouse
 
 import io.quarkus.test.junit.QuarkusTest
+import io.vertx.core.json.Json
 import jakarta.inject.Inject
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
-import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -40,7 +40,7 @@ class TestClickhousePodStore {
         val pods = (1..10).map { i ->
             Pod(
                 "http://example.com/pod$i",
-                mapOf(KvasirVocab.autoIngestRDF to true, "http://example.org/testRunId" to testRunId)
+                Json.encode(mapOf(KvasirVocab.autoIngestRDF to true, "http://example.org/testRunId" to testRunId))
             )
         }
 
@@ -51,7 +51,7 @@ class TestClickhousePodStore {
 
         // Query them back
         val retrievedPods = podStore.find().await()
-            .indefinitely().items.filter { it.configuration["http://example.org/testRunId"] == testRunId }
+            .indefinitely().items.filter { it.getConfigAsJson()["http://example.org/testRunId"] == testRunId }
         assertEquals(pods.map { it.id }.toSet(), retrievedPods.map { it.id }.toSet())
 
         // Clean up
@@ -60,7 +60,7 @@ class TestClickhousePodStore {
         }
 
         val retrievedPodsAfterDelete = podStore.find().await()
-            .indefinitely().items.filter { it.configuration["http://example.org/testRunId"] == testRunId }
+            .indefinitely().items.filter { it.getConfigAsJson()["http://example.org/testRunId"] == testRunId }
         assertEquals(0, retrievedPodsAfterDelete.size)
     }
 

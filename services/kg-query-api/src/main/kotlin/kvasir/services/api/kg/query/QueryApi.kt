@@ -7,17 +7,18 @@ import io.smallrye.mutiny.Uni
 import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
-import kvasir.definitions.auth.GraphQLQueryChecker
+import kvasir.definitions.auth.AuthConstants
+import kvasir.definitions.config.PodConfig
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
-import kvasir.plugins.policyagent.openfga.extractors.GraphQLPostRelationExtractor
+import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
-import org.eclipse.microprofile.config.inject.ConfigProperty
+import kvasir.utils.pod.PodConfigProvider
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Content
 import org.eclipse.microprofile.openapi.annotations.media.Schema
@@ -31,12 +32,9 @@ const val QUERY_API_PATH = "/query"
 @Path("")
 class QueryApi(
     private val knowledgeGraph: KnowledgeGraph,
-    private val podStoreFactory: PodStoreFactory,
+    private val podConfigProvider: PodConfigProvider,
     private val uriInfo: KvasirUriInfo,
-    private val securityIdentity: Instance<SecurityIdentity>,
-    private val graphQLQueryChecker: Instance<GraphQLQueryChecker>,
-    @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
-    private val anonymousUserName: String
+    private val securityIdentity: Instance<SecurityIdentity>
 ) {
 
     @Path("{podId}$QUERY_API_PATH")
@@ -51,20 +49,13 @@ class QueryApi(
         @PathParam("podId") podId: String,
         input: QueryInputWithContext
     ): Uni<QueryResult> {
-        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
-            uriInfo.getResourceUri().toASCIIString(),
-            securityIdentity.get(),
-            input.query,
-            input.operationName
-        ) ?: Uni.createFrom().voidItem()).chain { _ ->
-            val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-            podStoreFactory.createPodStore().findById(fqPodId).onItem().ifNull()
-                .failWith(NotFoundException("Pod not found: $podId"))
-                .onItem().ifNotNull().transformToUni { pod ->
-                    val req = parseInput(pod!!, input)
-                    knowledgeGraph.query(req).toUni()
-                }
-        }
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return podConfigProvider.getPodConfigById(fqPodId).onItem().ifNull()
+            .failWith(NotFoundException("Pod not found: $podId"))
+            .onItem().ifNotNull().transformToUni { podConfig ->
+                val req = parseInput(fqPodId, podConfig!!, input)
+                knowledgeGraph.query(req).toUni()
+            }
     }
 
     @Path("{podId}$QUERY_API_PATH")
@@ -78,32 +69,26 @@ class QueryApi(
     fun queryJsonLD(
         @PathParam("podId") podId: String, input: QueryInputWithContext
     ): Uni<Any> {
-        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
-            uriInfo.getResourceUri().toASCIIString(),
-            securityIdentity.get(),
-            input.query,
-            input.operationName
-        ) ?: Uni.createFrom().voidItem()).chain { _ ->
-            val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-            podStoreFactory.createPodStore().findById(fqPodId).onItem().ifNull()
-                .failWith(NotFoundException("Pod not found: $podId"))
-                .onItem().ifNotNull().transformToUni { pod ->
-                    val req = parseInput(pod!!, input)
-                    knowledgeGraph.query(req).map {
-                        it.toJsonLD(req.context)
-                    }.toUni()
-                }
-        }
+        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return podConfigProvider.getPodConfigById(fqPodId).onItem().ifNull()
+            .failWith(NotFoundException("Pod not found: $podId"))
+            .onItem().ifNotNull().transformToUni { podConfig ->
+                val req = parseInput(fqPodId, podConfig!!, input)
+                knowledgeGraph.query(req).map {
+                    it.toJsonLD(req.context)
+                }.toUni()
+            }
     }
 
     private fun parseInput(
-        pod: Pod,
+        podId: String,
+        podConfig: PodConfig,
         input: QueryInputWithContext
     ): QueryRequest {
         return QueryRequest(
-            input.providedContext ?: pod.getDefaultContext(),
-            securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
-            pod.id,
+            input.providedContext ?: podConfig.defaultContext(),
+            securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: AuthConstants.ANONYMOUS_USERNAME,
+            podId,
             null,
             input.query,
             input.variables,

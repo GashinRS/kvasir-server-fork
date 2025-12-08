@@ -22,11 +22,13 @@ import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.graphql.SQLConvertorMode
 import kvasir.plugins.kg.clickhouse.graphql.saref.SarefDatafetcher
 import kvasir.plugins.kg.clickhouse.graphql.saref.TSQLConvertor
-import kvasir.plugins.kg.clickhouse.specs.*
+import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
+import kvasir.plugins.kg.clickhouse.specs.ObservationInsertRecordSpec
+import kvasir.plugins.kg.clickhouse.specs.TIME_SERIES_DATA_COLUMNS
+import kvasir.plugins.kg.clickhouse.specs.TIME_SERIES_DATA_TABLE
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
 import kvasir.utils.graphql.getFQName
 import kvasir.utils.rdf.RDFTransformer
-import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory
 import java.time.Instant
 import java.time.format.DateTimeParseException
@@ -34,8 +36,6 @@ import kotlin.jvm.optionals.getOrNull
 
 @Singleton
 class SarefTimeseriesStorageBackend(
-    @ConfigProperty(name = "kvasir.plugins.kg.clickhouse.storage-buffer", defaultValue = "100000")
-    private val bufferSize: Int,
     private val sarefDatafetcher: SarefDatafetcher,
     clickhouseClient: ClickhouseClient,
 ) : AbstractStorageBackend(TIME_SERIES_DATA_TABLE, TIME_SERIES_DATA_COLUMNS, clickhouseClient) {
@@ -82,7 +82,7 @@ class SarefTimeseriesStorageBackend(
             }
             // Filter out matches that did not result in an Observation
             .filter { it.first != null }
-            .group().intoLists().of(bufferSize)
+            .group().intoLists().of(DEFAULT_BUFFER_SIZE)
             .onItem().transformToUniAndConcatenate { batch ->
                 // Store the observations in the Timeseries store
                 write(databaseFromPodId(buffer.request.podId), batch.mapNotNull { it.first }).chain { _ ->
