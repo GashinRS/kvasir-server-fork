@@ -1,7 +1,0 @@
-kvasir:
-  services:
-    storage:
-      s3:
-        endpoint: ${quarkus.s3.endpoint-override}
-        access-key: ${quarkus.s3.aws.credentials.static-provider.access-key-id}
-        secret-key: ${quarkus.s3.aws.credentials.static-provider.secret-access-key}

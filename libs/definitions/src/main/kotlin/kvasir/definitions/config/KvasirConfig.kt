@@ -1,7 +1,8 @@
 package kvasir.definitions.config
 
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.config.ConfigMapping
-import io.smallrye.config.WithConverter
 import io.smallrye.config.WithDefault
 import io.smallrye.config.WithName
 import io.vertx.core.json.JsonObject
@@ -9,14 +10,153 @@ import kvasir.definitions.rdf.JSONObject
 import org.eclipse.microprofile.config.spi.Converter
 import java.util.*
 
-object KvasirConfig {
+@ConfigMapping(prefix = "kvasir.http")
+interface HttpConfig {
 
-    const val BASE_URI_PROPERTY = "kvasir.base-uri"
-    const val BASE_URI_DEFAULT = "http://localhost:8080/"
+    /**
+     * The base URI where Kvasir is accessible.
+     */
+    fun baseUri(): String
 
-    const val WEBCLIENT_URI_PROPERTY = "kvasir.webclient-uri"
-    const val WEBCLIENT_URI_DEFAULT = "http://localhost:8080/_ui/"
+    /**
+     * The URI where the Kvasir web client is accessible.
+     */
+    fun webclientUri(): String
+}
 
+/**
+ * Default configuration related to Pods.
+ * May be overridden per Pod.
+ */
+@ConfigMapping(prefix = "kvasir.pod")
+interface PodConfig {
+
+    /**
+     * The default JSON-LD context to use when interfacing with the global GraphQL endpoint of the Pod's Knowledge Graph.
+     * This allows the execution of standard GraphQL queries (which do not have context information) against the Pod's Knowledge Graph.
+     */
+    @JsonProperty("default-context")
+    fun defaultContext(): Map<String, String>
+
+    /**
+     * If true, RDF data will be automatically ingested into the KG when uploaded via the storage-api.
+     */
+    @WithDefault("false")
+    @JsonProperty("auto-ingest-rdf")
+    fun autoIngestRdf(): Boolean
+
+    /**
+     * Authentication and authorization configuration for the Pod.
+     */
+    @JsonProperty("auth")
+    fun auth(): PodAuthConfig
+
+}
+
+interface PodAuthConfig {
+    /**
+     * Configuration related to OpenID Connect (OIDC) authentication.
+     */
+    @JsonProperty("oidc")
+    fun oidc(): Optional<OIDCConfig>
+
+    /**
+     * Whether to enable Solid WebID support.
+     */
+    @WithDefault("false")
+    @JsonProperty("enable-solid-web-id")
+    fun enableSolidWebId(): Boolean
+
+    /**
+     * Whether to require DPoP tokens for protected resources.
+     */
+    @WithDefault("false")
+    @JsonProperty("require-dpop")
+    fun requireDpop(): Boolean
+
+    /**
+     * Whether to skip the access token hash (ath) check for DPoP tokens.
+     * Note: skipping this check may have security implications and should only be done if you fully understand the consequences.
+     * This setting is primarily intended for backward compatibility with clients that implement an earlier version of the DPoP specification.
+     */
+    @WithDefault("false")
+    @JsonProperty("skip-dpop-ath-check")
+    fun skipDpopAthCheck(): Boolean
+
+    /**
+     * Configuration related to UMA authorization.
+     */
+    @JsonProperty("uma")
+    fun uma(): Optional<UMAConfig>
+
+    /**
+     * Configuration for HTTP Endpoint Policy Enforcers.
+     */
+    @JsonProperty("http-endpoint-policy-enforcer")
+    fun httpEndpointPolicyEnforcer(): Optional<HttpEndpointPolicyEnforcerConfig>
+}
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+interface JWTProviderConfig {
+    @JsonProperty("server-url")
+    fun serverUrl(): String
+
+    /**
+     * Allows configuring a custom JWT principal extractor for JWT tokens issued by this provider.
+     */
+    @JsonProperty("principal-extractor")
+    fun principalExtractor(): Optional<JWTPrincipalExtractorConfig>
+
+    /**
+     * Allowed clock skew in seconds to apply during JWT token validation.
+     */
+    @JsonProperty("jwt-allowed-clock-skew-seconds")
+    fun jwtAllowedClockSkewSeconds(): Int
+}
+
+interface OIDCConfig : JWTProviderConfig
+
+interface UMAConfig : JWTProviderConfig
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+interface HttpEndpointPolicyEnforcerConfig {
+    @JsonProperty("url")
+    fun url(): String
+
+    @JsonProperty("basic-auth")
+    fun basicAuth(): Optional<BasicAuthConfig>
+
+    @JsonProperty("api-key")
+    fun apiKey(): Optional<ApiKeyConfig>
+}
+
+interface JWTPrincipalExtractorConfig {
+    fun className(): String
+    fun config(): Map<String, String>
+}
+
+interface BasicAuthConfig {
+    @JsonProperty("username")
+    fun username(): String
+
+    @JsonProperty("password")
+    fun password(): String
+}
+
+interface ApiKeyConfig {
+    @JsonProperty("key-name")
+    fun keyName(): String
+
+    @JsonProperty("key-value")
+    fun keyValue(): String
+
+    @JsonProperty("send-via")
+    fun sendVia(): ApiKeySendVia
+}
+
+enum class ApiKeySendVia {
+    header,
+    query
 }
 
 /**
@@ -28,7 +168,7 @@ interface BootstrapConfig {
     /**
      * Returns the list of pods to be initialized based on the supplied config.
      */
-    fun pods(): List<PodConfig>
+    fun pods(): List<BootstrapPodConfig>
 
     /**
      * If true, the Kvasir init-service will terminate after the setup is completed (or failed).
@@ -37,7 +177,7 @@ interface BootstrapConfig {
     fun exitAfterSetup(): Boolean
 }
 
-interface PodConfig {
+interface BootstrapPodConfig {
     /**
      * The name of the pod. The pod will be accessible via {kvasir.base-uri}/{name}.
      */
@@ -51,18 +191,27 @@ interface PodConfig {
     fun ownerUserId(): Optional<String>
 
     /**
+     * If set to true, authorization is delegated to the configured UMA server for all resources.
+     */
+    @WithDefault("false")
+    fun autoRegisterUma(): Boolean
+
+    /**
+     * If set to true, authorization is delegated to the configured HTTP Endpoint Policy Enforcer for all resources.
+     */
+    @WithDefault("false")
+    fun autoRegisterHttpEndpointPolicyEnforcer(): Boolean
+
+    /**
      * As a convenience, Kvasir allows generating clients for the Pod from config.
      * For now, this is only supported when using Kvasir's built-in Keycloak server.
      */
     fun generateClients(): Optional<List<GenerateClientConfig>>
 
     /**
-     * Configure the Pod via a JSON-LD object.
-     * This maps to the property 'https://kvasir.discover.ilabt.imec.be/vocab#' when creating or updating a Pod using
-     * the Pod Management API.
+     * Allows overriding Pod-specific configuration.
      */
-    @WithConverter(JsonConvertor::class)
-    fun configuration(): JSONObject
+    fun configuration(): PodConfig
 }
 
 interface GenerateClientConfig {
@@ -127,8 +276,8 @@ interface OpenFgaPermissionConfig {
 }
 
 class JsonConvertor : Converter<JSONObject> {
-    override fun convert(input: String): JSONObject {
-        return JsonObject(input).map
+    override fun convert(input: String?): JSONObject? {
+        return input?.takeIf { it.isNotBlank() }?.let { JsonObject(input).map }
     }
 
 }

@@ -2,9 +2,9 @@ package kvasir.services.api.storage
 
 import com.google.common.hash.Hashing
 import io.quarkus.logging.Log
+import io.quarkus.runtime.Startup
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.vertx.UniHelper
-import io.smallrye.reactive.messaging.MutinyEmitter
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
@@ -14,14 +14,14 @@ import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import jakarta.enterprise.inject.Instance
+import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.auth.AuthHandler
-import kvasir.definitions.config.KvasirConfig
+import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
-import kvasir.plugins.messaging.kafka.Channels
+import kvasir.plugins.messaging.kafka.StorageMutationEmitterProvider
+import kvasir.plugins.storage.s3.S3StorageConfig
 import kvasir.utils.s3.S3Utils
-import org.eclipse.microprofile.config.inject.ConfigProperty
-import org.eclipse.microprofile.reactive.messaging.Channel
 import uk.co.lucasweb.aws.v4.signer.Signer
 import uk.co.lucasweb.aws.v4.signer.credentials.AwsCredentials
 import java.net.URI
@@ -42,15 +42,14 @@ internal const val HEADER_X_AMZ_DATE = "x-amz-date"
  */
 @ApplicationScoped
 class StorageApi(
-    @ConfigProperty(name = "kvasir.services.storage.s3.endpoint")
-    private val s3Endpoint: String,
+    private val s3Config: S3StorageConfig,
     private val s3Interceptor: S3Interceptor,
     private val authHandler: Instance<AuthHandler>
 ) {
 
     fun onStart(@Observes router: Router, vertx: Vertx) {
-        Log.debug("storage-api proxying S3 requests to $s3Endpoint")
-        val s3Url = URI.create(s3Endpoint)
+        Log.debug("storage-api proxying S3 requests to ${s3Config.endpoint()}")
+        val s3Url = URI.create(s3Config.endpoint())
         val proxyClient = vertx.createHttpClient()
         val proxy = HttpProxy.reverseProxy(proxyClient)
         proxy.origin(s3Url.port, s3Url.host).addInterceptor(s3Interceptor)
@@ -70,16 +69,8 @@ class StorageApi(
 
 @ApplicationScoped
 class S3Interceptor(
-    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
-    private val baseUri: String,
-    @ConfigProperty(name = "kvasir.services.storage.s3.endpoint")
-    private val s3Endpoint: String,
-    @ConfigProperty(name = "kvasir.services.storage.s3.access-key")
-    private val s3AccessKey: String,
-    @ConfigProperty(name = "kvasir.services.storage.s3.secret-key")
-    private val s3SecretKey: String,
-    @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
-    private val anonymousUserName: String,
+    private val config: HttpConfig,
+    private val s3Config: S3StorageConfig,
     private val storageEventEmitterProvider: StorageMutationEmitterProvider,
     private val authHandler: Instance<AuthHandler>
 ) : ProxyInterceptor {
@@ -90,7 +81,7 @@ class S3Interceptor(
 
     }
 
-    private val s3Url = URI.create(s3Endpoint)
+    private val s3Url = URI.create(s3Config.endpoint())
 
     override fun handleProxyRequest(context: ProxyContext): Future<ProxyResponse> {
         return context.request().proxiedRequest().resume().body().compose { buffer ->
@@ -105,7 +96,7 @@ class S3Interceptor(
             val targetDecoded = arrayOf(targetUri.path, targetUri.query ?: "").joinToString("?");
             val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
             val sig = Signer.builder()
-                .awsCredentials(AwsCredentials(s3AccessKey, s3SecretKey))
+                .awsCredentials(AwsCredentials(s3Config.accessKey(), s3Config.secretKey()))
                 .header("host", "${s3Url.host}:${s3Url.port}")
                 .header("x-amz-date", isoDateTime)
                 .header("x-amz-content-sha256", payloadHash)
@@ -131,22 +122,24 @@ class S3Interceptor(
                 if (resp.statusCode in 200..399 && operationType != null) {
                     val podId = context.request().proxiedRequest().getParam("podId")
                     val sliceId = context.request().proxiedRequest().getParam("sliceId")
-                    val bucket = sliceId?.let { S3Utils.getBucket("$baseUri$podId/slices/$it") }
-                        ?: S3Utils.getBucket("$baseUri$podId")
+                    val bucket = sliceId?.let { S3Utils.getBucket("${config.baseUri()}$podId/slices/$it") }
+                        ?: S3Utils.getBucket("${config.baseUri()}$podId")
                     val event = StorageEvent(
                         id = "urn:kvasir:storage-events:${UUID.randomUUID()}",
                         timestamp = Instant.now(),
                         requestingUser = authHandler.takeIf { it.isResolvable }?.get()
                             ?.getPrincipalForProxiedRequest(context.request().proxiedRequest())?.name
-                            ?: anonymousUserName,
-                        podId = "$baseUri$podId",
-                        sliceId = sliceId?.let { "$baseUri$podId/slices/$it" },
+                            ?: AuthConstants.ANONYMOUS_USERNAME,
+                        podId = "${config.baseUri()}$podId",
+                        sliceId = sliceId?.let { "${config.baseUri()}$podId/slices/$it" },
                         objectId = URLDecoder.decode(
                             context.request().uri.substringAfter("/$bucket/").substringBefore("?"),
                             Charsets.UTF_8.name()
                         ),
-                        externalObjectUri = "${baseUri.removeSuffix("/")}${context.request().proxiedRequest().path()}",
-                        internalStorageUri = "$s3Endpoint${context.request().uri}",
+                        externalObjectUri = "${config.baseUri().removeSuffix("/")}${
+                            context.request().proxiedRequest().path()
+                        }",
+                        internalStorageUri = "${s3Config.endpoint()}${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),
                         type = operationType
                     )
@@ -171,10 +164,10 @@ class S3Interceptor(
     // TODO: take into account potential API prefixes
     private fun replacePath(uri: String, podId: String, sliceId: String?): String {
         return if (sliceId != null) {
-            val bucketId = S3Utils.getBucket("$baseUri$podId/slices/$sliceId")
+            val bucketId = S3Utils.getBucket("${config.baseUri()}$podId/slices/$sliceId")
             uri.replaceFirst("/$podId/slices/$sliceId/s3", "/$bucketId")
         } else {
-            val bucketId = S3Utils.getBucket("$baseUri$podId")
+            val bucketId = S3Utils.getBucket("${config.baseUri()}$podId")
             uri.replaceFirst("/$podId/s3", "/$bucketId")
         }
     }
@@ -194,14 +187,4 @@ class S3Interceptor(
         }
     }
 
-}
-
-@ApplicationScoped
-class StorageMutationEmitterProvider(
-    @Channel(Channels.STORAGE_EVENTS_PUBLISH)
-    private val storageMutationsEmitter: MutinyEmitter<StorageEvent>
-) {
-    fun getEmitter(): MutinyEmitter<StorageEvent> {
-        return storageMutationsEmitter
-    }
 }

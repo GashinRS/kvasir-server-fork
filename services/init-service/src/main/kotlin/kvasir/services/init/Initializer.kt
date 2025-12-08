@@ -5,28 +5,31 @@ import io.quarkus.runtime.Quarkus
 import io.quarkus.runtime.StartupEvent
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
+import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
+import jakarta.enterprise.inject.Instance
+import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.BootstrapConfig
-import kvasir.definitions.config.KvasirConfig
+import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.kg.clickhouse.ClickhouseInitializer
 import kvasir.utils.pod.PodSetupHelper
-import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.util.concurrent.atomic.AtomicBoolean
 
 @ApplicationScoped
 class Initializer(
-    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY, defaultValue = KvasirConfig.BASE_URI_DEFAULT)
-    private val baseUri: String,
-    private val dbInitializer: ClickhouseInitializer
-) : PodSetupHelper() {
+    private val podSetupHelper: PodSetupHelper,
+    private val podAuthInitializer: Instance<AuthInitializer>,
+    private val dbInitializer: ClickhouseInitializer,
+    private val httpConfig: HttpConfig,
+    private val bootstrapConfig: BootstrapConfig
+) {
 
     private val initializationComplete = AtomicBoolean(false)
 
     fun init(
-        @Observes event: StartupEvent,
-        config: BootstrapConfig,
+        @Observes event: StartupEvent
     ) {
         // Init system db
         val exitCode = dbInitializer.init()
@@ -42,10 +45,14 @@ class Initializer(
             }
             .chain { _ ->
                 // Init pods based on config
-                Multi.createFrom().iterable(config.pods())
+                Multi.createFrom().iterable(bootstrapConfig.pods())
                     .onItem().transformToUni { podConfig ->
-                        val podId = "${baseUri}${podConfig.name()}"
-                        createPod(podId, podConfig)
+                        val podId = "${httpConfig.baseUri()}${podConfig.name()}"
+                        podSetupHelper.createPod(
+                            podId,
+                            podConfig,
+                            Json.encode(podConfig.configuration())
+                        )
                     }
                     .concatenate()
                     .onCompletion().invoke { initializationComplete.set(true) }
@@ -62,7 +69,7 @@ class Initializer(
             .await().indefinitely()
 
         // Exit on failure, or when exitAfterSetup is set
-        if (exitCode != 0 || config.exitAfterSetup()) {
+        if (exitCode != 0 || bootstrapConfig.exitAfterSetup()) {
             Quarkus.asyncExit(exitCode)
         }
     }

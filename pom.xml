@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>kvasir</groupId>
     <artifactId>kvasir-parent</artifactId>
@@ -13,14 +14,17 @@
     <properties>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>
         <kotlin.version>2.2.21</kotlin.version>
-        <kotlin.jvmTarget>24</kotlin.jvmTarget>
-        <maven.compiler.release>25</maven.compiler.release>
+        <kotlin.jvmTarget>20</kotlin.jvmTarget>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.21.3</quarkus.platform.version>
-        <idlab.extension.openfga.version>0.11.0</idlab.extension.openfga.version>
+        <idlab.extension.openfga.version>1.0.1</idlab.extension.openfga.version>
+        <openfga.docker.model-tx.image>gitlab.ilabt.imec.be:4567/discover/ci-tools/fga-model-tx:latest
+        </openfga.docker.model-tx.image>
+        <model-tx.skip>false</model-tx.skip>
         <jackson.version>2.17.1</jackson.version>
         <guava.version>33.4.0-jre</guava.version>
         <rdf4j.version>5.0.3</rdf4j.version>
@@ -143,12 +147,15 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${surefire-plugin.version}</version>
                     <configuration>
+                        <argLine>--add-opens java.base/java.lang=ALL-UNNAMED</argLine>
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                             <maven.home>${maven.home}</maven.home>
-                            <quarkus.jacoco.data-file>${maven.multiModuleProjectDirectory}/target/jacoco.exec</quarkus.jacoco.data-file>
+                            <quarkus.jacoco.data-file>${maven.multiModuleProjectDirectory}/target/jacoco.exec
+                            </quarkus.jacoco.data-file>
                             <quarkus.jacoco.reuse-data-file>true</quarkus.jacoco.reuse-data-file>
-                            <quarkus.jacoco.report-location>${maven.multiModuleProjectDirectory}/target/coverage</quarkus.jacoco.report-location>
+                            <quarkus.jacoco.report-location>${maven.multiModuleProjectDirectory}/target/coverage
+                            </quarkus.jacoco.report-location>
                         </systemPropertyVariables>
                     </configuration>
                 </plugin>
@@ -220,7 +227,7 @@
                 <plugin>
                     <groupId>io.smallrye</groupId>
                     <artifactId>jandex-maven-plugin</artifactId>
-                    <version>3.5.0</version>
+                    <version>3.5.2</version>
                     <executions>
                         <execution>
                             <id>make-index</id>
@@ -252,7 +259,8 @@
                             <arguments>
                                 <argument>compose</argument>
                                 <argument>-f</argument>
-                                <argument>${maven.multiModuleProjectDirectory}/compose/compose.devservices.yml</argument>
+                                <argument>${maven.multiModuleProjectDirectory}/compose/compose.devservices.yml
+                                </argument>
                                 <argument>up</argument>
                                 <argument>-d</argument>
                                 <argument>--quiet-pull</argument>
@@ -272,9 +280,29 @@
                             <arguments>
                                 <argument>compose</argument>
                                 <argument>-f</argument>
-                                <argument>${maven.multiModuleProjectDirectory}/compose/compose.devservices.yml</argument>
+                                <argument>${maven.multiModuleProjectDirectory}/compose/compose.devservices.yml
+                                </argument>
                                 <argument>down</argument>
                                 <argument>-v</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <!-- FGA MODEL DSL TO JSON -->
+                    <execution>
+                        <id>fga-model-tx</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${model-tx.skip}</skip>
+                            <executable>docker</executable>
+                            <arguments>
+                                <argument>run</argument>
+                                <argument>-v</argument>
+                                <argument>${basedir}/plugins/openfga-pep/src/main/resources:/dsl</argument>
+                                <argument>-t</argument>
+                                <argument>${openfga.docker.model-tx.image}</argument>
                             </arguments>
                         </configuration>
                     </execution>

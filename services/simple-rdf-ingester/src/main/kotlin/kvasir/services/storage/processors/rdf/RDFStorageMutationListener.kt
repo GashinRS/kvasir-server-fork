@@ -6,7 +6,6 @@ import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.ChangeRequest
-import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.RDFMediaTypes
@@ -14,6 +13,7 @@ import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.idgen.ChangeRequestId
+import kvasir.utils.pod.PodConfigProvider
 import kvasir.utils.s3.S3Utils
 import kvasir.utils.s3.getObjectContentType
 import org.eclipse.microprofile.reactive.messaging.Incoming
@@ -28,7 +28,7 @@ import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest
 @ApplicationScoped
 class RDFStorageMutationListener(
     private val s3Client: S3AsyncClient,
-    private val podStoreFactory: PodStoreFactory
+    private val podConfigProvider: PodConfigProvider
 ) {
 
     @Incoming(Channels.STORAGE_EVENTS_SUBSCRIBE)
@@ -36,7 +36,7 @@ class RDFStorageMutationListener(
     fun consumeAndLog(storageEvents: Multi<StorageEvent>): Multi<ChangeRequest> {
         return storageEvents
             .onItem().transformToUniAndConcatenate { event ->
-                podStoreFactory.createPodStore().findById(event.podId).map { event to (it?.getAutoIngestRDF() == true) }
+                podConfigProvider.getPodConfigById(event.podId).map { event to (it?.autoIngestRdf() ?: false) }
             }
             .filter { (event, autoIngestEnabled) -> autoIngestEnabled && event.type.mutation }
             .map { (event, _) -> event }

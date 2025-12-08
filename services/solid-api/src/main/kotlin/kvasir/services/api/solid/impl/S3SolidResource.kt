@@ -8,13 +8,11 @@ import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.infrastructure.Infrastructure
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.json.Json
-import io.vertx.ext.web.RoutingContext
 import io.vertx.mutiny.core.Vertx
-import jakarta.enterprise.context.ApplicationScoped
+import jakarta.inject.Singleton
 import jakarta.ws.rs.BadRequestException
 import jakarta.ws.rs.ClientErrorException
 import jakarta.ws.rs.NotFoundException
-import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFMediaTypes
@@ -26,6 +24,7 @@ import kvasir.services.api.solid.vocab.DCVocab
 import kvasir.services.api.solid.vocab.LDPVocab
 import kvasir.services.api.solid.vocab.PosixStatVocab
 import kvasir.utils.http.getChildUri
+import kvasir.utils.s3.S3Utils
 import org.eclipse.rdf4j.model.Model
 import org.eclipse.rdf4j.model.impl.DynamicModelFactory
 import org.eclipse.rdf4j.rio.RDFFormat
@@ -45,16 +44,16 @@ import kotlin.reflect.KClass
 private const val S3_SOLID_METADATA_KEY = "solid-metadata"
 private const val S3_SOLID_METADATA_SIZE_KEY = "solid-metadata-size"
 
-@ApplicationScoped
+@Singleton
 class S3SolidApi(
     private val s3Client: S3AsyncClient,
     private val vertx: Vertx
 ) : SolidApi {
-    override fun <T : SolidResource> getContextualResource(ctx: RoutingContext, clazz: KClass<T>): T {
+    override fun <T : SolidResource> getContextualResource(ctx: SolidResourceRequestContext, clazz: KClass<T>): T {
         return when (clazz) {
             SolidContainer::class -> S3SolidContainer(ctx, s3Client, vertx)
             SolidDocument::class -> S3SolidDocument(ctx, s3Client, vertx)
-            else -> if (ctx.request().path().isContainerPath()) {
+            else -> if (ctx.isContainerPath()) {
                 S3SolidContainer(ctx, s3Client, vertx)
             } else if (ctx.isMetadataRequest()) {
                 S3SolidDocumentMetadata(ctx, s3Client, vertx)
@@ -66,11 +65,13 @@ class S3SolidApi(
 }
 
 abstract class S3SolidResource(
-    protected val context: RoutingContext,
+    protected val context: SolidResourceRequestContext,
     protected val s3Client: S3AsyncClient,
     protected val vertx: Vertx
 ) :
     SolidResource {
+
+    protected val bucketId = S3Utils.getBucket("${context.getBaseUri()}/${context.getPodName()}")
 
     abstract fun getResourceKey(): String
 
@@ -86,8 +87,8 @@ abstract class S3SolidResource(
 
             else -> {
                 Uni.combine().all().unis(
-                    s3Client.objectExists(context.getBucketId(), key),
-                    s3Client.objectExists(context.getBucketId(), key.removeSuffix("/"))
+                    s3Client.objectExists(bucketId, key),
+                    s3Client.objectExists(bucketId, key.removeSuffix("/"))
                 ).asTuple().map { tuple -> tuple.asList().map { it as Boolean } }
                     .chain { (existsAsFolder, existsAsDoc) ->
                         when {
@@ -107,7 +108,7 @@ abstract class S3SolidResource(
                                     .chain { _ ->
                                         Log.debug("Creating container at key '$key' with type '$containerType'")
                                         s3Client.putObject(
-                                            PutObjectRequest.builder().bucket(context.getBucketId()).key(key).build(),
+                                            PutObjectRequest.builder().bucket(bucketId).key(key).build(),
                                             AsyncRequestBody.empty()
                                         ).toUni().replaceWithVoid()
                                     }
@@ -125,7 +126,7 @@ abstract class S3SolidResource(
 }
 
 
-class S3SolidContainer(context: RoutingContext, s3Client: S3AsyncClient, vertx: Vertx) :
+class S3SolidContainer(context: SolidResourceRequestContext, s3Client: S3AsyncClient, vertx: Vertx) :
     S3SolidResource(context, s3Client, vertx),
     SolidContainer {
     override fun isPresent(): Uni<Boolean> {
@@ -133,7 +134,7 @@ class S3SolidContainer(context: RoutingContext, s3Client: S3AsyncClient, vertx: 
             // The root container always exists
             Uni.createFrom().item(true)
         } else {
-            s3Client.objectsWithPrefixExist(context.getBucketId(), getResourceKey())
+            s3Client.objectsWithPrefixExist(bucketId, getResourceKey())
         }
     }
 
@@ -141,7 +142,7 @@ class S3SolidContainer(context: RoutingContext, s3Client: S3AsyncClient, vertx: 
         return isPresent().chain { exists ->
             if (exists) {
                 s3Client.listObjectsV2Paginator(
-                    ListObjectsV2Request.builder().bucket(context.getBucketId()).prefix(getResourceKey())
+                    ListObjectsV2Request.builder().bucket(bucketId).prefix(getResourceKey())
                         .delimiter("/").build()
                 ).toMulti()
                     // TODO: Don't collect all results at once, but stream them as they come in (this would require a streamable RDF representation)
@@ -203,8 +204,8 @@ class S3SolidContainer(context: RoutingContext, s3Client: S3AsyncClient, vertx: 
 
     override fun delete(): Uni<Void> {
         return Uni.combine().all().unis(
-            s3Client.objectExists(context.getBucketId(), getResourceKey()),
-            s3Client.prefixHasChildren(context.getBucketId(), getResourceKey())
+            s3Client.objectExists(bucketId, getResourceKey()),
+            s3Client.prefixHasChildren(bucketId, getResourceKey())
         ).asTuple().map { result -> result.asList().map { it as Boolean } }
             .chain { (containerObjExists, containerHasChildren) ->
                 when {
@@ -213,7 +214,7 @@ class S3SolidContainer(context: RoutingContext, s3Client: S3AsyncClient, vertx: 
                         .failure(ClientErrorException("Cannot delete a non-empty container.", 409))
                     // If a container object was created, delete it
                     containerObjExists -> s3Client.deleteObject(
-                        DeleteObjectRequest.builder().bucket(context.getBucketId()).key(getResourceKey()).build()
+                        DeleteObjectRequest.builder().bucket(bucketId).key(getResourceKey()).build()
                     ).toUni().replaceWithVoid()
                     // If no container object was created, just return (compatibility with S3-backed containers that have no object at the container key)
                     else -> Uni.createFrom().failure(NotFoundException())
@@ -234,8 +235,8 @@ class S3SolidContainer(context: RoutingContext, s3Client: S3AsyncClient, vertx: 
         // Check if the container exists and check if the to be created resource exists (in parallel)
         return Uni.combine().all().unis(
             isPresent(),
-            s3Client.objectExists(context.getBucketId(), childKey),
-            s3Client.objectsWithPrefixExist(context.getBucketId(), "$childKey/"),
+            s3Client.objectExists(bucketId, childKey),
+            s3Client.objectsWithPrefixExist(bucketId, "$childKey/"),
         ).asTuple().chain { existChecks ->
             val (containerExists, childDocumentExists, childContainerExists) = existChecks.map { it as Boolean }
             if (!containerExists) {
@@ -249,12 +250,10 @@ class S3SolidContainer(context: RoutingContext, s3Client: S3AsyncClient, vertx: 
                 }
 
                 // Create child document
-                val contentLength = context.request().getHeader(HttpHeaders.CONTENT_LENGTH).toLong()
+                val contentLength = context.getContentLength()
                 s3Client.putObject(
-                    PutObjectRequest.builder().bucket(context.getBucketId()).key(childKey).contentType(
-                        context.request().getHeader(
-                            HttpHeaders.CONTENT_TYPE
-                        )
+                    PutObjectRequest.builder().bucket(bucketId).key(childKey).contentType(
+                        context.getContentType()
                     ).build(),
                     AsyncRequestBody.fromInputStream(content, contentLength, Infrastructure.getDefaultWorkerPool())
                 )
@@ -282,16 +281,16 @@ class S3SolidContainer(context: RoutingContext, s3Client: S3AsyncClient, vertx: 
 }
 
 
-class S3SolidDocument(context: RoutingContext, s3Client: S3AsyncClient, vertx: Vertx) :
+class S3SolidDocument(context: SolidResourceRequestContext, s3Client: S3AsyncClient, vertx: Vertx) :
     S3SolidResource(context, s3Client, vertx),
     SolidDocument {
     override fun isPresent(): Uni<Boolean> {
-        return s3Client.objectExists(context.getBucketId(), getResourceKey())
+        return s3Client.objectExists(bucketId, getResourceKey())
     }
 
     override fun getContent(): Uni<ContentResponse?> {
         return s3Client.getObject(
-            GetObjectRequest.builder().bucket(context.getBucketId()).key(getResourceKey()).build(),
+            GetObjectRequest.builder().bucket(bucketId).key(getResourceKey()).build(),
             AsyncResponseTransformer.toPublisher()
         ).toUni()
             .onItem().transform { resp ->
@@ -305,21 +304,19 @@ class S3SolidDocument(context: RoutingContext, s3Client: S3AsyncClient, vertx: V
 
     override fun delete(): Uni<Void> {
         return s3Client.deleteObject(
-            DeleteObjectRequest.builder().bucket(context.getBucketId()).key(getResourceKey()).build()
+            DeleteObjectRequest.builder().bucket(bucketId).key(getResourceKey()).build()
         )
             .toUni().replaceWithVoid()
     }
 
     override fun setContent(content: InputStream): Uni<URI?> {
-        val contentLength = context.request().getHeader(HttpHeaders.CONTENT_LENGTH).toLong()
+        val contentLength = context.getContentLength()
         // Check if the object exists
-        return s3Client.objectExists(context.getBucketId(), getResourceKey()).chain { exists ->
+        return s3Client.objectExists(bucketId, getResourceKey()).chain { exists ->
             // Upload the provided content
             s3Client.putObject(
-                PutObjectRequest.builder().bucket(context.getBucketId()).key(getResourceKey()).contentType(
-                    context.request().getHeader(
-                        HttpHeaders.CONTENT_TYPE
-                    )
+                PutObjectRequest.builder().bucket(bucketId).key(getResourceKey()).contentType(
+                    context.getContentType()
                 ).build(),
                 AsyncRequestBody.fromInputStream(content, contentLength, Infrastructure.getDefaultWorkerPool())
             ).toUni()
@@ -340,7 +337,7 @@ class S3SolidDocument(context: RoutingContext, s3Client: S3AsyncClient, vertx: V
     override fun modify(patch: Patch): Uni<URI?> {
         // Implement PATCH support (by loading the resource in RDF4J, applying the patch, and then writing it back)
         return s3Client.getObject(
-            GetObjectRequest.builder().bucket(context.getBucketId()).key(getResourceKey()).build(),
+            GetObjectRequest.builder().bucket(bucketId).key(getResourceKey()).build(),
             AsyncResponseTransformer.toBlockingInputStream()
         ).toUni()
             .chain { resp ->
@@ -370,7 +367,7 @@ class S3SolidDocument(context: RoutingContext, s3Client: S3AsyncClient, vertx: V
                 }
                     .chain { updatedFileAsBytes ->
                         s3Client.putObject(
-                            PutObjectRequest.builder().bucket(context.getBucketId()).key(getResourceKey())
+                            PutObjectRequest.builder().bucket(bucketId).key(getResourceKey())
                                 .contentType(rdfType.defaultMIMEType).build(),
                             AsyncRequestBody.fromBytes(updatedFileAsBytes)
                         ).toUni().map {
@@ -392,7 +389,7 @@ class S3SolidDocument(context: RoutingContext, s3Client: S3AsyncClient, vertx: V
 }
 
 class S3SolidDocumentMetadata(
-    context: RoutingContext,
+    context: SolidResourceRequestContext,
     s3Client: S3AsyncClient,
     vertx: Vertx
 ) : S3SolidResource(context, s3Client, vertx), SolidDocumentMetadata {
@@ -402,12 +399,12 @@ class S3SolidDocumentMetadata(
     }
 
     override fun isPresent(): Uni<Boolean> {
-        return s3Client.objectExists(context.getBucketId(), getResourceKey())
+        return s3Client.objectExists(bucketId, getResourceKey())
     }
 
     override fun getContent(): Uni<ContentResponse?> {
         return s3Client.headObject(
-            HeadObjectRequest.builder().bucket(context.getBucketId()).key(getResourceKey()).build()
+            HeadObjectRequest.builder().bucket(bucketId).key(getResourceKey()).build()
         ).toUni()
             .map { resp ->
                 val metaContent = JsonUtils.fromString(resp.metadata()[S3_SOLID_METADATA_KEY]?.let { encodedContent ->
@@ -439,12 +436,12 @@ class S3SolidDocumentMetadata(
         // Clear the metadata by removing the relevant metadata entries
         return updateObjectMetadata { metadata ->
             Uni.createFrom()
-                .item { metadata.filterKeys { it != S3_SOLID_METADATA_KEY  && it != S3_SOLID_METADATA_SIZE_KEY } }
+                .item { metadata.filterKeys { it != S3_SOLID_METADATA_KEY && it != S3_SOLID_METADATA_SIZE_KEY } }
         }
     }
 
     override fun setContent(content: InputStream): Uni<URI?> {
-        val mediaType = context.request().getHeader(HttpHeaders.CONTENT_TYPE)
+        val mediaType = context.getContentType()
         return vertx.executeBlocking {
             // Load content into RD4J model
             val rdfType = Rio.getParserFormatForMIMEType(mediaType).orElseThrow {
@@ -506,16 +503,16 @@ class S3SolidDocumentMetadata(
 
     private fun updateObjectMetadata(updateFunction: (Map<String, String>) -> Uni<Map<String, String>>): Uni<Void> {
         return s3Client.headObject(
-            HeadObjectRequest.builder().bucket(context.getBucketId()).key(getResourceKey()).build()
+            HeadObjectRequest.builder().bucket(bucketId).key(getResourceKey()).build()
         ).toUni()
             .chain { resp ->
                 updateFunction(resp.metadata())
                     .chain { updatedMetadata ->
                         s3Client.copyObject(
                             CopyObjectRequest.builder()
-                                .sourceBucket(context.getBucketId())
+                                .sourceBucket(bucketId)
                                 .sourceKey(getResourceKey())
-                                .destinationBucket(context.getBucketId())
+                                .destinationBucket(bucketId)
                                 .contentType(resp.contentType())
                                 .destinationKey(getResourceKey())
                                 .metadata(updatedMetadata)

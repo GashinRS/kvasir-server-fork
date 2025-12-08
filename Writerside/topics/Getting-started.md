@@ -131,16 +131,10 @@ requires you to have Java JDK 21 installed.
 
 The backing services for development are managed by Maven and will be started automatically.
 
-By default, the application starts with no policy agent enabled (`noauth`). To run with a specific agent, which is
-necessary for most features, you must activate it using the `policy.agent` property.
-
-To run the application in dev mode with the recommended `openfga` agent:
-
+To run the application in dev mode, execute:
 ```bash
-./mvnw compile quarkus:dev -Dpolicy.agent=openfga
+./mvnw compile quarkus:dev
 ```
-
-You can also use `a4ds` or `noauth` (the default).
 
 To stop the backing services and remove their volumes, run:
 
@@ -148,7 +142,7 @@ To stop the backing services and remove their volumes, run:
 ./mvnw clean
 ```
 
-You can skip the compose lifecycle by adding `-Dcompose.skip=true` to your Maven command.
+You can skip the compose lifecycle (for the Docker dependencies) by adding `-Dcompose.skip=true` to your Maven command.
 
 ## Issues
 

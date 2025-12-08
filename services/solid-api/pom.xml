@@ -30,6 +30,11 @@
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
+            <artifactId>s3-storage</artifactId>
+            <version>0.13.0</version>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-plugins</groupId>
             <artifactId>clickhouse-knowledge-graph</artifactId>
             <version>0.13.0</version>
         </dependency>

@@ -11,7 +11,6 @@ import kvasir.definitions.persistence.Repository
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
-import kvasir.definitions.rdf.getJsonObject
 import java.time.Instant
 import java.util.*
 
@@ -20,7 +19,7 @@ interface PodStoreFactory {
 }
 
 interface PodStore : Repository<Pod> {
-    fun deleteById(id: String, deleteData: Boolean=false): Uni<Void>
+    fun deleteById(id: String, deleteData: Boolean = false): Uni<Void>
 }
 
 @GenerateNoArgConstructor
@@ -28,28 +27,12 @@ data class Pod(
     @get:JsonProperty(JsonLdKeywords.id)
     override var id: String,
     @get:JsonProperty(KvasirVocab.configuration)
-    var configuration: Map<String, Any>
+    var configuration: String
 ) : PersistentEntity() {
 
     @JsonIgnore
-    fun getDefaultContext(): Map<String, Any> {
-        return configuration[KvasirVocab.defaultContext]?.let {
-            if (it is String && it.isNotEmpty()) {
-                JsonObject(it).map
-            } else {
-                null
-            }
-        } ?: emptyMap()
-    }
-
-    @JsonIgnore
-    fun getAutoIngestRDF(): Boolean {
-        return configuration[KvasirVocab.autoIngestRDF] as? Boolean == true
-    }
-
-    @JsonIgnore
-    fun getAuthConfiguration(): Map<String, Any>? {
-        return configuration.getJsonObject(KvasirVocab.authConfiguration)
+    fun getConfigAsJson(): JSONObject {
+        return JsonObject(configuration).map
     }
 
 }

@@ -18,6 +18,8 @@ object KvasirVocab {
     const val defaultContext = "${baseUri}defaultContext"
     const val delete = "${baseUri}delete"
     const val description = "${baseUri}description"
+    const val autoRegisterUma = "${baseUri}autoRegisterUma"
+    const val autoRegisterHttpEndpointPolicyEnforcer = "${baseUri}autoRegisterHttpEndpointPolicyEnforcer"
     const val message = "${baseUri}message"
     const val graph = "${baseUri}graph"
     const val insert = "${baseUri}insert"
@@ -44,9 +46,11 @@ object KvasirVocab {
     const val clientId = "${baseUri}clientId"
     const val clientSecret = "${baseUri}clientSecret"
     const val profile = "${baseUri}profile"
+    const val Pod = "${baseUri}Pod"
     const val authServerUrl = "${baseUri}authServerUrl"
     const val supportsChanges = "${baseUri}supportChanges"
     const val variables = "${baseUri}variables"
+    const val oidcServerUrl = "${baseUri}oidcServerUrl"
     const val operationName = "${baseUri}operationName"
     const val atTimestamp = "${baseUri}atTimestamp"
     const val atChangeRequestId = "${baseUri}atChangeRequestId"
@@ -54,6 +58,7 @@ object KvasirVocab {
     const val externalObjectUri = "${baseUri}externalObjectUri"
     const val internalObjectUri = "${baseUri}internalObjectUri"
     const val mutationType = "${baseUri}mutationType"
+    const val umaServerUrl = "${baseUri}umaServerUrl"
 }
 
 object KvasirNamedGraphs {
@@ -70,37 +75,32 @@ object FgaVocab {
     const val baseUri = "https://kvasir.discover.ilabt.imec.be/fine-grained-access#"
 
     const val Resource = "${baseUri}Resource"
-    const val Group = "${baseUri}Group"
     const val User = "${baseUri}User"
 
     const val allowed = "${baseUri}allowed"
-    const val member = "${baseUri}member"
     const val owner = "${baseUri}owner"
     const val parent = "${baseUri}parent"
     const val reader = "${baseUri}reader"
     const val writer = "${baseUri}writer"
     const val deleter = "${baseUri}deleter"
-    const val manager = "${baseUri}manager"
     const val blocked = "${baseUri}blocked"
     const val can_read = "${baseUri}can_read"
     const val can_write = "${baseUri}can_write"
     const val can_delete = "${baseUri}can_delete"
     const val can_manage = "${baseUri}can_manage"
+    const val external_access = "${baseUri}external_access"
 
     val ALL_TYPES = setOf(
         Resource,
-        Group,
         User
     )
 
-    val GROUP_RELATIONS = setOf(member)
     val RESOURCE_RELATIONS = setOf(
         owner,
         parent,
         reader,
         writer,
         deleter,
-        manager,
         blocked,
         can_read,
         can_write,

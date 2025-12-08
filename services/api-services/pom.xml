@@ -12,7 +12,6 @@
     <artifactId>api-services-parent</artifactId>
     <packaging>pom</packaging>
 
-
     <modules>
         <module>../kg-inbox-api</module>
         <module>../kg-query-api</module>
@@ -24,38 +23,11 @@
         <module>../solid-api</module>
     </modules>
 
-    <profiles>
-        <profile>
-            <id>openfga</id>
-            <activation>
-                <property>
-                    <name>policy.agent</name>
-                    <value>openfga</value>
-                </property>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>kvasir-plugins</groupId>
-                    <artifactId>openfga-policy-agent</artifactId>
-                    <version>${project.version}</version>
-                </dependency>
-            </dependencies>
-        </profile>
-        <profile>
-            <id>a4ds</id>
-            <activation>
-                <property>
-                    <name>policy.agent</name>
-                    <value>a4ds</value>
-                </property>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>kvasir-plugins</groupId>
-                    <artifactId>a4ds-policy-agent</artifactId>
-                    <version>${project.version}</version>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
+    <dependencies>
+        <dependency>
+            <groupId>kvasir-plugins</groupId>
+            <artifactId>openfga-pep</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
 </project>

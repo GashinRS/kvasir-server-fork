@@ -11,7 +11,7 @@ import io.vertx.mutiny.core.Vertx
 import io.vertx.mutiny.core.file.FileSystem
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
-import kvasir.definitions.config.KvasirConfig
+import kvasir.definitions.config.HttpConfig
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
@@ -28,7 +28,7 @@ const val SKIP_UI_SYSTEM_PROPERTY = "ui-service.phase";
 
 @ApplicationScoped
 class SpaHandler(
-    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY) private val host: String,
+    private val config: HttpConfig,
     @ConfigProperty(name = "policy.agent") private val policyAgent: Optional<String>,
     @ConfigProperty(name = SKIP_UI_SYSTEM_PROPERTY) private val uiServicePhase: Optional<String>
 ) {
@@ -90,7 +90,7 @@ class SpaHandler(
     private fun generateConfig(): JsonObject {
         val policyAgent = policyAgent.orElse(null).takeIf { it in setOf("openfga", "a4ds") };
         return JsonObject.of(
-            KEY_KVASIR_HOST, host,
+            KEY_KVASIR_HOST, config.baseUri(),
             KEY_POLICY_AGENT, policyAgent
         );
     }
