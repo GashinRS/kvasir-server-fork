@@ -10,9 +10,8 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { map } from 'rxjs';
 import { ConfigService } from '../services/config.service';
 import { KvasirService } from '../services/kvasir.service';
-import { SessionService } from '../services/session.service';
-import { Pod } from '../types';
 import { LoginFSM } from '../services/login-fsm';
+import { Pod } from '../types';
 
 @Component({
   selector: 'app-login',

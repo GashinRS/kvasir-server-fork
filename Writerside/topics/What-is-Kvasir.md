@@ -6,10 +6,9 @@ and associated with peacemaking. As such, Kvasir symbolizes the mission statemen
 generate knowledge, bringing applications together through interoperability and bridging the gap between a decentralized
 Web and modern Cloud development.
 
-The platform is being developed at [IDLab](https://idlab.technology) in the context of [SolidLab](https://solidlab.be)
-and is currently in early prototype stage.
+The platform now offers core functionalities and is being further developed at [IDLab](https://idlab.technology).
 
-## Planned Features
+## (Planned) Features
 
 * **Scalable data backend** built using industry-proven technologies such as Kubernetes, Apache Kafka, Clickhouse, Minio, etc.
 * **Powerful APIs**: ingest, query, stream and export large amounts of data using a range of APIs, optimized for

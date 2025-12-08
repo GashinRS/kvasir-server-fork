@@ -1,0 +1,36 @@
+<nz-select [nzCustomTemplate]="relationTpl">
+  <nz-option-group nzLabel="normal">
+    @for (rel of relations.normal; track rel.value) {
+      <nz-option [nzLabel]="rel.label" [nzValue]="rel.value" nzCustomContent>
+        <ng-content>
+          <nz-icon [nzType]="rel.icon"></nz-icon>
+          {{ rel.label }}
+        </ng-content>
+      </nz-option>
+    }
+  </nz-option-group>
+  <nz-option-group nzLabel="special">
+    @for (rel of relations.special; track rel.value) {
+      <nz-option [nzLabel]="rel.label" [nzValue]="rel.value" nzCustomContent>
+        <ng-content>
+          <nz-icon [nzType]="rel.icon"></nz-icon>
+          {{ rel.label }}
+        </ng-content>
+      </nz-option>
+    }
+  </nz-option-group>
+  <nz-option-group nzLabel="elevated">
+    @for (rel of relations.elevated; track rel.value) {
+      <nz-option [nzLabel]="rel.label" [nzValue]="rel.value" nzCustomContent>
+        <ng-content>
+          <nz-icon [nzType]="rel.icon"></nz-icon>
+          {{ rel.label }}
+        </ng-content>
+      </nz-option>
+    }
+  </nz-option-group>
+</nz-select>
+<ng-template #relationTpl let-selected>
+  <nz-icon [nzType]="getRelationIcon(selected.nzLabel)"></nz-icon>
+  {{ selected.nzLabel }}
+</ng-template>

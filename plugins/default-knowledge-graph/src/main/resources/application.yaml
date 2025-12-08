@@ -1,0 +1,11 @@
+kvasir-ext:
+  changes:
+    processing:
+      pipeline:
+        - class-name: kvasir.baseimpl.kg.EvaluateAssertions
+        - class-name: kvasir.baseimpl.kg.MaterializeS3References
+        - class-name: kvasir.baseimpl.kg.MaterializeRecords
+        - class-name: kvasir.baseimpl.kg.SliceGraphQLBasedValidator
+        - class-name: kvasir.plugins.kg.clickhouse.backends.MetadataStorageBackend
+        - class-name: kvasir.plugins.kg.clickhouse.backends.GenericStorageBackend
+          default-storage: true

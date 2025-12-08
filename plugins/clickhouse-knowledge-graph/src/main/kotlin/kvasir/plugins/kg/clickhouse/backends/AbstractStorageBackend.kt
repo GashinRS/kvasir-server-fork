@@ -13,6 +13,8 @@ import kvasir.plugins.kg.clickhouse.utils.MAX_PAGE_SIZE_RECORDS
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
 import kvasir.utils.cursors.OffsetBasedCursor
 
+internal const val DEFAULT_BUFFER_SIZE = 100000
+
 abstract class AbstractStorageBackend(
     protected val targetTable: String,
     protected val targetTableColumns: List<String>,

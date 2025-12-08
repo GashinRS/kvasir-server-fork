@@ -52,4 +52,7 @@ _openapi
 .local
 
 # Ignore environment files in the compose directory
-/compose/.env
+*.env
+
+*.tgz
+kubernetes/.kvasir.env

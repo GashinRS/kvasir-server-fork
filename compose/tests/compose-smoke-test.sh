@@ -3,13 +3,12 @@
 DOCKER_HOST=${1:-localhost}
 
 # Smoke test runs in docker enabled runner, localhost does not work here, use 'docker'
-overviewResponse=$(curl -s http://${DOCKER_HOST}:8080)
-#{"@context":{"kss":"https://kvasir.discover.ilabt.imec.be/vocab#"},"@graph":[{"@id":"http://localhost:8080/alice","kss:profile":"http://localhost:8080/alice/.profile"}]}
+overviewResponse=$(curl -H "Accept:application/ld+json" -s http://${DOCKER_HOST}:8080)
+#{"@context":{"kss":"https://kvasir.discover.ilabt.imec.be/vocab#"},"@graph":[{"@id":"http://localhost:8080/alice"}]}
 context=$(echo "$overviewResponse" | jq -r '.["@context"]["kss"]')
 aliceId=$(echo "$overviewResponse" | jq -r '.["@graph"][0]["@id"]')
-aliceProfile=$(echo "$overviewResponse" | jq -r '.["@graph"][0]["kss:profile"]')
 
-if [[ "$context" == "https://kvasir.discover.ilabt.imec.be/vocab#" && "$aliceId" == "http://localhost:8080/alice" && "$aliceProfile" == "http://localhost:8080/alice/.profile" ]]; then
+if [[ "$context" == "https://kvasir.discover.ilabt.imec.be/vocab#" && "$aliceId" == "http://localhost:8080/alice" ]]; then
   echo "Overview test passed!"
 else
   echo "Overview test failed!"
@@ -17,19 +16,19 @@ else
 fi
 
 # Replace all occurrences of localhost with docker hostname
-aliceProfile=${aliceProfile//localhost/${DOCKER_HOST}}
+alicePod=http://${DOCKER_HOST}:8080/alice
 
-echo "Testing alice .profile: $aliceProfile"
-aliceProfileResponse=$(curl -s $aliceProfile)
-#{"@id":"http://localhost:8080/alice/.profile","kss:authServerUrl":"http://localhost:8280/realms/alice","@context":{"kss":"https://kvasir.discover.ilabt.imec.be/vocab#"}}
-authServerUrl=$(echo "$aliceProfileResponse" | jq -r '.["kss:authServerUrl"]')
-context=$(echo "$aliceProfileResponse" | jq -r '.["@context"]["kss"]')
-aliceProfileId=$(echo "$aliceProfileResponse" | jq -r '.["@id"]')
+echo "Testing alice pod should return challenge: $alicePod"
+resp_headers=$(curl -s -D - -o /dev/null "$alicePod")
 
-if [[ "$authServerUrl" == "http://localhost:8280/realms/quarkus" && "$context" == "https://kvasir.discover.ilabt.imec.be/vocab#" && "$aliceProfileId" == "http://localhost:8080/alice/.profile" ]]; then
-  echo "Alice profile test passed!"
+# extract HTTP status code from the status line
+status=$(echo "$resp_headers" | head -n 1 | awk '{print $2}')
+
+# check for Www-Authenticate header (case-insensitive)
+if echo "$resp_headers" | grep -qi '^WWW-Authenticate:' && [[ "$status" == "401" ]]; then
+  echo "Alice pod test passed!"
 else
-  echo "Alice profile test failed!"
+  echo "Alice pod test failed!"
   exit 1
 fi
 

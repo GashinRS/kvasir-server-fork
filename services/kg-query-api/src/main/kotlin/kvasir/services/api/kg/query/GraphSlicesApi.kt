@@ -16,7 +16,6 @@ import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.sse.OutboundSseEvent
 import jakarta.ws.rs.sse.Sse
 import kvasir.definitions.annotations.GenerateNoArgConstructor
-import kvasir.definitions.auth.GraphQLQueryChecker
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.kg.slices.SliceStoreFactory
@@ -27,8 +26,8 @@ import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.plugins.messaging.kafka.Channels
-import kvasir.plugins.policyagent.openfga.extractors.GraphQLGetRelationExtractor
-import kvasir.plugins.policyagent.openfga.extractors.GraphQLPostRelationExtractor
+import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLGetRelationExtractor
+import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.utils.graphql.SliceGraphQLSchema
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
@@ -56,7 +55,6 @@ class GraphSlicesApi(
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifeCycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
     private val securityIdentity: Instance<SecurityIdentity>,
-    private val graphQLQueryChecker: Instance<GraphQLQueryChecker>,
     @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
     private val anonymousUserName: String
 ) {
@@ -229,17 +227,10 @@ class GraphSlicesApi(
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
         input: QueryInputImpl,
     ): Uni<QueryResult> {
-        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
-            uriInfo.getResourceUri().toASCIIString(),
-            securityIdentity.get(),
-            input.query,
-            input.operationName
-        ) ?: Uni.createFrom().voidItem()).chain { _ ->
-            val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-            val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-            getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
-                executeQuery(fqPodId, slice, input).toUni()
-            }
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
+            executeQuery(fqPodId, slice, input).toUni()
         }
     }
 
@@ -254,19 +245,12 @@ class GraphSlicesApi(
         @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice, representing a subset of the specified pod's Knowledge Graph.") sliceId: String,
         input: QueryInputImpl,
     ): Multi<OutboundSseEvent> {
-        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
-            uriInfo.getResourceUri().toASCIIString(),
-            securityIdentity.get(),
-            input.query,
-            input.operationName
-        ) ?: Uni.createFrom().voidItem()).onItem().transformToMulti { _ ->
-            val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-            val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-            getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
-                .transformToMulti { slice ->
-                    executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
-                }
-        }
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
+            .transformToMulti { slice ->
+                executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
+            }
     }
 
     /**
@@ -285,27 +269,20 @@ class GraphSlicesApi(
         @QueryParam("variables") variables: Optional<String>,
         @QueryParam("operationName") operationName: Optional<String>,
     ): Multi<OutboundSseEvent> {
-        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
-            uriInfo.getResourceUri().toASCIIString(),
-            securityIdentity.get(),
-            query,
-            operationName.getOrNull()
-        ) ?: Uni.createFrom().voidItem()).onItem().transformToMulti { _ ->
-            val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-            val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-            val queryInputImpl =
-                QueryInputImpl(
-                    query = query,
-                    variables = variables.getOrNull()?.let { JsonObject(it).map },
-                    operationName = operationName.getOrNull()
-                )
-            getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
-                .transformToMulti { slice ->
-                    executeQuery(fqPodId, slice, queryInputImpl).map {
-                        sse.newEventBuilder().name("next").data(it).build()
-                    }
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        val queryInputImpl =
+            QueryInputImpl(
+                query = query,
+                variables = variables.getOrNull()?.let { JsonObject(it).map },
+                operationName = operationName.getOrNull()
+            )
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
+            .transformToMulti { slice ->
+                executeQuery(fqPodId, slice, queryInputImpl).map {
+                    sse.newEventBuilder().name("next").data(it).build()
                 }
-        }
+            }
     }
 
     @POST
@@ -322,18 +299,11 @@ class GraphSlicesApi(
         @PathParam("sliceId") sliceId: String,
         input: QueryInputImpl,
     ): Uni<Any> {
-        return (graphQLQueryChecker.takeIf { it.isResolvable }?.get()?.checkAccess(
-            uriInfo.getResourceUri().toASCIIString(),
-            securityIdentity.get(),
-            input.query,
-            input.operationName
-        ) ?: Uni.createFrom().voidItem()).chain { _ ->
-            val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-            val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-            getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
-                executeQuery(fqPodId, slice, input).toUni().map {
-                    it.toJsonLD(slice.context)
-                }
+        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
+        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
+            executeQuery(fqPodId, slice, input).toUni().map {
+                it.toJsonLD(slice.context)
             }
         }
     }

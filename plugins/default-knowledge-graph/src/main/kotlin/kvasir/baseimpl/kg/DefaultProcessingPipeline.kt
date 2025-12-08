@@ -24,13 +24,13 @@ import kvasir.definitions.reactive.skipToLast
 import kvasir.utils.graphql.ChangeRequestValidator
 import kvasir.utils.idgen.getTimestamp
 import kvasir.utils.rdf.RDFTransformer
-import org.eclipse.microprofile.config.inject.ConfigProperty
+
+private const val ASSERTION_CHECKING_PARALLELISM = 4
+private const val REF_HANDLING_BUFFER_SIZE = 50000
 
 @ApplicationScoped
 class EvaluateAssertions(
-    private val parent: KnowledgeGraph,
-    @ConfigProperty(name = "kvasir.changes.processing.assertion-checking-parallelism", defaultValue = "4")
-    private val assertionCheckingParallelism: Int,
+    private val parent: KnowledgeGraph
 ) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
@@ -89,7 +89,7 @@ class EvaluateAssertions(
                         }
                     }
             }
-            .merge(assertionCheckingParallelism)
+            .merge(ASSERTION_CHECKING_PARALLELISM)
             .skipToLast()
             .map {
                 val log =
@@ -107,9 +107,7 @@ class EvaluateAssertions(
 @ApplicationScoped
 class MaterializeS3References(
     @All
-    private val referenceLoaders: MutableList<ReferenceLoader>,
-    @ConfigProperty(name = "kvasir.changes.processing.ref-handling-buffer", defaultValue = "50000")
-    private val referenceHandlingBuffer: Int,
+    private val referenceLoaders: MutableList<ReferenceLoader>
 ) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
@@ -124,7 +122,7 @@ class MaterializeS3References(
                     extractObject(ref)?.let { deletedS3Objects.add(it) }
                     loadReference(request.podId, ref)
                 }
-                .group().intoLists().of(referenceHandlingBuffer)
+                .group().intoLists().of(REF_HANDLING_BUFFER_SIZE)
                 .onItem().transformToUni { deleteTuples ->
                     buffer.add(
                         deleteTuples.map {
@@ -145,7 +143,7 @@ class MaterializeS3References(
                             extractObject(ref)?.let { insertedS3Objects.add(it) }
                             loadReference(request.podId, ref)
                         }
-                        .group().intoLists().of(referenceHandlingBuffer)
+                        .group().intoLists().of(REF_HANDLING_BUFFER_SIZE)
                         .onItem().transformToUni { insertTuples ->
                             buffer.add(
                                 insertTuples.map {

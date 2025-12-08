@@ -17,6 +17,10 @@ import {
   WriteTransaction,
 } from '../types';
 import { AT_CONTEXT_KSS_FGA } from '../util/constants';
+import { AccessControlSubjectComponent } from '../components/access-control-subject/access-control-subject.component';
+import { AccessControlResourceComponent } from '../components/access-control-resource/access-control-resource.component';
+import { AccessControlRelationComponent } from '../components/access-control-relation/access-control-relation.component';
+import { AccessControlTypeComponent } from "../components/access-control-type/access-control-type.component";
 
 @Component({
   selector: 'app-access-control',
@@ -30,7 +34,11 @@ import { AT_CONTEXT_KSS_FGA } from '../util/constants';
     NzSpaceModule,
     RouterModule,
     NzModalModule,
-  ],
+    AccessControlSubjectComponent,
+    AccessControlResourceComponent,
+    AccessControlRelationComponent,
+    AccessControlTypeComponent
+],
   templateUrl: './access-control.component.html',
   styleUrl: './access-control.component.less',
 })
@@ -92,5 +100,19 @@ export class AccessControlComponent {
       nzOnOk: removeFn,
       nzWidth: '680px',
     });
+  }
+
+  getSubjectIcon(rel: Relationship): string {
+    const id = rel['@id'];
+    if (id.startsWith('kss-fga:User')) {
+      return 'user';
+    }
+    if (id.startsWith('mailto:')) {
+      return 'mail';
+    }
+    if (id.startsWith('https://')) {
+      return 'idcard';
+    }
+    return 'question-circle';
   }
 }

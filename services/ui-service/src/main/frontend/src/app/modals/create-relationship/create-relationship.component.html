@@ -9,26 +9,95 @@
     <nz-row>
       <nz-col nzSpan="24">
         <nz-form-item>
+          <nz-form-label>Access Control Type</nz-form-label>
+          <nz-form-control>
+            <nz-radio-group formControlName="acType">
+              <label nz-radio-button nzValue="kvasir">
+                <nz-space nzAlign="center">
+                  <nz-icon *nzSpaceItem nzType="thunderbolt"></nz-icon>
+                  <span *nzSpaceItem>Kvasir ReBAC</span>
+                </nz-space>
+              </label>
+              <label nz-radio-button nzValue="uma">
+                <nz-space nzAlign="center">
+                  <nz-icon *nzSpaceItem nzType="user"></nz-icon>
+                  <span *nzSpaceItem>UMA</span>
+                </nz-space>
+              </label>
+              <label nz-radio-button nzValue="httpPep">
+                <nz-space nzAlign="center">
+                  <nz-icon *nzSpaceItem nzType="global"></nz-icon>
+                  <span *nzSpaceItem>Http PEP</span>
+                </nz-space>
+              </label>
+            </nz-radio-group>
+          </nz-form-control>
+        </nz-form-item>
+      </nz-col>
+    </nz-row>
+    <nz-row>
+      <nz-col nzSpan="24">
+        <nz-form-item>
           <nz-form-label>Subject</nz-form-label>
           <nz-form-control>
-            <nz-input-group
-              [nzAddOnBefore]="addOnBeforeTemplate"
-              [nzPrefix]="prefix()"
-            >
-              <input type="text" nz-input formControlName="subject" />
-            </nz-input-group>
-            <ng-template #addOnBeforeTemplate>
+            <nz-space-compact nzBlock>
               <nz-select
                 name="subjectAddon"
+                id="subjectAddon"
+                [style.width.px]="115"
+                [style.min-width.px]="130"
                 [(ngModel)]="subjectAddon"
                 [ngModelOptions]="{ standalone: true }"
+                [nzCustomTemplate]="subjectTpl"
+                #subjectSelector
               >
-                <nz-option nzLabel="E-mail" nzValue="email"></nz-option>
-                <nz-option nzLabel="WebID" nzValue="webid"></nz-option>
-                <nz-option nzLabel="User" nzValue="user"></nz-option>
-                <!-- <nz-option nzLabel="Anyone" nzValue="everyone"></nz-option> -->
+                <nz-option nzCustomContent nzLabel="E-mail" nzValue="email">
+                  <ng-content>
+                    <nz-icon nzType="mail"></nz-icon>
+                    E-mail
+                  </ng-content>
+                </nz-option>
+                <nz-option nzCustomContent nzLabel="WebID" nzValue="webid">
+                  <ng-content>
+                    <nz-icon nzType="idcard"></nz-icon>
+                    WebID
+                  </ng-content>
+                </nz-option>
+                <nz-option nzCustomContent nzLabel="User" nzValue="user">
+                  <ng-content>
+                    <nz-icon nzType="user"></nz-icon>
+                    User
+                  </ng-content>
+                </nz-option>
+                <nz-option
+                  nzCustomContent
+                  nzLabel="Unauthed"
+                  nzValue="unauthed"
+                >
+                  <ng-content>
+                    <nz-icon nzType="unlock"></nz-icon>
+                    Unauthed
+                  </ng-content>
+                </nz-option>
+                <nz-option
+                  nzCustomContent
+                  nzLabel="Everyone"
+                  nzValue="everyone"
+                >
+                  <ng-content>
+                    <nz-icon nzType="team"></nz-icon>
+                    Everyone
+                  </ng-content>
+                </nz-option>
               </nz-select>
-            </ng-template>
+              <ng-template #subjectTpl let-selected>
+                <nz-icon [nzType]="getIcon(selected.nzValue)"></nz-icon>
+                {{ selected.nzLabel }}
+              </ng-template>
+              <nz-input-wrapper [nzPrefix]="prefix()">
+                <input type="text" nz-input formControlName="subject" />
+              </nz-input-wrapper>
+            </nz-space-compact>
           </nz-form-control>
         </nz-form-item>
       </nz-col>
@@ -38,12 +107,7 @@
         <nz-form-item>
           <nz-form-label>Relation</nz-form-label>
           <nz-form-control>
-            <nz-select
-              name="relation"
-              [nzOptions]="relations"
-              formControlName="relation"
-            >
-            </nz-select>
+            <app-select-relation formControlName="relation" />
           </nz-form-control>
         </nz-form-item>
       </nz-col>
@@ -53,9 +117,9 @@
         <nz-form-item>
           <nz-form-label>Resource (path)</nz-form-label>
           <nz-form-control>
-            <nz-input-group [nzPrefix]="pathPrefix">
+            <nz-input-wrapper [nzPrefix]="pathPrefix">
               <input type="text" nz-input formControlName="object" />
-            </nz-input-group>
+            </nz-input-wrapper>
           </nz-form-control>
         </nz-form-item>
       </nz-col>
@@ -68,7 +132,7 @@
       nz-button
       nzType="primary"
       type="submit"
-      [disabled]="relationshipForm.invalid"
+      [disabled]="!isFormValid()"
       (click)="create()"
     >
       Create

@@ -11,12 +11,14 @@ import io.vertx.mutiny.core.Vertx
 import io.vertx.mutiny.core.file.FileSystem
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
-import kvasir.definitions.config.KvasirConfig
+import kvasir.definitions.config.HttpConfig
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 const val KEY_KVASIR_HOST = "KVASIR_HOST"
+const val KEY_AUTH_HOST = "KVASIR_AUTH_HOST"
+const val KEY_AUTH_REALM = "KVASIR_AUTH_REALM"
 const val KEY_POLICY_AGENT = "POLICY_AGENT"
 const val PATH_PREFIX = "/_ui"
 const val WEBROOT = "webroot"
@@ -28,9 +30,11 @@ const val SKIP_UI_SYSTEM_PROPERTY = "ui-service.phase";
 
 @ApplicationScoped
 class SpaHandler(
-    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY) private val host: String,
-    @ConfigProperty(name = "policy.agent") private val policyAgent: Optional<String>,
-    @ConfigProperty(name = SKIP_UI_SYSTEM_PROPERTY) private val uiServicePhase: Optional<String>
+    private val config: HttpConfig,
+    @param:ConfigProperty(name = "policy.agent") private val policyAgent: Optional<String>,
+    @param:ConfigProperty(name = SKIP_UI_SYSTEM_PROPERTY) private val uiServicePhase: Optional<String>,
+    @param:ConfigProperty(name = "kvasir.auth.keycloak.url") private val keycloakUrl: String,
+    @param:ConfigProperty(name = "kvasir.auth.keycloak.realm") private val keycloakRealm: String
 ) {
     private val staticHandler = StaticHandler.create().setIndexPage(INDEX_PAGE)
         .setCachingEnabled(true)
@@ -90,8 +94,10 @@ class SpaHandler(
     private fun generateConfig(): JsonObject {
         val policyAgent = policyAgent.orElse(null).takeIf { it in setOf("openfga", "a4ds") };
         return JsonObject.of(
-            KEY_KVASIR_HOST, host,
-            KEY_POLICY_AGENT, policyAgent
+            KEY_KVASIR_HOST, config.baseUri(),
+            KEY_POLICY_AGENT, policyAgent,
+            KEY_AUTH_HOST, keycloakUrl,
+            KEY_AUTH_REALM, keycloakRealm
         );
     }
 }

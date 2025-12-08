@@ -1,4 +1,5 @@
 # .gitlab-ci.yml
+
 include:
   - local: /.ci/templates.yml
   - local: /.ci/build.yml
@@ -10,9 +11,11 @@ include:
       release_stage: release
       proposal_stage: pre
       sync_stage: sync
-      image_flavors_array: ["a4ds", "openfga", "noauth"]
+      image_flavors_array: [ "a4ds", "openfga", "noauth" ]
 
 variables:
+  GIT_STRATEGY: clone
+  GIT_CLEAN_FLAGS: -ffdx
   INSTANCE: "Writerside/kd"
   ARTIFACT: "webHelpKD2-all.zip"
   ALGOLIA_ARTIFACT: "algolia-indexes-KD.zip"

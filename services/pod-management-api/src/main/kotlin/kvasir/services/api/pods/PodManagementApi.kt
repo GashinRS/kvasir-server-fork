@@ -1,6 +1,5 @@
 package kvasir.services.api.pods
 
-import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.quarkus.security.identity.SecurityIdentity
@@ -13,12 +12,15 @@ import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriBuilder
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.auth.AuthConstants
+import kvasir.definitions.config.BootstrapPodConfig
 import kvasir.definitions.config.GenerateClientConfig
-import kvasir.definitions.config.KvasirConfig
+import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.config.PodConfig
 import kvasir.definitions.kg.LifeCycleEvent
 import kvasir.definitions.kg.LifeCycleEventType
 import kvasir.definitions.kg.Pod
+import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -27,10 +29,9 @@ import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
 import kvasir.utils.http.getParentUri
+import kvasir.utils.pod.PodConfigProvider
 import kvasir.utils.pod.PodSetupHelper
 import org.apache.http.HttpStatus
-import org.eclipse.microprofile.config.ConfigProvider
-import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema
@@ -39,19 +40,18 @@ import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestResponse
 import java.net.URI
 import java.util.*
-import kotlin.jvm.optionals.getOrNull
 
 @Path("")
 class PodManagementApi(
     private val uriInfo: KvasirUriInfo,
-    @ConfigProperty(name = KvasirConfig.WEBCLIENT_URI_PROPERTY, defaultValue = KvasirConfig.WEBCLIENT_URI_DEFAULT)
-    private val webclientUri: Optional<URI>,
-    @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
+    private val httpConfig: HttpConfig,
+    private val podSetupHelper: PodSetupHelper,
+    private val podStoreFactory: PodStoreFactory,
+    @param:Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
     private val securityIdentity: Instance<SecurityIdentity>,
-    @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
-    private val anonymousUserName: String
-) : PodSetupHelper() {
+    private val podConfigProvider: PodConfigProvider
+) {
 
     @PermitAll
     @POST
@@ -65,14 +65,15 @@ class PodManagementApi(
     fun register(input: RegisterPodInput): Uni<Response> {
         // This basic implementation check if the pod already exists in a non-atomic way.
         val fqPodId = uriInfo.getResourceUri().getChildUri(input.name).toASCIIString()
-        return createPod(fqPodId, input, errorWhenExists = true)
+        return podSetupHelper.createPod(fqPodId, input, input.configuration, errorWhenExists = true)
             .chain { _ ->
                 // Emit life-cycle event when the Pod was successfully created
                 lifecycleEventEmitter.send(
                     LifeCycleEvent(
                         type = LifeCycleEventType.POD_CREATED,
                         podId = fqPodId,
-                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
+                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+                            ?: AuthConstants.ANONYMOUS_USERNAME,
                     )
                 )
             }
@@ -81,6 +82,12 @@ class PodManagementApi(
                 Response.status(HttpStatus.SC_CONFLICT).entity("Pod with ID $fqPodId already exists.").build()
             }
     }
+
+    private fun listPodInfo(): Uni<List<PodInfo>> =
+        podStoreFactory.createPodStore().find().map { result ->
+            result.items.map { pod -> PodInfo(pod.id) }
+        };
+
 
     @PermitAll
     @GET
@@ -92,10 +99,16 @@ class PodManagementApi(
     )
     @APIResponseSchema(PodInfoGraph::class)
     fun list(): Uni<List<PodInfo>> {
-        return podStoreFactory.createPodStore().find().map { result ->
-            result.items.map { pod -> PodInfo(pod.id, "${pod.id}/.profile") }
-        }
+        return listPodInfo();
     }
+
+    @GET
+    @Produces(MediaType.TEXT_HTML)
+    fun getHtml(): Uni<Response> {
+        val uiUri = UriBuilder.fromUri(httpConfig.webclientUri()).build();
+        return if (httpConfig.redirectToWebclient()) Uni.createFrom().item(Response.seeOther(uiUri).build()) else listPodInfo().map { Response.ok(it, JSON_LD_MEDIA_TYPE).build() };
+    }
+
 
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
@@ -122,38 +135,25 @@ class PodManagementApi(
         return podStoreFactory.createPodStore().findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { item ->
-                if (webclientUri.isPresent) {
-                    val uiUri = UriBuilder.fromUri(webclientUri.get()).path("/force-session/${podId}").build()
-                    Uni.createFrom().item(RestResponse.seeOther<Void>(uiUri).toResponse())
-                } else {
-                    get(podId).map { Response.ok(it, JSON_LD_MEDIA_TYPE).build() }
-                }
+                val uiUri = UriBuilder.fromUri(httpConfig.webclientUri()).path("/force-session/${podId}").build()
+                Uni.createFrom().item(RestResponse.seeOther<Void>(uiUri).toResponse())
             }
     }
 
-    @PermitAll
     @GET
-    @Produces(JSON_LD_MEDIA_TYPE)
-    @Path("{podId}/.profile")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("{podId}/runtime-config")
     @Tag(name = ApiDocTags.PODS_API)
     @Operation(
-        summary = "Get pod public profile",
-        description = "Returns the public profile of a pod, which includes its ID and authentication server URL."
+        summary = "Get pod runtime config",
+        description = "Returns the actual pod config used at runtime for a a specific pod identified by its ID. This overlays the user settings with the system configuration."
     )
-    fun getProfile(@PathParam("podId") podId: String): Uni<PodPublicProfile> {
-        // This is a simple example of a profile endpoint that returns a public profile of the pod.
-        // Could fetch data from the KG, but for now, extracts some static info
-        val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return podStoreFactory.createPodStore().findById(fqPodId)
+    @OpenFgaPolicyEnforcer
+    fun getRuntimeConfig(@PathParam("podId") podId: String): Uni<PodConfig> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(1).toASCIIString()
+        return podConfigProvider.getPodConfigById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
-            .onItem().ifNotNull().transform { pod ->
-                PodPublicProfile(
-                    "${fqPodId}/.profile",
-                    pod!!.getAuthConfiguration()?.get("authServerUrl")?.let { it as String }
-                        ?: ConfigProvider.getConfig()
-                            .getOptionalValue("quarkus.oidc.auth-server-url", String::class.java).getOrNull()
-                )
-            }
+            .onItem().ifNotNull().transform { it!! }
     }
 
     @PUT
@@ -180,7 +180,8 @@ class PodManagementApi(
                             LifeCycleEvent(
                                 type = LifeCycleEventType.POD_UPDATED,
                                 podId = fqPodId,
-                                requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName
+                                requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+                                    ?: AuthConstants.ANONYMOUS_USERNAME
                             )
                         )
                     }
@@ -208,7 +209,8 @@ class PodManagementApi(
                     LifeCycleEvent(
                         type = LifeCycleEventType.POD_DELETED,
                         podId = fqPodId,
-                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName
+                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+                            ?: AuthConstants.ANONYMOUS_USERNAME
                     )
                 )
             }
@@ -224,14 +226,23 @@ data class RegisterPodInput(
     @get:JsonProperty(KvasirVocab.ownerUserId)
     val ownerUserId: String,
     @get:JsonProperty(KvasirVocab.configuration)
-    val configuration: Map<String, Any>,
-) : PodConfig {
+    val configuration: String = "{}",
+    @get:JsonProperty(KvasirVocab.autoRegisterUma)
+    val autoRegisterUma: Boolean = false,
+    @get:JsonProperty(KvasirVocab.autoRegisterHttpEndpointPolicyEnforcer)
+    val autoRegisterHttpEndpointPolicyEnforcer: Boolean = false
+) : BootstrapPodConfig {
 
     override fun name(): String = name
 
     override fun ownerUserId(): Optional<String> = Optional.of(ownerUserId)
+    override fun autoRegisterUma(): Boolean = autoRegisterUma
 
-    override fun configuration(): Map<String, Any> = configuration
+    override fun autoRegisterHttpEndpointPolicyEnforcer(): Boolean = autoRegisterHttpEndpointPolicyEnforcer
+
+    override fun configuration(): PodConfig {
+        return PodConfigProvider.deserializePodConfig(configuration)
+    }
 
     override fun generateClients(): Optional<List<GenerateClientConfig>> = Optional.empty()
 }
@@ -239,28 +250,20 @@ data class RegisterPodInput(
 @GenerateNoArgConstructor
 data class UpdatePodInput(
     @get:JsonProperty(KvasirVocab.configuration)
-    val configuration: Map<String, Any>,
+    val configuration: String,
 )
 
 @GenerateNoArgConstructor
 data class PodInfo(
     @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @get:JsonProperty(KvasirVocab.profile)
-    val profile: String
-)
+) {
+    @JsonProperty(JsonLdKeywords.type)
+    fun getType() = KvasirVocab.Pod
+}
 
 @GenerateNoArgConstructor
 data class PodInfoGraph(
     @get:JsonProperty(JsonLdKeywords.graph)
     val pods: List<PodInfo>
-)
-
-@GenerateNoArgConstructor
-@JsonInclude(JsonInclude.Include.NON_DEFAULT)
-data class PodPublicProfile(
-    @get:JsonProperty(JsonLdKeywords.id)
-    val id: String,
-    @get:JsonProperty(KvasirVocab.authServerUrl)
-    val authServerUri: String? = null
 )

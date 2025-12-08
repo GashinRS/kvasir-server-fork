@@ -1,6 +1,14 @@
 import jsonld from 'jsonld';
 import * as N3 from 'n3';
-import { ChangeRecord, ChangeResultCode, ChangeStatusEntry, Timestamped } from '../types';
+import {
+  ChangeRecord,
+  ChangeResultCode,
+  ChangeStatusEntry,
+  Pod,
+  PodDetails,
+  PodSerialized,
+  Timestamped,
+} from '../types';
 
 export function ensureArray<T>(input: T[] | T): T[] {
   if (input == null) {
@@ -143,10 +151,14 @@ export interface SignedN3Quad {
 
 export function sortStatusEntries(direction: 'asc' | 'desc' = 'asc') {
   return function (a: ChangeStatusEntry, b: ChangeStatusEntry): number {
-    const statusA = Object.values(ChangeResultCode).indexOf(a['kss:statusCode'].toString());
-    const statusB = Object.values(ChangeResultCode).indexOf(b['kss:statusCode'].toString());
+    const statusA = Object.values(ChangeResultCode).indexOf(
+      a['kss:statusCode'].toString(),
+    );
+    const statusB = Object.values(ChangeResultCode).indexOf(
+      b['kss:statusCode'].toString(),
+    );
     return direction == 'asc' ? statusA - statusB : statusB - statusA;
-  }
+  };
 }
 
 export function sortByTimestamp(direction: 'asc' | 'desc' = 'asc') {
@@ -165,6 +177,9 @@ function sortByTimestampAsc(a: Timestamped, b: Timestamped): number {
 }
 
 export function ensureSlashAtStart(input: string): string {
+  if (input == undefined) {
+    return '';
+  }
   return input.length == 0
     ? input
     : input.startsWith('/')
@@ -178,4 +193,21 @@ export function ensureSlashAtEnd(input: string): string {
 
 export function ensureSlashAtBoth(input: string): string {
   return ensureSlashAtStart(input).endsWith('/') ? input : `${input}/`;
+}
+
+export function serialize(pod: PodDetails): PodSerialized {
+  return {
+    ...pod,
+    ...{ 'kss:configuration': JSON.stringify(pod['kss:configuration']) },
+  };
+}
+
+export function deserialize(podSerialized: PodSerialized): PodDetails {
+  if (podSerialized == null) {
+    return podSerialized;
+  }
+  return {
+    ...podSerialized,
+    ...{ 'kss:configuration': JSON.parse(podSerialized['kss:configuration']) },
+  };
 }

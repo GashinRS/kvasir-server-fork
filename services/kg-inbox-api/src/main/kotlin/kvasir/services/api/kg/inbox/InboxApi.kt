@@ -10,6 +10,7 @@ import io.smallrye.reactive.messaging.kafka.KafkaRecord
 import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Response
+import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.kg.changes.Assertion
@@ -23,7 +24,6 @@ import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
 import kvasir.utils.idgen.ChangeRequestId
 import org.apache.kafka.common.errors.RecordTooLargeException
-import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.media.Schema
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
@@ -40,9 +40,7 @@ class InboxApi(
     private val sliceStoreFactory: SliceStoreFactory,
     private val podStoreFactory: PodStoreFactory,
     private val uriInfo: KvasirUriInfo,
-    private val securityIdentity: Instance<SecurityIdentity>,
-    @ConfigProperty(name = "kvasir.auth.anonymous-user-name", defaultValue = "anonymous")
-    private val anonymousUserName: String
+    private val securityIdentity: Instance<SecurityIdentity>
 ) {
 
     @Path("{podId}/changes")
@@ -65,7 +63,8 @@ class InboxApi(
                 val changeCommand = input.toChangeRequest(
                     fqPodId,
                     uriInfo,
-                    securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName
+                    securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+                        ?: AuthConstants.ANONYMOUS_USERNAME
                 )
                 changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
                     .map { _ -> Response.created(URI.create(changeCommand.id)).build() }
@@ -97,7 +96,8 @@ class InboxApi(
                     val changeCommand = input.toChangeRequest(
                         fqPodId,
                         uriInfo,
-                        securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
+                        securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+                            ?: AuthConstants.ANONYMOUS_USERNAME,
                         fqSliceId
                     )
                     // Publish the change request

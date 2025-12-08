@@ -4,11 +4,7 @@ import graphql.ExecutionInput
 import graphql.ExecutionResult
 import graphql.GraphQL
 import graphql.GraphqlErrorBuilder
-import graphql.execution.AbortExecutionException
-import graphql.execution.DataFetcherExceptionHandler
-import graphql.execution.DataFetcherExceptionHandlerParameters
-import graphql.execution.DataFetcherExceptionHandlerResult
-import graphql.execution.SubscriptionExecutionStrategy
+import graphql.execution.*
 import graphql.language.AstPrinter
 import graphql.parser.Parser
 import graphql.scalars.ExtendedScalars
@@ -20,7 +16,6 @@ import io.smallrye.config.WithDefault
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
-import io.vertx.core.eventbus.EventBus
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
@@ -43,10 +38,10 @@ import org.dataloader.DataLoaderRegistry
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.reactivestreams.Publisher
 import java.time.Instant
-import java.util.UUID
+import java.util.*
 import java.util.concurrent.CompletableFuture
 
-@ConfigMapping(prefix = "kvasir.changes.processing")
+@ConfigMapping(prefix = "kvasir-ext.changes.processing")
 interface ChangeRequestPipelineConfig {
 
     fun pipeline(): List<ChangeRequestPipelineProcessorConfig>
@@ -81,8 +76,7 @@ class DefaultKnowledgeGraph(
     private val changeRequestEmitter: MutinyEmitter<ChangeRequest>,
     @Channel(Channels.QUERY_REQUESTS_PUBLISH)
     private val queryRequestEventEmitter: MutinyEmitter<QueryRequestEvent>,
-    private val streamingDatafetcherFactory: StreamingDatafetcherFactory,
-    private val eventBus: EventBus
+    private val streamingDatafetcherFactory: StreamingDatafetcherFactory
 ) : KnowledgeGraph {
 
     val defaultStorageBackend = (pipelineConfig.pipeline().find { it.defaultStorage() }?.let {

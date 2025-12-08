@@ -1,6 +1,5 @@
 package kvasir.utils.test.commons
 
-import kvasir.definitions.config.PodConfig
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFSVocab
 import kvasir.definitions.rdf.SAREFVocab

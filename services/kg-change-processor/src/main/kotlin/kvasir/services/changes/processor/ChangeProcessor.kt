@@ -18,11 +18,11 @@ class ChangeProcessor(
     private val knowledgeGraph: KnowledgeGraph,
     @Channel(Channels.CHANGE_REQUESTS_SUBSCRIBE)
     private val changeRequestsSubscriber: Multi<Message<ChangeRequest>>,
-    @ConfigProperty(name = "kvasir.change-processor.overflow.buffer-size", defaultValue = "100000")
+    @ConfigProperty(name = "kvasir-ext.change-processor.overflow.buffer-size", defaultValue = "100000")
     private val overflowBufferSize: Int,
-    @ConfigProperty(name = "kvasir.change-processor.shutdown-on-error", defaultValue = "true")
+    @ConfigProperty(name = "kvasir-ext.change-processor.shutdown-on-error", defaultValue = "true")
     private val shutdownOnError: Boolean,
-    @ConfigProperty(name = "kvasir.change-processor.ignore-non-existing-pod", defaultValue = "false")
+    @ConfigProperty(name = "kvasir-ext.change-processor.ignore-non-existing-pod", defaultValue = "false")
     private val ignoreNonExistingPod: Boolean
 ) {
 

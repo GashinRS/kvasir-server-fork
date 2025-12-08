@@ -1,16 +1,17 @@
 package kvasir.services.api.storage
 
+import io.quarkus.logging.Log
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.RestAssured.`when`
 import io.restassured.http.ContentType
+import io.vertx.core.http.HttpClosedException
 import io.vertx.mutiny.core.Vertx
 import io.vertx.mutiny.core.buffer.Buffer
 import io.vertx.mutiny.ext.web.client.WebClient
 import jakarta.inject.Inject
-import kvasir.definitions.config.KvasirConfig
+import kvasir.definitions.config.HttpConfig
 import kvasir.utils.test.commons.AbstractPodTest
-import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -22,8 +23,7 @@ import kotlin.random.Random
 class StorageApiTest : AbstractPodTest() {
 
     @Inject
-    @ConfigProperty(name = KvasirConfig.BASE_URI_PROPERTY)
-    lateinit var baseUri: String
+    lateinit var kvasirConfig: HttpConfig
 
     @Inject
     lateinit var vertx: Vertx
@@ -87,12 +87,17 @@ class StorageApiTest : AbstractPodTest() {
     fun testPutTooLargeResource() {
         // Try to upload a 60 MB file, which should exceed the default limit (50 MB)
         val content = Random.nextBytes(60 * 1024 * 1024)
+
+        val targetUrl = "${kvasirConfig.baseUri().removeSuffix("/")}/$podName/s3/too-large-binary.bin"
+        Log.debug("Trying to upload a too large file to URL: $targetUrl")
         val respStatus =
             WebClient
                 .create(vertx)
-                .putAbs("$baseUri/$podName/s3/too-large-binary.bin")
+                .putAbs(targetUrl)
                 .sendBuffer(Buffer.buffer(content))
                 .map { resp -> resp.statusCode() }
+                .onFailure(HttpClosedException::class.java)
+                .recoverWithItem(413) // Treat the server closing the connection as the equivalent of a 413
                 .await()
                 .indefinitely()
         assertEquals(413, respStatus)

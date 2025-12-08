@@ -1,14 +1,10 @@
 package kvasir.services.api.solid
 
-import com.fasterxml.jackson.annotation.JsonProperty
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.vertx.core.buffer.Buffer
 import io.vertx.ext.web.RoutingContext
 import jakarta.ws.rs.core.MediaType
-import kvasir.definitions.rdf.JSONObject
-import kvasir.definitions.rdf.JsonLdKeywords
-import kvasir.services.api.solid.vocab.LDPVocab
 import org.eclipse.rdf4j.model.Statement
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -16,7 +12,7 @@ import java.net.URI
 import kotlin.reflect.KClass
 
 interface SolidApi {
-    fun <T : SolidResource> getContextualResource(ctx: RoutingContext, clazz: KClass<T>): T
+    fun <T : SolidResource> getContextualResource(ctx: SolidResourceRequestContext, clazz: KClass<T>): T
 }
 
 /**
@@ -114,5 +110,33 @@ interface PatchParser {
         }
 
     fun parse(docIri: String, inputStream: InputStream): Patch
+
+}
+
+interface SolidResourceRequestContextProvider {
+    fun getContext(ctx: RoutingContext): SolidResourceRequestContext
+}
+
+interface SolidResourceRequestContext {
+
+    fun isRoot(): Boolean
+
+    fun isContainerPath(): Boolean
+
+    fun isMetadataRequest(): Boolean
+
+    fun getResourceUri(): URI
+
+    fun getBaseUri(): String
+
+    fun getPodId(): String
+
+    fun getPodName(): String
+
+    fun getRoot(): URI
+
+    fun getContentType(): String?
+
+    fun getContentLength(): Long
 
 }

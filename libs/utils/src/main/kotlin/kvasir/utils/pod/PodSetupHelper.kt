@@ -4,10 +4,11 @@ import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
+import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Inject
 import kvasir.definitions.auth.AuthInitializer
-import kvasir.definitions.config.PodConfig
+import kvasir.definitions.config.BootstrapPodConfig
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.PodStoreFactory
 import kvasir.definitions.rdf.JSONObject
@@ -22,20 +23,22 @@ import kotlin.jvm.optionals.getOrNull
 
 const val PLAIN_JSON_VOCAB = "urn:kvasir:plain-json:"
 
-abstract class PodSetupHelper {
+@ApplicationScoped
+class PodSetupHelper {
 
     @Inject
-    protected lateinit var podStoreFactory: PodStoreFactory
+    lateinit var podStoreFactory: PodStoreFactory
 
     @Inject
-    protected lateinit var s3AsyncClient: S3AsyncClient
+    lateinit var s3AsyncClient: S3AsyncClient
 
     @Inject
-    protected lateinit var podAuthInitializer: Instance<AuthInitializer>
+    lateinit var podAuthInitializer: Instance<AuthInitializer>
 
     fun createPod(
         podId: String,
-        podConfig: PodConfig,
+        bootstrapPodConfig: BootstrapPodConfig,
+        rawPodConfig: String,
         errorWhenExists: Boolean = false
     ): Uni<Void> {
         val podStore = podStoreFactory.createPodStore()
@@ -45,31 +48,14 @@ abstract class PodSetupHelper {
                 if (existingPod != null) {
                     if (errorWhenExists) {
                         Uni.createFrom().failure(IllegalStateException("Pod with ID $podId already exists."))
-                    }
-                    // ... but in dev mode the OpenFga store will be empty
-                    else {
-                        // Be sure Bucket exists: try setting up s3 bucket (will not do anything if bucketName already exists)
-                        createS3BucketIfNotExist(podId)
-                            .chain { _ ->
-                                if (podAuthInitializer.isResolvable) {
-                                    val initializer = podAuthInitializer.get()
-                                    Log.debug("Try initializing configured auth policy provider (${initializer::class.java.name}) for Pod '$podId'")
-                                    // Be sure PodAuthModel exists: try initializeForPod (will not do anything if store with podName already exists)
-                                    initializer.initializeForPod(
-                                        podId,
-                                        podConfig.name(),
-                                        podConfig.ownerUserId()
-                                            .orElse(podConfig.name()), // Owner ID is the same as Pod ID for simplicity
-                                        existingPod,
-                                        podConfig.generateClients().getOrNull()
-                                    )
-                                } else Uni.createFrom().voidItem()
-                            }
+                    } else {
+                        Log.debug("Pod '$podId' already exists, skipping initialization.")
+                        Uni.createFrom().voidItem()
                     }
                 } else {
                     // Create storage entry for the new Pod
                     Log.debug("Adding storage entry for Pod '$podId'")
-                    val newPod = Pod(podId, parseConfiguration(podConfig.configuration()))
+                    val newPod = Pod(podId, rawPodConfig)
                     podStore.persist(newPod)
                         .chain { _ -> createS3BucketIfNotExist(podId) }
                         .chain { _ ->
@@ -77,14 +63,7 @@ abstract class PodSetupHelper {
                             if (podAuthInitializer.isResolvable) {
                                 val initializer = podAuthInitializer.get()
                                 Log.debug("Initializing configured auth policy provider (${initializer::class.java.name}) for Pod '$podId'")
-                                initializer.initializeForPod(
-                                    podId,
-                                    podConfig.name(),
-                                    podConfig.ownerUserId()
-                                        .orElse(podConfig.name()), // Owner ID is the same as Pod ID for simplicity
-                                    newPod,
-                                    podConfig.generateClients().getOrNull()
-                                )
+                                initializer.initializeForPod(newPod, bootstrapPodConfig)
                             } else {
                                 Uni.createFrom().voidItem()
                             }
@@ -93,7 +72,12 @@ abstract class PodSetupHelper {
             }
     }
 
-    fun deletePod(podId: String, podConfig: PodConfig, deleteData: Boolean, deleteOwner: Boolean): Uni<Void> {
+    fun deletePod(
+        podId: String,
+        bootstrapPodConfig: BootstrapPodConfig,
+        deleteData: Boolean,
+        deleteOwner: Boolean
+    ): Uni<Void> {
         val podStore = podStoreFactory.createPodStore()
         Log.debug("Deleting Pod '$podId' (deleteData=$deleteData)")
         return podStore.deleteById(podId, deleteData)
@@ -142,8 +126,8 @@ abstract class PodSetupHelper {
                     Log.debug("Clearing auth model for Pod '$podId' using provider (${initializer::class.java.name})")
                     initializer.cleanupForPod(
                         podId,
-                        podConfig.name(),
-                        podConfig.ownerUserId().getOrNull().takeIf { deleteOwner })
+                        bootstrapPodConfig.name(),
+                        bootstrapPodConfig.ownerUserId().getOrNull().takeIf { deleteOwner })
                 } else {
                     Uni.createFrom().voidItem()
                 }
