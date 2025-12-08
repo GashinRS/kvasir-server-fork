@@ -17,7 +17,9 @@ import {
   ReadOutline,
   SignatureOutline,
   StopOutline,
+  ThunderboltOutline,
   UserOutline,
+  UnlockOutline,
 } from '@ant-design/icons-angular/icons';
 import { provideNzIcons } from 'ng-zorro-antd/icon';
 
@@ -31,6 +33,7 @@ const icons = [
   HistoryOutline,
   IdcardOutline,
   MailOutline,
+  LockOutline,
   QuestionCircleFill,
   QuestionCircleOutline,
   UserOutline,
@@ -40,6 +43,8 @@ const icons = [
   StopOutline,
   KeyOutline,
   CrownOutline,
+  ThunderboltOutline,
+  UnlockOutline,
 ];
 
 export function provideIcons(): EnvironmentProviders {

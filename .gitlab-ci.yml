@@ -11,7 +11,7 @@ include:
       release_stage: release
       proposal_stage: pre
       sync_stage: sync
-      image_flavors_array: ["a4ds", "openfga", "noauth"]
+      image_flavors_array: [ "a4ds", "openfga", "noauth" ]
 
 variables:
   GIT_STRATEGY: clone

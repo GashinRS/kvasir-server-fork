@@ -3,56 +3,470 @@
   nzSubtitle="Configure basic settings for your pod"
 >
 </nz-page-header>
-<form [formGroup]="settingsForm">
-  <nz-row>
-    <nz-col nzFlex="1">
-      <div class="default-context">
-        <h5 nz-typography>Default context</h5>
-        <span nz-typography nzType="secondary"
-          >This is the default context applied for your whole pod. It allows you
-          to remap prefixes to your liking.</span
-        >
-        <nz-code-editor
-          class="editor"
-          formControlName="defaultContext"
-          [nzEditorOption]="settings.getCodeEditorSetting().json"
-        ></nz-code-editor>
-        <div class="error">
-          <span nz-typography nzType="danger">{{ defaultContextError() }}</span>
-        </div>
-        <div class="btns">
-          <button nz-button nzType="text" (click)="resetDefaultContext()">
-            Reset
-          </button>
-          <button
-            nz-button
-            nzType="primary"
-            (click)="saveDefaultContext()"
-            [disabled]="this.defaultContextError() != null"
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </nz-col>
-  </nz-row>
-  <nz-row>
-    <nz-col nzSpan="24">
-      <h5 nz-typography>Configuration flags</h5>
-    </nz-col>
-  </nz-row>
-  <nz-row>
-    <nz-col nzSpan="24" nzXs="14" nzSm="10" nzMd="8" nzLg="6" nzXl="4">
-      <nz-space>
-        <span *nzSpaceItem>Auto-ingest RDF</span>
-        <app-help
-          text="Automatically ingest RDF into the Changes API if the content of an S3 File Upload is an RDF MIME-type, thus adding it to the knowledge graph."
-          *nzSpaceItem
-        ></app-help>
-      </nz-space>
-    </nz-col>
-    <nz-col nzSpan="24" nxXs="10" nzSm="14" nzMd="16" nzLg="18" nzXl="20">
-      <nz-switch formControlName="autoIngestRDF"></nz-switch>
-    </nz-col>
-  </nz-row>
-</form>
+@if (settingsForm; as f) {
+  <form [formGroup]="f" nz-form nzLayout="vertical">
+    <nz-tabs>
+      <nz-tab nzTitle="General">
+        <nz-row>
+          <nz-col nzSpan="24">
+            <div class="default-context">
+              <nz-space class="title">
+                <h5 nz-typography *nzSpaceItem>Default context</h5>
+                <app-help
+                  text="This is the default context applied for your whole pod. It
+                allows you to remap prefixes to your liking."
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+              <nz-code-editor
+                class="editor"
+                formControlName="defaultContext"
+                [nzEditorOption]="settings.getCodeEditorSetting().json"
+              ></nz-code-editor>
+              <div class="error">
+                <span nz-typography nzType="danger">{{
+                  defaultContextError()
+                }}</span>
+              </div>
+              <div class="btns">
+                <button nz-button nzType="text" (click)="resetDefaultContext()">
+                  Reset
+                </button>
+                <button
+                  nz-button
+                  nzType="primary"
+                  (click)="saveDefaultContext()"
+                  [disabled]="this.defaultContextError() != null"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </nz-col>
+        </nz-row>
+        <nz-row>
+          <nz-col nzSpan="24">
+            <h5 nz-typography>Configuration flags</h5>
+          </nz-col>
+        </nz-row>
+        <nz-row>
+          <nz-col nzSpan="24">
+            <nz-space nzAlign="center">
+              <nz-switch
+                *nzSpaceItem
+                formControlName="autoIngestRDF"
+              ></nz-switch>
+              <span *nzSpaceItem>Auto-ingest RDF</span>
+              <app-help
+                text="Automatically ingest RDF into the Changes API if the content of an S3 File Upload is an RDF MIME-type, thus adding it to the knowledge graph."
+                *nzSpaceItem
+              ></app-help>
+            </nz-space>
+          </nz-col>
+        </nz-row>
+      </nz-tab>
+
+      <nz-tab nzTitle="Auth">
+        <nz-form-item>
+          <nz-form-control>
+            <nz-space nzAlign="center">
+              <nz-switch formControlName="enableSolidWebId"></nz-switch>
+              <span *nzSpaceItem>Enable Solid WebID</span>
+              <app-help
+                text="Enable WebID support for the pod (Solid-OIDC)"
+                *nzSpaceItem
+              ></app-help>
+            </nz-space>
+          </nz-form-control>
+        </nz-form-item>
+        <nz-form-item>
+          <nz-form-control>
+            <nz-space nzAlign="center">
+              <nz-switch formControlName="requireDpop"></nz-switch>
+              <span *nzSpaceItem>Require DPoP</span>
+              <app-help
+                text="Require DPoP (Demonstrating Proof of Possession) tokens for requests to the Pod (!! This currently breaks the UI !!)"
+                *nzSpaceItem
+              ></app-help>
+            </nz-space>
+          </nz-form-control>
+        </nz-form-item>
+        <nz-form-item>
+          <nz-form-control>
+            <nz-space nzAlign="center">
+              <nz-switch formControlName="skipDpopAthCheck"></nz-switch>
+              <span *nzSpaceItem>Skip DPoP ath check</span>
+              <app-help
+                text="Skip DPoP ath claim checks (for compatibility with legacy DPoP clients, do not use in production)"
+                *nzSpaceItem
+              ></app-help>
+            </nz-space>
+          </nz-form-control>
+        </nz-form-item>
+      </nz-tab>
+
+      <nz-tab nzTitle="OIDC">
+        <fieldset>
+          <legend>
+            <nz-space nzAlign="center">
+              <nz-switch formControlName="enableOidc" #enableOidc></nz-switch>
+              <span *nzSpaceItem>Enable external OIDC</span>
+              <app-help
+                text="Enable the use of an external OIDC server (disable to use the embedded Keycloak server)"
+                *nzSpaceItem
+              ></app-help>
+            </nz-space>
+          </legend>
+          <nz-form-item>
+            <nz-form-label [nzSpan]="6" nzFor="oidcServerUrl">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Server URL</span>
+                <app-help
+                  text="The base OIDC server URL"
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </nz-form-label>
+            <nz-form-control [nzSpan]="18">
+              <input
+                nz-input
+                type="text"
+                id="oidcServerUrl"
+                formControlName="oidcServerUrl"
+              />
+            </nz-form-control>
+          </nz-form-item>
+          <nz-form-item>
+            <nz-form-label [nzSpan]="6" nzFor="oidcPrincipalExtractor">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Principal extractor</span>
+                <app-help
+                  text="Specify a custom class that extracts the principal from the JWT Token (full package and class name!)"
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </nz-form-label>
+            <nz-form-control [nzSpan]="18">
+              <input
+                type="text"
+                nz-input
+                id="oidcPrincipalExtractor"
+                formControlName="oidcPrincipalExtractor"
+              />
+            </nz-form-control>
+          </nz-form-item>
+          <nz-form-item class="validated">
+            <nz-form-label [nzSpan]="6" nzFor="oidcExtractorConfig">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Extractor config</span>
+                <app-help
+                  text="A properties map (string => string) with properties used by the custom Extractor Class"
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </nz-form-label>
+            <nz-form-control [nzSpan]="18" [class.disabled]="oidcDisabled()">
+              <nz-code-editor
+                class="config-props"
+                [class.disabled]="oidcDisabled()"
+                id="oidcExtractorConfig"
+                formControlName="oidcExtractorConfig"
+                [nzEditorOption]="
+                  oidcDisabled()
+                    ? settings.getCodeEditorSetting().json_readonly
+                    : settings.getCodeEditorSetting().json
+                "
+              ></nz-code-editor>
+            </nz-form-control>
+            <div
+              class="error"
+              [class.hide]="oidcDisabled()"
+              nz-col
+              nzOffset="6"
+            >
+              <span nz-typography nzType="danger">{{
+                oidcExtractorConfigError()
+              }}</span>
+            </div>
+          </nz-form-item>
+          <nz-form-item>
+            <nz-form-label [nzSpan]="6" nzFor="oidcAllowedSkew">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Allowed skew</span>
+                <app-help
+                  text="How many seconds the timestamps may be out of sync to still be valid."
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </nz-form-label>
+            <nz-form-control [nzSpan]="18">
+              <nz-input-number
+                nzAddonAfter="seconds"
+                [nzMin]="0"
+                id="oidcAllowedSkew"
+                formControlName="oidcAllowedSkew"
+              />
+            </nz-form-control>
+          </nz-form-item>
+          <nz-form-item>
+            <nz-form-control [nzSpan]="24" nz-flex nzAlign="end">
+              <button nz-button nzType="primary" (click)="saveOidc()">
+                Save
+              </button>
+            </nz-form-control>
+          </nz-form-item>
+        </fieldset>
+      </nz-tab>
+
+      <nz-tab nzTitle="UMA">
+        <fieldset>
+          <legend>
+            <nz-space nzAlign="center">
+              <nz-switch formControlName="enableUma"></nz-switch>
+              <span *nzSpaceItem>Enable UMA server</span>
+              <app-help
+                text="Enable the use of a server following the UMA 2.0 specification"
+                *nzSpaceItem
+              ></app-help>
+            </nz-space>
+          </legend>
+          <nz-form-item>
+            <nz-form-label [nzSpan]="6" nzFor="umaServerUrl">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Server URL</span>
+                <app-help
+                  text="The base UMA server URL"
+                  *nzSpaceItem
+                ></app-help> </nz-space
+            ></nz-form-label>
+            <nz-form-control [nzSpan]="18">
+              <input
+                nz-input
+                id="umaServerUrl"
+                type="text"
+                formControlName="umaServerUrl"
+              />
+            </nz-form-control>
+          </nz-form-item>
+          <nz-form-item>
+            <nz-form-label [nzSpan]="6" nzFor="umaPrincipalExtractor">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Principal extractor</span>
+                <app-help
+                  text="Specify a custom class that extracts the principal from the JWT Token (full package and class name!)"
+                  *nzSpaceItem
+                ></app-help> </nz-space
+            ></nz-form-label>
+            <nz-form-control [nzSpan]="18">
+              <input
+                nz-input
+                type="text"
+                id="umaPrincipalExtractor"
+                formControlName="umaPrincipalExtractor"
+              />
+            </nz-form-control>
+          </nz-form-item>
+          <nz-form-item class="validated">
+            <nz-form-label [nzSpan]="6" nzFor="umaExtractorConfig">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Extractor config</span>
+                <app-help
+                  text="A properties map (string => string) with properties used by the custom Extractor Class"
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </nz-form-label>
+            <nz-form-control [nzSpan]="18" [class.disabled]="umaDisabled()">
+              <nz-code-editor
+                class="config-props"
+                [class.disabled]="umaDisabled()"
+                formControlName="umaExtractorConfig"
+                id="umaExtractorConfig"
+                [nzEditorOption]="
+                  umaDisabled()
+                    ? settings.getCodeEditorSetting().json_readonly
+                    : settings.getCodeEditorSetting().json
+                "
+              ></nz-code-editor>
+            </nz-form-control>
+            <div class="error" [class.hide]="umaDisabled()" nz-col nzOffset="6">
+              <span nz-typography nzType="danger">{{
+                umaExtractorConfigError()
+              }}</span>
+            </div>
+          </nz-form-item>
+          <nz-form-item>
+            <nz-form-label [nzSpan]="6" nzFor="umaAllowedSkew">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Allowed skew</span>
+                <app-help
+                  text="How many seconds the timestamps may be out of sync to still be valid."
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </nz-form-label>
+            <nz-form-control [nzSpan]="18">
+              <nz-input-number
+                nzAddonAfter="seconds"
+                [nzMin]="0"
+                id="umaAllowedSkew"
+                formControlName="umaAllowedSkew"
+              />
+            </nz-form-control>
+          </nz-form-item>
+          <nz-form-item>
+            <nz-form-control [nzSpan]="24" nz-flex nzAlign="end">
+              <button nz-button nzType="primary" (click)="saveUma()">
+                Save
+              </button>
+            </nz-form-control>
+          </nz-form-item>
+        </fieldset>
+      </nz-tab>
+
+      <nz-tab nzTitle="HTTP Policy">
+        <fieldset>
+          <legend>
+            <nz-space nzAlign="center">
+              <nz-switch formControlName="enableHttpPep"></nz-switch>
+              <span *nzSpaceItem>Http Endpoint Policy Enforcer</span>
+              <app-help
+                text="Enable using an external HTTP Endpoint Policy Enforcer for the pod. This delegates policy decisions to an external service."
+                *nzSpaceItem
+              ></app-help>
+            </nz-space>
+          </legend>
+          <nz-form-item>
+            <nz-form-label [nzSpan]="6" nzFor="httpPepUrl">
+              <nz-space nzAlign="center">
+                <span *nzSpaceItem>Server URL</span>
+                <app-help
+                  text="The external HTTP Endpoint Policy Enforcer URL"
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </nz-form-label>
+            <nz-form-control [nzSpan]="18">
+              <input
+                nz-input
+                type="text"
+                id="httpPepUrl"
+                formControlName="httpPepUrl"
+              />
+            </nz-form-control>
+          </nz-form-item>
+          <fieldset>
+            <legend>
+              <nz-space nzAlign="center">
+                <nz-switch formControlName="enableHttpPepBasicAuth"></nz-switch>
+                <span *nzSpaceItem>Basic auth</span>
+                <app-help
+                  text="Enable Basic auth security on your Http Endpoint Policy Enforcer"
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </legend>
+            <nz-form-item>
+              <nz-form-label [nzSpan]="6" nzFor="httpPepBasicAuthUsername">
+                Username
+              </nz-form-label>
+              <nz-form-control [nzSpan]="18">
+                <input
+                  nz-input
+                  type="text"
+                  id="httpPepBasicAuthUsername"
+                  formControlName="httpPepBasicAuthUsername"
+                />
+              </nz-form-control>
+            </nz-form-item>
+            <nz-form-item>
+              <nz-form-label [nzSpan]="6" nzFor="httpPepBasicAuthPassword">
+                Password
+              </nz-form-label>
+              <nz-form-control [nzSpan]="18">
+                <input
+                  nz-input
+                  type="password"
+                  id="httpPepBasicAuthPassword"
+                  formControlName="httpPepBasicAuthPassword"
+                />
+              </nz-form-control>
+            </nz-form-item>
+          </fieldset>
+          <fieldset>
+            <legend>
+              <nz-space nzAlign="center">
+                <nz-switch formControlName="enableHttpPepApiKey"></nz-switch>
+                <span *nzSpaceItem>API key</span>
+                <app-help
+                  text="Enable API Key security on your HTTP Endpoint Policy Enforcer"
+                  *nzSpaceItem
+                ></app-help>
+              </nz-space>
+            </legend>
+            <nz-form-item>
+              <nz-form-label [nzSpan]="6" nzFor="httpPepApiKeySendVia">
+                <nz-space nzAlign="center">
+                  <span *nzSpaceItem>Sent via</span>
+                  <app-help
+                    text="Look for the API key in either the headers or the querystring"
+                    *nzSpaceItem
+                  ></app-help>
+                </nz-space>
+              </nz-form-label>
+              <nz-form-control [nzSpan]="18">
+                <nz-radio-group
+                  formControlName="httpPepApiKeySendVia"
+                  id="httpPepApiKeySendVia"
+                >
+                  <label nz-radio-button [nzValue]="0">Header</label>
+                  <label nz-radio-button [nzValue]="1">Querystring</label>
+                </nz-radio-group>
+              </nz-form-control>
+            </nz-form-item>
+            <nz-form-item>
+              <nz-form-label [nzSpan]="6" nzFor="httpPepApiKeyName">
+                {{ sentRadioGroup == 0 ? "Header name" : "Parameter name" }}
+              </nz-form-label>
+              <nz-form-control [nzSpan]="18">
+                <input
+                  nz-input
+                  id="httpPepApiKeyName"
+                  type="text"
+                  formControlName="httpPepApiKeyName"
+                />
+              </nz-form-control>
+            </nz-form-item>
+            <nz-form-item>
+              <nz-form-label [nzSpan]="6" nzFor="httpPepApiKeyValue">
+                {{ sentRadioGroup == 0 ? "Header value" : "Parameter value" }}
+              </nz-form-label>
+              <nz-form-control [nzSpan]="18">
+                <input
+                  nz-input
+                  type="password"
+                  id="httpPepApiKeyValue"
+                  formControlName="httpPepApiKeyValue"
+                />
+              </nz-form-control>
+            </nz-form-item>
+          </fieldset>
+          <nz-form-item>
+            <nz-form-control [nzSpan]="24" nz-flex nzAlign="end">
+              <button
+                nz-button
+                nzType="primary"
+                (click)="saveHttpPep()"
+                [disabled]="!isHttpPepSectionValid()"
+              >
+                Save
+              </button>
+            </nz-form-control>
+          </nz-form-item>
+        </fieldset>
+      </nz-tab>
+    </nz-tabs>
+  </form>
+} @else {
+  <span>Loading settings form...</span>
+}

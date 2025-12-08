@@ -47,7 +47,7 @@ class PodManagementApi(
     private val httpConfig: HttpConfig,
     private val podSetupHelper: PodSetupHelper,
     private val podStoreFactory: PodStoreFactory,
-    @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
+    @param:Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
     private val securityIdentity: Instance<SecurityIdentity>,
     private val podConfigProvider: PodConfigProvider
@@ -83,6 +83,12 @@ class PodManagementApi(
             }
     }
 
+    private fun listPodInfo(): Uni<List<PodInfo>> =
+        podStoreFactory.createPodStore().find().map { result ->
+            result.items.map { pod -> PodInfo(pod.id) }
+        };
+
+
     @PermitAll
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)
@@ -93,10 +99,16 @@ class PodManagementApi(
     )
     @APIResponseSchema(PodInfoGraph::class)
     fun list(): Uni<List<PodInfo>> {
-        return podStoreFactory.createPodStore().find().map { result ->
-            result.items.map { pod -> PodInfo(pod.id) }
-        }
+        return listPodInfo();
     }
+
+    @GET
+    @Produces(MediaType.TEXT_HTML)
+    fun getHtml(): Uni<Response> {
+        val uiUri = UriBuilder.fromUri(httpConfig.webclientUri()).build();
+        return if (httpConfig.redirectToWebclient()) Uni.createFrom().item(Response.seeOther(uiUri).build()) else listPodInfo().map { Response.ok(it, JSON_LD_MEDIA_TYPE).build() };
+    }
+
 
     @GET
     @Produces(JSON_LD_MEDIA_TYPE)

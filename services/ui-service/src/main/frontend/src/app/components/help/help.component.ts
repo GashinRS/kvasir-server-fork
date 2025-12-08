@@ -1,10 +1,10 @@
 import { Component, input } from '@angular/core';
 import { NzIconModule } from 'ng-zorro-antd/icon';
-import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
+import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 
 @Component({
   selector: 'app-help',
-  imports: [NzIconModule, NzToolTipModule],
+  imports: [NzIconModule, NzTooltipModule],
   template: `
     <div class="top" [nz-tooltip]="text()">
       <span

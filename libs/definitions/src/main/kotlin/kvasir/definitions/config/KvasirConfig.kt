@@ -22,6 +22,12 @@ interface HttpConfig {
      * The URI where the Kvasir web client is accessible.
      */
     fun webclientUri(): String
+
+    /**
+     * If true, HTTP requests to the base URI will be redirected to the web client URI.
+     */
+    @WithDefault("true")
+    fun redirectToWebclient(): Boolean
 }
 
 /**

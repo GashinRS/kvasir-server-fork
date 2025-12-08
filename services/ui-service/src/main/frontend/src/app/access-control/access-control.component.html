@@ -24,6 +24,7 @@
   <nz-table #basicTable [nzData]="relationships.value()!">
     <thead>
       <tr>
+        <th>type</th>
         <th>user</th>
         <th>relation</th>
         <th>resource</th>
@@ -33,6 +34,7 @@
     <tbody>
       @for (data of basicTable.data; track $index) {
         <tr>
+          <td><app-access-control-type [relationship]="data" /></td>
           <td><app-access-control-subject [relationship]="data" /></td>
           <td><app-access-control-relation [relationship]="data" /></td>
           <td><app-access-control-resource [relationship]="data" /></td>

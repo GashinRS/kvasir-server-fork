@@ -4,6 +4,9 @@ import {
   ChangeRecord,
   ChangeResultCode,
   ChangeStatusEntry,
+  Pod,
+  PodDetails,
+  PodSerialized,
   Timestamped,
 } from '../types';
 
@@ -190,4 +193,21 @@ export function ensureSlashAtEnd(input: string): string {
 
 export function ensureSlashAtBoth(input: string): string {
   return ensureSlashAtStart(input).endsWith('/') ? input : `${input}/`;
+}
+
+export function serialize(pod: PodDetails): PodSerialized {
+  return {
+    ...pod,
+    ...{ 'kss:configuration': JSON.stringify(pod['kss:configuration']) },
+  };
+}
+
+export function deserialize(podSerialized: PodSerialized): PodDetails {
+  if (podSerialized == null) {
+    return podSerialized;
+  }
+  return {
+    ...podSerialized,
+    ...{ 'kss:configuration': JSON.parse(podSerialized['kss:configuration']) },
+  };
 }

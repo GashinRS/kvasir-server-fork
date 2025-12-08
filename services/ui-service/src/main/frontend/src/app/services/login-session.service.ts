@@ -1,6 +1,14 @@
 import { inject, Injectable } from '@angular/core';
 import { KEY_KVASIR_LOGIN_SESSION, KEY_LOGIN_STATE } from '../util/constants';
 import { ConfigService } from './config.service';
+import { WwwAuthenticateParserService } from './www-authenticate-parser.service';
+import { ErrorHandlerService } from './error-handler.service';
+import {
+  AuthenticationError,
+  AuthErrorType,
+} from '../util/AuthenticationError';
+import { HttpClient } from '@angular/common/http';
+import { lastValueFrom } from 'rxjs';
 
 export interface KvasirLoginSession {
   podName: string;
@@ -38,6 +46,8 @@ export class LoginSessionService {
 
   // DI
   private config = inject(ConfigService);
+  private wwwAuthParser = inject(WwwAuthenticateParserService);
+  private httpClient = inject(HttpClient);
 
   constructor() {
     // Try to restore login state
@@ -59,9 +69,12 @@ export class LoginSessionService {
     // Clear any existing login sessions in storage
     this.clearCurrentLoginSession();
     // Fetch details
-    try {
-      const response = await fetch(`${this.config.host}/${podName}/.profile`);
-      const { 'kss:authServerUrl': keycloakUrl } = await response.json();
+
+    const keycloakUrl = this.config.getAuthUri();
+    if (!keycloakUrl) {
+      throw new AuthenticationError(AuthErrorType.NO_AS_URI);
+    } else {
+      await this.testAsUri(keycloakUrl);
       this.session = {
         keycloakUrl,
         podName,
@@ -71,8 +84,6 @@ export class LoginSessionService {
       };
       // Persist and return
       this.persistLoginSession();
-    } catch (err: any) {
-      console.error(err);
     }
   }
 
@@ -188,6 +199,20 @@ export class LoginSessionService {
   setLoginState(state: LoginState): void {
     this.state = state;
     this.persistLoginState();
+  }
+
+  private async testAsUri(as_uri: string): Promise<void> {
+    try {
+      const response = await lastValueFrom(
+        this.httpClient.head(as_uri, { observe: 'response' }),
+      );
+      if (response.status >= 200 && response.status <= 399) {
+        return;
+      }
+      throw new AuthenticationError(AuthErrorType.INVALID_AS_URI, as_uri);
+    } catch (e) {
+      throw new AuthenticationError(AuthErrorType.INVALID_AS_URI, as_uri);
+    }
   }
 }
 

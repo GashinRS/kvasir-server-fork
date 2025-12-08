@@ -1,17 +1,27 @@
 <div nz-row nzJustify="center">
   <div nz-col>
     <nz-page-header nzTitle="Select a pod"> </nz-page-header>
-    <form [formGroup]="myForm" (submit)="doLogin()">
-      <nz-space>
-        <nz-select formControlName="podName" *nzSpaceItem>
-          @for (pod of podsResource.value(); track pod["@id"]) {
-            <nz-option [nzValue]="name(pod)" [nzLabel]="name(pod)"></nz-option>
-          }
-        </nz-select>
-        <button nz-button nzType="primary" *nzSpaceItem type="submit">
-          Log in
-        </button>
-      </nz-space>
-    </form>
+
+    @if (podsResource.error(); as err) {
+      <div class="error">
+        <div class="title">Cannot list pods: could not connect to backend!</div>
+      </div>
+    } @else {
+      <form [formGroup]="myForm" (submit)="doLogin()">
+        <nz-space>
+          <nz-select formControlName="podName" *nzSpaceItem>
+            @for (pod of podsResource.value(); track pod["@id"]) {
+              <nz-option
+                [nzValue]="name(pod)"
+                [nzLabel]="name(pod)"
+              ></nz-option>
+            }
+          </nz-select>
+          <button nz-button nzType="primary" *nzSpaceItem type="submit">
+            Log in
+          </button>
+        </nz-space>
+      </form>
+    }
   </div>
 </div>

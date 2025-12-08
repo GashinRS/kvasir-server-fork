@@ -39,15 +39,58 @@ export class ErrorHandlerService {
   mapErrorToKvasirError(res: HttpErrorResponse): KvasirError {
     // Determine if response is of type string or json
     const isStringError = typeof res.error == 'string';
-    return {
-      statusCode: res.status,
-      message: isStringError
-        ? res.error
-        : ((res.error as KvasirBackendError)?.details ?? ''),
-      stack: isStringError
-        ? undefined
-        : (res.error as KvasirBackendError)?.stack,
-    };
+    // Host unreachable case
+    if (
+      res.status == 0 &&
+      res.error.message == 'Failed to fetch' &&
+      res.message.startsWith('Http failure response for ')
+    ) {
+      return {
+        statusCode: -1,
+        description: `Host Unreachable [${res.url}]`,
+        message: res.url?.startsWith('http://localhost')
+          ? `Is your local kvasir backend running?`
+          : `Is the kvasir host url reachable?`,
+      };
+    } else {
+      return {
+        statusCode: res.status,
+        message: isStringError
+          ? res.error
+          : ((res.error as KvasirBackendError)?.details ?? ''),
+        stack: isStringError
+          ? undefined
+          : (res.error as KvasirBackendError)?.stack,
+      };
+    }
+  }
+
+  showCannotAuthenticate(err: KvasirError) {
+    setTimeout(() => {
+      this.modal.create<ErrorComponent, KvasirError>({
+        nzTitle: 'Error: Cannot authenticate!',
+        nzContent: ErrorComponent,
+        nzData: err,
+        nzWidth: '75%',
+        nzFooter: null,
+        nzCentered: true,
+      });
+    }, 0);
+  }
+
+  showGenericError(err: Error) {
+    setTimeout(() => {
+      this.modal.create<ErrorComponent, KvasirError>({
+        nzTitle: 'Error: Cannot authenticate!',
+        nzContent: ErrorComponent,
+        nzData: {
+          message: err.message,
+        },
+        nzWidth: '75%',
+        nzFooter: null,
+        nzCentered: true,
+      });
+    }, 0);
   }
 
   showInModal(err: KvasirError) {
@@ -119,20 +162,27 @@ export class ErrorHandlerService {
           'A service could not respond in time after proxying your request.';
         break;
 
+      case -1:
+        nzTitle = 'Error: Host Unreachable';
+        break;
+
       default:
         nzTitle = 'Error: Unknown';
         description =
           'An unknown error occurred. Please report this as an issue to the developers.';
     }
 
-    err.description = description;
+    err.description = err.description ?? description;
 
-    this.modal.create<ErrorComponent, KvasirError>({
-      nzTitle,
-      nzContent: ErrorComponent,
-      nzData: err,
-      nzWidth: '75%',
-      nzFooter: null,
-    });
+    setTimeout(() => {
+      this.modal.create<ErrorComponent, KvasirError>({
+        nzTitle,
+        nzContent: ErrorComponent,
+        nzData: err,
+        nzWidth: '75%',
+        nzFooter: null,
+        nzCentered: true,
+      });
+    }, 0);
   }
 }

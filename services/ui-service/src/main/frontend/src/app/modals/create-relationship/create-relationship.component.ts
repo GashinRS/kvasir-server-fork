@@ -5,7 +5,8 @@ import {
   Inject,
   inject,
   model,
-  ViewEncapsulation,
+  viewChild,
+  ViewEncapsulation
 } from '@angular/core';
 import {
   FormBuilder,
@@ -20,16 +21,24 @@ import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NZ_MODAL_DATA, NzModalModule, NzModalRef } from 'ng-zorro-antd/modal';
-import { NzSelectModule } from 'ng-zorro-antd/select';
+import { NzPopoverModule } from "ng-zorro-antd/popover";
+import { NzRadioModule } from 'ng-zorro-antd/radio';
+import { NzSelectComponent, NzSelectModule } from 'ng-zorro-antd/select';
+import { NzSpaceModule } from 'ng-zorro-antd/space';
+import { NzTabsModule } from 'ng-zorro-antd/tabs';
+import { NzTooltipModule } from "ng-zorro-antd/tooltip";
+import { SelectRelationComponent } from '../../components/select-relation/select-relation.component';
 import { ConfigService } from '../../services/config.service';
 import { LoginSessionService } from '../../services/login-session.service';
 import { RelationshipDefinition } from '../../types';
-import { KSS_FGA_RESOURCE_TYPE, KSS_FGA_USER_TYPE } from '../../util/constants';
+import { KSS_FGA_EXTERNAL_ACCESS, KSS_FGA_EXTERNAL_ACCESS_HTTP_ENDPOINT, KSS_FGA_EXTERNAL_ACCESS_UMA, KSS_FGA_RESOURCE_TYPE, KSS_FGA_USER_ANONYMOUS, KSS_FGA_USER_TYPE, KSS_FGA_USER_WILDCARD } from '../../util/constants';
 import { ensureSlashAtStart } from '../../util/utils';
 
-type SubjectAddon = 'email' | 'webid' | 'user' | 'everyone';
+
+type SubjectAddon = 'email' | 'webid' | 'user' | 'everyone' | 'unauthed';
 
 interface RelationshipModel {
+  acType: FormControl<AccessControlType>;
   subject: FormControl<string | null>;
   relation: FormControl<string | null>;
   object: FormControl<string | null>;
@@ -47,6 +56,8 @@ export interface RelationOption {
   groupLabel: 'normal' | 'special' | 'elevated';
   icon: string;
 }
+
+type AccessControlType = 'kvasir' | 'uma' | 'httpPep';
 
 const RELATIONS: RelationOption[] = [
   {
@@ -74,12 +85,6 @@ const RELATIONS: RelationOption[] = [
     icon: 'stop',
   },
   {
-    value: 'kss-fga:manager',
-    label: 'manager',
-    groupLabel: 'elevated',
-    icon: 'key',
-  },
-  {
     value: 'kss-fga:owner',
     label: 'owner',
     groupLabel: 'elevated',
@@ -94,11 +99,17 @@ const RELATIONS: RelationOption[] = [
     NzFormModule,
     NzInputModule,
     NzSelectModule,
+    NzSpaceModule,
     NzModalModule,
     NzIconModule,
+    NzTabsModule,
+    NzTooltipModule,
+    NzPopoverModule,
+    NzRadioModule,
     ReactiveFormsModule,
     FormsModule,
-  ],
+    SelectRelationComponent,
+],
   templateUrl: './create-relationship.component.html',
   styleUrl: './create-relationship.component.less',
   encapsulation: ViewEncapsulation.None,
@@ -123,6 +134,8 @@ export class CreateRelationshipComponent {
   private config = inject(ConfigService);
   private session = inject(LoginSessionService);
 
+  subjectSelector = viewChild<NzSelectComponent>('subjectSelector');
+
   autoTips: Record<string, Record<string, string>> = {
     default: {
       required: 'Cannot be empty',
@@ -135,6 +148,7 @@ export class CreateRelationshipComponent {
     @Inject(NZ_MODAL_DATA) private data: IRelationship,
   ) {
     this.relationshipForm = fb.group<RelationshipModel>({
+      acType: fb.nonNullable.control('kvasir'),
       subject: fb.control(
         { disabled: false, value: data?.subject ?? null },
         {
@@ -157,15 +171,38 @@ export class CreateRelationshipComponent {
         },
       ),
     });
-    effect(() => {
-      if (this.subjectAddon() == 'everyone') {
-        this.relationshipForm.controls.subject.disable();
-        this.relationshipForm.controls.subject.reset();
-      } else {
-        this.relationshipForm.controls.subject.enable();
-        this.relationshipForm.controls.subject.reset();
+    this.relationshipForm.controls.acType.valueChanges.subscribe((acType) => {
+      let model: any;
+      switch (acType) {
+        case 'kvasir':
+          model = {
+            acType,
+          };
+          this.relationshipForm.controls.subject.enable();
+          this.subjectSelector()?.setDisabledState(false);
+          break;
+        case 'httpPep':
+        case 'uma':
+          model = {
+            acType,
+            subject: null,
+          };
+          this.relationshipForm.controls.subject.disable();
+          this.subjectAddon.set('everyone');
+          this.subjectSelector()!.setDisabledState(true);
+          break;
+
       }
+      this.relationshipForm.reset(model, { emitEvent: false });
     });
+    effect(() => {
+      const control = this.relationshipForm.controls.subject;
+      if (this.subjectAddon() == 'everyone' || this.subjectAddon() == 'unauthed') {
+        control.disable();
+      } else {
+        control.enable();
+      }
+    })
   }
 
   get pathPrefix(): string {
@@ -178,15 +215,17 @@ export class CreateRelationshipComponent {
         return 'mailto:';
       case 'webid':
         return 'https://';
-      case 'everyone':
-        return '*';
       default:
       case 'user':
         return 'urn:kvasir-user:';
+      case 'everyone':
+        return KSS_FGA_USER_WILDCARD;
+      case 'unauthed':
+        return KSS_FGA_USER_ANONYMOUS
     }
   }
 
-  getIcon(selected: 'email' | 'webid' | 'user' | 'everyone'): string {
+  getIcon(selected: SubjectAddon): string {
     switch (selected) {
       case 'email':
         return 'mail';
@@ -194,13 +233,17 @@ export class CreateRelationshipComponent {
         return 'idcard';
       case 'user':
         return 'user';
+      case 'everyone':
+        return 'team';
+      case 'unauthed':
+        return 'unlock';
       default:
         return 'question-circle';
     }
   }
 
   getRelationIcon(
-    selected: 'reader' | 'writer' | 'deleter' | 'blocked' | 'manager' | 'owner',
+    selected: 'reader' | 'writer' | 'deleter' | 'blocked' | 'owner',
   ): string {
     switch (selected) {
       case 'reader':
@@ -211,8 +254,6 @@ export class CreateRelationshipComponent {
         return 'delete';
       case 'blocked':
         return 'stop';
-      case 'manager':
-        return 'key';
       case 'owner':
         return 'crown';
       default:
@@ -247,19 +288,47 @@ export class CreateRelationshipComponent {
     this.subjectAddon.set('user');
   }
 
+  isFormValid(): boolean {
+    const { acType, subject, relation, object } =
+      this.relationshipForm.controls;
+    switch (acType.value) {
+      case 'kvasir':
+        switch (this.subjectAddon()) {
+          case 'everyone':
+          case 'unauthed':
+            return relation.valid && this.prefix().trim().length > 0;
+          default:
+            return subject.valid && relation.valid && object.valid;
+        }
+      case 'uma':
+        return relation.valid;
+      case 'httpPep':
+        return relation.valid;
+      default:
+        return false;
+    }
+  }
+
   private createRelationShipDefinition(): RelationshipDefinition {
     let { value: rel } = this.relationshipForm;
-    let userId =
-      this.subjectAddon() == 'everyone'
-        ? `user:${this.prefix()}`
-        : this.prefix() + rel.subject!;
+    let userId = this.prefix() + (rel.subject ?? '');
+    let relation = {
+        '@id': `${this.config.host}${this.pathPrefix}${ensureSlashAtStart(rel.object!)}`,
+        '@type': KSS_FGA_RESOURCE_TYPE,
+      };
+    if (this.acType == 'uma') {
+      relation = {...relation, ...{[KSS_FGA_EXTERNAL_ACCESS]: {"@id": KSS_FGA_EXTERNAL_ACCESS_UMA}}};
+    } else if (this.acType == 'httpPep') {
+      relation = {...relation, ...{[KSS_FGA_EXTERNAL_ACCESS]: {"@id": KSS_FGA_EXTERNAL_ACCESS_HTTP_ENDPOINT}}};    }
+    
     return {
       '@id': userId,
       '@type': KSS_FGA_USER_TYPE,
-      [rel.relation!]: {
-        '@id': `${this.config.host}${this.pathPrefix}${ensureSlashAtStart(rel.object!)}`,
-        '@type': KSS_FGA_RESOURCE_TYPE,
-      },
+      [rel.relation!]: relation
     } as RelationshipDefinition;
+  }
+
+  get acType(): AccessControlType {
+    return this.relationshipForm.controls.acType.value;
   }
 }
