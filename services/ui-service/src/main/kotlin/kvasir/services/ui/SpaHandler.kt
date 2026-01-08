@@ -19,7 +19,6 @@ import kotlin.jvm.optionals.getOrNull
 const val KEY_KVASIR_HOST = "KVASIR_HOST"
 const val KEY_AUTH_HOST = "KVASIR_AUTH_HOST"
 const val KEY_AUTH_REALM = "KVASIR_AUTH_REALM"
-const val KEY_POLICY_AGENT = "POLICY_AGENT"
 const val PATH_PREFIX = "/_ui"
 const val WEBROOT = "webroot"
 const val CONFIG_PREFIX = "${PATH_PREFIX}/_cfg/config.json"
@@ -31,7 +30,6 @@ const val SKIP_UI_SYSTEM_PROPERTY = "ui-service.phase";
 @ApplicationScoped
 class SpaHandler(
     private val config: HttpConfig,
-    @param:ConfigProperty(name = "policy.agent") private val policyAgent: Optional<String>,
     @param:ConfigProperty(name = SKIP_UI_SYSTEM_PROPERTY) private val uiServicePhase: Optional<String>,
     @param:ConfigProperty(name = "kvasir.auth.keycloak.url") private val keycloakUrl: String,
     @param:ConfigProperty(name = "kvasir.auth.keycloak.realm") private val keycloakRealm: String
@@ -92,10 +90,8 @@ class SpaHandler(
     }
 
     private fun generateConfig(): JsonObject {
-        val policyAgent = policyAgent.orElse(null).takeIf { it in setOf("openfga", "a4ds") };
         return JsonObject.of(
             KEY_KVASIR_HOST, config.baseUri(),
-            KEY_POLICY_AGENT, policyAgent,
             KEY_AUTH_HOST, keycloakUrl,
             KEY_AUTH_REALM, keycloakRealm
         );

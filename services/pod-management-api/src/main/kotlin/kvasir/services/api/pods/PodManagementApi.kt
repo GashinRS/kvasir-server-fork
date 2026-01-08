@@ -50,7 +50,8 @@ class PodManagementApi(
     @param:Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
     private val securityIdentity: Instance<SecurityIdentity>,
-    private val podConfigProvider: PodConfigProvider
+    private val podConfigProvider: PodConfigProvider,
+    private val platformPodConfig: PodConfig
 ) {
 
     @PermitAll
@@ -154,6 +155,19 @@ class PodManagementApi(
         return podConfigProvider.getPodConfigById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transform { it!! }
+    }
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("{podId}/platform-config")
+    @Tag(name = ApiDocTags.PODS_API)
+    @Operation(
+        summary = "Get the default pod config values, defined at platform-level.",
+        description = "Returns the default pod config set via the system configuration."
+    )
+    @OpenFgaPolicyEnforcer
+    fun getPlatformConfig(@PathParam("podId") podId: String): Uni<PodConfig> {
+        return Uni.createFrom().item(platformPodConfig)
     }
 
     @PUT
