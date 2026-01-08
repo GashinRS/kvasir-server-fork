@@ -1,0 +1,75 @@
+<div class="parent">
+  <div
+    class="overlay clickable {{ type() }}"
+    [class.overlay-inline]="displayType() == 'inline'"
+    [class.overlay-block]="displayType() == 'block'"
+    (click)="unlock()"
+    nz-tooltip="Click to override default state"
+    nzTooltipPlacement="topLeft"
+    [class.fade-out-animation]="!locked()"
+    [class.fade-in-animation]="locked()"
+    [style.opacity]="locked() ? 1 : 0"
+    [style.pointer-events]="locked() ? 'auto' : 'none'"
+  >
+    @switch (type()) {
+      @case ("switch") {
+        <nz-icon nzType="lock"></nz-icon>
+        <nz-switch nzDisabled [ngModel]="defaultState()" />
+        <span>{{ label() }}</span>
+      }
+      @case ("code-json") {
+        <nz-icon nzType="lock"></nz-icon>
+        <textarea nz-input disabled>{{ defaultState() }}</textarea>
+      }
+      @case ("fieldset") {
+        <fieldset>
+          <legend>
+            <nz-space nzAlign="center">
+              <nz-icon nzType="lock" *nzSpaceItem></nz-icon>
+              <nz-switch
+                nzDisabled
+                [ngModel]="defaultState() != null"
+                *nzSpaceItem
+              /><span *nzSpaceItem>{{ label() }}</span>
+
+              <app-help
+                text="Enable the use of an external OIDC server (disable to use the embedded Keycloak server)"
+                *nzSpaceItem
+              ></app-help>
+            </nz-space>
+          </legend>
+          @if (defaultState() == null) {
+            <!-- Top section -->
+            <nz-skeleton
+              [nzTitle]="{ width: 75 }"
+              [nzParagraph]="{ rows: 5 }"
+            />
+          } @else {
+            <pre nz-typography>{{ defaultStateStringified() }}</pre>
+          }
+        </fieldset>
+      }
+      @default {
+        <span> {{ label() }}: {{ defaultState() }} </span>
+      }
+    }
+  </div>
+  <div
+    class="project {{ type() }}"
+    [class.project-inline]="displayType() == 'inline'"
+    [class.project-block]="displayType() == 'block'"
+    [class.fade-out-animation]="locked()"
+    [class.fade-in-animation]="!locked()"
+    [style.opacity]="locked() ? 0 : 1"
+  >
+    <nz-icon
+      class="clickable"
+      nzType="unlock"
+      (click)="lock()"
+      nz-tooltip="Reset to follow default state"
+    ></nz-icon>
+    <div>
+      <ng-content></ng-content>
+    </div>
+  </div>
+</div>

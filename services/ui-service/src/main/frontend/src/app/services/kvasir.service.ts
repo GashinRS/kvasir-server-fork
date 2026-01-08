@@ -216,6 +216,22 @@ export class KvasirService {
       );
   }
 
+  getPodRuntimeConfig(): Observable<PodConfiguration> {
+    return this.http
+      .get<PodConfiguration>(
+        `${this.host}/${this.session.podName()}/runtime-config`,
+      )
+      .pipe(this.convertErrorToKvasirError());
+  }
+
+  getPlatformConfig(): Observable<PodConfiguration> {
+    return this.http
+      .get<PodConfiguration>(
+        `${this.host}/${this.session.podName()}/platform-config`,
+      )
+      .pipe(this.convertErrorToKvasirError());
+  }
+
   updatePod(podConfig: PodConfiguration): Observable<void> {
     const cfg = {
       '@context': {
