@@ -13,7 +13,7 @@
     </modules>
     <properties>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>
-        <kotlin.version>2.2.21</kotlin.version>
+        <kotlin.version>2.0.21</kotlin.version>
         <kotlin.jvmTarget>20</kotlin.jvmTarget>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -44,6 +44,13 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-bom</artifactId>
+                <version>${kotlin.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>${quarkus.platform.artifact-id}</artifactId>
                 <version>${quarkus.platform.version}</version>
@@ -60,10 +67,15 @@
         </dependencies>
     </dependencyManagement>
     <dependencies>
-        <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-reflect</artifactId>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.jetbrains.kotlin</groupId>-->
+<!--            <artifactId>kotlin-reflect</artifactId>-->
+<!--        </dependency>-->
+<!--        <dependency>-->
+<!--            <groupId>org.jetbrains.kotlin</groupId>-->
+<!--            <artifactId>kotlin-stdlib</artifactId>-->
+
+<!--        </dependency>-->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest</artifactId>
@@ -106,10 +118,6 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5</artifactId>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-stdlib-jdk8</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
