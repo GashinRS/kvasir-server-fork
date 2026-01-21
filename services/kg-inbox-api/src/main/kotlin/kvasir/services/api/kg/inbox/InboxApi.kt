@@ -1,7 +1,6 @@
 package kvasir.services.api.kg.inbox
 
 import com.fasterxml.jackson.annotation.JsonFormat
-import com.fasterxml.jackson.annotation.JsonProperty
 import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
@@ -12,14 +11,16 @@ import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.kg.ChangeRequest
-import kvasir.definitions.kg.PodStoreFactory
+import kvasir.definitions.kg.Pod
 import kvasir.definitions.kg.changes.Assertion
-import kvasir.definitions.kg.slices.SliceStoreFactory
+import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
+import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
-import kvasir.definitions.rdf.KvasirVocab
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
 import kvasir.utils.idgen.ChangeRequestId
@@ -37,8 +38,7 @@ import java.util.*
 class InboxApi(
     @Channel("change_requests_publish")
     private val changeEmitter: MutinyEmitter<ChangeRequest>,
-    private val sliceStoreFactory: SliceStoreFactory,
-    private val podStoreFactory: PodStoreFactory,
+    private val repositoryFactory: RepositoryFactory,
     private val uriInfo: KvasirUriInfo,
     private val securityIdentity: Instance<SecurityIdentity>
 ) {
@@ -57,7 +57,7 @@ class InboxApi(
         input: ChangeRequestInput
     ): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toString()
-        return podStoreFactory.createPodStore().findById(fqPodId)
+        return repositoryFactory.getRepository(Pod::class).findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transformToUni { pod ->
                 val changeCommand = input.toChangeRequest(
@@ -89,7 +89,7 @@ class InboxApi(
     ): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return sliceStoreFactory.getSliceStore(fqPodId).findById(fqSliceId)
+        return repositoryFactory.getRepository(Slice::class, fqPodId).findById(fqSliceId)
             .onItem().ifNull().failWith(NotFoundException("Slice not found"))
             .onItem().ifNotNull().transformToUni { slice ->
                 if (slice!!.supportsChanges) {
@@ -118,37 +118,38 @@ data class ChangeRequestInput(
         description = "The JSON-LD context for the change request.",
         example = ApiDocConstants.JSON_LD_CONTEXT_EXAMPLE
     )
-    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any> = emptyMap(),
     @get:Schema(
         description = "List of assertions to be checked before applying the change request."
     )
-    @get:JsonProperty(KvasirVocab.assert)
-    @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
+    @get:JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val assert: List<Assertion> = emptyList(),
     @get:Schema(
         description = "Optional GraphQL query where matches are required to be found for the change request to be applied. Results are bound to the field names in the query and can be used in the insert and delete operations (via templates).",
         example = "ex_Person { id ex_givenName @filter(if: \"it==Bob\") }"
     )
-    @get:JsonProperty(KvasirVocab.with)
     val with: String? = null,
     @get:Schema(
         description = "List of triples to be inserted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
         example = "[ { \"@id\": \"ex:123\", \"ex:givenName\": \"Bob\" } ]"
     )
-    @get:JsonProperty(KvasirVocab.insert)
-    @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
+    @get:JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val insert: List<Any> = emptyList(),
     @get:Schema(
         description = "List of triples to be deleted, or a [JSONata](https://jsonata.org) template string to be applied to the results of the with-clause.",
         example = "[ { \"@id\": \"ex:123\", \"ex:givenName\": \"Alice\" } ]"
     )
-    @get:JsonProperty(KvasirVocab.delete)
-    @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
+    @get:JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val delete: List<Any> = emptyList(),
 ) {
 
-    init {
+    fun toChangeRequest(
+        fqPodId: String,
+        uriInfo: KvasirUriInfo,
+        principal: String,
+        sliceId: String? = null
+    ): ChangeRequest {
+        // Validate
         require(insert.isNotEmpty() || delete.isNotEmpty()) {
             "At least one of insert or delete properties must be provided"
         }
@@ -158,14 +159,7 @@ data class ChangeRequestInput(
         require(delete.filterIsInstance<String>().isEmpty() || with != null) {
             "Delete templates require a with-clause"
         }
-    }
 
-    fun toChangeRequest(
-        fqPodId: String,
-        uriInfo: KvasirUriInfo,
-        principal: String,
-        sliceId: String? = null
-    ): ChangeRequest {
         val bNodeIdMap = mutableMapOf<String, String>()
         return ChangeRequest(
             id = ChangeRequestId.generate(uriInfo.getResourceUri().toASCIIString()).encode(),

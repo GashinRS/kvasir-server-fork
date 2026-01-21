@@ -12,8 +12,9 @@ import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.ChangeStatusCode
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryResult
-import kvasir.definitions.kg.changes.ChangeHistoryFactory
-import kvasir.definitions.kg.changes.ChangeHistoryRequest
+import kvasir.definitions.kg.changes.ChangeReport
+import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.pod.PodConfigProvider
 import java.time.Duration
@@ -23,7 +24,7 @@ import kotlin.math.roundToLong
 @ApplicationScoped
 class TestHelpers(
     val httpConfig: HttpConfig,
-    val changeHistoryFactory: Instance<ChangeHistoryFactory>,
+    val repositoryFactory: RepositoryFactory,
     val kg: Instance<KnowledgeGraph>
 ) {
 
@@ -69,34 +70,24 @@ class TestHelpers(
             .extract().header(HttpHeaders.LOCATION)
 
         // Wait for the request to be committed
-        waitForChangeRequest(changeRequestUri, podUri, expectedResult, sliceUri).await().indefinitely()
+        waitForChangeRequest(changeRequestUri, podUri, expectedResult).await().indefinitely()
         return changeRequestUri
-    }
-
-    fun requestChangeSync(
-        changeRequest: ChangeRequest,
-        expectedResult: ChangeStatusCode = ChangeStatusCode.COMMITTED
-    ) {
-        kg.get().process(changeRequest).chain { _ ->
-            waitForChangeRequest(changeRequest.id, changeRequest.podId, expectedResult)
-        }.await().indefinitely()
     }
 
     fun waitForChangeRequest(
         changeRequestUri: String,
         podUri: String,
         expectedResult: ChangeStatusCode = ChangeStatusCode.COMMITTED,
-        sliceUri: String? = null,
         retryInitialDelay: Duration = Duration.ofMillis(200),
         delayFactor: Double = 1.2
     ): Uni<Void> {
-        val changeHistory = changeHistoryFactory.get().getChangeHistory(podUri)
+        val changeHistory = repositoryFactory.getRepository(ChangeReport::class, podUri)
         return changeHistory
-            .get(ChangeHistoryRequest(sliceId = sliceUri, changeRequestId = changeRequestUri))
+            .findById(changeRequestUri)
             .chain { report ->
                 if (report != null) {
                     val completedStatus =
-                        report.statusEntry.filter { it.code.terminalState }.map { it.code }.firstOrNull()
+                        report.statusEntry.filter { it.statusCode.terminalState }.map { it.statusCode }.firstOrNull()
                     when {
                         completedStatus == expectedResult -> Uni.createFrom().voidItem()
                         completedStatus != null -> Uni.createFrom()
@@ -115,7 +106,6 @@ class TestHelpers(
                         changeRequestUri,
                         podUri,
                         expectedResult,
-                        sliceUri,
                         retryInitialDelay.plusMillis((retryInitialDelay.toMillis() * delayFactor).roundToLong()),
                         delayFactor
                     )
@@ -181,7 +171,7 @@ class TestPodConfig(
     }
 
     override fun generateClients(): Optional<List<GenerateClientConfig>> {
-        return if(clients.isNotEmpty()) {
+        return if (clients.isNotEmpty()) {
             Optional.of(clients)
         } else {
             Optional.empty()

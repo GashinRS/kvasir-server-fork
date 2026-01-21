@@ -1,12 +1,15 @@
 package kvasir.definitions.rdf
 
 import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.module.kotlin.KotlinFeature
+import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
-import io.vertx.core.json.Json
-import io.vertx.core.json.JsonObject
-import kvasir.definitions.annotations.GenerateNoArgConstructor
+import com.github.jsonldjava.utils.JsonUtils
+import kvasir.definitions.kg.Pod
 
 typealias JSONObject = Map<String, Any>
 
@@ -24,6 +27,16 @@ object JsonLdKeywords {
 }
 
 object JsonLdHelper {
+
+    private val defaultContext = mapOf("kss" to KvasirVocab.baseUri, "kss-fga" to FgaVocab.baseUri)
+    val mapper: ObjectMapper = ObjectMapper()
+
+    init {
+        mapper.registerModule(JavaTimeModule())
+        mapper.registerModule(KotlinModule.Builder().configure(KotlinFeature.NullIsSameAsDefault, true).build())
+        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+        mapper.propertyNamingStrategy = PrefixedPropertyNamingStrategy(KvasirVocab.baseUri)
+    }
 
     fun toCompactFQForm(doc: JSONObject, options: JsonLdOptions = JsonLdOptions()): JSONObject {
         return JsonLdProcessor.compact(JsonLdProcessor.expand(doc), emptyMap<String, Any>(), options)
@@ -55,13 +68,52 @@ object JsonLdHelper {
         }
     }
 
-    fun encode(any: Any, context: JSONObject): JSONObject {
-        val effectiveContext = if (!context.values.contains(KvasirVocab.baseUri)) {
-            context.plus(KvasirVocab.context)
+    fun encode(content: Any, context: JSONObject? = null): Any {
+        return if (content is Iterable<*>) {
+            // if the list contains JSON-LD, return as is
+            if (content.any {
+                    it is Map<*, *> && (it.containsKey(JsonLdKeywords.context) || it.containsKey(
+                        JsonLdKeywords.graph
+                    ))
+                }) {
+                content
+            } else {
+                val effectiveContext = (context ?: defaultContext)
+                val entityList = mapper.convertValue(content, object : TypeReference<List<JSONObject>>() {})
+                mapOf(
+                    JsonLdKeywords.context to effectiveContext,
+                    JsonLdKeywords.graph to entityList.map {
+                        JsonLdProcessor.compact(it, effectiveContext, JsonLdOptions())
+                            .minus(JsonLdKeywords.context)
+                    }
+                )
+            }
         } else {
-            context
+            val jsonLd = mapper.convertValue(content, JSONObject::class.java)
+            val effectiveContext = when {
+                jsonLd.containsKey(JsonLdKeywords.context) -> jsonLd[JsonLdKeywords.context]
+                context != null -> if (!context.values.contains(KvasirVocab.baseUri)) context.plus(KvasirVocab.context) else context
+                else -> defaultContext
+            }
+            return JsonLdProcessor.compact(
+                jsonLd,
+                effectiveContext,
+                JsonLdOptions()
+            )
         }
-        return JsonLdProcessor.compact(JsonObject.mapFrom(any).map, effectiveContext, JsonLdOptions())
+    }
+
+    fun <T> decode(jsonLd: String, type: Class<T>): T {
+        val jsonLd = JsonUtils.fromString(jsonLd) as Map<String, Any>
+        val context = jsonLd[JsonLdKeywords.context] as Map<String, Any>? ?: defaultContext
+        val fqJsonLd = toCompactFQForm(jsonLd)
+        // Only include context if the target type has a context field
+        val convertInput = if (type.declaredFields.any { it.name == "context" && it.type == JSONObject::class.java }) {
+            mapOf(JsonLdKeywords.context to context) + fqJsonLd
+        } else {
+            fqJsonLd
+        }
+        return mapper.convertValue(convertInput, type)
     }
 }
 

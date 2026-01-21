@@ -433,7 +433,7 @@ class SolidHttpRoutes(
                 internalStorageUri = "${s3Config.endpoint().removeSuffix("/")}/${bucketId}/$key",
                 // TODO: add support for specifying a version here!
                 versionId = null,
-                type = when (ctx.request().method()) {
+                eventType = when (ctx.request().method()) {
                     HttpMethod.HEAD, HttpMethod.GET -> {
                         if (solidRequestContext.isMetadataRequest()) {
                             StorageEventType.GET_OBJECT_METADATA

@@ -19,11 +19,6 @@
             <version>0.14.0</version>
         </dependency>
         <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>default-knowledge-graph</artifactId>
-            <version>0.14.0</version>
-        </dependency>
-        <dependency>
             <groupId>io.smallrye.reactive</groupId>
             <artifactId>smallrye-mutiny-vertx-web-client</artifactId>
         </dependency>

@@ -2,17 +2,16 @@ package kvasir.services.api.kg.query
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
-import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Link
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.changes.ChangeHistoryFactory
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.kg.changes.ChangeReportStatusEntry
 import kvasir.definitions.openapi.ApiDocTags
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.persistence.Sort
 import kvasir.definitions.persistence.SortOrder
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -33,7 +32,7 @@ import java.util.*
 @Path("")
 @Tag(name = ApiDocTags.KG_CHANGES_API)
 class ChangeHistoryApi(
-    val changeHistoryFactory: ChangeHistoryFactory,
+    val repositoryFactory: RepositoryFactory,
     val knowledgeGraph: KnowledgeGraph,
     val uriInfo: KvasirUriInfo
 ) {
@@ -49,7 +48,7 @@ class ChangeHistoryApi(
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<List<ChangeReport>>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return changeHistoryFactory.getChangeHistory(fqPodId).find(
+        return repositoryFactory.getRepository(ChangeReport::class, fqPodId).find(
             cursor = cursor.orElse(null),
             limit = pageSize,
             sort = Sort.by("writeTs", order = SortOrder.DESC)
@@ -74,7 +73,7 @@ class ChangeHistoryApi(
     ): Uni<RestResponse<List<ChangeReport>>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return changeHistoryFactory.getChangeHistory(fqPodId).find(
+        return repositoryFactory.getRepository(ChangeReport::class, fqPodId).find(
             filter = "sliceId==\"$fqSliceId\"",
             cursor = cursor.orElse(null),
             limit = pageSize,
@@ -98,7 +97,7 @@ class ChangeHistoryApi(
     ): Uni<ChangeReport> {
         val id = uriInfo.getResourceUri().toASCIIString()
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
-        return changeHistoryFactory.getChangeHistory(fqPodId).findById(id)
+        return repositoryFactory.getRepository(ChangeReport::class, fqPodId).findById(id)
             .onItem().ifNotNull().transform { it!! }
             .onItem().ifNull().switchTo {
                 try {
@@ -129,7 +128,7 @@ class ChangeHistoryApi(
         val fqChangeId = uriInfo.getResourceUri().toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqPodId = uriInfo.getResourceUri().getParentUri(4).toASCIIString()
-        return changeHistoryFactory.getChangeHistory(fqPodId).findById(fqChangeId)
+        return repositoryFactory.getRepository(ChangeReport::class, fqPodId).findById(fqChangeId)
             .onItem().ifNotNull().transform { it!! }
             .onItem().ifNull().switchTo {
                 try {

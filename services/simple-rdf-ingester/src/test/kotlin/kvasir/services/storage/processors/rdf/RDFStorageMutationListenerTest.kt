@@ -7,8 +7,8 @@ import jakarta.inject.Inject
 import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordRequest
 import kvasir.definitions.kg.KnowledgeGraph
-import kvasir.definitions.kg.changes.ChangeHistoryFactory
 import kvasir.definitions.kg.changes.ChangeReport
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.persistence.Sort
 import kvasir.definitions.persistence.SortOrder
 import kvasir.definitions.rdf.RDFMediaTypes
@@ -25,7 +25,7 @@ private const val TEST_FILE_NUMBER_OF_STATEMENTS = 68976
 class RDFStorageMutationListenerTest : AbstractPodTest() {
 
     @Inject
-    lateinit var changeHistoryFactory: ChangeHistoryFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     @Inject
     lateinit var kg: KnowledgeGraph
@@ -74,7 +74,10 @@ class RDFStorageMutationListenerTest : AbstractPodTest() {
             .then().statusCode(200)
 
         val changeHistoryResult = testHelpers.waitForCondition(
-            { changeHistoryFactory.getChangeHistory(podUri).find(sort = Sort.by("writeTs", order = SortOrder.DESC)) },
+            {
+                repositoryFactory.getRepository(ChangeReport::class, podUri)
+                    .find(sort = Sort.by("writeTs", order = SortOrder.DESC))
+            },
             { result ->
                 result.items.any { report -> changeRequestMatch(report, fileName, ts) }
             })

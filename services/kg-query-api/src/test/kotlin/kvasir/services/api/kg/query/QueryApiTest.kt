@@ -143,7 +143,7 @@ class QueryApiTest : AbstractPodTest() {
         )
 
         // Perform query
-        val result = JsonUtils.fromString(
+        val rawResult =
             given()
                 .accept(RDFMediaTypes.JSON_LD)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -152,7 +152,7 @@ class QueryApiTest : AbstractPodTest() {
                 .then()
                 .statusCode(200)
                 .extract().body().asString()
-        ) as List<Map<String, Any>>
+        val result = JsonUtils.fromString(rawResult) as List<Map<String, Any>>
 
         val expectedPersonMap = personData.associateBy { it[JsonLdKeywords.id]!! }
         val dataGraph = result.find { it[JsonLdKeywords.id] == KvasirNamedGraphs.queryResultDataGraph }!!

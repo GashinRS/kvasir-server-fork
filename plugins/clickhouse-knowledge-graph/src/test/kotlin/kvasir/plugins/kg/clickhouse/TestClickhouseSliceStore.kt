@@ -3,6 +3,7 @@ package kvasir.plugins.kg.clickhouse
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import kvasir.definitions.kg.slices.Slice
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
@@ -19,10 +20,10 @@ class TestClickhouseSliceStore {
 
 
     @Inject
-    lateinit var sliceStoreFactory: ClickhouseSliceStoreFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     @Inject
-    lateinit var clichouseInitializer: ClickhouseInitializer
+    lateinit var clichouseInitializer: ClickhouseLifecycleManager
 
     @Inject
     lateinit var clickhouseClient: ClickhouseClient
@@ -31,7 +32,7 @@ class TestClickhouseSliceStore {
 
     @BeforeAll
     fun setup() {
-        clichouseInitializer.initializePodSchema(testRunId).await().indefinitely()
+        clichouseInitializer.initializePodSchema(testRunId, setOf(Slice::class.java)).await().indefinitely()
     }
 
     @AfterAll
@@ -41,7 +42,7 @@ class TestClickhouseSliceStore {
 
     @Test
     fun testInsertAndQuery() {
-        val sliceStore = sliceStoreFactory.getSliceStore(testRunId)
+        val sliceStore = repositoryFactory.getRepository(Slice::class, testRunId)
 
         // Insert some slices
         val slices = (1..10).map { i ->

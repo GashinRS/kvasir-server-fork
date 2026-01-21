@@ -4,8 +4,8 @@ import io.quarkus.test.junit.QuarkusTest
 import io.vertx.core.json.Json
 import jakarta.inject.Inject
 import kvasir.definitions.kg.Pod
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.KvasirVocab
-import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -17,24 +17,21 @@ import java.util.*
 class TestClickhousePodStore {
 
     @Inject
-    lateinit var podStoreFactory: ClickhousePodStoreFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     @Inject
-    lateinit var clichouseInitializer: ClickhouseInitializer
-
-    @Inject
-    lateinit var clickhouseClient: ClickhouseClient
+    lateinit var clickhouseLifecycleManager: ClickhouseLifecycleManager
 
     private val testRunId = UUID.randomUUID().toString()
 
     @BeforeAll
     fun setup() {
-        clichouseInitializer.init().await().indefinitely()
+        clickhouseLifecycleManager.init(setOf(Pod::class.java)).await().indefinitely()
     }
 
     @Test
     fun testInsertAndQuery() {
-        val podStore = podStoreFactory.createPodStore()
+        val podStore = repositoryFactory.getRepository(Pod::class)
 
         // Generate some pods
         val pods = (1..10).map { i ->
@@ -56,7 +53,8 @@ class TestClickhousePodStore {
 
         // Clean up
         pods.forEach {
-            podStore.deleteById(it.id, true).await().indefinitely()
+            podStore.deleteById(it.id).await().indefinitely()
+            clickhouseLifecycleManager.dropPodDatabase(it.id).await().indefinitely()
         }
 
         val retrievedPodsAfterDelete = podStore.find().await()

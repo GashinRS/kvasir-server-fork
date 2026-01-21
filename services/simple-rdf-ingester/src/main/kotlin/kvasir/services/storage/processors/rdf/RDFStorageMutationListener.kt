@@ -38,14 +38,14 @@ class RDFStorageMutationListener(
             .onItem().transformToUniAndConcatenate { event ->
                 podConfigProvider.getPodConfigById(event.podId).map { event to (it?.autoIngestRdf() ?: false) }
             }
-            .filter { (event, autoIngestEnabled) -> autoIngestEnabled && event.type.mutation }
+            .filter { (event, autoIngestEnabled) -> autoIngestEnabled && event.eventType.mutation }
             .map { (event, _) -> event }
             .onItem()
             .transformToUniAndConcatenate { event ->
                 val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
 
                 // If the operation is of type DELETE_OBJECT, we need to look up the version previous to the deletion
-                if (event.type == StorageEventType.DELETE_OBJECT) {
+                if (event.eventType == StorageEventType.DELETE_OBJECT) {
                     Uni.createFrom().completionStage {
                         s3Client.listObjectVersions(
                             ListObjectVersionsRequest.builder().bucket(bucketId).prefix(event.objectId).build()
@@ -77,7 +77,7 @@ class RDFStorageMutationListener(
                 // Transform the object into a Kvasir change request
                 val changesBaseUri = event.externalObjectUri.split("/").take(4).joinToString("/", postfix = "/changes")
                 val id = ChangeRequestId.generate(changesBaseUri).encode()
-                when (event.type) {
+                when (event.eventType) {
                     StorageEventType.PUT_OBJECT, StorageEventType.CREATE_OBJECT, StorageEventType.COMPLETE_MULTIPART_UPLOAD, StorageEventType.RESTORE_OBJECT -> ChangeRequest(
                         id = id,
                         requestingUser = event.requestingUser ?: "",
@@ -106,7 +106,7 @@ class RDFStorageMutationListener(
                         )
                     )
 
-                    else -> throw IllegalStateException("Unsupported storage event type: ${event.type}")
+                    else -> throw IllegalStateException("Unsupported storage event type: ${event.eventType}")
                 }
             }
             .onFailure().invoke { err ->

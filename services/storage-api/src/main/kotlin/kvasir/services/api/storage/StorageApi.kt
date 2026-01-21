@@ -2,7 +2,6 @@ package kvasir.services.api.storage
 
 import com.google.common.hash.Hashing
 import io.quarkus.logging.Log
-import io.quarkus.runtime.Startup
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.vertx.UniHelper
 import io.vertx.core.Future
@@ -141,7 +140,7 @@ class S3Interceptor(
                         }",
                         internalStorageUri = "${s3Config.endpoint()}${context.request().uri}",
                         versionId = context.response().headers().get("x-amz-version-id"),
-                        type = operationType
+                        eventType = operationType
                     )
                     storageEventEmitterProvider.getEmitter().send(event).replaceWithVoid()
                 } else {
