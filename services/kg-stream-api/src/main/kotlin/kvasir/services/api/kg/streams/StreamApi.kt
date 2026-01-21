@@ -108,7 +108,7 @@ class StreamApi(
                 }
             }
             .onItem().disjoint<ChangeRecords>()
-            .map { JsonLdHelper.encode(it, it.context) }
+            .map { JsonLdHelper.encode(it, it.context) as JSONObject }
     }
 
     @Path("{podId}/events/query")
@@ -144,7 +144,7 @@ class StreamApi(
             true
         )
             .filter { it.payload.podId == fqPodId }
-            .map { event -> JsonLdHelper.encode(event.payload, event.payload.context) }
+            .map { event -> JsonLdHelper.encode(event.payload, event.payload.context) as JSONObject }
     }
 
     @Path("{podId}/events/life-cycle")
@@ -180,7 +180,7 @@ class StreamApi(
             true
         )
             .filter { it.payload.podId == fqPodId }
-            .map { event -> JsonLdHelper.encode(event.payload, event.payload.context) }
+            .map { event -> JsonLdHelper.encode(event.payload, event.payload.context) as JSONObject }
     }
 
     @Path("{podId}/events/s3")
@@ -216,7 +216,7 @@ class StreamApi(
             true
         )
             .filter { it.payload.podId == fqPodId }
-            .map { event -> JsonLdHelper.encode(event.payload, KvasirVocab.context) }
+            .map { event -> JsonLdHelper.encode(event.payload, KvasirVocab.context) as JSONObject }
     }
 
     private fun <T> streamFrom(

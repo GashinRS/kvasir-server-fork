@@ -26,6 +26,7 @@ import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.graphql.KvasirTypes
 import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.kg.graphql.TYPE_SUBSCRIPTION
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.cursors.OffsetBasedCursor
@@ -67,7 +68,7 @@ interface ChangeRequestPipelineProcessorConfig {
 class DefaultKnowledgeGraph(
     @Channel(Channels.OUTBOX_PUBLISH)
     private val outboxEmitter: MutinyEmitter<ChangeReport>,
-    private val changeHistoryFactory: ChangeHistoryFactory,
+    private val repositoryFactory: RepositoryFactory,
     private val changeRequestTxBufferFactory: ChangeRequestTxBufferFactory,
     private val pipelineConfig: ChangeRequestPipelineConfig,
     private val processors: Instance<ChangeProcessor>,
@@ -117,7 +118,8 @@ class DefaultKnowledgeGraph(
                         nrOfInserts = stats.nrOfInserts,
                         nrOfDeletes = stats.nrOfDeletes
                     )
-                    changeHistoryFactory.getChangeHistory(request.podId).persist(report).map { report }
+                    repositoryFactory.getRepository(ChangeReport::class, request.podId).persist(report)
+                        .map { report }
                 }
             }
             .invoke { _ -> Log.debug("Processed change request with id '${request.id}' in ${System.currentTimeMillis() - start} ms.") }
@@ -277,10 +279,9 @@ class DefaultKnowledgeGraph(
     private fun getRequestedStateAtTimestamp(request: QueryRequest): Uni<Instant> {
         return when {
             request.atTimestamp != null -> Uni.createFrom().item(request.atTimestamp)
-            request.atChangeRequestId != null -> changeHistoryFactory.getChangeHistory(request.podId).get(
-                ChangeHistoryRequest(changeRequestId = request.atChangeRequestId)
-            )
-                .map { change -> change?.statusEntry?.find { it.code == ChangeStatusCode.COMMITTED }?.timestamp }
+            request.atChangeRequestId != null -> repositoryFactory.getRepository(ChangeReport::class, request.podId)
+                .findById(request.atChangeRequestId!!)
+                .map { change -> change?.statusEntry?.find { it.statusCode == ChangeStatusCode.COMMITTED }?.timestamp }
 
             else -> Uni.createFrom().nullItem()
         }
@@ -440,7 +441,7 @@ class DefaultKnowledgeGraph(
             sliceId = request.sliceId,
             errorMessage = errorMessage
         )
-        return changeHistoryFactory.getChangeHistory(request.podId).persist(report).map { report }
+        return repositoryFactory.getRepository(ChangeReport::class, request.podId).persist(report).map { report }
     }
 
 }

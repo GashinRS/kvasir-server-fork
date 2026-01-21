@@ -7,15 +7,18 @@ import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import jakarta.inject.Inject
+import kvasir.definitions.annotations.StorageLevel
 import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.BootstrapPodConfig
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.PodStoreFactory
+import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.persistence.StorageLifecycleManager
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.reactive.skipToLast
 import kvasir.definitions.reactive.toMulti
 import kvasir.definitions.reactive.toUni
+import kvasir.utils.persistence.PersistentEntityDetector
 import kvasir.utils.s3.S3Utils
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.s3.model.*
@@ -27,7 +30,7 @@ const val PLAIN_JSON_VOCAB = "urn:kvasir:plain-json:"
 class PodSetupHelper {
 
     @Inject
-    lateinit var podStoreFactory: PodStoreFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     @Inject
     lateinit var s3AsyncClient: S3AsyncClient
@@ -35,13 +38,19 @@ class PodSetupHelper {
     @Inject
     lateinit var podAuthInitializer: Instance<AuthInitializer>
 
+    @Inject
+    lateinit var storageLifecycleManager: Instance<StorageLifecycleManager>
+
+    @Inject
+    lateinit var persistentEntityDetector: PersistentEntityDetector
+
     fun createPod(
         podId: String,
         bootstrapPodConfig: BootstrapPodConfig,
         rawPodConfig: String,
         errorWhenExists: Boolean = false
     ): Uni<Void> {
-        val podStore = podStoreFactory.createPodStore()
+        val podStore = repositoryFactory.getRepository(Pod::class)
         return podStore.findById(podId)
             .chain { existingPod ->
                 // Pod exists already, ...
@@ -58,6 +67,18 @@ class PodSetupHelper {
                     val newPod = Pod(podId, rawPodConfig)
                     podStore.persist(newPod)
                         .chain { _ -> createS3BucketIfNotExist(podId) }
+                        .chain { _ ->
+                            if (storageLifecycleManager.isResolvable) {
+                                // Initialize storage schema for the Pod
+                                storageLifecycleManager.get().initializePodSchema(
+                                    podId, persistentEntityDetector.getDetectedEntityClasses(
+                                        StorageLevel.PER_POD
+                                    )
+                                )
+                            } else {
+                                Uni.createFrom().voidItem()
+                            }
+                        }
                         .chain { _ ->
                             // Initialize the configured auth policy provider for the Pod (if any)
                             if (podAuthInitializer.isResolvable) {
@@ -78,9 +99,16 @@ class PodSetupHelper {
         deleteData: Boolean,
         deleteOwner: Boolean
     ): Uni<Void> {
-        val podStore = podStoreFactory.createPodStore()
+        val podStore = repositoryFactory.getRepository(Pod::class)
         Log.debug("Deleting Pod '$podId' (deleteData=$deleteData)")
-        return podStore.deleteById(podId, deleteData)
+        return podStore.deleteById(podId)
+            .chain { _ ->
+                if (deleteData && storageLifecycleManager.isResolvable) {
+                    storageLifecycleManager.get().dropPodDatabase(podId)
+                } else {
+                    Uni.createFrom().voidItem()
+                }
+            }
             .chain { _ ->
                 // CLear up S3 bucket (if deleteData is true)
                 if (deleteData) {

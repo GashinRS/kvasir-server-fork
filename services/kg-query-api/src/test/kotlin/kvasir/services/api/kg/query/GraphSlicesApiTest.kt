@@ -13,6 +13,7 @@ import kvasir.definitions.kg.*
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.rdf.JSONObject
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.rdf.getJsonArray
@@ -68,13 +69,14 @@ class GraphSlicesApiTest : AbstractPodTest() {
 
         sliceUri = given()
             .contentType(RDFMediaTypes.JSON_LD)
-            .body(input)
+            .body(JsonLdHelper.encode(input))
             .post("{podId}/slices", podName)
             .then()
             .statusCode(201)
             .extract().header(HttpHeaders.LOCATION)
 
-        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().`as`(Slice::class.java)
+        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().asString()
+            .let { JsonLdHelper.decode(it, Slice::class.java) }
         assertFalse(sliceDef.supportsChanges)
     }
 
@@ -102,13 +104,14 @@ class GraphSlicesApiTest : AbstractPodTest() {
 
         nonNamedSliceUri = given()
             .contentType(RDFMediaTypes.JSON_LD)
-            .body(input)
+            .body(JsonLdHelper.encode(input))
             .post("{podId}/slices", podName)
             .then()
             .statusCode(201)
             .extract().header(HttpHeaders.LOCATION)
 
-        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().`as`(Slice::class.java)
+        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().asString()
+            .let { JsonLdHelper.decode(it, Slice::class.java) }
         assertFalse(sliceDef.supportsChanges)
     }
 
@@ -224,12 +227,13 @@ class GraphSlicesApiTest : AbstractPodTest() {
 
         given()
             .contentType(RDFMediaTypes.JSON_LD)
-            .body(input)
+            .body(JsonLdHelper.encode(input))
             .put(sliceUri)
             .then().statusCode(204)
 
         // Fetch the Slice definition, mutations should now be enabled.
-        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().`as`(Slice::class.java)
+        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().asString()
+            .let { JsonLdHelper.decode(it, Slice::class.java) }
         assertTrue(sliceDef.supportsChanges)
     }
 

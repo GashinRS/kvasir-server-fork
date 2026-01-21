@@ -18,13 +18,12 @@ import jakarta.ws.rs.sse.Sse
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
-import kvasir.definitions.kg.slices.SliceStoreFactory
 import kvasir.definitions.kg.slices.SliceSummary
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
-import kvasir.definitions.rdf.KvasirVocab
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLGetRelationExtractor
 import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLPostRelationExtractor
@@ -47,11 +46,10 @@ import kotlin.jvm.optionals.getOrNull
 
 @Path("")
 class GraphSlicesApi(
-    private val sliceStoreFactory: SliceStoreFactory,
-    private val podStoreFactory: PodStoreFactory,
     private val knowledgeGraph: KnowledgeGraph,
     private val uriInfo: KvasirUriInfo,
     private val sse: Sse,
+    private val repositoryFactory: RepositoryFactory,
     @Channel(Channels.LIFECYCLE_EVENTS_PUBLISH)
     private val lifeCycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
     private val securityIdentity: Instance<SecurityIdentity>,
@@ -71,8 +69,8 @@ class GraphSlicesApi(
     @OpenFgaPolicyEnforcer
     fun listSlices(@PathParam("podId") podId: String): Uni<List<SliceSummary>> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getPodOrThrow404(podStoreFactory.createPodStore(), fqPodId).chain { _ ->
-            sliceStoreFactory.getSliceStore(fqPodId).find()
+        return getPodOrThrow404(repositoryFactory.getRepository(Pod::class), fqPodId).chain { _ ->
+            repositoryFactory.getRepository(Slice::class, fqPodId).find()
                 .map { results -> results.items.map { SliceSummary(it.id, it.name, it.description) } }
         }
     }
@@ -90,10 +88,10 @@ class GraphSlicesApi(
     fun createSlice(@PathParam("podId") podId: String, input: SliceInput): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getChildUri(input.name).toASCIIString()
-        return getPodOrThrow404(podStoreFactory.createPodStore(), fqPodId)
+        return getPodOrThrow404(repositoryFactory.getRepository(Pod::class), fqPodId)
             .chain { _ ->
                 // A Slice with the same name should not exist
-                sliceStoreFactory.getSliceStore(fqPodId).findById(fqSliceId)
+                repositoryFactory.getRepository(Slice::class, fqPodId).findById(fqSliceId)
                     .onItem().ifNotNull().failWith(ClientErrorException(Response.Status.CONFLICT))
                     .onItem().ifNull().switchTo { validateAndPersistSlice(fqPodId, fqSliceId, input) }
             }
@@ -101,7 +99,7 @@ class GraphSlicesApi(
                 // Emit life-cycle event
                 lifeCycleEventEmitter.send(
                     LifeCycleEvent(
-                        type = LifeCycleEventType.SLICE_CREATED,
+                        eventType = LifeCycleEventType.SLICE_CREATED,
                         requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
                             ?: anonymousUserName,
                         podId = fqPodId,
@@ -143,7 +141,7 @@ class GraphSlicesApi(
     ): Uni<Slice> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().toASCIIString()
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId)
+        return getSliceOrThrow404(repositoryFactory.getRepository(Slice::class, fqPodId), fqPodId, fqSliceId)
     }
 
     @Tag(name = ApiDocTags.PODS_API)
@@ -163,13 +161,17 @@ class GraphSlicesApi(
     ): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().toASCIIString()
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { _ ->
+        return getSliceOrThrow404(
+            repositoryFactory.getRepository(Slice::class, fqPodId),
+            fqPodId,
+            fqSliceId
+        ).chain { _ ->
             validateAndPersistSlice(fqPodId, fqSliceId, input)
                 .chain { _ ->
                     // Emit life-cycle event
                     lifeCycleEventEmitter.send(
                         LifeCycleEvent(
-                            type = LifeCycleEventType.SLICE_UPDATED,
+                            eventType = LifeCycleEventType.SLICE_UPDATED,
                             podId = fqPodId,
                             requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
                                 ?: anonymousUserName,
@@ -193,14 +195,14 @@ class GraphSlicesApi(
     fun deleteSlice(@PathParam("podId") podId: String, @PathParam("sliceId") sliceId: String): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().toASCIIString()
-        val sliceStore = sliceStoreFactory.getSliceStore(fqPodId)
+        val sliceStore = repositoryFactory.getRepository(Slice::class, fqPodId)
         return getSliceOrThrow404(sliceStore, fqPodId, fqSliceId).chain { _ ->
             sliceStore.deleteById(fqSliceId)
                 .chain { _ ->
                     // Emit life-cycle event
                     lifeCycleEventEmitter.send(
                         LifeCycleEvent(
-                            type = LifeCycleEventType.SLICE_DELETED,
+                            eventType = LifeCycleEventType.SLICE_DELETED,
                             requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
                                 ?: anonymousUserName,
                             podId = fqPodId,
@@ -229,7 +231,11 @@ class GraphSlicesApi(
     ): Uni<QueryResult> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
+        return getSliceOrThrow404(
+            repositoryFactory.getRepository(Slice::class, fqPodId),
+            fqPodId,
+            fqSliceId
+        ).chain { slice ->
             executeQuery(fqPodId, slice, input).toUni()
         }
     }
@@ -247,7 +253,11 @@ class GraphSlicesApi(
     ): Multi<OutboundSseEvent> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
+        return getSliceOrThrow404(
+            repositoryFactory.getRepository(Slice::class, fqPodId),
+            fqPodId,
+            fqSliceId
+        ).onItem()
             .transformToMulti { slice ->
                 executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
             }
@@ -277,7 +287,11 @@ class GraphSlicesApi(
                 variables = variables.getOrNull()?.let { JsonObject(it).map },
                 operationName = operationName.getOrNull()
             )
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).onItem()
+        return getSliceOrThrow404(
+            repositoryFactory.getRepository(Slice::class, fqPodId),
+            fqPodId,
+            fqSliceId
+        ).onItem()
             .transformToMulti { slice ->
                 executeQuery(fqPodId, slice, queryInputImpl).map {
                     sse.newEventBuilder().name("next").data(it).build()
@@ -301,7 +315,12 @@ class GraphSlicesApi(
     ): Uni<Any> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return getSliceOrThrow404(sliceStoreFactory.getSliceStore(fqPodId), fqPodId, fqSliceId).chain { slice ->
+        return getSliceOrThrow404(
+            repositoryFactory.getRepository(
+                Slice::class,
+                fqPodId
+            ), fqPodId, fqSliceId
+        ).chain { slice ->
             executeQuery(fqPodId, slice, input).toUni().map {
                 it.toJsonLD(slice.context)
             }
@@ -344,7 +363,7 @@ class GraphSlicesApi(
             )
             // Validate the schema
             parsedSchema.validate()
-            sliceStoreFactory.getSliceStore(podId).persist(slice).map { slice }
+            repositoryFactory.getRepository(Slice::class, podId).persist(slice).map { slice }
         } catch (err: Throwable) {
             Uni.createFrom().failure(err)
         }
@@ -353,16 +372,11 @@ class GraphSlicesApi(
 
 @GenerateNoArgConstructor
 data class SliceInput(
-    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
-    @get:JsonProperty(KvasirVocab.name)
     val name: String = Hashing.farmHashFingerprint64().hashString(UUID.randomUUID().toString(), Charsets.UTF_8)
         .toString(),
-    @get:JsonProperty(KvasirVocab.schema)
     val schema: String,
-    @get:JsonProperty(KvasirVocab.description)
     val description: String = "",
-    @get:JsonProperty(KvasirVocab.targetGraphs)
     val targetGraphs: Set<String> = emptySet()
 ) {
     fun toSlice(principal: String, sliceId: String, supportsChanges: Boolean): Slice {

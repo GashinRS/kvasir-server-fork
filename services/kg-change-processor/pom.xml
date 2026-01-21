@@ -24,6 +24,11 @@
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
+            <artifactId>default-knowledge-graph</artifactId>
+            <version>0.14.0</version>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-plugins</groupId>
             <artifactId>kafka-messaging</artifactId>
             <version>0.14.0</version>
         </dependency>

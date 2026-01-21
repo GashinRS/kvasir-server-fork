@@ -2,10 +2,12 @@ package kvasir.plugins.kg.clickhouse.persistence
 
 import cz.jirutka.rsql.parser.ast.*
 import kvasir.definitions.persistence.PersistentEntity
-import kvasir.plugins.kg.clickhouse.specs.EntityWriteSpec
-import kvasir.plugins.kg.clickhouse.utils.toSnakeCase
+import java.time.Instant
+import kotlin.reflect.KClass
+import kotlin.reflect.full.memberProperties
+import kotlin.reflect.jvm.jvmErasure
 
-class CHFilterVisitor<T : PersistentEntity>(private val writeSpec: EntityWriteSpec<T>) :
+class CHFilterVisitor<T : PersistentEntity>(private val entityClass: KClass<T>) :
     NoArgRSQLVisitorAdapter<String>() {
     companion object {
         private val FIQL_WILDCARD_PATTERN = Regex("(?<!\\\\)\\*")
@@ -29,9 +31,9 @@ class CHFilterVisitor<T : PersistentEntity>(private val writeSpec: EntityWriteSp
     }
 
     override fun visit(node: ComparisonNode): String {
-        val column = toSnakeCase(node.selector)
+        val valueFetcher = mapSelector(entityClass, node.selector)
         val sqlOp = mapOperator(node.operator)
-        val pattern = parsePattern(node)
+        val pattern = parsePattern(valueFetcher, node)
         return when {
             // Use this first is pattern was matched
             pattern != null -> pattern
@@ -39,15 +41,25 @@ class CHFilterVisitor<T : PersistentEntity>(private val writeSpec: EntityWriteSp
             node.operator.arity.max() > 1 -> {
                 val serializedArgList =
                     node.arguments.filterNotNull()
-                        .joinToString(",", "(", ")") { writeSpec.getCHFilterValue(node.selector, it) }
-                "$column $sqlOp $serializedArgList"
+                        .joinToString(",", "(", ")") { mapValue(node.selector, it) }
+                "$valueFetcher $sqlOp $serializedArgList"
             }
 
             else -> {
                 val rawValue =
                     node.arguments.firstOrNull() ?: throw IllegalArgumentException("Condition value cannot be null!")
-                "$column $sqlOp ${writeSpec.getCHFilterValue(node.selector, rawValue)}"
+                "$valueFetcher $sqlOp ${mapValue(node.selector, rawValue)}"
             }
+        }
+    }
+
+    private fun mapValue(propertyName: String, propertyValue: String): String {
+        val property = entityClass.memberProperties.find { it.name == propertyName }
+            ?: throw RuntimeException("No backing property found for filter on '$propertyName' in entity '${entityClass.simpleName}'")
+        return when (property.returnType.jvmErasure) {
+            String::class -> "'$propertyValue'"
+            Instant::class -> "${Instant.parse(propertyValue).toEpochMilli()}::DateTime64"
+            else -> propertyValue
         }
     }
 
@@ -69,7 +81,7 @@ class CHFilterVisitor<T : PersistentEntity>(private val writeSpec: EntityWriteSp
      * Try to parse values IF operator is EQUALS or NOT EQUALS AND the pattern contains a *.
      * If so: a parsed string is returned.
      */
-    private fun parsePattern(node: ComparisonNode): String? {
+    private fun parsePattern(valueFetcher: String, node: ComparisonNode): String? {
         val pattern = node.arguments.firstOrNull()
         return if (node.operator in setOf(
                 RSQLOperators.EQUAL,
@@ -80,9 +92,32 @@ class CHFilterVisitor<T : PersistentEntity>(private val writeSpec: EntityWriteSp
         ) {
             val sign = if (node.operator == RSQLOperators.NOT_EQUAL) "NOT " else ""
             val likePattern = FIQL_WILDCARD_PATTERN.replace(pattern as CharSequence, "%")
-            "${sign}ilike(toString(${node.selector}), '$likePattern')"
+            "${sign}ilike(toString($valueFetcher), '$likePattern')"
         } else {
             null
+        }
+    }
+}
+
+internal fun mapSelector(entityClass: KClass<*>, selector: String): String {
+    return when (selector) {
+        "id" -> "id"
+        "writeTs" -> "write_ts"
+        else -> {
+            val property = entityClass.memberProperties.find { it.name == selector }
+                ?: throw RuntimeException("No backing property found for filter on '$selector' in entity '${entityClass.simpleName}'")
+            val propertyType = property.returnType.jvmErasure
+            val valueExtractorFunction = when (propertyType) {
+                Boolean::class -> "simpleJSONExtractBool"
+                Int::class, Long::class -> "simpleJSONExtractInt"
+                Double::class, Float::class -> "simpleJSONExtractFloat"
+                else -> "simpleJSONExtractString"
+            }
+            if (propertyType == Instant::class) {
+                "toDateTime64($valueExtractorFunction(json_representation, '$selector')::String, 3)"
+            } else {
+                "$valueExtractorFunction(json_representation, '$selector')"
+            }
         }
     }
 }
