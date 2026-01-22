@@ -143,9 +143,11 @@ export class SettingsComponent {
 
     // Init form on each podResource reload
     effect(() => {
-      if (this.podResource.hasValue()) {
+      if (this.podResource.hasValue() && this.platformConfig.hasValue()) {
         const pod = this.podResource.value();
-        this.initForm(pod);
+        if (pod != null && pod != undefined) {
+          this.initForm(pod);
+        }
       }
     });
   }
