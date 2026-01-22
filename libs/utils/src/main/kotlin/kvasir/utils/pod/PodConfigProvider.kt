@@ -3,6 +3,7 @@ package kvasir.utils.pod
 import io.smallrye.config.SmallRyeConfigBuilder
 import io.smallrye.config.source.yaml.YamlConfigSource
 import io.smallrye.mutiny.Uni
+import io.smallrye.mutiny.infrastructure.Infrastructure
 import io.vertx.core.http.HttpServerRequest
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
@@ -61,7 +62,8 @@ class PodConfigProvider {
     }
 
     fun getPodConfigById(podId: String): Uni<PodConfig?> {
-        return repositoryFactory.getRepository(Pod::class).findById(podId)
+        return repositoryFactory.getRepository(Pod::class)
+            .findById(podId)
             .map { pod ->
                 pod?.let { fromPod(it) }
             }
