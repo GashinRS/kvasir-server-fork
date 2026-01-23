@@ -7,6 +7,7 @@ import jakarta.ws.rs.GET
 import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.core.Response
+import kvasir.utils.test.commons.getTokenForClient
 import org.junit.jupiter.api.Test
 
 @QuarkusTest

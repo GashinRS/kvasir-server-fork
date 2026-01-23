@@ -11,6 +11,7 @@ import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.*
 import kvasir.utils.test.commons.TestGenerateClientConfig
 import kvasir.utils.test.commons.TestPodConfig
+import kvasir.utils.test.commons.getTokenForClient
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue

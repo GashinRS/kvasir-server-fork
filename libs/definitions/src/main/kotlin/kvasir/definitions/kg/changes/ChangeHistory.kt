@@ -1,5 +1,6 @@
 package kvasir.definitions.kg.changes
 
+import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonInclude
 import kvasir.definitions.annotations.Persistent
@@ -17,6 +18,7 @@ data class ChangeReport(
     override var id: String,
     var requestingUser: String,
     var podId: String,
+    @get:JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     var statusEntry: List<ChangeReportStatusEntry>,
     var sliceId: String? = null,
     var nrOfInserts: Long = 0,

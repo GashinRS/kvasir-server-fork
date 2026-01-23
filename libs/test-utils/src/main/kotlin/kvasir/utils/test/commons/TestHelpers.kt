@@ -17,6 +17,7 @@ import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.pod.PodConfigProvider
+import org.eclipse.microprofile.config.ConfigProvider
 import java.time.Duration
 import java.util.*
 import kotlin.math.roundToLong
@@ -147,6 +148,20 @@ inline fun <reified T> QueryResult.getDataField(name: String): T? {
     return this.data?.get(name)?.let {
         if (it is T) it else null
     }
+}
+
+fun getTokenForClient(clientId: String, clientSecret: String): String {
+    val oidcServerUrl = ConfigProvider.getConfig().getValue("kvasir.pod.auth.oidc.server-url", String::class.java)
+    val basicAuth = Base64.getEncoder().encodeToString("$clientId:$clientSecret".toByteArray())
+    return given()
+        .header(HttpHeaders.AUTHORIZATION, "Basic $basicAuth")
+        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+        .formParam("grant_type", "client_credentials")
+        .post("${oidcServerUrl}/protocol/openid-connect/token")
+        .then()
+        .statusCode(200)
+        .extract()
+        .path("access_token")
 }
 
 class TestPodConfig(

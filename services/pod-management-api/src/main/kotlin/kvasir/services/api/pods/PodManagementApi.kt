@@ -16,6 +16,8 @@ import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.config.BootstrapPodConfig
 import kvasir.definitions.config.GenerateClientConfig
 import kvasir.definitions.config.HttpConfig
+import kvasir.definitions.config.OpenFgaClientConfig
+import kvasir.definitions.config.OpenFgaPermissionConfig
 import kvasir.definitions.config.PodConfig
 import kvasir.definitions.config.PodConfigOverride
 import kvasir.definitions.kg.LifeCycleEvent
@@ -243,7 +245,9 @@ data class RegisterPodInput(
     val ownerUserId: String,
     val configuration: String = "{}",
     val autoRegisterUma: Boolean = false,
-    val autoRegisterHttpEndpointPolicyEnforcer: Boolean = false
+    val autoRegisterHttpEndpointPolicyEnforcer: Boolean = false,
+    val adminClientId: String? = null,
+    val adminClientSecret: String? = null
 ) : BootstrapPodConfig {
 
     override fun name(): String = name
@@ -257,7 +261,38 @@ data class RegisterPodInput(
         return PodConfigProvider.deserializePodConfigOverride(configuration)
     }
 
-    override fun generateClients(): Optional<List<GenerateClientConfig>> = Optional.empty()
+    override fun generateClients(): Optional<List<GenerateClientConfig>> {
+        return if (adminClientId != null) {
+            Optional.of(
+                listOf(
+                    object : GenerateClientConfig {
+                        override fun clientId(): String = adminClientId
+                        override fun clientSecret(): Optional<String> = Optional.ofNullable(adminClientSecret)
+                        override fun redirectUris(): Optional<List<String>> = Optional.empty()
+                        override fun enableForcePKCE(): Boolean = false
+                        override fun openfga(): Optional<OpenFgaClientConfig> = Optional.of(
+                            object : OpenFgaClientConfig {
+                                override fun relationships(): Optional<List<OpenFgaPermissionConfig>> {
+                                    return Optional.of(
+                                        listOf(
+                                            object : OpenFgaPermissionConfig {
+                                                override fun targetResource(): String = "/"
+                                                override fun relations(): List<String> =
+                                                    listOf("reader", "writer", "deleter")
+                                            }
+                                        ))
+                                }
+                            }
+                        )
+
+                        override fun enableServiceAccount(): Boolean = true
+
+                    }
+                ))
+        } else {
+            Optional.empty()
+        }
+    }
 }
 
 @GenerateNoArgConstructor

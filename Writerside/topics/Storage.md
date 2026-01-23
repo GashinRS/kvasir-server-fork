@@ -54,8 +54,7 @@ The provided implementation is backed by S3. This implies that:
 
 ### Known limitations
 
-- Similar to the S3 storage API, compatibility is limited to functional usage. Authentication and authorization follows
-  the Kvasir supported mechanisms. As a result, Kvasir does not support Solid-OIDC (WebID), WAC or ACP.
+- Although the Solid storage API does support [Solid-OIDC (WebID) for authentication](Access-Control.md), authorization via WAC or ACP is not implemented (use [Kvasir mechanisms](Access-Control.md#access-control) instead).
 - The Solid storage API does not support Solid notifications.
 - The Solid storage API does not implement locking at this time. This implies that concurrent modifications may lead to
   unexpected results.
