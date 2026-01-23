@@ -178,14 +178,14 @@ class TestPodConfig(
         }
     }
 
-    override fun configuration(): PodConfig {
+    override fun configuration(): PodConfigOverride {
         val json = """
             {
               "auto-ingest-rdf": true,
               "default-context": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
             }
         """.trimIndent()
-        return PodConfigProvider.deserializePodConfig(json)
+        return PodConfigProvider.deserializePodConfigOverride(json)
     }
 
 }
