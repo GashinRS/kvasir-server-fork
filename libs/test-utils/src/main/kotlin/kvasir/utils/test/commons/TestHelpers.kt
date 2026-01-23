@@ -12,10 +12,12 @@ import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.ChangeStatusCode
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryResult
-import kvasir.definitions.kg.changes.ChangeHistoryFactory
-import kvasir.definitions.kg.changes.ChangeHistoryRequest
+import kvasir.definitions.kg.changes.ChangeReport
+import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.pod.PodConfigProvider
+import org.eclipse.microprofile.config.ConfigProvider
 import java.time.Duration
 import java.util.*
 import kotlin.math.roundToLong
@@ -23,7 +25,7 @@ import kotlin.math.roundToLong
 @ApplicationScoped
 class TestHelpers(
     val httpConfig: HttpConfig,
-    val changeHistoryFactory: Instance<ChangeHistoryFactory>,
+    val repositoryFactory: RepositoryFactory,
     val kg: Instance<KnowledgeGraph>
 ) {
 
@@ -69,34 +71,24 @@ class TestHelpers(
             .extract().header(HttpHeaders.LOCATION)
 
         // Wait for the request to be committed
-        waitForChangeRequest(changeRequestUri, podUri, expectedResult, sliceUri).await().indefinitely()
+        waitForChangeRequest(changeRequestUri, podUri, expectedResult).await().indefinitely()
         return changeRequestUri
-    }
-
-    fun requestChangeSync(
-        changeRequest: ChangeRequest,
-        expectedResult: ChangeStatusCode = ChangeStatusCode.COMMITTED
-    ) {
-        kg.get().process(changeRequest).chain { _ ->
-            waitForChangeRequest(changeRequest.id, changeRequest.podId, expectedResult)
-        }.await().indefinitely()
     }
 
     fun waitForChangeRequest(
         changeRequestUri: String,
         podUri: String,
         expectedResult: ChangeStatusCode = ChangeStatusCode.COMMITTED,
-        sliceUri: String? = null,
         retryInitialDelay: Duration = Duration.ofMillis(200),
         delayFactor: Double = 1.2
     ): Uni<Void> {
-        val changeHistory = changeHistoryFactory.get().getChangeHistory(podUri)
+        val changeHistory = repositoryFactory.getRepository(ChangeReport::class, podUri)
         return changeHistory
-            .get(ChangeHistoryRequest(sliceId = sliceUri, changeRequestId = changeRequestUri))
+            .findById(changeRequestUri)
             .chain { report ->
                 if (report != null) {
                     val completedStatus =
-                        report.statusEntry.filter { it.code.terminalState }.map { it.code }.firstOrNull()
+                        report.statusEntry.filter { it.statusCode.terminalState }.map { it.statusCode }.firstOrNull()
                     when {
                         completedStatus == expectedResult -> Uni.createFrom().voidItem()
                         completedStatus != null -> Uni.createFrom()
@@ -115,7 +107,6 @@ class TestHelpers(
                         changeRequestUri,
                         podUri,
                         expectedResult,
-                        sliceUri,
                         retryInitialDelay.plusMillis((retryInitialDelay.toMillis() * delayFactor).roundToLong()),
                         delayFactor
                     )
@@ -159,6 +150,20 @@ inline fun <reified T> QueryResult.getDataField(name: String): T? {
     }
 }
 
+fun getTokenForClient(clientId: String, clientSecret: String): String {
+    val oidcServerUrl = ConfigProvider.getConfig().getValue("kvasir.pod.auth.oidc.server-url", String::class.java)
+    val basicAuth = Base64.getEncoder().encodeToString("$clientId:$clientSecret".toByteArray())
+    return given()
+        .header(HttpHeaders.AUTHORIZATION, "Basic $basicAuth")
+        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+        .formParam("grant_type", "client_credentials")
+        .post("${oidcServerUrl}/protocol/openid-connect/token")
+        .then()
+        .statusCode(200)
+        .extract()
+        .path("access_token")
+}
+
 class TestPodConfig(
     private val name: String,
     private val ownerUserId: String,
@@ -181,21 +186,21 @@ class TestPodConfig(
     }
 
     override fun generateClients(): Optional<List<GenerateClientConfig>> {
-        return if(clients.isNotEmpty()) {
+        return if (clients.isNotEmpty()) {
             Optional.of(clients)
         } else {
             Optional.empty()
         }
     }
 
-    override fun configuration(): PodConfig {
+    override fun configuration(): PodConfigOverride {
         val json = """
             {
               "auto-ingest-rdf": true,
               "default-context": "{\"kss\":\"https://kvasir.discover.ilabt.imec.be/vocab#\",\"rdfs\":\"http://www.w3.org/2000/01/rdf-schema#\",\"xsd\":\"http://www.w3.org/2001/XMLSchema#\",\"schema\":\"http://schema.org/\",\"ex\":\"http://example.org/\",\"saref\":\"https://saref.etsi.org/core/\",\"hasMeasurement\":{\"@reverse\":\"https://saref.etsi.org/core/measurementMadeBy\"},\"children\":{\"@reverse\":\"http://example.org/parent\"}}"
             }
         """.trimIndent()
-        return PodConfigProvider.deserializePodConfig(json)
+        return PodConfigProvider.deserializePodConfigOverride(json)
     }
 
 }

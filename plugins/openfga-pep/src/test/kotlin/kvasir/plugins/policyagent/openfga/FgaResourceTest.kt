@@ -7,10 +7,11 @@ import jakarta.inject.Inject
 import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.PodStoreFactory
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.*
 import kvasir.utils.test.commons.TestGenerateClientConfig
 import kvasir.utils.test.commons.TestPodConfig
+import kvasir.utils.test.commons.getTokenForClient
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,7 +27,7 @@ class FgaResourceTest {
     lateinit var authInitializer: AuthInitializer
 
     @Inject
-    lateinit var podStoreFactory: PodStoreFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     @Inject
     lateinit var config: HttpConfig
@@ -46,7 +47,7 @@ class FgaResourceTest {
         podId = "${config.baseUri()}${testRunId}"
         // Create a pod store for the test
         val pod = Pod(podId, "{}")
-        podStoreFactory.createPodStore().persist(pod).await().indefinitely()
+        repositoryFactory.getRepository(Pod::class).persist(pod).await().indefinitely()
         // Init openfga-policy-agent
         authInitializer.initializeForPod(
             pod, TestPodConfig(
@@ -174,9 +175,9 @@ class FgaResourceTest {
             .contentType(RDFMediaTypes.JSON_LD)
             .post("/$testRunId/rebac/check")
             .then()
-            .extract().body().asString().let { body -> JsonUtils.fromString(body) as JSONObject }
+            .extract().body().asString().let { body -> JsonLdHelper.decode(body, CheckResult::class.java) }
 
-        assertTrue(check1["kss-fga:allowed"] as Boolean)
+        assertTrue(check1.allowed)
 
         // Check alice cannot access global KG
         val aliceInvalidCheck = """
@@ -200,9 +201,9 @@ class FgaResourceTest {
             .contentType(RDFMediaTypes.JSON_LD)
             .post("/$testRunId/rebac/check")
             .then()
-            .extract().body().asString().let { body -> JsonUtils.fromString(body) as JSONObject }
+            .extract().body().asString().let { body -> JsonLdHelper.decode(body, CheckResult::class.java) }
 
-        assertFalse(check2["kss-fga:allowed"] as Boolean)
+        assertFalse(check2.allowed)
     }
 
     @Test

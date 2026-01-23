@@ -2,13 +2,11 @@ import {
   Component,
   effect,
   inject,
-  OnInit,
   signal,
   WritableSignal,
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import {
-  AbstractControl,
   FormBuilder,
   FormControl,
   FormGroup,
@@ -24,6 +22,7 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzInputNumberModule } from 'ng-zorro-antd/input-number';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzRadioModule } from 'ng-zorro-antd/radio';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
@@ -31,8 +30,9 @@ import { NzSwitchModule } from 'ng-zorro-antd/switch';
 import { NzTabsModule } from 'ng-zorro-antd/tabs';
 import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
-import { from, Observable, of, switchMap, throwError } from 'rxjs';
+import { DefaultStateLockComponent } from '../components/default-state-lock/default-state-lock.component';
 import { HelpComponent } from '../components/help/help.component';
+import { JsonPreviewComponent } from '../modals/json-preview/json-preview.component';
 import { DevSettingsService } from '../services/dev-settings.service';
 import { KvasirService } from '../services/kvasir.service';
 import {
@@ -42,7 +42,6 @@ import {
   PodDetails,
   OIDCConfig as UMAConfig,
 } from '../types';
-import { NzModalService } from 'ng-zorro-antd/modal';
 
 // Flat PodConfiguration form
 interface PodSettingsForm {
@@ -72,6 +71,22 @@ interface PodSettingsForm {
   httpPepApiKeyValue: FormControl<string | null>;
 }
 
+interface LockStates {
+  defaultContext: FormControl<boolean>;
+  autoIngestRDF: FormControl<boolean>;
+  enableSolidWebId: FormControl<boolean>;
+  requireDpop: FormControl<boolean>;
+  skipDpopAthCheck: FormControl<boolean>;
+  enableOidc: FormControl<boolean>;
+  enableUma: FormControl<boolean>;
+  enableHttpPep: FormControl<boolean>;
+}
+
+interface SettingsForm {
+  lockStates: FormGroup<LockStates>;
+  podSettings: FormGroup<PodSettingsForm>;
+}
+
 @Component({
   selector: 'app-settings',
   imports: [
@@ -93,11 +108,12 @@ interface PodSettingsForm {
     HelpComponent,
     ReactiveFormsModule,
     NzCodeEditorModule,
+    DefaultStateLockComponent,
   ],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.less',
 })
-export class SettingsComponent implements OnInit {
+export class SettingsComponent {
   // DI
   private kvasir = inject(KvasirService);
   private notify = inject(NzMessageService);
@@ -112,28 +128,53 @@ export class SettingsComponent implements OnInit {
   defaultContextError = signal<string | undefined>(undefined);
   oidcExtractorConfigError = signal<string | undefined>(undefined);
   umaExtractorConfigError = signal<string | undefined>(undefined);
-  settingsForm?: FormGroup<PodSettingsForm> = undefined;
+  settingsForm?: FormGroup<SettingsForm> = undefined;
 
-  private originalConfig?: PodConfiguration;
   private podResource = rxResource({
     stream: (params) => this.kvasir.getPod(),
   });
 
+  platformConfig = rxResource({
+    stream: (params) => this.kvasir.getPlatformConfig(),
+  });
+
   constructor(fb: FormBuilder) {
     this.setupForm(fb);
+
+    // Init form on each podResource reload
     effect(() => {
-      if (this.podResource.hasValue()) {
+      if (this.podResource.hasValue() && this.platformConfig.hasValue()) {
         const pod = this.podResource.value();
-        this.initForm(pod);
+        if (pod != null && pod != undefined) {
+          this.initForm(pod);
+        }
       }
     });
   }
 
-  ngOnInit(): void {
-    this.podResource.reload();
+  isSaveDisabled(): boolean {
+    return (
+      this.settingsForm?.pristine ||
+      this.settingsForm?.invalid ||
+      !this.JSONvalidate(this.podSettingsForm.controls.defaultContext.value!) ||
+      this.isHttpPepSectionValid() === false ||
+      this.isOidcSectionValid() === false ||
+      this.isUmaSectionValid() === false
+    );
   }
 
-  jsonValidate(value: string, errorSignal: WritableSignal<string | undefined>) {
+  get rtDefaultConfig() {
+    return JSON.stringify(
+      this.platformConfig.value()?.['default-context'] || {},
+      null,
+      4,
+    );
+  }
+
+  private jsonValidate(
+    value: string,
+    errorSignal: WritableSignal<string | undefined>,
+  ) {
     if (this.JSONvalidate(value)) {
       errorSignal.set(undefined);
     } else {
@@ -141,30 +182,8 @@ export class SettingsComponent implements OnInit {
     }
   }
 
-  resetDefaultContext() {
-    const defaultContext = JSON.stringify(
-      JSON.parse(this.originalConfig!['default-context']!),
-      null,
-      4,
-    );
-    this.settingsForm!.controls.defaultContext.setValue(defaultContext);
-  }
-
-  saveDefaultContext() {
-    const podConfig: Partial<PodConfiguration> = {
-      'default-context': JSON.parse(
-        this.settingsForm!.controls.defaultContext.value!,
-      ),
-    };
-    this.saveSection(
-      podConfig,
-      'Default context saved',
-      'Failed saving Default context',
-    );
-  }
-
-  saveOidc() {
-    const controls = this.settingsForm!.controls;
+  private saveOidc() {
+    const controls = this.podSettingsForm.controls;
     let podConfig: Partial<PodConfiguration> = {};
     let oidc: UMAConfig | null = null;
     if (!controls.enableOidc.value) {
@@ -192,17 +211,11 @@ export class SettingsComponent implements OnInit {
       };
     }
 
-    const auth = { ...this.originalConfig!.auth, oidc };
-
-    this.saveSection(
-      { auth },
-      'OIDC settings saved',
-      'Failed saving OIDC settings',
-    );
+    return oidc;
   }
 
-  saveUma() {
-    const controls = this.settingsForm!.controls;
+  private saveUma() {
+    const controls = this.podSettingsForm.controls;
     let podConfig: Partial<PodConfiguration> = {};
     let uma: UMAConfig | null = null;
     if (!controls.enableUma.value) {
@@ -229,23 +242,44 @@ export class SettingsComponent implements OnInit {
         'jwt-allowed-clock-skew-seconds': controls.umaAllowedSkew.value ?? 30,
       };
     }
-
-    const auth = { ...this.originalConfig!.auth, uma: uma };
-
-    this.saveSection(
-      { auth },
-      'UMA settings saved',
-      'Failed saving UMA settings',
-    );
+    return uma;
   }
 
-  isHttpPepSectionValid() {
-    const controls = this.settingsForm!.controls;
-    return controls.enableHttpPep.value && controls.httpPepUrl.value.length == 0 ? false : true;
+  private isHttpPepSectionValid() {
+    const controls = this.podSettingsForm.controls;
+    const stateLocked =
+      this.settingsForm!.controls.lockStates.controls.enableHttpPep.value;
+    return !stateLocked &&
+      controls.enableHttpPep.value &&
+      controls.httpPepUrl.value.length == 0
+      ? false
+      : true;
   }
 
-  saveHttpPep() {
-    const controls = this.settingsForm!.controls;
+  private isOidcSectionValid() {
+    const controls = this.podSettingsForm.controls;
+    const stateLocked =
+      this.settingsForm!.controls.lockStates.controls.enableOidc.value;
+    return !stateLocked &&
+      controls.enableOidc.value &&
+      controls.oidcServerUrl.value.length == 0
+      ? false
+      : true;
+  }
+
+  private isUmaSectionValid() {
+    const controls = this.podSettingsForm.controls;
+    const stateLocked =
+      this.settingsForm!.controls.lockStates.controls.enableUma.value;
+    return !stateLocked &&
+      controls.enableUma.value &&
+      controls.umaServerUrl.value.length == 0
+      ? false
+      : true;
+  }
+
+  private saveHttpPep() {
+    const controls = this.podSettingsForm.controls;
     let podConfig: Partial<PodConfiguration> = {};
     let httpPep: HttpEndpointPolicyEnforcerConfig | null = null;
     if (!controls.enableHttpPep.value) {
@@ -272,74 +306,7 @@ export class SettingsComponent implements OnInit {
       };
     }
 
-    const auth = {
-      ...this.originalConfig!.auth,
-      'http-endpoint-policy-enforcer': httpPep,
-    };
-
-    this.saveSection(
-      { auth },
-      'HTTP Endpoint Policy Enforcer settings saved',
-      'Failed saving HTTP Endpoint Policy Enforcer settings',
-    );
-  }
-
-  private saveSection(
-    configPart: Partial<PodConfiguration>,
-    msg?: string,
-    errMsg?: string,
-  ) {
-    const podConfig: PodConfiguration = {
-      ...this.originalConfig!,
-      ...configPart,
-    };
-    this.updatePodSettings(podConfig).subscribe({
-      next: (ok) => {
-        this.podResource.reload();
-        this.notify.success(msg ?? 'Configuration saved');
-      },
-      error: (err) =>
-        this.notify.error(errMsg ?? 'Failed saving configuration'),
-    });
-  }
-
-  private saveAutoIngestRDF(val: boolean) {
-    const podConfig: Partial<PodConfiguration> = {
-      'auto-ingest-rdf': val,
-    };
-    this.saveSection(
-      podConfig,
-      `Auto-ingest RDF (${val ? 'on' : 'off'}) saved`,
-      'Failed saving Auto-ingest RDF',
-    );
-  }
-
-  private saveEnableSolidWebId(val: boolean) {
-    this.saveSection(
-        { auth: { 'enable-solid-web-id': val } } as Partial<PodConfiguration>,
-        `Solid WebID ${val ? 'enabled' : 'disabled'}`,
-        'Failed saving Solid WebID state',
-      );
-  }
-
-  private saveRequireDpop(val: boolean ) {
-      this.saveSection(
-        { auth: { 'require-dpop': val } } as Partial<PodConfiguration>,
-        `Require DPoP ${val ? 'enabled' : 'disabled'}`,
-        'Failed saving Require DPoP state',
-      );
-  }
-
-  private saveSkipDpopAthCheck(val: boolean) {
-      this.saveSection(
-        { auth: { 'skip-dpop-ath-check': val } } as Partial<PodConfiguration>,
-        `Skip DPoP ath check ${val ? 'enabled' : 'disabled'}`,
-        'Failed saving Skip DPoP ath check state',
-      );
-  }
-
-  private updatePodSettings(podConfig: PodConfiguration): Observable<void> {
-    return this.kvasir.updatePod(podConfig);
+    return httpPep;
   }
 
   private JSONvalidate(input: string) {
@@ -352,65 +319,87 @@ export class SettingsComponent implements OnInit {
   }
 
   get sentRadioGroup(): ApiKeySendVia {
-    return this.settingsForm!.controls.httpPepApiKeySendVia!.value;
+    return this.podSettingsForm.controls.httpPepApiKeySendVia!.value;
   }
 
   private setupForm(fb: FormBuilder): void {
     // Init form
-    this.settingsForm = fb.group<PodSettingsForm>({
-      defaultContext: fb.nonNullable.control('{}'),
-      autoIngestRDF: fb.nonNullable.control(false),
-      enableSolidWebId: fb.nonNullable.control(false),
-      requireDpop: fb.nonNullable.control(false),
-      skipDpopAthCheck: fb.nonNullable.control(false),
-      enableOidc: fb.nonNullable.control(false),
+    this.settingsForm = fb.group<SettingsForm>({
+      podSettings: fb.group<PodSettingsForm>({
+        defaultContext: fb.nonNullable.control('{}'),
+        autoIngestRDF: fb.nonNullable.control(false),
+        enableSolidWebId: fb.nonNullable.control(false),
+        requireDpop: fb.nonNullable.control(false),
+        skipDpopAthCheck: fb.nonNullable.control(false),
+        enableOidc: fb.nonNullable.control(false),
 
-      oidcServerUrl: fb.nonNullable.control({ value: '', disabled: true }),
-      oidcPrincipalExtractor: fb.control({ value: null, disabled: true }),
-      oidcExtractorConfig: fb.nonNullable.control({
-        value: '{}',
-        disabled: true,
+        oidcServerUrl: fb.nonNullable.control({ value: '', disabled: true }),
+        oidcPrincipalExtractor: fb.control({ value: null, disabled: true }),
+        oidcExtractorConfig: fb.nonNullable.control({
+          value: '{}',
+          disabled: true,
+        }),
+        oidcAllowedSkew: fb.nonNullable.control({ value: 30, disabled: true }),
+
+        enableUma: fb.nonNullable.control(false),
+        umaServerUrl: fb.nonNullable.control({ value: '', disabled: true }),
+        umaPrincipalExtractor: fb.control({ value: null, disabled: true }),
+        umaExtractorConfig: fb.nonNullable.control({
+          value: '{}',
+          disabled: true,
+        }),
+        umaAllowedSkew: fb.nonNullable.control({ value: 30, disabled: true }),
+
+        enableHttpPep: fb.nonNullable.control(false),
+        httpPepUrl: fb.nonNullable.control({ value: '', disabled: true }),
+
+        enableHttpPepBasicAuth: fb.nonNullable.control({
+          value: false,
+          disabled: true,
+        }),
+        httpPepBasicAuthUsername: fb.control({ value: null, disabled: true }),
+        httpPepBasicAuthPassword: fb.control({ value: null, disabled: true }),
+
+        enableHttpPepApiKey: fb.nonNullable.control({
+          value: false,
+          disabled: true,
+        }),
+        httpPepApiKeyName: fb.control({ value: null, disabled: true }),
+        httpPepApiKeyValue: fb.control({ value: null, disabled: true }),
+        httpPepApiKeySendVia: fb.nonNullable.control({
+          value: ApiKeySendVia.HEADER,
+          disabled: true,
+        }),
       }),
-      oidcAllowedSkew: fb.nonNullable.control({ value: 30, disabled: true }),
-
-      enableUma: fb.nonNullable.control(false),
-      umaServerUrl: fb.nonNullable.control({ value: '', disabled: true }),
-      umaPrincipalExtractor: fb.control({ value: null, disabled: true }),
-      umaExtractorConfig: fb.nonNullable.control({
-        value: '{}',
-        disabled: true,
-      }),
-      umaAllowedSkew: fb.nonNullable.control({ value: 30, disabled: true }),
-
-      enableHttpPep: fb.nonNullable.control(false),
-      httpPepUrl: fb.nonNullable.control({ value: '', disabled: true }),
-
-      enableHttpPepBasicAuth: fb.nonNullable.control({
-        value: false,
-        disabled: true,
-      }),
-      httpPepBasicAuthUsername: fb.control({ value: null, disabled: true }),
-      httpPepBasicAuthPassword: fb.control({ value: null, disabled: true }),
-
-      enableHttpPepApiKey: fb.nonNullable.control({
-        value: false,
-        disabled: true,
-      }),
-      httpPepApiKeyName: fb.control({ value: null, disabled: true }),
-      httpPepApiKeyValue: fb.control({ value: null, disabled: true }),
-      httpPepApiKeySendVia: fb.nonNullable.control({
-        value: ApiKeySendVia.HEADER,
-        disabled: true,
+      lockStates: fb.group<LockStates>({
+        defaultContext: fb.nonNullable.control(true),
+        autoIngestRDF: fb.nonNullable.control(true),
+        enableSolidWebId: fb.nonNullable.control(true),
+        requireDpop: fb.nonNullable.control(true),
+        skipDpopAthCheck: fb.nonNullable.control(true),
+        enableOidc: fb.nonNullable.control(true),
+        enableUma: fb.nonNullable.control(true),
+        enableHttpPep: fb.nonNullable.control(true),
       }),
     });
 
     // Setup DISABLE triggers
-    const controls = this.settingsForm.controls;
-    controls.enableOidc.valueChanges.subscribe((enabled) => this.setEnabledStateOidc(enabled));
-    controls.enableUma.valueChanges.subscribe((enabled) => this.setEnabledStateUma(enabled));
-    controls.enableHttpPep.valueChanges.subscribe((enabled) => this.setEnabledStateHttpPep(enabled));
-    controls.enableHttpPepBasicAuth.valueChanges.subscribe((enabled) => this.setEnabledStateHttpPepBasicAuth(enabled));
-    controls.enableHttpPepApiKey.valueChanges.subscribe((enabled) => this.setEnabledStateHttpPepApiKey(enabled));
+    const controls = this.podSettingsForm.controls;
+    controls.enableOidc.valueChanges.subscribe((enabled) =>
+      this.setEnabledStateOidc(enabled),
+    );
+    controls.enableUma.valueChanges.subscribe((enabled) =>
+      this.setEnabledStateUma(enabled),
+    );
+    controls.enableHttpPep.valueChanges.subscribe((enabled) =>
+      this.setEnabledStateHttpPep(enabled),
+    );
+    controls.enableHttpPepBasicAuth.valueChanges.subscribe((enabled) =>
+      this.setEnabledStateHttpPepBasicAuth(enabled),
+    );
+    controls.enableHttpPepApiKey.valueChanges.subscribe((enabled) =>
+      this.setEnabledStateHttpPepApiKey(enabled),
+    );
 
     // Setup ON CHANGE EFFECTS
     controls.defaultContext.valueChanges.subscribe((val) =>
@@ -423,85 +412,130 @@ export class SettingsComponent implements OnInit {
       this.jsonValidate(val!, this.umaExtractorConfigError),
     );
 
-    // Setup SAVE triggers
-    controls.autoIngestRDF.valueChanges.subscribe(val => this.saveAutoIngestRDF(val));
-    controls.enableSolidWebId.valueChanges.subscribe((val) =>
-      this.saveEnableSolidWebId(val)
-    );
-    controls.requireDpop.valueChanges.subscribe((val) => this.confirmToggle(
-      val,
-      this.saveRequireDpop.bind(this, val),
-      controls.requireDpop
-    ));
-    controls.skipDpopAthCheck.valueChanges.subscribe((val) =>
-      this.saveSkipDpopAthCheck(val)
+    // On Change effects
+    controls.requireDpop.valueChanges.subscribe((val) =>
+      this.confirmToggle(val, controls.requireDpop),
     );
   }
 
   private initForm(pod: PodDetails): void {
     const cfg = pod['kss:configuration'];
-    this.originalConfig = cfg;
+    const defaults = this.platformConfig.value()!;
 
     // Prepare values
     const defaultContext =
-      JSON.stringify(cfg['default-context'], null, 4) ?? '{}';
-    const autoIngestRDF = cfg['auto-ingest-rdf'];
-    const enableSolidWebId = cfg.auth['enable-solid-web-id'];
-    const requireDpop = cfg.auth['require-dpop'];
-    const skipDpopAthCheck = cfg.auth['skip-dpop-ath-check'];
-    const enableOidc = cfg.auth.oidc ? true : false;
-    const oidcServerUrl = enableOidc ? cfg.auth.oidc!['server-url'] : '';
+      JSON.stringify(
+        cfg['default-context'] ?? defaults['default-context'],
+        null,
+        4,
+      ) ?? '{}';
+    const autoIngestRDF = cfg['auto-ingest-rdf'] ?? defaults['auto-ingest-rdf'];
+    const enableSolidWebId =
+      cfg.auth?.['enable-solid-web-id'] ??
+      defaults.auth?.['enable-solid-web-id'];
+    const requireDpop =
+      cfg.auth?.['require-dpop'] ?? defaults.auth?.['require-dpop'];
+    const skipDpopAthCheck =
+      cfg.auth?.['skip-dpop-ath-check'] ??
+      defaults.auth?.['skip-dpop-ath-check'];
+    const enableOidc = (cfg.auth?.oidc ?? defaults.auth?.oidc) ? true : false;
+    const oidcServerUrl = enableOidc
+      ? (cfg.auth?.oidc?.['server-url'] ?? defaults.auth?.oidc?.['server-url'])
+      : '';
     const oidcPrincipalExtractor = enableOidc
-      ? cfg.auth.oidc!['principal-extractor']?.['class-name']
+      ? (cfg.auth?.oidc?.['principal-extractor']?.['class-name'] ??
+        defaults.auth?.oidc?.['principal-extractor']?.['class-name'])
       : null;
     const oidcExtractorConfig = enableOidc
-      ? JSON.stringify(cfg.auth.oidc!['principal-extractor']?.config, null, 4)
+      ? JSON.stringify(
+          cfg.auth?.oidc?.['principal-extractor']?.config ??
+            defaults.auth?.oidc?.['principal-extractor']?.config,
+          null,
+          4,
+        )
       : '{}';
     const oidcAllowedSkew = enableOidc
-      ? cfg.auth.oidc!['jwt-allowed-clock-skew-seconds']
+      ? (cfg.auth?.oidc?.['jwt-allowed-clock-skew-seconds'] ??
+        defaults.auth?.oidc?.['jwt-allowed-clock-skew-seconds'])
       : 30;
-    const enableUma = cfg.auth.uma ? true : false;
-    const umaServerUrl = enableUma ? cfg.auth.uma!['server-url'] : '';
+    const enableUma = (cfg.auth?.uma ?? defaults.auth?.uma) ? true : false;
+    const umaServerUrl = enableUma
+      ? (cfg.auth?.uma?.['server-url'] ?? defaults.auth?.uma?.['server-url'])
+      : '';
     const umaPrincipalExtractor = enableUma
-      ? cfg.auth.uma!['principal-extractor']?.['class-name']
+      ? (cfg.auth?.uma?.['principal-extractor']?.['class-name'] ??
+        defaults.auth?.uma?.['principal-extractor']?.['class-name'])
       : null;
     const umaExtractorConfig = enableUma
-      ? JSON.stringify(cfg.auth.uma!['principal-extractor']?.config, null, 4)
+      ? JSON.stringify(
+          cfg.auth?.uma?.['principal-extractor']?.config ??
+            defaults.auth?.uma?.['principal-extractor']?.config,
+          null,
+          4,
+        )
       : '{}';
     const umaAllowedSkew = enableUma
-      ? cfg.auth.uma!['jwt-allowed-clock-skew-seconds']
+      ? (cfg.auth?.uma?.['jwt-allowed-clock-skew-seconds'] ??
+        defaults.auth?.uma?.['jwt-allowed-clock-skew-seconds'])
       : 30;
-    const enableHttpPep = cfg.auth['http-endpoint-policy-enforcer']
-      ? true
-      : false;
-    const httpPepUrl = cfg.auth['http-endpoint-policy-enforcer']?.url
-    const enableHttpPepBasicAuth = cfg.auth['http-endpoint-policy-enforcer']?.[
-      'basic-auth'
-    ]
-      ? true
-      : false;
+    const enableHttpPep =
+      (cfg.auth?.['http-endpoint-policy-enforcer'] ??
+      defaults.auth?.['http-endpoint-policy-enforcer'])
+        ? true
+        : false;
+    const httpPepUrl = enableHttpPep
+      ? (cfg.auth?.['http-endpoint-policy-enforcer']?.url ??
+        defaults.auth?.['http-endpoint-policy-enforcer']?.url)
+      : '';
+    const enableHttpPepBasicAuth =
+      enableHttpPep &&
+      (cfg.auth?.['http-endpoint-policy-enforcer']?.['basic-auth'] ??
+        defaults.auth?.['http-endpoint-policy-enforcer']?.['basic-auth'])
+        ? true
+        : false;
     const httpPepBasicAuthUsername = enableHttpPepBasicAuth
-      ? cfg.auth['http-endpoint-policy-enforcer']?.['basic-auth']?.username
+      ? (cfg.auth['http-endpoint-policy-enforcer']?.['basic-auth']?.username ??
+        defaults.auth?.['http-endpoint-policy-enforcer']?.['basic-auth']
+          ?.username)
       : null;
     const httpPepBasicAuthPassword = enableHttpPepBasicAuth
-      ? cfg.auth['http-endpoint-policy-enforcer']?.['basic-auth']?.password
+      ? (cfg.auth?.['http-endpoint-policy-enforcer']?.['basic-auth']
+          ?.password ??
+        defaults.auth?.['http-endpoint-policy-enforcer']?.['basic-auth']
+          ?.password)
       : null;
-    const enableHttpPepApiKey = cfg.auth['http-endpoint-policy-enforcer']?.[
-      'api-key'
-    ]
-      ? true
-      : false;
+    const enableHttpPepApiKey =
+      enableHttpPep &&
+      (cfg.auth?.['http-endpoint-policy-enforcer']?.['api-key'] ??
+        defaults.auth?.['http-endpoint-policy-enforcer']?.['api-key'])
+        ? true
+        : false;
     const httpPepApiKeySendVia = enableHttpPepApiKey
-      ? cfg.auth['http-endpoint-policy-enforcer']?.['api-key']?.['send-via']
+      ? (cfg.auth?.['http-endpoint-policy-enforcer']?.['api-key']?.[
+          'send-via'
+        ] ??
+        defaults.auth?.['http-endpoint-policy-enforcer']?.['api-key']?.[
+          'send-via'
+        ])
       : ApiKeySendVia.HEADER;
     const httpPepApiKeyName = enableHttpPepApiKey
-      ? cfg.auth['http-endpoint-policy-enforcer']?.['api-key']?.['key-name']
+      ? (cfg.auth?.['http-endpoint-policy-enforcer']?.['api-key']?.[
+          'key-name'
+        ] ??
+        defaults.auth?.['http-endpoint-policy-enforcer']?.['api-key']?.[
+          'key-name'
+        ])
       : null;
     const httpPepApiKeyValue = enableHttpPepApiKey
-      ? cfg.auth['http-endpoint-policy-enforcer']?.['api-key']?.['key-value']
+      ? (cfg.auth?.['http-endpoint-policy-enforcer']?.['api-key']?.[
+          'key-value'
+        ] ??
+        defaults.auth?.['http-endpoint-policy-enforcer']?.['api-key']?.[
+          'key-value'
+        ])
       : null;
 
-    this.settingsForm!.reset(
+    this.podSettingsForm.reset(
       {
         defaultContext,
         autoIngestRDF,
@@ -530,20 +564,38 @@ export class SettingsComponent implements OnInit {
       },
       { emitEvent: false },
     );
+    this.settingsForm!.controls.lockStates.reset(
+      {
+        defaultContext: 'default-context' in cfg ? false : true,
+        autoIngestRDF: 'auto-ingest-rdf' in cfg ? false : true,
+        enableSolidWebId:
+          cfg.auth && 'enable-solid-web-id' in cfg.auth ? false : true,
+        requireDpop: cfg.auth && 'require-dpop' in cfg.auth ? false : true,
+        skipDpopAthCheck:
+          cfg.auth && 'skip-dpop-ath-check' in cfg.auth ? false : true,
+        enableOidc: cfg.auth && 'oidc' in cfg.auth ? false : true,
+        enableUma: cfg.auth && 'uma' in cfg.auth ? false : true,
+        enableHttpPep:
+          cfg.auth && 'http-endpoint-policy-enforcer' in cfg.auth
+            ? false
+            : true,
+      },
+      { emitEvent: false },
+    );
 
     // Correct disabled states
     this.setEnabledStateOidc(enableOidc);
     this.setEnabledStateUma(enableUma);
     this.setEnabledStateHttpPep(enableHttpPep);
-    this.setEnabledStateHttpPepBasicAuth(enableHttpPepBasicAuth)
+    this.setEnabledStateHttpPepBasicAuth(enableHttpPepBasicAuth);
     this.setEnabledStateHttpPepApiKey(enableHttpPepApiKey);
   }
 
-
   private setEnabledStateOidc(enabled: boolean) {
-    const controls = this.settingsForm!.controls;
+    const controls = this.podSettingsForm.controls;
     // OIDC
-    setEnabledState(enabled, 
+    setEnabledState(
+      enabled,
       controls.oidcServerUrl,
       controls.oidcPrincipalExtractor,
       controls.oidcExtractorConfig,
@@ -553,9 +605,10 @@ export class SettingsComponent implements OnInit {
   }
 
   private setEnabledStateUma(enabled: boolean) {
-    const controls = this.settingsForm!.controls;
+    const controls = this.podSettingsForm.controls;
     // OIDC
-    setEnabledState(enabled, 
+    setEnabledState(
+      enabled,
       controls.umaServerUrl,
       controls.umaPrincipalExtractor,
       controls.umaExtractorConfig,
@@ -565,47 +618,174 @@ export class SettingsComponent implements OnInit {
   }
 
   private setEnabledStateHttpPep(enabled: boolean) {
-    const controls = this.settingsForm!.controls;
-    setEnabledState(enabled,
-       controls.httpPepUrl,
+    const controls = this.podSettingsForm.controls;
+    setEnabledState(
+      enabled,
+      controls.httpPepUrl,
       controls.enableHttpPepApiKey,
       controls.enableHttpPepBasicAuth,
-       controls.httpPepBasicAuthUsername,
+      controls.httpPepBasicAuthUsername,
       controls.httpPepBasicAuthPassword,
       controls.httpPepApiKeySendVia,
       controls.httpPepApiKeyName,
       controls.httpPepApiKeyValue,
-    )
+    );
   }
 
   private setEnabledStateHttpPepApiKey(enabled: boolean) {
-    const controls = this.settingsForm!.controls;
-     setEnabledState(enabled,
+    const controls = this.podSettingsForm.controls;
+    setEnabledState(
+      enabled,
       controls.httpPepApiKeySendVia,
       controls.httpPepApiKeyName,
       controls.httpPepApiKeyValue,
-    )
+    );
   }
 
   private setEnabledStateHttpPepBasicAuth(enabled: boolean) {
-    const controls = this.settingsForm!.controls;
-     setEnabledState(enabled,
+    const controls = this.podSettingsForm.controls;
+    setEnabledState(
+      enabled,
       controls.httpPepBasicAuthUsername,
       controls.httpPepBasicAuthPassword,
-    )
+    );
   }
 
-  private confirmToggle = (val: boolean, fn: (val: boolean) => void, control: FormControl<boolean>) => {
-    const reset = () => control.setValue(!val, {emitEvent: false});
+  private confirmToggle = (
+    val: boolean,
+    control: FormControl<boolean>,
+    onOkFn?: () => void,
+  ) => {
+    const reset = () => control.setValue(!val, { emitEvent: false });
     this.modal.confirm({
       nzTitle: 'Warning: advanced toggle!',
-      nzContent: 'Toggling this might break the Kvasir UI!<br>Are you sure you want to do this?',
+      nzContent:
+        'Tweaking this setting might break the Kvasir UI!<br>Are you sure you want to do this?',
       nzIconType: 'exclamation-circle',
       nzOkDanger: true,
       nzOkText: 'Continue',
-      nzOnOk: fn,
+      nzOnOk: onOkFn ?? (() => {}),
       nzOnCancel: reset,
-      nzCentered: true
+      nzCentered: true,
+    });
+  };
+
+  private confirm = (msg: string, onOkFn?: () => void) => {
+    this.modal.confirm({
+      nzTitle: 'Warning!',
+      nzContent: `${msg}<br>Are you sure you want to do this?`,
+      nzIconType: 'exclamation-circle',
+      nzOkDanger: true,
+      nzOkText: 'Continue',
+      nzOnOk: onOkFn ?? (() => {}),
+      nzCentered: true,
+    });
+  };
+
+  private get podSettingsForm(): FormGroup<PodSettingsForm> {
+    return this.settingsForm!.controls.podSettings;
+  }
+
+  private parseToPodSettingsBody(): Partial<PodConfiguration> {
+    const controls = this.podSettingsForm.controls;
+    const body: Partial<PodConfiguration> = {};
+
+    body['default-context'] = JSON.parse(controls.defaultContext.value!);
+    body['auto-ingest-rdf'] = controls.autoIngestRDF.value!;
+    body.auth = {
+      'enable-solid-web-id': controls.enableSolidWebId.value!,
+      'require-dpop': controls.requireDpop.value!,
+      'skip-dpop-ath-check': controls.skipDpopAthCheck.value!,
+      oidc: this.saveOidc(),
+      uma: this.saveUma(),
+      'http-endpoint-policy-enforcer': this.saveHttpPep(),
+    };
+    return body;
+  }
+
+  saveAll() {
+    if (!this.isSaveDisabled()) {
+      const body = this.parseToPodSettingsBody();
+      const locks = this.settingsForm!.value.lockStates!;
+      if (locks.defaultContext) {
+        delete body['default-context'];
+      }
+      if (locks.autoIngestRDF) {
+        delete body['auto-ingest-rdf'];
+      }
+      const authBody = body.auth as Partial<PodConfiguration['auth']>;
+      if (locks.enableSolidWebId && body.auth) {
+        delete authBody['enable-solid-web-id'];
+      }
+      if (locks.requireDpop) {
+        delete authBody['require-dpop'];
+      }
+      if (locks.skipDpopAthCheck) {
+        delete authBody['skip-dpop-ath-check'];
+      }
+      if (locks.enableOidc) {
+        delete authBody.oidc;
+      }
+      if (locks.enableUma) {
+        delete authBody.uma;
+      }
+      if (locks.enableHttpPep) {
+        delete authBody['http-endpoint-policy-enforcer'];
+      }
+      if (body.auth && Object.keys(body.auth).length == 0) {
+        delete body.auth;
+      }
+
+      // Save remaining settings to podSettings
+      this.kvasir.updatePod(body as PodConfiguration).subscribe({
+        next: () => {
+          this.notify.success('All settings saved');
+        },
+      });
+    }
+  }
+
+  resetAll() {
+    this.confirm('This will discard ALL your unsaved changes!', () => {
+      this.podResource.reload();
+      this.notify.info('Custom settings reset to last saved state');
+    });
+  }
+
+  resetToPlatformDefaults() {
+    this.confirm(
+      'This will clear ALL your custom settings and restore the platform default configuration!',
+      () => {
+        if (this.platformConfig.hasValue()) {
+          this.kvasir.updatePod({} as PodConfiguration).subscribe({
+            next: () => {
+              this.podResource.reload();
+              this.notify.success(
+                'Custom settings cleared, platform defaults restored',
+              );
+            },
+          });
+        }
+      },
+    );
+  }
+
+  previewRuntimeConfig() {
+    this.kvasir.getPodRuntimeConfig().subscribe({
+      next: (config) => {
+        const modalRef = this.modal.create<JsonPreviewComponent, string>({
+          nzTitle: 'Runtime Pod Config',
+          nzContent: JsonPreviewComponent,
+          nzData: JSON.stringify(config, null, 4),
+          nzWidth: '75%',
+          nzFooter: [
+            {
+              label: 'Close',
+              onClick: () => modalRef.destroy(),
+            },
+          ],
+        });
+      },
     });
   }
 }

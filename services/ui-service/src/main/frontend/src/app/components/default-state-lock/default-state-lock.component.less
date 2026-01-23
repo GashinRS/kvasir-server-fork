@@ -1,0 +1,184 @@
+@overlay-color: rgb(230 230 230);
+
+.parent {
+    position: relative;
+}
+
+.overlay {
+    position: absolute;
+    top: 0;
+    left: -1px;
+
+    margin-top: 0;
+    border: 1px solid hsl(from @overlay-color h s 75%);
+    background-color: rgb(from @overlay-color r g b / 0.9);
+    opacity: 1;
+    padding: 2px 8px;
+    border-radius: 4px;
+    z-index: 10;
+
+
+    grid-template-rows: 1fr;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 16px;
+
+    &.switch {
+        height: 32px;
+        align-items: center;
+    }
+
+    nz-switch {
+        pointer-events: none;
+    }
+
+    fieldset {
+        legend {
+            width: fit-content;
+            font-size: 14px;
+            font-weight: 600;
+            border: unset;
+            margin: unset;
+            color: unset;
+        }
+
+        border: 1px dashed #ccc;
+        padding: 20px 25px;
+        margin: 10px
+    }
+
+    &:hover {
+        border: 1px solid hsl(from @overlay-color h s 60%);
+        // border-color: red;
+        color: black;
+
+        nz-icon {
+            color: orangered;
+        }
+    }
+}
+
+.overlay-block {
+    display: grid;
+    width: 100%;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 16px;
+    padding: 4px 8px;
+    align-items: flex-start;
+
+    nz-icon {
+        padding-top: 4px;
+    }
+
+    pre,
+    textarea {
+        min-height: 232px;
+        pointer-events: none;
+
+        font-family: Consolas, "Courier New", monospace;
+        font-weight: normal;
+        font-size: 13px;
+        font-feature-settings: "liga" 0, "calt" 0;
+        font-variation-settings: normal;
+        line-height: 18px;
+        letter-spacing: 0px;
+
+        padding-top: 0;
+        color: #888;
+    }
+
+    textarea {
+        padding-left: 26px;
+    }
+
+    ;
+
+    &.fieldset {
+        grid-template-columns: 1fr;
+    }
+}
+
+.overlay-inline {
+    display: inline-grid;
+
+}
+
+.project {
+    position: relative;
+    grid-template-columns: auto 1fr;
+    column-gap: 16px;
+    padding: 0px 8px;
+    opacity: 0;
+    z-index: 5;
+
+    nz-icon {
+        color: orangered;
+    }
+
+    &.code-json {
+        padding: 5px 8px;
+    }
+
+    &.fieldset {
+        grid-template-columns: 1fr;
+
+        nz-icon {
+            position: absolute;
+            top: 0px;
+            left: 7px;
+        }
+    }
+
+    nz-space {
+        display: flex !important;
+    }
+
+}
+
+.project-block {
+    display: grid;
+
+    align-items: flex-start;
+
+    nz-icon {
+        padding-top: 4px;
+    }
+}
+
+.project-inline {
+    display: inline-grid;
+}
+
+.clickable {
+    cursor: pointer;
+}
+
+.fade-in-animation {
+    animation: fade-in 0.3s ease-in-out forwards;
+}
+
+.fade-out-animation {
+    animation: fade-out 0.3s ease-in-out forwards;
+}
+
+
+@keyframes fade-out {
+    from {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    to {
+        opacity: 0;
+        pointer-events: none;
+    }
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}

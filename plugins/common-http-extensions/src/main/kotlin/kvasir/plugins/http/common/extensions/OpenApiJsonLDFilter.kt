@@ -9,8 +9,8 @@ import org.eclipse.microprofile.openapi.models.OpenAPI
 import org.eclipse.microprofile.openapi.models.media.Schema
 import org.jboss.logging.Logger
 
-
-@OpenApiFilter(OpenApiFilter.RunStage.BUILD)
+// TODO: reenable
+//@OpenApiFilter(OpenApiFilter.RunStage.BUILD)
 class OpenApiJsonLDFilter : OASFilter {
     private val log = Logger.getLogger(OpenApiJsonLDFilter::class.java)
     private val KVASIR_VOCAB_FQN = KvasirVocab.baseUri.trimEnd('#')

@@ -6,6 +6,7 @@ import dev.openfga.sdk.errors.FgaApiValidationError
 import idlab.quarkus.ext.pep.openfga.model.util.Codec.Encoder.encUser
 import idlab.quarkus.ext.pep.openfga.runtime.cdi.OpenFgaManager
 import io.quarkus.logging.Log
+import io.quarkus.runtime.LaunchMode
 import io.quarkus.vertx.VertxContextSupport
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
@@ -37,7 +38,8 @@ class OpenFgaInitializer(
     private val keycloakServerUrl: String,
     @ConfigProperty(name = "kvasir.auth.keycloak.realm")
     private val kvasirRealm: String,
-    private val httpConfig: HttpConfig
+    private val httpConfig: HttpConfig,
+    private val launchMode: LaunchMode
 ) : AuthInitializer {
 
     companion object {
@@ -46,6 +48,8 @@ class OpenFgaInitializer(
         private val SSO_MAX_LIFESPAN = Duration.parse("8h").inWholeSeconds.toInt();
         private val ACCESS_TOKEN_LIFESPAN = Duration.parse("5m").inWholeSeconds.toInt();
     }
+
+    private fun isDevMode() = launchMode == LaunchMode.DEVELOPMENT
 
     override fun initialize(): Uni<Void> = VertxContextSupport.executeBlocking {
         Log.debugf("kvasir.plugins.policy-agent.openfga.keycloak-realm: %s", kvasirRealm)
@@ -133,8 +137,14 @@ class OpenFgaInitializer(
                         this.credentials = listOf(CredentialRepresentation().apply {
                             this.type = CredentialRepresentation.PASSWORD
                             this.value = ownerId
-                            this.isTemporary = true
+                            this.isTemporary = !isDevMode()
                         });
+
+                        if (isDevMode()) {
+                            this.email = "$ownerId@example.com"
+                            this.firstName = ownerId.replaceFirstChar { it.uppercase() }
+                            this.lastName = ownerId.reversed().replaceFirstChar { it.uppercase() }
+                        }
                     }).checkStatus()
                     Log.debug("Created user '$ownerId' in Keycloak realm '$kvasirRealm'.")
                 }
@@ -321,3 +331,4 @@ private fun Response.checkStatus() {
         throw RuntimeException("Keycloak request failed with status $status: ${readEntity(String::class.java)}")
     }
 }
+

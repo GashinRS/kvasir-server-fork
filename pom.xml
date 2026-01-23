@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>kvasir</groupId>
     <artifactId>kvasir-parent</artifactId>
-    <version>0.14.0</version>
+    <version>0.15.0</version>
     <packaging>pom</packaging>
     <modules>
         <module>libs</module>
@@ -13,15 +13,15 @@
     </modules>
     <properties>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>
-        <kotlin.version>2.2.21</kotlin.version>
-        <kotlin.jvmTarget>20</kotlin.jvmTarget>
+        <kotlin.version>2.3.0</kotlin.version>
+        <kotlin.jvmTarget>21</kotlin.jvmTarget>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>3.21.3</quarkus.platform.version>
-        <idlab.extension.openfga.version>1.0.1</idlab.extension.openfga.version>
+        <quarkus.platform.version>3.30.7</quarkus.platform.version>
+        <idlab.extension.openfga.version>1.0.3</idlab.extension.openfga.version>
         <openfga.docker.model-tx.image>gitlab.ilabt.imec.be:4567/discover/ci-tools/fga-model-tx:latest
         </openfga.docker.model-tx.image>
         <model-tx.skip>false</model-tx.skip>
@@ -44,6 +44,13 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-bom</artifactId>
+                <version>${kotlin.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>${quarkus.platform.artifact-id}</artifactId>
                 <version>${quarkus.platform.version}</version>
@@ -60,10 +67,6 @@
         </dependencies>
     </dependencyManagement>
     <dependencies>
-        <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-reflect</artifactId>
-        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest</artifactId>
@@ -108,10 +111,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-stdlib-jdk8</artifactId>
-        </dependency>
-        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-jacoco</artifactId>
             <scope>test</scope>
@@ -149,7 +148,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${surefire-plugin.version}</version>
                     <configuration>
-                        <argLine>--add-opens java.base/java.lang=ALL-UNNAMED</argLine>
+                        <argLine>--add-opens java.base/java.lang=ALL-UNNAMED -Dapi.version=1.44</argLine>
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                             <maven.home>${maven.home}</maven.home>

@@ -1,7 +1,6 @@
 package kvasir.definitions.kg
 
 import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.annotation.JsonProperty
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 import io.smallrye.mutiny.Multi
@@ -297,16 +296,11 @@ data class ChangeRecord(
 @GenerateNoArgConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class ChangeRecords(
-    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any>,
-    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
-    @get:JsonProperty(KvasirVocab.delete)
-    val deleted: JSONObject? = null,
-    @get:JsonProperty(KvasirVocab.insert)
-    val inserted: JSONObject? = null
+    val delete: JSONObject? = null,
+    val insert: JSONObject? = null
 )
 
 enum class ChangeRecordType {
@@ -320,32 +314,19 @@ enum class QueryRequestStatusCode {
 @GenerateNoArgConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class QueryRequestEvent(
-    @get:JsonProperty(JsonLdKeywords.id)
     val id: String,
-    @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant,
-    @get:JsonProperty(JsonLdKeywords.context)
     val context: Map<String, Any> = emptyMap(),
-    @get:JsonProperty(KvasirVocab.requestingUser)
     val requestingUser: String,
-    @get:JsonProperty(KvasirVocab.statusCode)
     val statusCode: QueryRequestStatusCode,
-    @get:JsonProperty(KvasirVocab.podId)
     val podId: String,
-    @get:JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null,
-    @get:JsonProperty(KvasirVocab.query)
     val query: String,
-    @get:JsonProperty(KvasirVocab.variables)
     val variables: Map<String, Any>? = null,
-    @get:JsonProperty(KvasirVocab.operationName)
     val operationName: String? = null,
-    @get:JsonProperty(KvasirVocab.atTimestamp)
     val atTimestamp: Instant? = null,
-    @get:JsonProperty(KvasirVocab.atChangeRequestId)
     val atChangeRequestId: String? = null,
-    @get:JsonProperty(KvasirVocab.message)
-    val errorMessage: String? = null
+    val message: String? = null
 ) {
     companion object {
 
@@ -369,7 +350,7 @@ data class QueryRequestEvent(
                 operationName = queryRequest.operationName,
                 atTimestamp = queryRequest.atTimestamp ?: timestamp.takeIf { queryRequest.atChangeRequestId == null },
                 atChangeRequestId = queryRequest.atChangeRequestId,
-                errorMessage = errorMessage
+                message = errorMessage
             )
         }
 

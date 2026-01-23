@@ -243,24 +243,19 @@ class FgaResource(
 
 @GenerateNoArgConstructor
 data class WriteTransaction(
-    @get:JsonProperty(KvasirVocab.insert)
-    @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
+    @get:JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val insert: List<JSONObject> = emptyList(),
-    @get:JsonProperty(KvasirVocab.delete)
-    @JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
+    @get:JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val delete: List<JSONObject> = emptyList()
 )
 
 @GenerateNoArgConstructor
 data class RelationshipGraph(
-    @get:JsonProperty(JsonLdKeywords.context)
     val context: JSONObject = mapOf("kss" to KvasirVocab.baseUri, "kss-fga" to FgaVocab.baseUri),
-    @get:JsonProperty(JsonLdKeywords.graph)
     val graph: List<JSONObject>
 )
 
 @GenerateNoArgConstructor
 data class CheckResult(
-    @get:JsonProperty(FgaVocab.allowed)
     val allowed: Boolean
 )

@@ -59,7 +59,7 @@ class ClickhouseClient(
 
     fun <S : QuerySpec<T, *>, T> query(spec: S, sql: String): Uni<List<T>> {
         val startTs = System.currentTimeMillis()
-        Log.debug("Executing Clickhouse select query: $sql")
+        Log.debug("Executing Clickhouse select query (db: ${spec.database}): $sql")
         return httpClient.get("/")
             .putHeader("X-ClickHouse-Format", "JSONCompact")
             .addAuthHeaders(clickhouseConfig)

@@ -7,7 +7,8 @@ import jakarta.inject.Inject
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.Assertion
 import kvasir.definitions.kg.slices.Slice
-import kvasir.definitions.kg.slices.SliceStoreFactory
+import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.rdf.getJsonArray
@@ -32,7 +33,7 @@ class InboxApiTest : AbstractPodTest() {
     lateinit var knowledgeGraph: KnowledgeGraph
 
     @Inject
-    lateinit var sliceStoreFactory: SliceStoreFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     @Test
     @TestSecurity(user = "alice")
@@ -41,7 +42,7 @@ class InboxApiTest : AbstractPodTest() {
         val insert = ChangeRequestInput(insert = personData)
 
         // Perform change request for inserts
-        val insertChangeRequestUri = testHelpers.requestChangeViaHTTPSync(insert, podUri)
+        val insertChangeRequestUri = testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(insert), podUri)
 
         // Fetch the committed records for the change via KG
         val changeRecords = knowledgeGraph.getChangeRecords(
@@ -68,7 +69,7 @@ class InboxApiTest : AbstractPodTest() {
         // Delete the inserted data
         val delete = ChangeRequestInput(delete = personData)
         // Perform change request for delete
-        val deleteChangeRequestUri = testHelpers.requestChangeViaHTTPSync(delete, podUri)
+        val deleteChangeRequestUri = testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(delete), podUri)
 
         // Fetch the committed records for the change via KG
         val deleteChangeRecords = knowledgeGraph.getChangeRecords(
@@ -158,7 +159,7 @@ class InboxApiTest : AbstractPodTest() {
         val insert = ChangeRequestInput(insert = personData)
 
         // Perform change request for inserts
-        testHelpers.requestChangeViaHTTPSync(insert, podUri)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(insert), podUri)
 
         // Schedule a change request that should only be executed when the specified id does not already exist
         val badInsert =
@@ -173,7 +174,11 @@ class InboxApiTest : AbstractPodTest() {
             )
 
         // Perform the request
-        testHelpers.requestChangeViaHTTPSync(badInsert, podUri, expectedResult = ChangeStatusCode.ASSERTION_FAILED)
+        testHelpers.requestChangeViaHTTPSync(
+            JsonLdHelper.encode(badInsert),
+            podUri,
+            expectedResult = ChangeStatusCode.ASSERTION_FAILED
+        )
 
         // Schedule a change request that should only be executed when the specified id exists
         val validDelete = ChangeRequestInput(
@@ -187,7 +192,7 @@ class InboxApiTest : AbstractPodTest() {
         )
 
         // Perform the request
-        testHelpers.requestChangeViaHTTPSync(validDelete, podUri)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(validDelete), podUri)
 
         // The data should not be retrievable anymore
         val result = knowledgeGraph.query(
@@ -215,7 +220,7 @@ class InboxApiTest : AbstractPodTest() {
         val updatedEmail = "$personGivenName@somedomain.org"
 
         // Perform change request for inserts
-        testHelpers.requestChangeViaHTTPSync(insert, podUri)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(insert), podUri)
 
         // Schedule a change request that updates the email address for the person with the specified givenName
         val update = ChangeRequestInput(
@@ -239,7 +244,7 @@ class InboxApiTest : AbstractPodTest() {
             )
         )
 
-        val changeRequestUri = testHelpers.requestChangeViaHTTPSync(update, podUri)
+        val changeRequestUri = testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(update), podUri)
 
         // Check the changes
         val changes =
@@ -295,7 +300,7 @@ class InboxApiTest : AbstractPodTest() {
             )
         )
         // Perform change request for delete
-        testHelpers.requestChangeViaHTTPSync(delete, podUri)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(delete), podUri)
     }
 
     @Test
@@ -303,7 +308,7 @@ class InboxApiTest : AbstractPodTest() {
     fun testSliceInbox() {
         // Define Slice
         val sliceId = "$podUri/slices/test"
-        sliceStoreFactory.getSliceStore(podUri).persist(
+        repositoryFactory.getRepository(Slice::class, podUri).persist(
             Slice(
                 sliceId,
                 TestConstants.CONTEXT,
@@ -342,7 +347,12 @@ class InboxApiTest : AbstractPodTest() {
             )
         )
         val invalidChange = ChangeRequestInput(context = TestConstants.CONTEXT, insert = invalidPersonData)
-        testHelpers.requestChangeViaHTTPSync(invalidChange, podUri, ChangeStatusCode.VALIDATION_ERROR, sliceId)
+        testHelpers.requestChangeViaHTTPSync(
+            JsonLdHelper.encode(invalidChange),
+            podUri,
+            ChangeStatusCode.VALIDATION_ERROR,
+            sliceId
+        )
 
         val invalidNonPersonData = listOf(
             mapOf(
@@ -352,16 +362,21 @@ class InboxApiTest : AbstractPodTest() {
             )
         )
         val invalidChange2 = ChangeRequestInput(context = TestConstants.CONTEXT, insert = invalidNonPersonData)
-        testHelpers.requestChangeViaHTTPSync(invalidChange2, podUri, ChangeStatusCode.VALIDATION_ERROR, sliceId)
+        testHelpers.requestChangeViaHTTPSync(
+            JsonLdHelper.encode(invalidChange2),
+            podUri,
+            ChangeStatusCode.VALIDATION_ERROR,
+            sliceId
+        )
 
         // Data that matches should be committed
         val validPersonData = TestDataGenerator.generatePersonData(1)
         val validChange = ChangeRequestInput(context = TestConstants.CONTEXT, insert = validPersonData)
-        testHelpers.requestChangeViaHTTPSync(validChange, podUri, sliceUri = sliceId)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(validChange), podUri, sliceUri = sliceId)
 
         // Delete the data
         val delete = ChangeRequestInput(context = TestConstants.CONTEXT, delete = validPersonData)
-        testHelpers.requestChangeViaHTTPSync(delete, podUri, sliceUri = sliceId)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(delete), podUri, sliceUri = sliceId)
     }
 
     private fun getExpectedChangeRecords(changeRequestInput: ChangeRequestInput): Set<Pair<ChangeRecordType, RDFStatement>> {

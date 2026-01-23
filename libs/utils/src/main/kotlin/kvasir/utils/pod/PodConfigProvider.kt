@@ -3,13 +3,15 @@ package kvasir.utils.pod
 import io.smallrye.config.SmallRyeConfigBuilder
 import io.smallrye.config.source.yaml.YamlConfigSource
 import io.smallrye.mutiny.Uni
+import io.smallrye.mutiny.infrastructure.Infrastructure
 import io.vertx.core.http.HttpServerRequest
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.config.PodConfig
+import kvasir.definitions.config.PodConfigOverride
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.PodStoreFactory
+import kvasir.definitions.persistence.RepositoryFactory
 import org.yaml.snakeyaml.Yaml
 
 @ApplicationScoped
@@ -22,9 +24,16 @@ class PodConfigProvider {
     lateinit var podConfig: PodConfig
 
     @Inject
-    lateinit var podStoreFactory: PodStoreFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     companion object {
+        fun deserializePodConfigOverride(input: String): PodConfigOverride {
+            val config = SmallRyeConfigBuilder().withSources(
+                YamlConfigSource("registerPodInputConfigOverride", input)
+            ).withMapping(PodConfigOverride::class.java, "").build()
+            return config.getConfigMapping(PodConfigOverride::class.java, "")
+        }
+
         fun deserializePodConfig(input: String): PodConfig {
             val config = SmallRyeConfigBuilder().withSources(
                 YamlConfigSource("registerPodInputConfig", input)
@@ -53,7 +62,8 @@ class PodConfigProvider {
     }
 
     fun getPodConfigById(podId: String): Uni<PodConfig?> {
-        return podStoreFactory.createPodStore().findById(podId)
+        return repositoryFactory.getRepository(Pod::class)
+            .findById(podId)
             .map { pod ->
                 pod?.let { fromPod(it) }
             }

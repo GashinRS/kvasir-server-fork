@@ -5,6 +5,8 @@ import jakarta.inject.Inject
 import kvasir.definitions.kg.ChangeStatusCode
 import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.kg.changes.ChangeReportStatusEntry
+import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.persistence.Sort
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
 import org.junit.jupiter.api.AfterAll
@@ -25,10 +27,10 @@ class TestClickhouseChangeLog {
 
 
     @Inject
-    lateinit var changeLogFactory: ClickhouseChangeHistoryFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     @Inject
-    lateinit var clichouseInitializer: ClickhouseInitializer
+    lateinit var clichouseInitializer: ClickhouseLifecycleManager
 
     @Inject
     lateinit var clickhouseClient: ClickhouseClient
@@ -37,7 +39,7 @@ class TestClickhouseChangeLog {
 
     @BeforeAll
     fun setup() {
-        clichouseInitializer.initializePodSchema(testRunId).await().indefinitely()
+        clichouseInitializer.initializePodSchema(testRunId, setOf(ChangeReport::class.java)).await().indefinitely()
     }
 
     @AfterAll
@@ -47,7 +49,7 @@ class TestClickhouseChangeLog {
 
     @Test
     fun testInsertAndQuery() {
-        val changeHistory = changeLogFactory.getChangeHistory(testRunId)
+        val changeHistory = repositoryFactory.getRepository(ChangeReport::class, testRunId)
 
         // Insert some history entries
         val historyRecords = (1..10).map { i ->
@@ -80,6 +82,21 @@ class TestClickhouseChangeLog {
         // Query them back
         val retrievedRecords = changeHistory.find().await().indefinitely()
         assertEquals(historyRecords.sortedBy { it.id }, retrievedRecords.items.sortedBy { it.id })
+
+        // Test filter and ordering
+        val selectedSliceId = sliceRefs.filterNotNull().random()
+        val filteredRecords =
+            changeHistory.find("sliceId=='$selectedSliceId'", sort = Sort.descending("writeTs")).await().indefinitely()
+        val expectedFilteredRecords = historyRecords.filter { it.sliceId == selectedSliceId }
+            .sortedByDescending { it.writeTs }
+        assertEquals(expectedFilteredRecords, filteredRecords.items)
+
+        // Test ordering by POJO field
+        val orderedRecords = changeHistory.find(sort = Sort.ascending("nrOfInserts", "id")).await().indefinitely()
+        val expectedOrderedRecords = historyRecords.sortedWith(
+            compareBy<ChangeReport> { it.nrOfInserts }.thenBy { it.id }
+        )
+        assertEquals(expectedOrderedRecords, orderedRecords.items)
 
         // Test get by id
         val selectedRecord = historyRecords.random()

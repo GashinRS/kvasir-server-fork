@@ -10,8 +10,9 @@ import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.kg.PagedResult
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.PodStore
-import kvasir.definitions.kg.PodStoreFactory
+import kvasir.definitions.persistence.PersistentEntity
+import kvasir.definitions.persistence.Repository
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.persistence.Sort
 import kvasir.utils.test.commons.TestGenerateClientConfig
 import kvasir.utils.test.commons.TestPodConfig
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.TestInstance
 import java.util.*
+import kotlin.reflect.KClass
 
 const val ALICE_CLIENT_NAME = "alice-client"
 const val ALICE_CLIENT_SECRET = "alice"
@@ -36,7 +38,7 @@ abstract class AbstractFgaTest {
     lateinit var fgaManager: OpenFgaManager
 
     @Inject
-    lateinit var podStoreFactory: PodStoreFactory
+    lateinit var repositoryFactory: RepositoryFactory
 
     @Inject
     lateinit var config: HttpConfig
@@ -49,7 +51,7 @@ abstract class AbstractFgaTest {
         podId = "${config.baseUri()}${testRunId}"
         // Create a pod store for the test
         val pod = Pod(podId, "{}")
-        podStoreFactory.createPodStore().persist(pod).await().indefinitely()
+        repositoryFactory.getRepository(Pod::class).persist(pod).await().indefinitely()
         // Init openfga-policy-agent
         authInitializer.initialize().chain { _ ->
             authInitializer.initializeForPod(
@@ -65,25 +67,34 @@ abstract class AbstractFgaTest {
 
     @AfterAll
     fun teardown() {
-        podStoreFactory.createPodStore().deleteById(podId, true).await().indefinitely()
+        repositoryFactory.getRepository(Pod::class).deleteById(podId).await().indefinitely()
         authInitializer.cleanupForPod(podId, testRunId).await().indefinitely()
     }
 
 }
 
 @ApplicationScoped
-class MockPodStoreFactory : PodStoreFactory {
-    private val store = MockPodStore()
-    override fun createPodStore(): PodStore {
-        return store
+class MockPodStoreFactory : RepositoryFactory {
+
+    private val mockRepositories: MutableMap<Pair<KClass<*>, String?>, MockRepository<*>> = mutableMapOf()
+
+    override fun <T : PersistentEntity> getRepository(
+        entityClass: KClass<T>,
+        podId: String?
+    ): Repository<T> {
+        val repositoryKey = entityClass to podId
+        if (!mockRepositories.containsKey(repositoryKey)) {
+            mockRepositories.put(repositoryKey, MockRepository<T>())
+        }
+        return mockRepositories[repositoryKey] as Repository<T>
     }
 
 }
 
 
-class MockPodStore : PodStore {
-    private val pods = mutableMapOf<String, Pod>()
-    override fun persist(entity: Pod): Uni<Void> {
+class MockRepository<T : PersistentEntity> : Repository<T> {
+    private val pods = mutableMapOf<String, T>()
+    override fun persist(entity: T): Uni<Void> {
         pods[entity.id] = entity
         return Uni.createFrom().voidItem()
     }
@@ -93,11 +104,11 @@ class MockPodStore : PodStore {
         limit: Int?,
         cursor: String?,
         sort: Sort
-    ): Uni<PagedResult<Pod>> {
+    ): Uni<PagedResult<T>> {
         return Uni.createFrom().item(PagedResult(pods.values.toList()))
     }
 
-    override fun findById(id: String): Uni<Pod?> {
+    override fun findById(id: String): Uni<T?> {
         return Uni.createFrom().item(pods[id])
     }
 
@@ -106,22 +117,4 @@ class MockPodStore : PodStore {
         return Uni.createFrom().voidItem()
     }
 
-    override fun deleteById(id: String, deleteData: Boolean): Uni<Void> {
-        return deleteById(id)
-    }
-
-}
-
-internal fun getTokenForClient(clientId: String, clientSecret: String): String {
-    val oidcServerUrl = ConfigProvider.getConfig().getValue("kvasir.pod.auth.oidc.server-url", String::class.java)
-    val basicAuth = Base64.getEncoder().encodeToString("$clientId:$clientSecret".toByteArray())
-    return given()
-        .header(HttpHeaders.AUTHORIZATION, "Basic $basicAuth")
-        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-        .formParam("grant_type", "client_credentials")
-        .post("${oidcServerUrl}/protocol/openid-connect/token")
-        .then()
-        .statusCode(200)
-        .extract()
-        .path("access_token")
 }

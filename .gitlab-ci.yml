@@ -11,7 +11,7 @@ include:
       release_stage: release
       proposal_stage: pre
       sync_stage: sync
-      image_flavors_array: [ "a4ds", "openfga", "noauth" ]
+      image_flavors_array: ["a4ds", "openfga", "noauth"]
 
 variables:
   GIT_STRATEGY: clone
@@ -43,7 +43,7 @@ variables:
   WRITERSIDE_IMAGE: "${CI_TOOLS_REGISTRY}/writerside-builder:2025.04.8412"
   QUARKUS_JIB_BASE_JVM_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:21.0.7_6-jre-noble"
   JDK_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:21.0.7_6-jdk-noble"
-  CI_TOOLS_IMAGE: "${CI_TOOLS_REGISTRY}:1.3.1"
+  CI_TOOLS_IMAGE: "${CI_TOOLS_REGISTRY}:3.0.0-jdk21"
   QUARKUS_JIB_PLATFORMS: "linux/amd64,linux/arm64/v8"
   QUARKUS_CONTAINER_IMAGE_PUSH: "false"
   QUARKUS_CONTAINER_IMAGE_REGISTRY: $CI_REGISTRY

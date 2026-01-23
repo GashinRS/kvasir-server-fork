@@ -10,6 +10,7 @@ import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.kg.LifeCycleEvent
 import kvasir.definitions.kg.LifeCycleEventType
 import kvasir.definitions.kg.QueryRequestEvent
+import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
@@ -77,7 +78,7 @@ class StreamApiTest : AbstractPodTest() {
 
             val sliceUri = given()
                 .contentType(RDFMediaTypes.JSON_LD)
-                .body(input)
+                .body(JsonLdHelper.encode(input))
                 .post("$podUri/slices")
                 .then()
                 .statusCode(201)
@@ -86,7 +87,7 @@ class StreamApiTest : AbstractPodTest() {
 
             val receivedEvent = client.openStream().toUni().await().atMost(Duration.ofSeconds(5))
             assertEquals(sliceUri, receivedEvent.sliceId)
-            assertEquals(LifeCycleEventType.SLICE_CREATED, receivedEvent.type)
+            assertEquals(LifeCycleEventType.SLICE_CREATED, receivedEvent.eventType)
         }
     }
 
@@ -111,9 +112,9 @@ class StreamApiTest : AbstractPodTest() {
             val (firstEvent, secondEvent) =
                 client.openStream().select().first(2).collect().asList().await().atMost(Duration.ofSeconds(5))
             assertEquals("$podUri/s3/test.txt", firstEvent.externalObjectUri)
-            assertEquals(StorageEventType.PUT_OBJECT, firstEvent.type)
+            assertEquals(StorageEventType.PUT_OBJECT, firstEvent.eventType)
             assertEquals("$podUri/s3/test.txt", secondEvent.externalObjectUri)
-            assertEquals(StorageEventType.GET_OBJECT, secondEvent.type)
+            assertEquals(StorageEventType.GET_OBJECT, secondEvent.eventType)
         }
 
         delete("$podUri/s3/test.txt")

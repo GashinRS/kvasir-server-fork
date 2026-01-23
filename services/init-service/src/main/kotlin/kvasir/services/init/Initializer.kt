@@ -9,11 +9,13 @@ import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import jakarta.enterprise.inject.Instance
+import kvasir.definitions.annotations.StorageLevel
 import kvasir.definitions.auth.AuthInitializer
 import kvasir.definitions.config.BootstrapConfig
 import kvasir.definitions.config.HttpConfig
+import kvasir.definitions.persistence.StorageLifecycleManager
 import kvasir.definitions.reactive.skipToLast
-import kvasir.plugins.kg.clickhouse.ClickhouseInitializer
+import kvasir.utils.persistence.PersistentEntityDetector
 import kvasir.utils.pod.PodSetupHelper
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -21,9 +23,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 class Initializer(
     private val podSetupHelper: PodSetupHelper,
     private val podAuthInitializer: Instance<AuthInitializer>,
-    private val dbInitializer: ClickhouseInitializer,
+    private val dbInitializer: StorageLifecycleManager,
     private val httpConfig: HttpConfig,
-    private val bootstrapConfig: BootstrapConfig
+    private val bootstrapConfig: BootstrapConfig,
+    private val persistentEntityDetector: PersistentEntityDetector
 ) {
 
     private val initializationComplete = AtomicBoolean(false)
@@ -32,7 +35,7 @@ class Initializer(
         @Observes event: StartupEvent
     ) {
         // Init system db
-        val exitCode = dbInitializer.init()
+        val exitCode = dbInitializer.init(persistentEntityDetector.getDetectedEntityClasses(StorageLevel.SYSTEM))
             // Init auth (global)
             .chain { _ ->
                 if (podAuthInitializer.isResolvable) {
@@ -75,4 +78,5 @@ class Initializer(
     }
 
     fun isInitialized(): Boolean = initializationComplete.get()
+
 }

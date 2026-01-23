@@ -1,32 +1,23 @@
 package kvasir.definitions.kg
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.annotation.JsonProperty
-import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonObject
+import kvasir.definitions.annotations.Persistent
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.annotations.StorageLevel
 import kvasir.definitions.persistence.PersistentEntity
-import kvasir.definitions.persistence.Repository
 import kvasir.definitions.rdf.JSONObject
-import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import java.time.Instant
 import java.util.*
 
-interface PodStoreFactory {
-    fun createPodStore(): PodStore
-}
-
-interface PodStore : Repository<Pod> {
-    fun deleteById(id: String, deleteData: Boolean = false): Uni<Void>
-}
-
 @GenerateNoArgConstructor
+@Persistent(storageLevel = StorageLevel.SYSTEM, collectionName = "pods")
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class Pod(
-    @get:JsonProperty(JsonLdKeywords.id)
     override var id: String,
-    @get:JsonProperty(KvasirVocab.configuration)
     var configuration: String
 ) : PersistentEntity() {
 
@@ -49,18 +40,11 @@ enum class LifeCycleEventType {
 @GenerateNoArgConstructor
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 data class LifeCycleEvent(
-    @get:JsonProperty(JsonLdKeywords.context)
     val context: JSONObject = KvasirVocab.context,
-    @get:JsonProperty(JsonLdKeywords.id)
     val id: String = "urn:kvasir:life-cycle-events:${UUID.randomUUID()}",
-    @get:JsonProperty(KvasirVocab.requestingUser)
     val requestingUser: String,
-    @get:JsonProperty(KvasirVocab.timestamp)
     val timestamp: Instant = Instant.now(),
-    @get:JsonProperty(KvasirVocab.type)
-    val type: LifeCycleEventType,
-    @get:JsonProperty(KvasirVocab.podId)
+    val eventType: LifeCycleEventType,
     val podId: String,
-    @get:JsonProperty(KvasirVocab.sliceId)
     val sliceId: String? = null
 )

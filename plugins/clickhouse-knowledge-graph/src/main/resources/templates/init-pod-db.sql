@@ -51,29 +51,3 @@ CREATE TABLE IF NOT EXISTS {cfg.database}.metadata (
     property_ref LowCardinality (String)
 ) ENGINE = ReplacingMergeTree()
     ORDER BY (type_uri, property_uri, property_ref, property_kind);
-
-CREATE TABLE IF NOT EXISTS {cfg.database}.changelog (
-    id String,
-    requesting_user String,
-    pod_id LowCardinality (String),
-    status_entry String,
-    slice_id String,
-    nr_of_inserts Int64,
-    nr_of_deletes Int64,
-    error_message Nullable(String),
-    write_ts DateTime64 (3) Codec (DoubleDelta, LZ4),
-) ENGINE = ReplacingMergeTree()
-    ORDER BY (slice_id, id, write_ts);
-
-CREATE TABLE IF NOT EXISTS {cfg.database}.slices (
-    id String,
-    context String,
-    author String,
-    name String,
-    description String,
-    schema String,
-    supports_changes Bool,
-    target_graphs String,
-    write_ts DateTime64 (3) Codec (DoubleDelta, LZ4),
-) ENGINE = ReplacingMergeTree()
-    ORDER BY (id, write_ts);

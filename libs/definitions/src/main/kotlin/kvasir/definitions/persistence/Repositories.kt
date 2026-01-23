@@ -1,8 +1,26 @@
 package kvasir.definitions.persistence
 
+import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.kg.PagedResult
+import kvasir.definitions.reactive.skipToLast
 import java.time.Instant
+import kotlin.reflect.KClass
+
+interface RepositoryFactory {
+    /**
+     * Get a repository for accessing and managing persistent entities.
+     *
+     * @param entityClass The KClass of the persistent entity type.
+     * @param podId Optional pod identifier for per-pod storage. If the entity is annotated for per-pod storage, this must be provided.
+     *
+     * @return A Repository instance for the specified entity type.
+     */
+    fun <T : PersistentEntity> getRepository(
+        entityClass: KClass<T>,
+        podId: String? = null
+    ): Repository<T>
+}
 
 /**
  * Generic storage provider for POJOs
@@ -21,6 +39,9 @@ interface Repository<T : PersistentEntity> {
     ): Uni<PagedResult<T>>
 
     fun persist(entity: T): Uni<Void>
+
+    fun persist(entities: List<T>): Uni<Void> =
+        Multi.createFrom().iterable(entities).onItem().transformToUni { persist(it) }.merge(4).skipToLast()
 
     fun deleteById(id: String): Uni<Void>
 

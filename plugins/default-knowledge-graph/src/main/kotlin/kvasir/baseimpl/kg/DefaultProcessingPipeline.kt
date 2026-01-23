@@ -7,7 +7,6 @@ import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.enterprise.inject.Instance
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.ChangeProcessor
 import kvasir.definitions.kg.changes.ChangeReportStatusEntry
@@ -15,7 +14,8 @@ import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
-import kvasir.definitions.kg.slices.SliceStoreFactory
+import kvasir.definitions.kg.slices.Slice
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirNamedGraphs
@@ -44,7 +44,7 @@ class EvaluateAssertions(
                     requestingUser = buffer.request.requestingUser,
                     podId = request.podId,
                     sliceId = request.sliceId,
-                    query = assertion.queryStr
+                    query = assertion.query
                 )
                 parent.query(q).toUni()
                     .onFailure().recoverWithItem { err ->
@@ -62,10 +62,10 @@ class EvaluateAssertions(
                                 KvasirVocab.AssertEmptyResult -> {
                                     when {
                                         result.data == null -> Uni.createFrom()
-                                            .failure(IllegalArgumentException("Invalid assertion query: ${assertion.queryStr}"))
+                                            .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
 
                                         result.data!!.isNotEmpty() -> Uni.createFrom()
-                                            .failure(ChangeAssertionException("Assertion failed: results exists for '${assertion.queryStr}'"))
+                                            .failure(ChangeAssertionException("Assertion failed: results exists for '${assertion.query}'"))
 
                                         else -> Uni.createFrom().voidItem()
                                     }
@@ -74,10 +74,10 @@ class EvaluateAssertions(
                                 KvasirVocab.AssertNonEmptyResult -> {
                                     when {
                                         result.data == null -> Uni.createFrom()
-                                            .failure(IllegalArgumentException("Invalid assertion query: ${assertion.queryStr}"))
+                                            .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
 
                                         result.data!!.isEmpty() -> Uni.createFrom()
-                                            .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.queryStr}'"))
+                                            .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.query}'"))
 
                                         else -> Uni.createFrom().voidItem()
                                     }
@@ -96,7 +96,7 @@ class EvaluateAssertions(
                     "Finished evaluating assertions (${request.assert.size}) for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms"
                 Log.debug(log)
                 ChangeReportStatusEntry(
-                    code = ChangeStatusCode.PROCESSING,
+                    statusCode = ChangeStatusCode.PROCESSING,
                     message = log
                 ).takeIf { request.assert.isNotEmpty() }
             }
@@ -168,7 +168,7 @@ class MaterializeS3References(
                     "Finished processing external references for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms. Details: $report"
                 Log.debug(log)
                 ChangeReportStatusEntry(
-                    code = ChangeStatusCode.PROCESSING,
+                    statusCode = ChangeStatusCode.PROCESSING,
                     message = log
                 ).takeIf { insertedS3Objects.isNotEmpty() || deletedS3Objects.isNotEmpty() }
             }
@@ -193,7 +193,7 @@ class MaterializeS3References(
 @ApplicationScoped
 class MaterializeRecords(
     private val kg: KnowledgeGraph,
-    private val sliceStoreFactory: Instance<SliceStoreFactory>
+    private val repositoryFactory: RepositoryFactory
 ) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         val startTs = System.currentTimeMillis()
@@ -235,7 +235,7 @@ class MaterializeRecords(
                     "Finished processing with clauses for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms. Materialized $insertStatementsCount inserts and $deleteStatementsCount deletes."
                 Log.debug(log)
                 ChangeReportStatusEntry(
-                    code = ChangeStatusCode.PROCESSING,
+                    statusCode = ChangeStatusCode.PROCESSING,
                     message = log
                 ).takeIf { insertStatementsCount + deleteStatementsCount > 0 }
             }
@@ -247,7 +247,7 @@ class MaterializeRecords(
         } else {
             // For change requests on a Slice, load the Slice schema
             (request.sliceId?.let { sliceId ->
-                sliceStoreFactory.get().getSliceStore(sliceId).findById(sliceId)
+                repositoryFactory.getRepository(Slice::class, request.podId).findById(sliceId)
                     .onItem().ifNull().failWith(IllegalArgumentException("Slice not found: $sliceId"))
                     .onItem().ifNotNull().transform { it!! }
             } ?: Uni.createFrom().nullItem())
@@ -315,13 +315,13 @@ class MaterializeRecords(
 }
 
 @ApplicationScoped
-class SliceGraphQLBasedValidator(private val sliceStoreFactory: SliceStoreFactory) : ChangeProcessor {
+class SliceGraphQLBasedValidator(private val repositoryFactory: RepositoryFactory) : ChangeProcessor {
     override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
         return buffer.request.sliceId?.let { sliceId ->
             val startTs = System.currentTimeMillis()
             Log.debug("Validating change request ${buffer.request.id} against Slice GraphQL schema...")
             // Load Slice schema
-            sliceStoreFactory.getSliceStore(buffer.request.podId).findById(sliceId)
+            repositoryFactory.getRepository(Slice::class, buffer.request.podId).findById(sliceId)
                 .chain { sliceSpec ->
                     if (sliceSpec != null) {
                         buffer.stream().collect().asSet().chain { records ->
@@ -342,7 +342,7 @@ class SliceGraphQLBasedValidator(private val sliceStoreFactory: SliceStoreFactor
                     val log =
                         "Finished validating change request ${buffer.request.id} against Slice GraphQL schema in ${System.currentTimeMillis() - startTs} ms"
                     Log.debug(log)
-                    ChangeReportStatusEntry(code = ChangeStatusCode.PROCESSING, message = log)
+                    ChangeReportStatusEntry(statusCode = ChangeStatusCode.PROCESSING, message = log)
                 }
         } ?: Uni.createFrom().nullItem()
     }

@@ -34,8 +34,7 @@ object BasicSSEClientEventMappers {
 
 class ParseEventsFromJsonLD<T>(private val eventType: Class<T>) : SSEClientEventMapper<T> {
     override fun convert(eventData: String): T {
-        val json = JsonObject(eventData).map
-        return JsonObject(JsonLdHelper.toCompactFQForm(json)).mapTo(eventType)
+        return JsonLdHelper.decode(eventData, eventType)
     }
 
 }

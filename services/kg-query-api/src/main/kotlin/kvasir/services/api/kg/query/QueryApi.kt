@@ -11,9 +11,9 @@ import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.config.PodConfig
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.slices.Slice
-import kvasir.definitions.kg.slices.SliceStore
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
+import kvasir.definitions.persistence.Repository
 import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.utils.http.KvasirUriInfo
@@ -152,13 +152,13 @@ data class QueryInputWithContext(
     val providedContext: Map<String, Any>? = null
 ) : QueryInput
 
-internal fun getPodOrThrow404(podStore: PodStore, podId: String): Uni<Pod> {
+internal fun getPodOrThrow404(podStore: Repository<Pod>, podId: String): Uni<Pod> {
     return podStore.findById(podId)
         .onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
         .onItem().ifNotNull().transform { it!! }
 }
 
-internal fun getSliceOrThrow404(sliceStore: SliceStore, podId: String, sliceId: String): Uni<Slice> {
+internal fun getSliceOrThrow404(sliceStore: Repository<Slice>, podId: String, sliceId: String): Uni<Slice> {
     return sliceStore.findById(sliceId)
         .onItem().ifNull().failWith(NotFoundException("Slice not found: $sliceId"))
         .onItem().ifNotNull().transform { it!! }
