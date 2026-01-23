@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.15.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.14.0..v0.15.0) - 2026-01-23
+### Bug Fixes
+- **(ui)** extra guard against platform config still being fetched - ([d7e3f4c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d7e3f4cf7dbd5cd3188a572cecaf18c66836be8a)) - Thomas Dupont
+-  [**breaking**]Updated generic POJO ORM implementation (fixing some conceptual issues) - ([0068d21](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/0068d21506baa0fdf86702729e895b6568332ddf)) - Wannes Kerckhove
+- podconfig overrides functionality - ([7174a20](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7174a2083e92979f600dc0e4eeee1f68354931eb)) - Thomas Dupont
+### Features
+- **(deps)** Update Kotlin to 2.0.21 and manage with BOM - ([bf5e793](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/bf5e793e3324f620d166249fdd59c8b1e2ae8c62)) - Thomas Dupont
+- **(ui)** settings overhaul - ([a4afb24](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a4afb24498278c9134629fcd1d295afc851a5801)) - Thomas Dupont
+- When registering a pod via the API, an optional admin client credential pair can now be set (for quick bootstrapping) - ([31f7d423](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/31f7d4233b4a24ebf63b9fdb10d76219b3225d9f)) - Wannes Kerckhove
+
+---
+
 ## [0.14.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.13.0..v0.14.0) - 2025-12-08
 ### Notable changes
 1. Auth system overhaul - ([4ca4f6c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4ca4f6c9a05344424222b43d47f6e16999082f3f)) - Wannes
