@@ -17,6 +17,7 @@ import kvasir.definitions.config.BootstrapPodConfig
 import kvasir.definitions.config.GenerateClientConfig
 import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.config.PodConfig
+import kvasir.definitions.config.PodConfigOverride
 import kvasir.definitions.kg.LifeCycleEvent
 import kvasir.definitions.kg.LifeCycleEventType
 import kvasir.definitions.kg.Pod
@@ -252,8 +253,8 @@ data class RegisterPodInput(
 
     override fun autoRegisterHttpEndpointPolicyEnforcer(): Boolean = autoRegisterHttpEndpointPolicyEnforcer
 
-    override fun configuration(): PodConfig {
-        return PodConfigProvider.deserializePodConfig(configuration)
+    override fun configuration(): PodConfigOverride {
+        return PodConfigProvider.deserializePodConfigOverride(configuration)
     }
 
     override fun generateClients(): Optional<List<GenerateClientConfig>> = Optional.empty()

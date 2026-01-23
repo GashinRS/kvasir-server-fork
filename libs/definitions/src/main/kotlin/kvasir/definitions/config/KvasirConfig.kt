@@ -59,6 +59,9 @@ interface PodConfig {
 
 }
 
+// Make sure the Optionals in config here are left absent when they are empty and are included when they are null
+// Also make sure empty values are not serialized as their annotated @WithDefault values
+//@JsonInclude(JsonInclude.Include.NON_ABSENT)
 interface PodAuthConfig {
     /**
      * Configuration related to OpenID Connect (OIDC) authentication.
@@ -166,6 +169,77 @@ enum class ApiKeySendVia {
 }
 
 /**
+ * This config has all the same fields as the PodConfig, but they are all Optionals. Semantics:
+ * - **empty (key absent)**: Follow platform default podconfig
+ * - **null (when it makes sense)**: Explicitly override with null
+ * - **value**: Explicitly override with value
+ */
+@JsonInclude(JsonInclude.Include.NON_ABSENT)
+interface PodConfigOverride {
+    /**
+     * The default JSON-LD context to use when interfacing with the global GraphQL endpoint of the Pod's Knowledge Graph.
+     * This allows the execution of standard GraphQL queries (which do not have context information) against the Pod's Knowledge Graph.
+     */
+    @JsonProperty("default-context")
+    fun defaultContext(): Map<String, String>
+
+    /**
+     * If true, RDF data will be automatically ingested into the KG when uploaded via the storage-api.
+     */
+    @WithDefault("false")
+    @JsonProperty("auto-ingest-rdf")
+    fun autoIngestRdf(): Optional<Boolean>
+
+    /**
+     * Authentication and authorization configuration for the Pod.
+     */
+    @JsonProperty("auth")
+    fun auth(): Optional<PodAuthConfigOverride>
+}
+
+// Make sure the Optionals in config here are left absent when they are empty and are included when they are null
+@JsonInclude(JsonInclude.Include.NON_ABSENT)
+interface PodAuthConfigOverride {
+    /**
+     * Configuration related to OpenID Connect (OIDC) authentication.
+     */
+    @JsonProperty("oidc")
+    fun oidc(): Optional<OIDCConfig>
+
+    /**
+     * Whether to enable Solid WebID support.
+     */
+    @JsonProperty("enable-solid-web-id")
+    fun enableSolidWebId(): Optional<Boolean>
+
+    /**
+     * Whether to require DPoP tokens for protected resources.
+     */
+    @JsonProperty("require-dpop")
+    fun requireDpop(): Optional<Boolean>
+
+    /**
+     * Whether to skip the access token hash (ath) check for DPoP tokens.
+     * Note: skipping this check may have security implications and should only be done if you fully understand the consequences.
+     * This setting is primarily intended for backward compatibility with clients that implement an earlier version of the DPoP specification.
+     */
+    @JsonProperty("skip-dpop-ath-check")
+    fun skipDpopAthCheck(): Optional<Boolean>
+
+    /**
+     * Configuration related to UMA authorization.
+     */
+    @JsonProperty("uma")
+    fun uma(): Optional<UMAConfig>
+
+    /**
+     * Configuration for HTTP Endpoint Policy Enforcers.
+     */
+    @JsonProperty("http-endpoint-policy-enforcer")
+    fun httpEndpointPolicyEnforcer(): Optional<HttpEndpointPolicyEnforcerConfig>
+}
+
+/**
  * Quarkus configuration mapping used for bootstrapping the system via config.
  * The processing of this config is done in the init-service.
  */
@@ -217,7 +291,7 @@ interface BootstrapPodConfig {
     /**
      * Allows overriding Pod-specific configuration.
      */
-    fun configuration(): PodConfig
+    fun configuration(): PodConfigOverride
 }
 
 interface GenerateClientConfig {

@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.config.PodConfig
+import kvasir.definitions.config.PodConfigOverride
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.persistence.RepositoryFactory
 import org.yaml.snakeyaml.Yaml
@@ -25,6 +26,13 @@ class PodConfigProvider {
     lateinit var repositoryFactory: RepositoryFactory
 
     companion object {
+        fun deserializePodConfigOverride(input: String): PodConfigOverride {
+            val config = SmallRyeConfigBuilder().withSources(
+                YamlConfigSource("registerPodInputConfigOverride", input)
+            ).withMapping(PodConfigOverride::class.java, "").build()
+            return config.getConfigMapping(PodConfigOverride::class.java, "")
+        }
+
         fun deserializePodConfig(input: String): PodConfig {
             val config = SmallRyeConfigBuilder().withSources(
                 YamlConfigSource("registerPodInputConfig", input)
