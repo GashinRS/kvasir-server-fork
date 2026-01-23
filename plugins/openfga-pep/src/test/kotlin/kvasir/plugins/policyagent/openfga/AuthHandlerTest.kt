@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import kvasir.definitions.auth.AuthHandler
 import kvasir.plugins.policyagent.openfga.utils.contextualizeSubject
+import kvasir.utils.test.commons.getTokenForClient
 import org.junit.jupiter.api.Test
 
 /**

@@ -11,6 +11,7 @@ import kvasir.definitions.kg.QueryResult
 import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLGetRelationExtractor
 import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.plugins.policyagent.openfga.utils.contextualizeSubject
+import kvasir.utils.test.commons.getTokenForClient
 import org.junit.jupiter.api.Test
 
 @QuarkusTest

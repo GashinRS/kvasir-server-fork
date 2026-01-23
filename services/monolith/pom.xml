@@ -68,6 +68,12 @@
             <artifactId>ui-service</artifactId>
             <version>0.14.0</version>
         </dependency>
+        <dependency>
+            <groupId>kvasir-libs</groupId>
+            <artifactId>test-utils</artifactId>
+            <version>0.14.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

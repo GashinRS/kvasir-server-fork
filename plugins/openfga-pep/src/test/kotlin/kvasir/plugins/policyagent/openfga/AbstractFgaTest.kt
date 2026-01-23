@@ -118,17 +118,3 @@ class MockRepository<T : PersistentEntity> : Repository<T> {
     }
 
 }
-
-internal fun getTokenForClient(clientId: String, clientSecret: String): String {
-    val oidcServerUrl = ConfigProvider.getConfig().getValue("kvasir.pod.auth.oidc.server-url", String::class.java)
-    val basicAuth = Base64.getEncoder().encodeToString("$clientId:$clientSecret".toByteArray())
-    return given()
-        .header(HttpHeaders.AUTHORIZATION, "Basic $basicAuth")
-        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-        .formParam("grant_type", "client_credentials")
-        .post("${oidcServerUrl}/protocol/openid-connect/token")
-        .then()
-        .statusCode(200)
-        .extract()
-        .path("access_token")
-}
