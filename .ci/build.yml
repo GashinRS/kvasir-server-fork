@@ -48,7 +48,7 @@ package:maven:
   image: $JDK_IMAGE
   tags: ["cache", "docker"]
   script:
-    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true -Dapi.version=1.44
+    - ./mvnw $MAVEN_CLI_OPTS -DskipTests package -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true
       -Dquarkus.container-image.push=$QUARKUS_CONTAINER_IMAGE_PUSH
       -Dquarkus.container-image.tag=${IMAGE_TAG}
       -Dquarkus.container-image.additional-tags=${IMAGE_ADDITIONAL_TAG}
