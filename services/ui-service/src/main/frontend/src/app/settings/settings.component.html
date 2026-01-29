@@ -316,23 +316,122 @@
                   ></app-help>
                 </nz-space>
               </legend>
+
+              <div nz-row>
+                <div nz-col [nzSpan]="6">
+                  <nz-form-item>
+                    <nz-form-label nzFor="umaServerUrl">
+                      <nz-space nzAlign="center" [nzSize]="16">
+                        <span *nzSpaceItem>Server URL</span>
+                        <app-help
+                          text="The base UMA server URL"
+                          *nzSpaceItem
+                        ></app-help> </nz-space
+                    ></nz-form-label>
+                  </nz-form-item>
+                </div>
+                <div nz-col [nzSpan]="14">
+                  <nz-form-item>
+                    <nz-form-control>
+                      <input
+                        nz-input
+                        id="umaServerUrl"
+                        type="text"
+                        [formControl]="podSettings.umaServerUrl"
+                      />
+                    </nz-form-control>
+                  </nz-form-item>
+                </div>
+                <div
+                  nz-col
+                  [nzSpan]="4"
+                  nz-flex
+                  nzJustify="flex-end"
+                  nzFlex="1 0 0"
+                >
+                  <button
+                    nz-button
+                    nzType="dashed"
+                    (click)="tryRegister()"
+                    nz-tooltip="Try to register this Pod as UMA Client and retrieve credentials"
+                  >
+                    <nz-icon nzType="swap" />
+                    Try registration
+                  </button>
+                </div>
+              </div>
+
               <nz-form-item>
-                <nz-form-label [nzSpan]="6" nzFor="umaServerUrl">
+                <nz-form-label [nzSpan]="6" nzFor="umaClientId">
                   <nz-space nzAlign="center" [nzSize]="16">
-                    <span *nzSpaceItem>Server URL</span>
+                    <span *nzSpaceItem>Client ID</span>
                     <app-help
-                      text="The base UMA server URL"
+                      text="The registered UMA client_id for this pod"
                       *nzSpaceItem
                     ></app-help> </nz-space
                 ></nz-form-label>
-                <nz-form-control [nzSpan]="18">
+                <nz-form-control [nzSpan]="clientIdSaved() ? 14 : 18">
                   <input
                     nz-input
-                    id="umaServerUrl"
+                    id="umaClientId"
                     type="text"
-                    [formControl]="podSettings.umaServerUrl"
+                    [formControl]="podSettings.umaClientId"
                   />
                 </nz-form-control>
+                @if (clientIdSaved()) {
+                  <div
+                    nz-col
+                    [nzSpan]="4"
+                    nz-flex
+                    nzJustify="flex-end"
+                    nzFlex="1 0 0"
+                  >
+                    <button
+                      nz-button
+                      (click)="resetClientId()"
+                      nzType="dashed"
+                      nzDanger
+                    >
+                      clear
+                    </button>
+                  </div>
+                }
+              </nz-form-item>
+              <nz-form-item>
+                <nz-form-label [nzSpan]="6" nzFor="umaClientSecret">
+                  <nz-space nzAlign="center" [nzSize]="16">
+                    <span *nzSpaceItem>Client Secret</span>
+                    <app-help
+                      text="The registered UMA client_secret for this pod"
+                      *nzSpaceItem
+                    ></app-help> </nz-space
+                ></nz-form-label>
+                <nz-form-control [nzSpan]="clientSecretSaved() ? 14 : 18">
+                  <input
+                    nz-input
+                    id="umaClientSecret"
+                    type="text"
+                    [formControl]="podSettings.umaClientSecret"
+                  />
+                </nz-form-control>
+                @if (clientSecretSaved()) {
+                  <div
+                    nz-col
+                    [nzSpan]="4"
+                    nz-flex
+                    nzJustify="flex-end"
+                    nzFlex="1 0 0"
+                  >
+                    <button
+                      nz-button
+                      (click)="resetClientSecret()"
+                      nzType="dashed"
+                      nzDanger
+                    >
+                      clear
+                    </button>
+                  </div>
+                }
               </nz-form-item>
               <nz-form-item>
                 <nz-form-label [nzSpan]="6" nzFor="umaPrincipalExtractor">

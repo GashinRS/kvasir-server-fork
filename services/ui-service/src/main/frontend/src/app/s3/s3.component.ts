@@ -14,7 +14,7 @@ import { Base64 } from 'js-base64';
 import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
-import { NzDropDownModule } from 'ng-zorro-antd/dropdown';
+import { NzDropdownModule } from 'ng-zorro-antd/dropdown';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
@@ -23,7 +23,7 @@ import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTableModule } from 'ng-zorro-antd/table';
-import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
+import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import {
   NzUploadChangeParam,
   NzUploadModule,
@@ -44,7 +44,7 @@ import { NzFlexDirective, NzFlexModule } from 'ng-zorro-antd/flex';
   imports: [
     NzBreadCrumbModule,
     NzButtonModule,
-    NzDropDownModule,
+    NzDropdownModule,
     NzEmptyModule,
     NzIconModule,
     NzInputModule,
@@ -56,7 +56,7 @@ import { NzFlexDirective, NzFlexModule } from 'ng-zorro-antd/flex';
     NzUploadModule,
     NzDividerModule,
     NzModalModule,
-    NzToolTipModule,
+    NzTooltipModule,
     DatePipe,
     DecimalPipe,
     FormsModule,

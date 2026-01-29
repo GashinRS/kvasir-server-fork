@@ -18,6 +18,7 @@ import { NzCodeEditorModule } from 'ng-zorro-antd/code-editor';
 import { NzFlexModule } from 'ng-zorro-antd/flex';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzGridModule } from 'ng-zorro-antd/grid';
+import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzInputNumberModule } from 'ng-zorro-antd/input-number';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
@@ -33,8 +34,10 @@ import { NzTypographyModule } from 'ng-zorro-antd/typography';
 import { DefaultStateLockComponent } from '../components/default-state-lock/default-state-lock.component';
 import { HelpComponent } from '../components/help/help.component';
 import { JsonPreviewComponent } from '../modals/json-preview/json-preview.component';
+import { ConfigService } from '../services/config.service';
 import { DevSettingsService } from '../services/dev-settings.service';
 import { KvasirService } from '../services/kvasir.service';
+import { SessionService } from '../services/session.service';
 import {
   ApiKeySendVia,
   HttpEndpointPolicyEnforcerConfig,
@@ -42,6 +45,7 @@ import {
   PodDetails,
   OIDCConfig as UMAConfig,
 } from '../types';
+import { REDACTED_CREDENTIALS } from '../util/constants';
 
 // Flat PodConfiguration form
 interface PodSettingsForm {
@@ -57,6 +61,8 @@ interface PodSettingsForm {
   oidcAllowedSkew: FormControl<number>;
   enableUma: FormControl<boolean>;
   umaServerUrl: FormControl<string>;
+  umaClientId: FormControl<string | null>;
+  umaClientSecret: FormControl<string | null>;
   umaPrincipalExtractor: FormControl<string | null>;
   umaExtractorConfig: FormControl<string>;
   umaAllowedSkew: FormControl<number>;
@@ -92,6 +98,7 @@ interface SettingsForm {
   imports: [
     FormsModule,
     NzFormModule,
+    NzIconModule,
     NzInputModule,
     NzInputNumberModule,
     NzSpaceModule,
@@ -105,6 +112,7 @@ interface SettingsForm {
     NzTooltipModule,
     NzLayoutModule,
     NzTabsModule,
+    NzSpaceModule,
     HelpComponent,
     ReactiveFormsModule,
     NzCodeEditorModule,
@@ -116,6 +124,8 @@ interface SettingsForm {
 export class SettingsComponent {
   // DI
   private kvasir = inject(KvasirService);
+  private config = inject(ConfigService);
+  private session = inject(SessionService);
   private notify = inject(NzMessageService);
   private modal = inject(NzModalService);
   settings = inject(DevSettingsService);
@@ -124,6 +134,8 @@ export class SettingsComponent {
   umaDisabled = signal(true);
   httpPepApiKeyDisabled = signal(true);
   httpPepBasicAuthDisabled = signal(true);
+  clientIdSaved = signal(false);
+  clientSecretSaved = signal(false);
 
   defaultContextError = signal<string | undefined>(undefined);
   oidcExtractorConfigError = signal<string | undefined>(undefined);
@@ -148,6 +160,21 @@ export class SettingsComponent {
         if (pod != null && pod != undefined) {
           this.initForm(pod);
         }
+      }
+    });
+    // REDACTED CREDENTIALS effects
+    effect(() => {
+      if (this.clientIdSaved()) {
+        this.podSettingsForm.controls.umaClientId.disable();
+      } else {
+        this.podSettingsForm.controls.umaClientId.enable();
+      }
+    });
+    effect(() => {
+      if (this.clientSecretSaved()) {
+        this.podSettingsForm.controls.umaClientSecret.disable();
+      } else {
+        this.podSettingsForm.controls.umaClientSecret.enable();
       }
     });
   }
@@ -228,6 +255,8 @@ export class SettingsComponent {
       }
       uma = {
         'server-url': controls.umaServerUrl.value ?? '',
+        'client-id': controls.umaClientId.value?.trim() ?? undefined,
+        'client-secret': controls.umaClientSecret.value?.trim() ?? undefined,
         'principal-extractor':
           controls.umaPrincipalExtractor.value?.trim() != null
             ? {
@@ -343,6 +372,8 @@ export class SettingsComponent {
 
         enableUma: fb.nonNullable.control(false),
         umaServerUrl: fb.nonNullable.control({ value: '', disabled: true }),
+        umaClientId: fb.control({ value: null, disabled: true }),
+        umaClientSecret: fb.control({ value: null, disabled: true }),
         umaPrincipalExtractor: fb.control({ value: null, disabled: true }),
         umaExtractorConfig: fb.nonNullable.control({
           value: '{}',
@@ -462,6 +493,13 @@ export class SettingsComponent {
     const umaServerUrl = enableUma
       ? (cfg.auth?.uma?.['server-url'] ?? defaults.auth?.uma?.['server-url'])
       : '';
+    const umaClientId = enableUma
+      ? (cfg.auth?.uma?.['client-id'] ?? defaults.auth?.uma?.['client-id'])
+      : '';
+    const umaClientSecret = enableUma
+      ? (cfg.auth?.uma?.['client-secret'] ??
+        defaults.auth?.uma?.['client-secret'])
+      : '';
     const umaPrincipalExtractor = enableUma
       ? (cfg.auth?.uma?.['principal-extractor']?.['class-name'] ??
         defaults.auth?.uma?.['principal-extractor']?.['class-name'])
@@ -549,6 +587,8 @@ export class SettingsComponent {
         oidcAllowedSkew,
         enableUma,
         umaServerUrl,
+        umaClientId,
+        umaClientSecret,
         umaPrincipalExtractor,
         umaExtractorConfig,
         umaAllowedSkew,
@@ -589,6 +629,15 @@ export class SettingsComponent {
     this.setEnabledStateHttpPep(enableHttpPep);
     this.setEnabledStateHttpPepBasicAuth(enableHttpPepBasicAuth);
     this.setEnabledStateHttpPepApiKey(enableHttpPepApiKey);
+
+    // If credentials are redacted, keep the fields disabled
+    const controls = this.podSettingsForm.controls;
+    if (REDACTED_CREDENTIALS == controls.umaClientId.value) {
+      this.clientIdSaved.set(true);
+    }
+    if (REDACTED_CREDENTIALS == controls.umaClientSecret.value) {
+      this.clientSecretSaved.set(true);
+    }
   }
 
   private setEnabledStateOidc(enabled: boolean) {
@@ -610,6 +659,8 @@ export class SettingsComponent {
     setEnabledState(
       enabled,
       controls.umaServerUrl,
+      controls.umaClientId,
+      controls.umaClientSecret,
       controls.umaPrincipalExtractor,
       controls.umaExtractorConfig,
       controls.umaAllowedSkew,
@@ -739,6 +790,7 @@ export class SettingsComponent {
       // Save remaining settings to podSettings
       this.kvasir.updatePod(body as PodConfiguration).subscribe({
         next: () => {
+          this.podResource.reload();
           this.notify.success('All settings saved');
         },
       });
@@ -768,6 +820,68 @@ export class SettingsComponent {
         }
       },
     );
+  }
+
+  resetClientId() {
+    this.clientIdSaved.set(false);
+    this.podSettingsForm.controls.umaClientId.setValue(null);
+    this.podSettingsForm.controls.umaClientId.markAsDirty();
+  }
+
+  resetClientSecret() {
+    this.clientSecretSaved.set(false);
+    this.podSettingsForm.controls.umaClientSecret.setValue(null);
+    this.podSettingsForm.controls.umaClientSecret.markAsDirty();
+  }
+
+  tryRegister() {
+    const serverUrl = this.podSettingsForm.controls.umaServerUrl.value;
+    if (serverUrl == null || serverUrl.length == 0) {
+      this.notify.error('UMA Server URL is required for dynamic registration');
+      return;
+    }
+    const podId = `${this.config.host}/${this.session.podName()}`;
+    fetch(`${serverUrl}/.well-known/uma2-configuration`)
+      .then((res) => res.json())
+      .then((config) => config['registration_endpoint'])
+      .then((regEndpoint: string) => {
+        return fetch(regEndpoint, {
+          method: 'POST',
+          headers: {
+            Authorization: `WebID ${encodeURIComponent(podId)}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            client_name: `Kvasir Pod UMA Client (${this.session.podName()})`,
+            client_uri: podId,
+          }),
+        });
+      })
+      .then((res) => res.json())
+      .then(
+        (regResponse) => {
+          if (regResponse.client_id && regResponse.client_secret) {
+            this.podSettingsForm.controls.umaClientId.setValue(
+              regResponse.client_id,
+            );
+            this.podSettingsForm.controls.umaClientSecret.setValue(
+              regResponse.client_secret,
+            );
+            this.podSettingsForm.controls.umaClientId.markAsDirty();
+            this.podSettingsForm.controls.umaClientSecret.markAsDirty();
+            this.notify.success(
+              "UMA client registered successfully, updating form. Don't forget to save the changes!",
+            );
+          } else {
+            regResponse.status == 409
+              ? this.notify.warning(
+                  'UMA Client was already registered under this URL',
+                )
+              : this.notify.error('UMA client registration failed');
+          }
+        },
+        (err) => this.notify.error(`UMA client registration failed: ${err}`),
+      );
   }
 
   previewRuntimeConfig() {

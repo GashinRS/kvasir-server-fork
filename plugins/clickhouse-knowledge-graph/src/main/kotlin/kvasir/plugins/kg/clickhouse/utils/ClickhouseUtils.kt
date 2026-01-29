@@ -1,14 +1,10 @@
 package kvasir.plugins.kg.clickhouse.utils
 
-import com.google.common.base.CaseFormat
 import com.google.common.hash.Hashing
-import io.vertx.core.json.Json
 import kvasir.definitions.annotations.Persistent
 import kvasir.definitions.annotations.StorageLevel
 import kvasir.definitions.persistence.PersistentEntity
 import java.time.Instant
-import kotlin.reflect.KClass
-import kotlin.reflect.full.memberProperties
 
 internal const val INSERT_BUFFER = 5000
 internal const val MAX_PAGE_SIZE_RECORDS = 25000

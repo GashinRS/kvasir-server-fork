@@ -47,6 +47,7 @@ const icons = [
   CrownOutline,
   ThunderboltOutline,
   UnlockOutline,
+  ReloadOutline,
 ];
 
 export function provideIcons(): EnvironmentProviders {
