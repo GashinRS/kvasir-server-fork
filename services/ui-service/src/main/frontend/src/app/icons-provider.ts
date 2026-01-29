@@ -20,6 +20,7 @@ import {
   ThunderboltOutline,
   UserOutline,
   UnlockOutline,
+  ReloadOutline,
 } from '@ant-design/icons-angular/icons';
 import { provideNzIcons } from 'ng-zorro-antd/icon';
 
@@ -38,6 +39,7 @@ const icons = [
   QuestionCircleOutline,
   UserOutline,
   ReadOutline,
+  ReloadOutline,
   SignatureOutline,
   DeleteOutline,
   StopOutline,

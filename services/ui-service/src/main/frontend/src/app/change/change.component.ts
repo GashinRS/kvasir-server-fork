@@ -1,9 +1,8 @@
 import { } from '@angular/cdk';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input, OnInit } from '@angular/core';
-import { rxResource } from '@angular/core/rxjs-interop';
+import { rxResource, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterModule } from '@angular/router';
 import { NzButtonComponent } from "ng-zorro-antd/button";
 import { NzDescriptionsModule } from 'ng-zorro-antd/descriptions';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
@@ -21,7 +20,7 @@ import { LiteralBadgeComponent } from '../components/literal-badge/literal-badge
 import { StatusEntriesComponent } from '../modals/status-entries/status-entries.component';
 import { RangeDiff, ServerPagedDirective } from '../server-paged.directive';
 import { KvasirService } from '../services/kvasir.service';
-import { ChangeReport, ChangeResultCode } from '../types';
+import { ChangeReport, ChangeResultCode, ChangeStatusEntry } from '../types';
 import {
   ensureArray,
   mapToSignedN3Quads,
@@ -43,32 +42,35 @@ import {
     FormsModule,
     NzGridModule,
     ServerPagedDirective,
-    RouterModule,
     NzEmptyModule,
     LiteralBadgeComponent,
     NzIconModule,
     NzFlexModule,
-    NzButtonComponent
-  ],
+    NzButtonComponent,
+],
   templateUrl: './change.component.html',
   styleUrl: './change.component.less',
 })
 export class ChangeComponent implements OnInit {
   // DI
-  private route = inject(ActivatedRoute);
   private kvasir = inject(KvasirService);
   private modal = inject(NzModalService)
 
   // Input params
   readonly changeReportId = input.required<string>();
 
-  change = rxResource<ChangeReport, unknown>({
-    stream: () => this.route.data.pipe(map(({ changeReport }) => changeReport)),
+  change = rxResource<ChangeReport, { changeReportId: string }>({
+    params: () => ({ changeReportId: this.changeReportId() }),
+    stream: ({ params: { changeReportId } }) => this.kvasir.getChangeReport(changeReportId),
   });
 
-  statusEntry = computed<any>(() => {
+  statusEntry = computed<ChangeStatusEntry>(() => {
     const entries = this.change.value()?.['kss:statusEntry'];
-    return entries?.sort(sortStatusEntries('desc'))[0];
+    if (Array.isArray(entries)) {
+      return entries?.sort(sortStatusEntries('desc'))[0];
+    } else {
+      return entries as unknown as ChangeStatusEntry;
+    }
   });
 
   records: SignedN3Quad[] = [];
@@ -104,6 +106,13 @@ export class ChangeComponent implements OnInit {
       nzData: this.change.value()?.['kss:statusEntry'] ?? [],
       nzWidth: '40%',
     });
+  }
+
+  reload(): void {
+   this.change.reload();
+    this.records = [];
+    this.cursor = undefined;
+   this.fetchPage();
   }
 
   private fetchPage(cursor?: string) {

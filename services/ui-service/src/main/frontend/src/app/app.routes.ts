@@ -1,6 +1,5 @@
 import { Routes } from '@angular/router';
 import { sessionActiveGuard } from './guards';
-import { changeReportResolver } from './resolvers/change.resolver';
 import { podResolver } from './resolvers/pod.resolver';
 import { sliceResolver } from './resolvers/slice.resolver';
 
@@ -91,10 +90,6 @@ export const routes: Routes = [
   {
     path: 'changes/view/:changeReportId',
     canActivate: [sessionActiveGuard],
-    resolve: {
-      changeReport: changeReportResolver,
-      // changeRecords: changeRecordsResolver,
-    },
     loadComponent: () =>
       import('./change/change.component').then((x) => x.ChangeComponent),
   },
