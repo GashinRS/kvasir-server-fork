@@ -2,10 +2,15 @@ package kvasir.definitions.config
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.databind.JsonSerializer
+import com.fasterxml.jackson.databind.SerializerProvider
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import io.smallrye.config.ConfigMapping
 import io.smallrye.config.WithDefault
 import io.smallrye.config.WithName
 import io.vertx.core.json.JsonObject
+import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.rdf.JSONObject
 import org.eclipse.microprofile.config.spi.Converter
 import java.util.*
@@ -123,9 +128,18 @@ interface JWTProviderConfig {
     fun jwtAllowedClockSkewSeconds(): Int
 }
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 interface OIDCConfig : JWTProviderConfig
 
-interface UMAConfig : JWTProviderConfig
+interface UMAConfig : JWTProviderConfig {
+    @JsonProperty("client-id")
+    @JsonSerialize(using = CredentialSerializer::class)
+    fun clientId(): Optional<String>
+
+    @JsonProperty("client-secret")
+    @JsonSerialize(using = CredentialSerializer::class)
+    fun clientSecret(): Optional<String>
+}
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 interface HttpEndpointPolicyEnforcerConfig {
@@ -360,4 +374,18 @@ class JsonConvertor : Converter<JSONObject> {
         return input?.takeIf { it.isNotBlank() }?.let { JsonObject(input).map }
     }
 
+}
+
+class CredentialSerializer: JsonSerializer<Optional<String>>() {
+    override fun serialize(
+        value: Optional<String>,
+        generator: JsonGenerator,
+        provider: SerializerProvider
+    ) {
+        if (value.isPresent) {
+            generator.writeString(AuthConstants.REDACTED_CREDENTIAL)
+        } else {
+            generator.writeNull()
+        }
+    }
 }

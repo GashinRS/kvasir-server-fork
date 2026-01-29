@@ -32,5 +32,9 @@
             <artifactId>rsql-parser</artifactId>
             <version>2.3.2</version>
         </dependency>
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>smallrye-mutiny-vertx-web-client</artifactId>
+        </dependency>
     </dependencies>
 </project>

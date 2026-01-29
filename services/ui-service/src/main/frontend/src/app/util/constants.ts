@@ -19,3 +19,4 @@ export const KSS_FGA_EXTERNAL_ACCESS_HTTP_ENDPOINT = 'kss-fga:HttpEndpoint';
 
 export const KSS_FGA_USER_ANONYMOUS = 'urn:kvasir-user:anonymous';
 export const KSS_FGA_USER_WILDCARD = 'urn:kvasir-wildcard';
+export const REDACTED_CREDENTIALS = '*********';

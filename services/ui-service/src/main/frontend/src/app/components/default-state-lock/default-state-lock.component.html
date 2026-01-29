@@ -13,18 +13,18 @@
   >
     @switch (type()) {
       @case ("switch") {
-        <nz-icon nzType="lock"></nz-icon>
+        <nz-icon class="tpl" nzType="lock"></nz-icon>
         <nz-switch nzDisabled [ngModel]="defaultState()" />
         <span>{{ label() }}</span>
       }
       @case ("code-json") {
-        <nz-icon nzType="lock"></nz-icon>
+        <nz-icon class="tpl" nzType="lock"></nz-icon>
         <textarea nz-input disabled>{{ defaultState() }}</textarea>
       }
       @case ("fieldset") {
         <fieldset>
           <legend>
-            <nz-space nzAlign="center">
+            <nz-space class="tpl" nzAlign="center">
               <nz-icon nzType="lock" *nzSpaceItem></nz-icon>
               <nz-switch
                 nzDisabled
@@ -63,7 +63,7 @@
     [style.opacity]="locked() ? 0 : 1"
   >
     <nz-icon
-      class="clickable"
+      class="tpl clickable"
       nzType="unlock"
       (click)="lock()"
       nz-tooltip="Reset to follow default state"
