@@ -1,11 +1,14 @@
 package kvasir.services.init
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.introspect.Annotated
+import com.fasterxml.jackson.databind.introspect.JacksonAnnotationIntrospector
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module
 import io.quarkus.logging.Log
 import io.quarkus.runtime.Quarkus
 import io.quarkus.runtime.StartupEvent
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
-import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import jakarta.enterprise.inject.Instance
@@ -51,10 +54,18 @@ class Initializer(
                 Multi.createFrom().iterable(bootstrapConfig.pods())
                     .onItem().transformToUni { podConfig ->
                         val podId = "${httpConfig.baseUri()}${podConfig.name()}"
+                        // Create a custom ObjectMapper that bypasses @JsonSerialize annotations of UMAConfig
+                        val customMapper = ObjectMapper()
+                            .registerModule(Jdk8Module())
+                            .setAnnotationIntrospector(object : JacksonAnnotationIntrospector() {
+                                override fun findSerializer(a: Annotated): Any? {
+                                    return null // Ignore @JsonSerialize annotations
+                                }
+                            })
                         podSetupHelper.createPod(
                             podId,
                             podConfig,
-                            Json.encode(podConfig.configuration())
+                            customMapper.writeValueAsString(podConfig.configuration())
                         )
                     }
                     .concatenate()

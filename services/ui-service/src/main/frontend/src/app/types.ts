@@ -47,7 +47,7 @@ export interface WriteTransaction {
 export interface TriplePart {
   '@id': string;
   '@type': string;
-  [KSS_FGA_EXTERNAL_ACCESS]: {'@id': string}
+  [KSS_FGA_EXTERNAL_ACCESS]: { '@id': string };
 }
 
 export type RelationshipDefinition = Record<string, TriplePart> & TriplePart;
@@ -171,6 +171,8 @@ export interface PodAuthConfiguration {
 
 export interface JWTProviderConfig {
   'server-url': string;
+  'client-id'?: string;
+  'client-secret'?: string;
   'principal-extractor'?: JWTPrincipalExtractorConfig;
   'jwt-allowed-clock-skew-seconds'?: number;
 }

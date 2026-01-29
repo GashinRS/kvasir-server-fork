@@ -14,7 +14,6 @@ import { ClipboardModule } from '@angular/cdk/clipboard';
 import { APP_BASE_HREF, registerLocaleData } from '@angular/common';
 import en from '@angular/common/locales/en';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { en_US, provideNzI18n } from 'ng-zorro-antd/i18n';
 import { NzModalModule } from 'ng-zorro-antd/modal';
 import { environment } from '../environments/environment';
@@ -45,7 +44,6 @@ export function appConfig(config: AppConfig): ApplicationConfig {
         ClipboardModule,
         NzModalModule,
       ),
-      provideAnimationsAsync(),
       provideIcons(),
     ],
   };

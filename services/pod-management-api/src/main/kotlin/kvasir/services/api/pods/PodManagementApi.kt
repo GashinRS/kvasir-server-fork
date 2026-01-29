@@ -5,6 +5,8 @@ import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
+import io.vertx.core.json.Json
+import io.vertx.core.json.JsonObject
 import jakarta.annotation.security.PermitAll
 import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
@@ -13,6 +15,7 @@ import jakarta.ws.rs.core.Response
 import jakarta.ws.rs.core.UriBuilder
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.auth.AuthConstants
+import kvasir.definitions.auth.AuthConstants.REDACTED_CREDENTIAL
 import kvasir.definitions.config.BootstrapPodConfig
 import kvasir.definitions.config.GenerateClientConfig
 import kvasir.definitions.config.HttpConfig
@@ -130,8 +133,14 @@ class PodManagementApi(
         val fqPodId = uriInfo.getResourceUri().toASCIIString()
         return repositoryFactory.getRepository(Pod::class).findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
-            .onItem().ifNotNull().transform { it!! }
+            .onItem().ifNotNull().transform {
+                it!!.configuration = redactKeys(setOf("auth.uma.client-id", "auth.uma.client-secret"), it.configuration)
+                it
+            }
     }
+
+
+
 
     @GET
     @Produces(MediaType.TEXT_HTML)
@@ -235,6 +244,24 @@ class PodManagementApi(
                 )
             }
             .map { Response.noContent().build() }
+    }
+
+    private fun redactKeys(keyPaths: Set<String>, jsonString: String): String {
+        val json = JsonObject(jsonString)
+        for (path in keyPaths) {
+            val keys = path.split(".")
+            var idx = 0;
+            var obj = json;
+            while (idx < keys.size-1) {
+                obj = obj.getJsonObject(keys[idx], JsonObject())
+                idx++;
+            }
+            val finalKey = keys[keys.size - 1]
+            if (obj.getString(finalKey) != null) {
+                obj.put(finalKey, REDACTED_CREDENTIAL)
+            }
+        }
+        return json.encode();
     }
 
 }

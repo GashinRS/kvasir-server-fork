@@ -6,7 +6,7 @@
     <parent>
         <groupId>kvasir-plugins</groupId>
         <artifactId>plugins-parent</artifactId>
-        <version>0.15.0</version>
+        <version>0.16.0</version>
     </parent>
 
     <artifactId>openfga-pep</artifactId>
@@ -15,22 +15,26 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>definitions</artifactId>
-            <version>0.15.0</version>
+            <version>0.16.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>0.15.0</version>
+            <version>0.16.0</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>common-http-extensions</artifactId>
-            <version>0.15.0</version>
+            <version>0.16.0</version>
         </dependency>
         <dependency>
             <groupId>idlab.quarkus.ext.pep.openfga</groupId>
             <artifactId>openfga-pep</artifactId>
             <version>${idlab.extension.openfga.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-cache</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -60,7 +64,7 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>test-utils</artifactId>
-            <version>0.15.0</version>
+            <version>0.16.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
