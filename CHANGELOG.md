@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.16.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.15.0..v0.16.0) - 2026-01-29
+### Bug Fixes
+- **(ui)** upon posting a CR the page is no longer blank - ([f373bf4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/f373bf494fb19fb07526fb2087e916fafc658560)) - Thomas Dupont
+- Fixed issue with timestamp serializing to JSON-LD - ([b0f8ade](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b0f8adee074bab764adb6ab909ed5de4bc818b04)) - Wannes Kerckhove
+### Features
+- uma integration - ([5a64aca](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5a64acacc142a47c02e6de7830f3b22edfdd1c9f)) - Thomas Dupont
+
+---
+
 ## [0.15.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.14.0..v0.15.0) - 2026-01-23
 ### Bug Fixes
 - **(ui)** extra guard against platform config still being fetched - ([d7e3f4c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d7e3f4cf7dbd5cd3188a572cecaf18c66836be8a)) - Thomas Dupont
