@@ -3,6 +3,7 @@ package kvasir.definitions.rdf
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.module.kotlin.KotlinModule
@@ -35,6 +36,7 @@ object JsonLdHelper {
         mapper.registerModule(JavaTimeModule())
         mapper.registerModule(KotlinModule.Builder().configure(KotlinFeature.NullIsSameAsDefault, true).build())
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
         mapper.propertyNamingStrategy = PrefixedPropertyNamingStrategy(KvasirVocab.baseUri)
     }
 
