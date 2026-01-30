@@ -1,16 +1,24 @@
 package kvasir.utils.http
 
+import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.context.RequestScoped
 import jakarta.ws.rs.core.UriBuilder
 import jakarta.ws.rs.core.UriInfo
-import org.eclipse.microprofile.config.inject.ConfigProperty
+import kvasir.definitions.config.HttpConfig
 import java.net.URI
+
+/**
+ * Application-scoped holder for HttpConfig to avoid injection issues in request-scoped beans
+ */
+@ApplicationScoped
+class HttpConfigHolder(private val httpConfig: HttpConfig) {
+    fun getBaseUri(): String = httpConfig.baseUri().removeSuffix("/")
+}
 
 @RequestScoped
 class KvasirUriInfo(
-    @ConfigProperty(name = "kvasir.http.base-uri")
-    private val baseUri: String,
-    val delegate: UriInfo
+    val delegate: UriInfo,
+    private val configHolder: HttpConfigHolder
 ) {
 
     /**
@@ -38,7 +46,7 @@ class KvasirUriInfo(
     }
 
     fun getBaseUri(): String {
-        return baseUri.removeSuffix("/")
+        return configHolder.getBaseUri()
     }
 }
 
