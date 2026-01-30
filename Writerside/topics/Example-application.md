@@ -24,13 +24,13 @@ It consists of three components:
    played tracks and allows you to browse the various artists and albums that are present in the Knowledge Graph for the
    demo user Alice.
 
-![](../images/overview.png)
+![](overview.png)
 
 # Running the application
 
 Make sure you have Docker Desktop installed, with Docker host networking enabled:
 
-![](../images/docker_host_networking.png)
+![](docker_host_networking.png)
 
 ## Starting the main components
 
@@ -62,7 +62,7 @@ in the `schema` area respectively.
 
 The page should now look like this:
 
-![](../images/create-slice.png)
+![](create-slice.png)
 
 Feel free to inspect the GraphQL schema. It defines which GraphQL query operations can be performed and the types that
 are returned (and thus which data fields are accessible), which mutations can be performed (and which input data is
