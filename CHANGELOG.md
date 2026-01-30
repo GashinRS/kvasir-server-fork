@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.16.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.16.0..v0.16.1) - 2026-01-30
+### Bug Fixes
+- configproperty classloading issue - ([b663f3e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b663f3eaf88cdd32eca24287b7017debc476ebf3)) - Thomas Dupont
+### Other
+- Updated documentation to reflect changes in UMA integration - Thomas Dupont
+
+---
+
 ## [0.16.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.15.0..v0.16.0) - 2026-01-29
 ### Bug Fixes
 - **(ui)** upon posting a CR the page is no longer blank - ([f373bf4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/f373bf494fb19fb07526fb2087e916fafc658560)) - Thomas Dupont
