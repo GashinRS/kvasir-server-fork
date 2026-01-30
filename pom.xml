@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>kvasir</groupId>
     <artifactId>kvasir-parent</artifactId>
-    <version>0.16.0</version>
+    <version>0.16.1</version>
     <packaging>pom</packaging>
     <modules>
         <module>libs</module>
@@ -220,6 +220,7 @@
                         <pluginOptions>
                             <option>all-open:annotation=jakarta.ws.rs.Path</option>
                             <option>all-open:annotation=jakarta.enterprise.context.ApplicationScoped</option>
+                            <option>all-open:annotation=jakarta.enterprise.context.RequestScoped</option>
                             <option>all-open:annotation=io.quarkus.test.junit.QuarkusTest</option>
                             <option>no-arg:annotation=kvasir.definitions.annotations.GenerateNoArgConstructor</option>
                         </pluginOptions>

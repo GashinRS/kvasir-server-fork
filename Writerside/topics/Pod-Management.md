@@ -76,7 +76,13 @@ For example:
 auth:
   uma:
     server-url: https://uma.example.org
+    client-id: 36b11819-39cf-4bef-8b3b-f38de55c1b6d
+    client-secret: 412d7759ba54850b915...d7b9a2ace6649b19a011b139fce3079
 ```
+
+When configuring UMA, you need to provide the `server-url`. You might need a valid `client-id` and `client-secret` to
+register Kvasir as a Resource Server. Those credentials can be filled in here or via the settings page in
+the [Kvasir UI](Kvasir-UI.md#settings).
 
 Note: the UMA configuration is similar to the OIDC configuration. You can also specify a custom `principal-extractor`
 and customize the `jwt-allowed-clock-skew-seconds`.
@@ -115,7 +121,8 @@ auth:
   skip-dpop-ath-check: false
 ```
 
-For more context on these options, please refer to the [Authentication & Access Control](Access-Control.md) section.
+For more context on these options, please refer to the [](Identity-and-Security.md)
+section.
 
 ## Creating a Pod
 

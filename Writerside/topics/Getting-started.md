@@ -40,7 +40,7 @@ podman compose up -d
 4. You can view the [Kvasir UI](Kvasir-UI.md)
    at <a href="http://localhost:8080/_ui/" target="_blank">http://localhost:8080/\_ui/</a> to play around with your pod.
 
-> Be sure to read the [Authentication & Access Control](Access-Control.md) section when you want to develop your own
+> Be sure to read the [Authentication & Access Control](Identity-and-Security.md) section when you want to develop your own
 > clients.
 > {style="warning"}
 
