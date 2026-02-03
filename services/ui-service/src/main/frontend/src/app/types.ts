@@ -81,7 +81,7 @@ export class Relationship {
 
 export interface CheckResult {
   '@context': Record<string, any>;
-  'kss-fga:allowed': boolean;
+  'kss:allowed': boolean;
 }
 
 export enum ChangeResultCode {
