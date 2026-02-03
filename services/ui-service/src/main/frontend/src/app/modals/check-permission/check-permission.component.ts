@@ -28,7 +28,11 @@ import { debounceTime } from 'rxjs';
 import { ConfigService } from '../../services/config.service';
 import { RebacService } from '../../services/rebac.service';
 import { RelationshipDefinition } from '../../types';
-import { KSS_FGA_RESOURCE_TYPE, KSS_FGA_USER_TYPE } from '../../util/constants';
+import {
+  AT_CONTEXT_KSS_FGA,
+  KSS_FGA_RESOURCE_TYPE,
+  KSS_FGA_USER_TYPE,
+} from '../../util/constants';
 import { ensureSlashAtStart } from '../../util/utils';
 import { LoginSessionService } from '../../services/login-session.service';
 import { NzIconModule } from 'ng-zorro-antd/icon';
@@ -181,8 +185,9 @@ export class CheckPermissionComponent implements OnInit {
     if (this.permissionForm.valid) {
       this.resultClass.set('unchecked');
       let rel = this.createPermissionDefinition();
-      this.rebac.check(rel).subscribe((res) => {
-        if (res['kss-fga:allowed']) {
+      let reqObj = { '@context': AT_CONTEXT_KSS_FGA, ...rel };
+      this.rebac.check(reqObj).subscribe((res) => {
+        if (res['kss:allowed']) {
           this.resultClass.set('granted');
         } else {
           this.resultClass.set('denied');

@@ -150,7 +150,7 @@ Returns:
     "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
     "kss-fga": "https://kvasir.discover.ilabt.imec.be/fine-grained-access#"
   },
-  "kss-fga:allowed": true
+  "kss:allowed": true
 }
 ```
 
