@@ -1,98 +1,121 @@
-@if (permissionForm) {
-  <form
-    nz-form
-    [formGroup]="permissionForm"
-    [nzLayout]="'vertical'"
-    [nzAutoTips]="autoTips"
-    name="permission"
-    (ngSubmit)="check()"
-  >
-    <nz-row>
-      <nz-col nzSpan="24">
-        <nz-form-item>
-          <nz-form-label>Subject</nz-form-label>
-          <nz-form-control>
-            <nz-input-group
-              [nzAddOnBefore]="addOnBeforeTemplate"
-              [nzPrefix]="prefix()"
-            >
-              <input type="text" nz-input formControlName="subject" />
-            </nz-input-group>
-            <ng-template #addOnBeforeTemplate>
-              <nz-select
-                name="subjectAddon"
-                [(ngModel)]="subjectAddon"
-                [ngModelOptions]="{ standalone: true }"
-                [nzCustomTemplate]="subjectTpl"
-              >
-                <nz-option nzCustomContent nzLabel="E-mail" nzValue="email">
-                  <ng-content>
-                    <nz-icon nzType="mail"></nz-icon>
-                    E-mail
-                  </ng-content>
-                </nz-option>
-                <nz-option nzCustomContent nzLabel="WebID" nzValue="webid">
-                  <ng-content>
-                    <nz-icon nzType="idcard"></nz-icon>
-                    WebID
-                  </ng-content>
-                </nz-option>
-                <nz-option nzCustomContent nzLabel="User" nzValue="user">
-                  <ng-content>
-                    <nz-icon nzType="user"></nz-icon>
-                    User
-                  </ng-content>
-                </nz-option>
-                <!-- <nz-option nzLabel="Anyone" nzValue="everyone"></nz-option> -->
-              </nz-select>
-              <ng-template #subjectTpl let-selected>
-                <nz-icon [nzType]="getIcon(selected.nzValue)"></nz-icon>
-                {{ selected.nzLabel }}
-              </ng-template>
-            </ng-template>
-          </nz-form-control>
-        </nz-form-item>
-      </nz-col>
-    </nz-row>
-    <nz-row>
-      <nz-col nzSpan="24">
-        <nz-form-item>
-          <nz-form-label>Permission</nz-form-label>
-          <nz-form-control>
+<form nz-form [nzLayout]="'vertical'" name="permission" (ngSubmit)="check()">
+  <nz-row>
+    <nz-col nzSpan="24">
+      <nz-form-item class="subject">
+        <nz-form-label>Subject</nz-form-label>
+        <nz-form-control>
+          <nz-space-compact>
             <nz-select
-              name="permission"
-              [nzOptions]="permissions"
-              formControlName="permission"
+              [style.width.px]="115"
+              [style.min-width.px]="130"
+              name="subjectAddon"
+              [formField]="signalForm.subjectType"
+              [nzCustomTemplate]="subjectTpl"
             >
+              <nz-option nzCustomContent nzLabel="E-mail" nzValue="email">
+                <ng-content>
+                  <nz-icon nzType="mail"></nz-icon>
+                  E-mail
+                </ng-content>
+              </nz-option>
+              <nz-option nzCustomContent nzLabel="WebID" nzValue="webid">
+                <ng-content>
+                  <nz-icon nzType="idcard"></nz-icon>
+                  WebID
+                </ng-content>
+              </nz-option>
+              <nz-option nzCustomContent nzLabel="User" nzValue="user">
+                <ng-content>
+                  <nz-icon nzType="user"></nz-icon>
+                  User
+                </ng-content>
+              </nz-option>
+              <nz-option nzCustomContent nzLabel="Unauthed" nzValue="unauthed">
+                <ng-content>
+                  <nz-icon nzType="unlock"></nz-icon>
+                  Unauthed
+                </ng-content>
+              </nz-option>
+              <nz-option nzCustomContent nzLabel="Everyone" nzValue="everyone">
+                <ng-content>
+                  <nz-icon nzType="team"></nz-icon>
+                  Everyone
+                </ng-content>
+              </nz-option>
             </nz-select>
-          </nz-form-control>
-        </nz-form-item>
-      </nz-col>
-    </nz-row>
-    <nz-row>
-      <nz-col nzSpan="24">
-        <nz-form-item>
-          <nz-form-label>Resource (path)</nz-form-label>
-          <nz-form-control>
-            <nz-input-group [nzPrefix]="pathPrefix">
-              <input type="text" nz-input formControlName="object" />
-            </nz-input-group>
-          </nz-form-control>
-        </nz-form-item>
-      </nz-col>
-    </nz-row>
-    <nz-row>
-      <nz-col nzSpan="24" class="resultRow">
-        <div [class]="resultClass()" [class.result]="true">
-          {{ resultLabel() }}
-        </div>
-        <button nz-button nzType="default" type="submit">Check</button>
-      </nz-col>
-    </nz-row>
-  </form>
+            <ng-template #subjectTpl let-selected>
+              <nz-icon [nzType]="getIcon(selected.nzValue)"></nz-icon>
+              {{ selected.nzLabel }}
+            </ng-template>
+            <nz-input-wrapper [nzPrefix]="prefixTxt()">
+              <input type="text" nz-input [formField]="signalForm.subject" />
+            </nz-input-wrapper>
+          </nz-space-compact>
+          <app-form-errors [field]="signalForm.subject" />
+        </nz-form-control>
+      </nz-form-item>
+    </nz-col>
+  </nz-row>
+  <nz-row>
+    <nz-col nzSpan="24">
+      <nz-form-item>
+        <nz-form-label>Permission</nz-form-label>
+        <nz-form-control>
+          <nz-select
+            name="permission"
+            [formField]="signalForm.permission"
+            [nzCustomTemplate]="relationTpl"
+          >
+            @for (perm of permissions; track perm.value) {
+              <nz-option
+                [nzLabel]="perm.label"
+                [nzValue]="perm.value"
+                nzCustomContent
+              >
+                <ng-content>
+                  <nz-icon [nzType]="perm.icon"></nz-icon>
+                  {{ perm.label }}
+                </ng-content>
+              </nz-option>
+            }
+          </nz-select>
+          <app-form-errors [field]="signalForm.permission" />
+          <ng-template #relationTpl let-selected>
+            <nz-icon [nzType]="getRelationIcon(selected.nzLabel)"></nz-icon>
+            {{ selected.nzLabel }}
+          </ng-template>
+        </nz-form-control>
+      </nz-form-item>
+    </nz-col>
+  </nz-row>
+  <nz-row>
+    <nz-col nzSpan="24">
+      <nz-form-item class="object">
+        <nz-form-label>Resource (path)</nz-form-label>
+        <nz-form-control>
+          <nz-input-wrapper [nzPrefix]="pathPrefix">
+            <input type="text" nz-input [formField]="signalForm.object" />
+          </nz-input-wrapper>
+          <app-form-errors [field]="signalForm.object" />
+        </nz-form-control>
+      </nz-form-item>
+    </nz-col>
+  </nz-row>
+  <nz-row>
+    <nz-col nzSpan="24" class="resultRow">
+      <div [class]="resultClass()" [class.result]="true">
+        {{ resultLabel() }}
+      </div>
+      <button nz-button nzType="default" type="submit">Check</button>
+    </nz-col>
+  </nz-row>
 
   <div *nzModalFooter>
-    <button nz-button nzType="default" (click)="reset()">Reset</button>
-    <button nz-button nzType="primary" (click)="close()">Close</button>
+    <button nz-button type="button" nzType="default" (click)="reset()">
+      Reset
+    </button>
+    <button nz-button type="button" nzType="primary" (click)="close()">
+      Close
+    </button>
   </div>
-}
+</form>
