@@ -2,6 +2,7 @@ package kvasir.utils.http
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.context.RequestScoped
+import jakarta.inject.Inject
 import jakarta.ws.rs.core.UriBuilder
 import jakarta.ws.rs.core.UriInfo
 import kvasir.definitions.config.HttpConfig
@@ -11,15 +12,22 @@ import java.net.URI
  * Application-scoped holder for HttpConfig to avoid injection issues in request-scoped beans
  */
 @ApplicationScoped
-class HttpConfigHolder(private val httpConfig: HttpConfig) {
+class HttpConfigHolder {
+
+    @Inject
+    lateinit var httpConfig: HttpConfig
+
     fun getBaseUri(): String = httpConfig.baseUri().removeSuffix("/")
 }
 
 @RequestScoped
-class KvasirUriInfo(
-    val delegate: UriInfo,
-    private val configHolder: HttpConfigHolder
-) {
+class KvasirUriInfo {
+
+    @Inject
+    lateinit var delegate: UriInfo
+
+    @Inject
+    lateinit var configHolder: HttpConfigHolder
 
     /**
      * Get the resource URI (does not include query parameters). Used for id generation, etc.
