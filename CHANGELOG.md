@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.17.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.16.1..v0.17.0) - 2026-02-13
+### Bug Fixes
+- **(ui)** check permissions modal works again - ([7f4fb54](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7f4fb548220319d3832cbf17e99649f889f5b227)) - Thomas Dupont
+-  [**breaking**] access control checks work again - ([7962e1e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7962e1e2a5f46aec73abfcdfd373b985b4381092)) - Thomas Dupont
+- use field injection instead of constructor injection - ([a2605c3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a2605c3669b6bf1d359b2b1841a47891fd9a5f6e)) - Thomas Dupont
+### Breaking
+Although this release is auto-marked as breaking, it is only breaking when you are using `{podId}/rebac/check` API. This API now returns a message with the key `kss:allowed` instead of `kss-fga:allowed`.
+
+---
+
 ## [0.16.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.16.0..v0.16.1) - 2026-01-30
 ### Bug Fixes
 - configproperty classloading issue - ([b663f3e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b663f3eaf88cdd32eca24287b7017debc476ebf3)) - Thomas Dupont
