@@ -164,6 +164,7 @@ export class SettingsComponent {
     });
     // REDACTED CREDENTIALS effects
     effect(() => {
+      this.podResource.value();
       if (this.clientIdSaved()) {
         this.podSettingsForm.controls.umaClientId.disable();
       } else {
@@ -171,6 +172,7 @@ export class SettingsComponent {
       }
     });
     effect(() => {
+      this.podResource.value();
       if (this.clientSecretSaved()) {
         this.podSettingsForm.controls.umaClientSecret.disable();
       } else {
@@ -270,6 +272,12 @@ export class SettingsComponent {
             : undefined,
         'jwt-allowed-clock-skew-seconds': controls.umaAllowedSkew.value ?? 30,
       };
+      if (this.clientSecretSaved()) {
+        delete uma['client-secret'];
+      }
+      if (this.clientIdSaved()) {
+        delete uma['client-id'];
+      }
     }
     return uma;
   }
