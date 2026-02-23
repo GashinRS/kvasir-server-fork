@@ -1,6 +1,9 @@
 package kvasir.plugins.policyagent.openfga.delegated.uma
 
+import io.quarkus.cache.CacheInvalidate
 import io.quarkus.cache.CacheResult
+import io.quarkus.logging.Log
+import io.smallrye.mutiny.Uni
 import io.vertx.mutiny.core.Vertx
 import io.vertx.mutiny.ext.web.client.WebClient
 import jakarta.enterprise.context.ApplicationScoped
@@ -16,13 +19,12 @@ class UmaClientManager(
 ) {
 
     /**
-     * Retrieve an UmaClient for the given podId.
-     * If already in cache, the cached instance is returned.
-     * Otherwise, a new instance is created and cached.
+     * Retrieve an UmaClient for the given podId. These UmaClients are cached so that every podId gets the same
+     * UmaClient instance. This way subsequent calls to the instance's methods will be properly cached.
      * @param podId The identifier of the pod.
      * @return The UmaClient instance for the specified podId.
      */
-    @CacheResult(cacheName = "umaClient")
+    @CacheResult(cacheName = "umaClients")
     fun getUmaClient(podId: String): UmaClient = UmaClient(
         repositoryFactory.getRepository(Pod::class),
         podId,
@@ -30,13 +32,13 @@ class UmaClientManager(
         httpConfig.baseUri().removeSuffix("/")
     )
 
-
+    @CacheInvalidate(cacheName = "umaClients")
     /**
-     * Invalidate the cached UmaClient for the given podId.
-     * This can be used when the UmaClient configuration changes and needs to be refreshed.
-     * @param podId The identifier of the pod.
+     * Invalidate the UMA client for the given podId. This effectively resets all internal fetch function for
+     * client credentials, well_known configuration, PAT token, etc.
      */
-    fun invalidateUmaClient(podId: String) {
-        // This method can be used to invalidate the cached UmaClient for a specific podId if needed.
+    fun invalidateUmaClient(podId: String): Uni<Void> {
+        Log.debug("Invalidating UMA client for pod '$podId'")
+        return Uni.createFrom().voidItem()
     }
 }

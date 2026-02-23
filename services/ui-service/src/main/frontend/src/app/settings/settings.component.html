@@ -26,10 +26,11 @@
             *nzSpaceItem
             nz-button
             nzType="link"
+            nzDanger
             (click)="resetToPlatformDefaults()"
             nz-tooltip="Clear all custom pod settings to follow platform defaults"
           >
-            Clear
+            Clear all settings
           </button>
           <button
             *nzSpaceItem
@@ -354,6 +355,7 @@
                     nzType="dashed"
                     (click)="tryRegister()"
                     nz-tooltip="Try to register this Pod as UMA Client and retrieve credentials"
+                    [disabled]="clientIdSaved() || clientSecretSaved()"
                   >
                     <nz-icon nzType="swap" />
                     Try registration
