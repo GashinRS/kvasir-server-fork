@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.17.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.17.0..v0.17.1) - 2026-02-25
+### Bug Fixes
+- uma credential edge cases - ([3c0e77f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/3c0e77f4b3370e86baa7bab013a94ddeb1439039)) - Thomas Dupont
+- Fixed runtime errors related to config injection in some environments by upgrading to JDK 25 (and Quarkus 3.31.4) - ([cca40cd](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/cca40cd6c41be7c417a22c9b3321f20865bdba63)) - Thomas Dupont
+
+---
+
 ## [0.17.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.16.1..v0.17.0) - 2026-02-13
 ### Bug Fixes
 - **(ui)** check permissions modal works again - ([7f4fb54](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7f4fb548220319d3832cbf17e99649f889f5b227)) - Thomas Dupont
