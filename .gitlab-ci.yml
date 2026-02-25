@@ -41,9 +41,9 @@ variables:
     -XX:HeapDumpPath=target/
   CI_TOOLS_REGISTRY: "gitlab.ilabt.imec.be:4567/discover/ci-tools"
   WRITERSIDE_IMAGE: "${CI_TOOLS_REGISTRY}/writerside-builder:2025.04.8412"
-  QUARKUS_JIB_BASE_JVM_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:21.0.7_6-jre-noble"
-  JDK_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:21.0.7_6-jdk-noble"
-  CI_TOOLS_IMAGE: "${CI_TOOLS_REGISTRY}:3.0.0-jdk21"
+  QUARKUS_JIB_BASE_JVM_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:25_36-jre-noble"
+  JDK_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:25_36-jdk-noble"
+  CI_TOOLS_IMAGE: "${CI_TOOLS_REGISTRY}:3.0.0-jdk25"
   QUARKUS_JIB_PLATFORMS: "linux/amd64,linux/arm64/v8"
   QUARKUS_CONTAINER_IMAGE_PUSH: "false"
   QUARKUS_CONTAINER_IMAGE_REGISTRY: $CI_REGISTRY

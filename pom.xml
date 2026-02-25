@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>kvasir</groupId>
     <artifactId>kvasir-parent</artifactId>
-    <version>0.17.0</version>
+    <version>0.17.1</version>
     <packaging>pom</packaging>
     <modules>
         <module>libs</module>
@@ -12,15 +12,16 @@
         <module>services</module>
     </modules>
     <properties>
-        <compiler-plugin.version>3.13.0</compiler-plugin.version>
+        <compiler-plugin.version>3.14.1</compiler-plugin.version>
         <kotlin.version>2.3.0</kotlin.version>
-        <kotlin.jvmTarget>21</kotlin.jvmTarget>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!-- Required because @{argLine} might be empty, and then it defaults to this empty variable -->
+        <argLine></argLine>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>3.30.7</quarkus.platform.version>
+        <quarkus.platform.version>3.31.4</quarkus.platform.version>
         <idlab.extension.openfga.version>1.0.3</idlab.extension.openfga.version>
         <openfga.docker.model-tx.image>gitlab.ilabt.imec.be:4567/discover/ci-tools/fga-model-tx:latest
         </openfga.docker.model-tx.image>
@@ -29,7 +30,7 @@
         <guava.version>33.4.0-jre</guava.version>
         <rdf4j.version>5.0.3</rdf4j.version>
         <skipITs>true</skipITs>
-        <surefire-plugin.version>3.5.2</surefire-plugin.version>
+        <surefire-plugin.version>3.5.4</surefire-plugin.version>
         <compose.executable>docker</compose.executable>
         <compose.skip>false</compose.skip>
         <model-tx.executable>${compose.executable}</model-tx.executable>
@@ -107,7 +108,7 @@
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5</artifactId>
+            <artifactId>quarkus-junit</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -126,16 +127,6 @@
                     <artifactId>quarkus-maven-plugin</artifactId>
                     <version>${quarkus.platform.version}</version>
                     <extensions>true</extensions>
-                    <executions>
-                        <execution>
-                            <goals>
-                                <goal>build</goal>
-                                <goal>generate-code</goal>
-                                <goal>generate-code-tests</goal>
-                                <goal>native-image-agent</goal>
-                            </goals>
-                        </execution>
-                    </executions>
                 </plugin>
                 <plugin>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -148,7 +139,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${surefire-plugin.version}</version>
                     <configuration>
-                        <argLine>--add-opens java.base/java.lang=ALL-UNNAMED</argLine>
+                        <argLine>@{argLine} --enable-native-access=ALL-UNNAMED</argLine>
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                             <maven.home>${maven.home}</maven.home>
@@ -172,6 +163,7 @@
                         </execution>
                     </executions>
                     <configuration>
+                        <argLine>@{argLine} --enable-native-access=ALL-UNNAMED</argLine>
                         <systemPropertyVariables>
                             <native.image.path>${project.build.directory}/${project.build.finalName}-runner
                             </native.image.path>
@@ -212,7 +204,6 @@
                     </dependencies>
                     <configuration>
                         <javaParameters>true</javaParameters>
-                        <jvmTarget>${kotlin.jvmTarget}</jvmTarget>
                         <compilerPlugins>
                             <plugin>all-open</plugin>
                             <plugin>no-arg</plugin>
@@ -242,6 +233,26 @@
             </plugins>
         </pluginManagement>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>create-target-directory</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${maven.multiModuleProjectDirectory}/target"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>

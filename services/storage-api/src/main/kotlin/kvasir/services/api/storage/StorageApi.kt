@@ -2,6 +2,7 @@ package kvasir.services.api.storage
 
 import com.google.common.hash.Hashing
 import io.quarkus.logging.Log
+import io.quarkus.runtime.Startup
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.vertx.UniHelper
 import io.vertx.core.Future
@@ -66,6 +67,7 @@ class StorageApi(
 
 }
 
+@Startup
 @ApplicationScoped
 class S3Interceptor(
     private val config: HttpConfig,
@@ -83,7 +85,13 @@ class S3Interceptor(
     private val s3Url = URI.create(s3Config.endpoint())
 
     override fun handleProxyRequest(context: ProxyContext): Future<ProxyResponse> {
-        return context.request().proxiedRequest().resume().body().compose { buffer ->
+        val proxiedRequest = context.request().proxiedRequest()
+
+        return if (proxiedRequest.isEnded) {
+            Future.succeededFuture(Buffer.buffer())
+        } else {
+            proxiedRequest.resume().body()
+        }.compose { buffer ->
             context.request().body = Body.body(buffer)
             val podId = context.request().proxiedRequest().getParam("podId")
             val sliceId = context.request().proxiedRequest().getParam("sliceId")

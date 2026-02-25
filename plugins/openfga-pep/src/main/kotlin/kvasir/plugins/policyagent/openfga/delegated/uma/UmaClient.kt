@@ -25,7 +25,6 @@ import java.time.Duration
 import java.time.temporal.ChronoUnit
 import kotlin.jvm.optionals.getOrNull
 
-const val UMA_REGISTRATION_ENDPOINT = "registration_endpoint"
 const val UMA_TOKEN_ENDPOINT = "token_endpoint"
 const val UMA_PERMISSION_ENDPOINT = "permission_endpoint"
 const val UMA_INTROSPECTION_ENDPOINT = "introspection_endpoint"
@@ -47,7 +46,11 @@ class UmaClient(
     @Volatile
     private var cachedPatToken: Uni<JsonObject>? = null
 
+    @Volatile
+    private var cachedUmaConfig: Uni<UMAConfig>? = null
+
     private val tokenLock = Any() // Lock for token creation to prevent duplicate creation
+    private val configLock = Any() // Lock for config fetching to prevent duplicate fetching
 
     /**
      * Get the UMA authorization server URL from the UMA configuration.
@@ -58,9 +61,25 @@ class UmaClient(
 
     /**
      * Refresh the UMA client configuration from the pod configuration.
-     * The result is memoized for 5 minutes.
+     * The result is memoized for 5 minutes
      */
     private fun refreshConfig(): Uni<UMAConfig> {
+        // Fast path: check without synchronization (volatile read)
+        cachedUmaConfig?.let { return it }
+
+        // Slow path: synchronize to ensure only one thread creates the Uni
+        synchronized(configLock) {
+            // Double-check: another thread may have created it while we waited for the lock
+            cachedUmaConfig?.let { return it }
+
+            // Create and cache the new Config Uni
+            val uni = createConfigUni()
+            cachedUmaConfig = uni
+            return uni
+        }
+    }
+
+    private fun createConfigUni(): Uni<UMAConfig> {
         return podStore.findById(podId)
             .onItem().ifNull()
             .failWith { IllegalStateException("Pod with ID '$podId' not found when refreshing UMA client configuration.") }
@@ -71,7 +90,17 @@ class UmaClient(
                 else Uni.createFrom()
                     .failure { IllegalStateException("UMA configuration not found in pod '$podId' when refreshing UMA client configuration.") }
             }
-            .memoize().forFixedDuration(Duration.of(5, ChronoUnit.MINUTES))
+            .invoke { _: UMAConfig ->
+                Log.debugv("Fetched UMA configuration for pod {0}", podId)
+                Uni.createFrom().voidItem()
+                    .onItem().delayIt().by(Duration.of(5, ChronoUnit.MINUTES))
+                    .subscribe().with { _ ->
+                        synchronized(configLock) {
+                            cachedUmaConfig = null
+                        }
+                    }
+            }
+            .memoize().indefinitely()
     }
 
     /**
@@ -118,7 +147,7 @@ class UmaClient(
     }
 
     /**
-     * Create a new token fetch Uni with memoization and scheduled invalidation.
+     * Create a new tokenFetch Uni with memoization and scheduled invalidation.
      */
     private fun createTokenFetchUni(): Uni<JsonObject> {
         return getEndpointWithConfig(UMA_TOKEN_ENDPOINT)
@@ -168,7 +197,6 @@ class UmaClient(
             }
             .memoize().indefinitely()
     }
-
 
     fun getTicket(resourceUri: String, requestedScopes: Set<Scope>): Uni<String?> {
         val requestBody = listOf(

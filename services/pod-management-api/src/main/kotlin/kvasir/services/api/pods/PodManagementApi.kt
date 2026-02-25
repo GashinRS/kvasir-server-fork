@@ -32,6 +32,7 @@ import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.plugins.messaging.kafka.Channels
+import kvasir.plugins.policyagent.openfga.delegated.uma.UmaClientManager
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
 import kvasir.utils.http.getParentUri
@@ -57,7 +58,8 @@ class PodManagementApi(
     private val lifecycleEventEmitter: MutinyEmitter<LifeCycleEvent>,
     private val securityIdentity: Instance<SecurityIdentity>,
     private val podConfigProvider: PodConfigProvider,
-    private val platformPodConfig: PodConfig
+    private val platformPodConfig: PodConfig,
+    private val umaClientManager: UmaClientManager
 ) {
 
     @PermitAll
@@ -202,7 +204,11 @@ class PodManagementApi(
             if (existingPod == null) {
                 Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build())
             } else {
-                podStore.persist(existingPod.copy(configuration = input.configuration))
+                podStore.persist(existingPod.copyAndKeepUmaCredentials(input.configuration))
+                    // When updating the podConfig, it is best to invalidate any cached UmaClients for this pod
+                    .chain { _ ->
+                        umaClientManager.invalidateUmaClient(fqPodId)
+                    }
                     .chain { _ ->
                         // Emit life-cycle event
                         lifecycleEventEmitter.send(
