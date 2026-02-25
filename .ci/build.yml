@@ -19,7 +19,7 @@ build:maven:
   script:
     - set -xe
     - docker compose -f compose/compose.devservices.yml up --wait --quiet-pull --no-color
-    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true -Dapi.version=1.44
+    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true
   interruptible: true
   after_script:
     - awk -F, '{ instructions += $4 + $5; covered += $5 } END { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered (line coverage)" }' target/coverage/jacoco.csv
