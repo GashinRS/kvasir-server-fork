@@ -58,7 +58,7 @@ private const val SOLID_AUDIENCE = "solid"
 @ApplicationScoped
 class CustomHttpAuthenticationMechanism :
     HttpAuthenticationMechanism, JWTAuthMechanism(object : SmallRyeJwtConfig {
-    override fun blockingAuthentication() = false
+    override fun blockingAuthentication() = Optional.of(false)
     override fun silent() = false
 }) {
 
