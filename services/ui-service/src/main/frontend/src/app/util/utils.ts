@@ -195,6 +195,14 @@ export function ensureSlashAtBoth(input: string): string {
   return ensureSlashAtStart(input).endsWith('/') ? input : `${input}/`;
 }
 
+export function stripSlashAtEnd(input: string): string {
+  return input.endsWith('/') ? input.slice(0, -1) : input;
+}
+
+export function stripSlashAtStart(input: string): string {
+  return input.startsWith('/') ? input.slice(1) : input;
+}
+
 export function serialize(pod: PodDetails): PodSerialized {
   return {
     ...pod,

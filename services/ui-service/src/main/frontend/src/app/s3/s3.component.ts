@@ -6,6 +6,7 @@ import {
   input,
   OnInit,
   resource,
+  ViewEncapsulation,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
@@ -16,6 +17,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
 import { NzDropdownModule } from 'ng-zorro-antd/dropdown';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
+import { NzFlexModule } from 'ng-zorro-antd/flex';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzMessageService } from 'ng-zorro-antd/message';
@@ -36,8 +38,13 @@ import { S3wrapperService } from '../services/s3wrapper.service';
 import { SessionService } from '../services/session.service';
 import { RelationshipDefinition, WriteTransaction } from '../types';
 import { AT_CONTEXT_KSS_FGA } from '../util/constants';
-import { ensureArray, ensureSlashAtStart } from '../util/utils';
-import { NzFlexDirective, NzFlexModule } from 'ng-zorro-antd/flex';
+import {
+  ensureArray,
+  ensureSlashAtEnd,
+  ensureSlashAtStart,
+  stripSlashAtEnd,
+  stripSlashAtStart,
+} from '../util/utils';
 
 @Component({
   selector: 'app-s3',
@@ -64,6 +71,7 @@ import { NzFlexDirective, NzFlexModule } from 'ng-zorro-antd/flex';
   ],
   templateUrl: './s3.component.html',
   styleUrl: './s3.component.less',
+  encapsulation: ViewEncapsulation.None,
 })
 export class S3Component implements OnInit {
   private s3w = inject(S3wrapperService);
@@ -76,7 +84,7 @@ export class S3Component implements OnInit {
   /** Custom upload request */
   customRequestFn = (items: NzUploadXHRArgs) => {
     const key = this.prefix()
-      ? [this.prefix(), items.file.name].join('/')
+      ? [stripSlashAtEnd(this.prefix()!), items.file.name].join('/')
       : items.file.name;
 
     const file = items.postFile as File;
@@ -92,10 +100,20 @@ export class S3Component implements OnInit {
     });
   };
 
+  sortName = (a: FileOrFolder, b: FileOrFolder) => {
+    if (a.type == b.type) {
+      return this.unPrefix(a.Key!).localeCompare(this.unPrefix(b.Key!));
+    }
+    return a.type === 'folder' ? -1 : 1;
+  };
+
   podName = this.session.podName()!;
   prefixRaw = input<string>('');
   prefix = computed(() =>
     this.prefixRaw()?.length > 0 ? Base64.decode(this.prefixRaw()) : undefined,
+  );
+  breadCrumbPrefix = computed(() =>
+    !!this.prefix() ? stripSlashAtEnd(this.prefix()!) : undefined,
   );
 
   prefixModalVisible = false;
@@ -134,25 +152,32 @@ export class S3Component implements OnInit {
   handleOk(): void {
     this.prefixModalVisible = false;
     const prefixNew = this.prefix()
-      ? this.prefix() + '/' + this.prefixInputValue
+      ? ensureSlashAtEnd(this.prefix()!) +
+        stripSlashAtStart(this.prefixInputValue)
       : this.prefixInputValue;
     this.goToPage(prefixNew);
+    this.prefixInputValue = '';
   }
 
   handleCancel(): void {
     this.prefixModalVisible = false;
+    this.prefixInputValue = '';
   }
 
   private goToPage(prefix?: string): void {
-    const prefixEnc = prefix ? Base64.encodeURL(prefix) : undefined;
+    const prefixEnc = prefix
+      ? Base64.encodeURL(ensureSlashAtEnd(prefix))
+      : undefined;
     this.router.navigate(['s3', prefixEnc]);
   }
 
   goToFolder(folderName: string): void {
     const prefix = this.prefix()
-      ? this.prefix()! + '/' + folderName
+      ? ensureSlashAtEnd(this.prefix()!) + stripSlashAtStart(folderName)
       : folderName;
-    const prefixEnc = prefix ? Base64.encodeURL(prefix) : undefined;
+    const prefixEnc = prefix
+      ? Base64.encodeURL(ensureSlashAtEnd(prefix))
+      : undefined;
     this.router.navigate(['s3', prefixEnc]);
   }
 
@@ -161,7 +186,9 @@ export class S3Component implements OnInit {
       ?.split('/')
       .slice(0, idx + 1)
       .join('/');
-    const prefixEnc = prefixNew ? Base64.encodeURL(prefixNew) : undefined;
+    const prefixEnc = prefixNew
+      ? Base64.encodeURL(ensureSlashAtEnd(prefixNew))
+      : undefined;
     this.router.navigate(['s3', prefixEnc]);
   }
 
@@ -235,7 +262,7 @@ export class S3Component implements OnInit {
   }
 
   unPrefix(key: string): string {
-    const len = !!this.prefix() ? this.prefix()!.length + 1 : 0;
+    const len = !!this.prefix() ? this.prefix()!.length : 0;
     const tmp = key.slice(len);
     const idx = tmp.indexOf('/');
     const end = idx === -1 ? tmp.length : idx;
@@ -245,13 +272,142 @@ export class S3Component implements OnInit {
   private mapToFileAndFolder(obj: any): FileOrFolder {
     let name = obj.Key as string;
     if (this.prefix()) {
-      name = name.slice(this.prefix()!.length + 1);
+      name = name.slice(this.prefix()!.length);
     }
     const idx = name.indexOf('/') ?? -1;
     if (idx === -1) {
       return { ...obj, type: 'file' } as FileOrFolder;
     } else {
       return { ...obj, Name: name.substring(0, idx), type: 'folder' };
+    }
+  }
+
+  private mapToMimeType(key: string): string {
+    if (key.indexOf('.') === -1) return 'no-extension';
+    const ext = key.split('.').pop();
+    switch (ext) {
+      case 'bmp':
+        return 'image/bmp';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'gif':
+        return 'image/gif';
+      case 'png':
+        return 'image/png';
+      case 'svg':
+        return 'image/svg+xml';
+      case 'webp':
+        return 'image/webp';
+
+      case 'pdf':
+        return 'application/pdf';
+      case 'txt':
+        return 'text/plain';
+      case 'md':
+        return 'text/markdown';
+
+      case 'rdf':
+        return 'application/rdf+xml';
+      case 'json':
+        return 'application/json';
+      case 'jsonld':
+        return 'application/ld+json';
+      case 'ttl':
+        return 'text/turtle';
+
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'ppt':
+        return 'application/vnd.ms-powerpoint';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'csv':
+        return 'text/csv';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+      case 'htm':
+      case 'html':
+        return 'text/html';
+
+      case 'js':
+        return 'application/javascript';
+      case 'ts':
+        return 'application/typescript';
+
+      case 'zip':
+        return 'application/zip';
+      case 'rar':
+        return 'application/x-rar-compressed';
+      case '7z':
+        return 'application/x-7z-compressed';
+      case 'tar':
+        return 'application/x-tar';
+      case 'gz':
+        return 'application/gzip';
+
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  mapToIcon(key: string): string {
+    const mimeType = this.mapToMimeType(key);
+    switch (mimeType) {
+      case 'image/jpeg':
+        return 'file-jpg';
+      case 'image/gif':
+        return 'file-gif';
+      case 'image/png':
+      case 'image/bmp':
+      case 'image/svg+xml':
+      case 'image/webp':
+        return 'file-image';
+
+      case 'text/csv':
+      case 'application/vnd.ms-excel':
+      case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        return 'file-excel';
+
+      case 'text/markdown':
+        return 'file-markdown';
+
+      case 'application/pdf':
+        return 'file-pdf';
+
+      case 'application/vnd.ms-powerpoint':
+      case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+        return 'file-ppt';
+
+      case 'application/msword':
+      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        return 'file-word';
+
+      case 'text/plain':
+      case 'application/rdf+xml':
+      case 'application/json':
+      case 'application/ld+json':
+      case 'text/turtle':
+        return 'file-text';
+
+      case 'application/zip':
+      case 'application/x-rar-compressed':
+      case 'application/x-7z-compressed':
+      case 'application/x-tar':
+      case 'application/gzip':
+        return 'file-zip';
+
+      // Edge cases
+      case 'no-extension':
+        return 'file';
+      case 'application/octet-stream':
+      default:
+        return 'file-unknown';
     }
   }
 }
