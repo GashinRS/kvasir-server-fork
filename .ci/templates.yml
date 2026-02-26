@@ -5,10 +5,15 @@
 
 .maven-cache:
   cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    paths:
-      - .m2/repository/
-    policy: pull-push
+    - key: ${CI_COMMIT_REF_SLUG}
+      paths:
+        - .m2/repository/
+      policy: pull-push
+    - key:
+        files:
+          - services/ui-service/src/main/frontend/pnpm-lock.yaml
+      paths:
+        - services/ui-service/src/main/frontend/.pnpm-store
 
 .docker-in-docker:
   services:

@@ -1,0 +1,11 @@
+packages:
+  - src/**
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - esbuild
+  - less
+  - lmdb
+  - msgpackr-extract
+
+storeDir: .pnpm-store
