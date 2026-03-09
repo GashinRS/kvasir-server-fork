@@ -4,22 +4,22 @@ services:
     image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:0.17.1
     volumes:
       # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
-      - "./kvasir-config:/home/jboss/config${SELINUX_MOUNT_FLAG}"
+      - "./kvasir-config:/home/jboss/config${SELINUX_SUFFIX:-}"
     environment:
-      - KVASIR_KG_CLICKHOUSE_HOST=localhost
+      - KVASIR_KG_CLICKHOUSE_HOST=${COMPOSE_HOSTNAME:-localhost}
       - KVASIR_KG_CLICKHOUSE_PORT=8123
-      - KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-      - KVASIR_STORAGE_S3_ENDPOINT=http://localhost:9000
+      - KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS=${COMPOSE_HOSTNAME:-localhost}:9092
+      - KVASIR_STORAGE_S3_ENDPOINT=http://${COMPOSE_HOSTNAME:-localhost}:8333
       - KVASIR_STORAGE_S3_REGION=us-east-1
       - KVASIR_STORAGE_S3_ACCESS_KEY_ID=kvasir
       - KVASIR_STORAGE_S3_SECRET_ACCESS_KEY=kvasirkvasir
-      - KVASIR_AUTH_KEYCLOAK_URL=http://localhost:8280
-      - KVASIR_PEP_OPENFGA_URL=http://localhost:8380
+      - KVASIR_AUTH_KEYCLOAK_URL=http://${COMPOSE_HOSTNAME:-localhost}:8280
+      - KVASIR_PEP_OPENFGA_URL=http://${COMPOSE_HOSTNAME:-localhost}:8380
     #    entrypoint: ["sleep", "3600"] # debug
     depends_on:
       clickhouse:
         condition: service_healthy
-      minio:
+      seaweedfs:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -27,7 +27,13 @@ services:
         condition: service_healthy
     network_mode: host
     healthcheck:
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9100 && echo -e 'GET /q/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 2 cat <&3 | head -1 | grep -q '200 OK'"]
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "exec 3<>/dev/tcp/127.0.0.1/9100 && echo -e 'GET /q/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 2 cat <&3 | head -1 | grep -q '200 OK'",
+        ]
       interval: 15s
       timeout: 10s
       retries: 10

@@ -1,5 +1,9 @@
 # Deployment
 
+## Deprecation notice
+
+The following instructions are deprecated and will not be maintained. They are provided for reference only. For local development and testing, please use the compose setup as described in the [README](../README.md).
+
 ## Prerequisites
 
 - [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
@@ -88,13 +92,13 @@ In that case, just run the command again. It should succeed the second time.
 The entire stack can be setup with helmfile, `helmfile.yaml.gotmpl` holds the configuration for all dependencies, Kvasir and Kvasir UI. Though some initial input is required, see `environments/default.yaml.gotmpl`:
 
 ```yaml
-kvasirHost: {{ requiredEnv "KVASIR_HOST" }}
-keycloakHost: {{ env "KEYCLOAK_HOST" }}
-minioRootpassword: {{ env "MINIO_ROOT_PASSWORD" | default "miniopassword" }}
+kvasirHost: { { requiredEnv "KVASIR_HOST" } }
+keycloakHost: { { env "KEYCLOAK_HOST" } }
+minioRootpassword: { { env "MINIO_ROOT_PASSWORD" | default "miniopassword" } }
 keycloakAdminPassword:
-  {{ env "KEYCLOAK_ADMIN_PASSWORD" | default "kcpassword" }}
-tlsEnabled: {{ env "TLS_ENABLED" | default "false" }}
-proxy: {{ env "PROXY" | default "edge" }}
+  { { env "KEYCLOAK_ADMIN_PASSWORD" | default "kcpassword" } }
+tlsEnabled: { { env "TLS_ENABLED" | default "false" } }
+proxy: { { env "PROXY" | default "edge" } }
 ```
 
 By default the `state-values` are setup through Environment variables. You can also provide

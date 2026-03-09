@@ -11,7 +11,6 @@ smoke_test:compose:
     - apk add --no-cache bash jq curl
     - ./.ci/scripts/wait-for-docker.sh
     - echo "$DOCKER_TOKEN" | docker login -u $DOCKER_USER --password-stdin
-    - echo "$DOCKER_TOKEN" | docker login docker.redpanda.com -u $DOCKER_USER --password-stdin
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - set -xe
@@ -20,14 +19,19 @@ smoke_test:compose:
     - docker compose up -d --wait --quiet-pull --no-color
     - tests/compose-smoke-test.sh docker
   after_script:
-    - cd compose
-    - docker ps -a > compose-ps.txt
-    - docker compose logs --no-color > compose-logs.txt
-    - docker compose down
+    - |
+      # Collect comprehensive diagnostics
+      cd compose || exit 0
+      ../.ci/scripts/collect-compose-diagnostics.sh \
+        "" \
+        diagnostics \
+        monolith kafka clickhouse seaweedfs keycloak postgresql openfga
+
+      # Tear down compose stack
+      docker compose down --volumes --remove-orphans || true
   artifacts:
     paths:
-      - compose/compose-logs.txt
-      - compose/docker-compose.yml
-      - compose/compose-ps.txt
+      - compose/diagnostics/
+      - compose/compose.kvasir.yml
     expire_in: 1 week
     when: on_failure

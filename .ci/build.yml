@@ -8,27 +8,41 @@ build:maven:
   image: $CI_TOOLS_IMAGE
   tags: ["cache", "docker"]
   variables:
+    # In CI, Docker-in-Docker services are reachable via the 'docker' hostname, not 'localhost'.
+    # Setting COMPOSE_HOSTNAME propagates this to all services in compose.devservices.yml
+    # (Kafka advertised listeners, SeaweedFS externalUrl) and compose.kvasir.yml.
+    # The KVASIR_* variables below override the application defaults so that the test JVM
+    # connects to the correct hostnames as well.
+    COMPOSE_HOSTNAME: docker
     KVASIR_KG_CLICKHOUSE_HOST: docker
     KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS: docker:9092
-    KVASIR_MESSAGING_KAFKA_ADVERTISED_HOSTNAME: docker
-    KVASIR_STORAGE_S3_ENDPOINT: http://docker:9000
+    KVASIR_STORAGE_S3_ENDPOINT: http://docker:8333
     KVASIR_AUTH_KEYCLOAK_URL: http://docker:8280
     KVASIR_PEP_OPENFGA_URL: http://docker:8380
-    KAFKA_BOOTSTRAP_SERVERS: docker:9092
-    KAFKA_ADVERTISED_HOSTNAME: docker
   script:
     - set -xe
     - docker compose -f compose/compose.devservices.yml up --wait --quiet-pull --no-color
     - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true
   interruptible: true
   after_script:
-    - awk -F, '{ instructions += $4 + $5; covered += $5 } END { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered (line coverage)" }' target/coverage/jacoco.csv
-    - docker compose -f compose/compose.devservices.yml logs > compose-logs.txt
-    - docker compose -f compose/compose.devservices.yml down --volumes --remove-orphans
+    - |
+      # Collect comprehensive diagnostics
+      ./.ci/scripts/collect-compose-diagnostics.sh \
+        compose/compose.devservices.yml \
+        compose-diagnostics \
+        kafka clickhouse seaweedfs keycloak postgresql openfga
+
+      # Tear down compose stack
+      docker compose -f compose/compose.devservices.yml down --volumes --remove-orphans || true
+
+      # Process Jacoco coverage (last, won't block diagnostics collection)
+      awk -F, '{ instructions += $4 + $5; covered += $5 } END \
+        { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered (line coverage)" }' \
+        target/coverage/jacoco.csv || exit 0
   coverage: "/(d+.d+) % covered/"
   artifacts:
     paths:
-      - compose-logs.txt
+      - compose-diagnostics/
       - "**/target"
     reports:
       coverage_report:
