@@ -10,7 +10,7 @@ and EU Data Spaces).
 A Pod can be configured with various settings that affect its behavior. The configuration is supplied as a YAML (or
 JSON) string for which the structure and possible values are defined by the PodConfig interface
 in [KvasirConfig.kt](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/blob/main/libs/definitions/src/main/kotlin/kvasir/definitions/config/KvasirConfig.kt).
-See also: [](Configuration-Reference.md#pod-configuration)
+See also: [](Configuration-Reference.md#default-pod-configuration)
 
 The following sections describe the available configuration options.
 

@@ -7,7 +7,7 @@
       </a>
     </nz-breadcrumb-item>
 
-    @let parts = prefix()?.split("/");
+    @let parts = breadCrumbPrefix()?.split("/");
 
     @for (part of parts; track $index) {
       <nz-breadcrumb-item>
@@ -71,9 +71,9 @@
   <ng-container *nzModalContent>
     <div>Please enter a prefix to create a virtual empty folder</div>
     <div>
-      <nz-input-group [nzAddOnBefore]="prefix() || ''">
+      <nz-input-wrapper [nzAddonBefore]="prefix() || ''">
         <input type="text" nz-input [(ngModel)]="prefixInputValue" />
-      </nz-input-group>
+      </nz-input-wrapper>
     </div>
   </ng-container>
 </nz-modal>
@@ -81,7 +81,13 @@
 <nz-table #basicTable [nzData]="dataList.value()!" [nzNoResult]="emptyTpl">
   <thead>
     <tr>
-      <th>Name</th>
+      <th
+        [nzSortDirections]="['ascend', 'descend']"
+        [nzSortOrder]="'ascend'"
+        [nzSortFn]="sortName"
+      >
+        Name
+      </th>
       <th>Modified at</th>
       <th>Size</th>
       <th>Action</th>
@@ -93,8 +99,18 @@
       @switch (data.type) {
         @case ("file") {
           <tr>
-            <td>
-              <a (click)="downloadObject(data.Key!)">{{ name }}</a>
+            <td class="file-type">
+              <a (click)="downloadObject(data.Key!)">
+                <nz-space>
+                  <span
+                    *nzSpaceItem
+                    nz-icon
+                    [nzType]="mapToIcon(data.Key!)"
+                    nzTheme="outline"
+                  ></span>
+                  <span *nzSpaceItem>{{ name }}</span>
+                </nz-space>
+              </a>
             </td>
             <td>{{ data.LastModified | date }}</td>
             <td>{{ data.Size | number }} kB</td>
@@ -120,7 +136,7 @@
         }
         @case ("folder") {
           <tr>
-            <td [colSpan]="3">
+            <td [colSpan]="3" class="folder-type">
               <a (click)="goToFolder(name)">
                 <nz-space>
                   <span

@@ -248,7 +248,7 @@ At the moment, the <tooltip term="A4DS">A4DS</tooltip> delegation implementation
   data produced by a specific user) will not work when using the <tooltip term="A4DS">A4DS</tooltip> Policy Agent. By
   default, the implementation tries to extract the `sub` claim from the token, but this is not set by the KNoWS
   implementation. However, Kvasir
-  allows [configuring custom principal extractors](Configuration-Reference.md#pod-configuration) to work around this
+  allows [configuring custom principal extractors](Configuration-Reference.md#default-pod-configuration) to work around this
   issue.
 - A JWKS keyset (hosted at `/.well-known/jwks.json`) is exposed by Kvasir, but the keypair is generated on
   each startup. This means that any tokens issued by Kvasir will be invalid after a restart. A proper key management

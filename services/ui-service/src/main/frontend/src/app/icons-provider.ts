@@ -21,6 +21,18 @@ import {
   UserOutline,
   UnlockOutline,
   ReloadOutline,
+  FileOutline,
+  FileImageOutline,
+  FileJpgOutline,
+  FileGifOutline,
+  FileExcelOutline,
+  FileMarkdownOutline,
+  FilePdfOutline,
+  FilePptOutline,
+  FileWordOutline,
+  FileTextOutline,
+  FileZipOutline,
+  FileUnknownOutline,
 } from '@ant-design/icons-angular/icons';
 import { provideNzIcons } from 'ng-zorro-antd/icon';
 
@@ -48,6 +60,18 @@ const icons = [
   ThunderboltOutline,
   UnlockOutline,
   ReloadOutline,
+  FileOutline,
+  FileImageOutline,
+  FileJpgOutline,
+  FileGifOutline,
+  FileExcelOutline,
+  FileMarkdownOutline,
+  FilePdfOutline,
+  FilePptOutline,
+  FileWordOutline,
+  FileTextOutline,
+  FileZipOutline,
+  FileUnknownOutline,
 ];
 
 export function provideIcons(): EnvironmentProviders {
