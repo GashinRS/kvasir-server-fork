@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.18.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.17.1..v0.18.0) - 2026-03-09
+### Bug Fixes
+- **(compose)** add SELinux bind-mount support via SELINUX_SUFFIX variable - ([49c9549](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/49c9549a58401ec7ae3f9ffee8344d34630ab207)) - Jasper Vaneessen
+- **(storage-api)** use configurable region instead of hardcoded us-east-1 - ([49c9549](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/49c9549a58401ec7ae3f9ffee8344d34630ab207)) - Jasper Vaneessen
+### Features
+- **(compose)** migrate to Apache Kafka and SeaweedFS, unify CI hostname config - ([49c9549](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/49c9549a58401ec7ae3f9ffee8344d34630ab207)) - Jasper Vaneessen
+
+---
+
 ## [0.17.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.17.0..v0.17.1) - 2026-02-25
 ### Bug Fixes
 - uma credential edge cases - ([3c0e77f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/3c0e77f4b3370e86baa7bab013a94ddeb1439039)) - Thomas Dupont
