@@ -10,4 +10,8 @@
         <description>Created after removal of "Authentication" from Kvasir Documentation</description>
         <accepts>Authentication.html</accepts>
     </rule>
+    <rule id="292ff778">
+        <description>Created after removal of "Deploying to Kubernetes" from Kvasir Documentation</description>
+        <accepts>Deploying-to-Kubernetes.html</accepts>
+    </rule>
 </rules>

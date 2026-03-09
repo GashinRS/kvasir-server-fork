@@ -102,18 +102,23 @@ class S3Interceptor(
             val targetUri = URI.create(target);
             val targetDecoded = arrayOf(targetUri.path, targetUri.query ?: "").joinToString("?");
             val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
+            val hostHeader = if (s3Url.port == -1 || s3Url.port in listOf(80, 443)) {
+                s3Url.host
+            } else {
+                "${s3Url.host}:${s3Url.port}"
+            }
             val sig = Signer.builder()
                 .awsCredentials(AwsCredentials(s3Config.accessKey(), s3Config.secretKey()))
-                .header("host", "${s3Url.host}:${s3Url.port}")
+                .header("host", hostHeader)
                 .header("x-amz-date", isoDateTime)
                 .header("x-amz-content-sha256", payloadHash)
-                .region("us-east-1") // TODO: Make configurable
+                .region(s3Config.region())
                 .buildS3(signUri, payloadHash)
                 .signature
             context.request().putHeader("Authorization", sig)
             context.request().putHeader("x-amz-date", isoDateTime)
             context.request().putHeader("x-amz-content-sha256", payloadHash)
-            context.request().putHeader("Host", "${s3Url.host}:${s3Url.port}")
+            context.request().putHeader("Host", hostHeader)
             context.request().authority = HostAndPort.authority(s3Url.host, s3Url.port)
             context.sendRequest()
         }

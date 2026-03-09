@@ -25,7 +25,6 @@
         <idlab.extension.openfga.version>2.0.0</idlab.extension.openfga.version>
         <openfga.docker.model-tx.image>gitlab.ilabt.imec.be:4567/discover/ci-tools/fga-model-tx:latest
         </openfga.docker.model-tx.image>
-        <model-tx.skip>false</model-tx.skip>
         <jackson.version>2.17.1</jackson.version>
         <guava.version>33.4.0-jre</guava.version>
         <rdf4j.version>5.0.3</rdf4j.version>
@@ -313,7 +312,7 @@
                             <arguments>
                                 <argument>run</argument>
                                 <argument>-v</argument>
-                                <argument>${basedir}/plugins/openfga-pep/src/main/resources:/dsl</argument>
+                                <argument>${basedir}/plugins/openfga-pep/src/main/resources:/dsl:z</argument>
                                 <argument>-t</argument>
                                 <argument>${openfga.docker.model-tx.image}</argument>
                             </arguments>

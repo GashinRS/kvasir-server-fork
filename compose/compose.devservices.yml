@@ -1,15 +1,16 @@
-
 services:
   clickhouse:
     #    24.8 = lts version
     image: docker.io/altinity/clickhouse-server:24.8.14.10459.altinitystable
+    environment:
+      - CLICKHOUSE_LOG_TO_CONSOLE=1
     ports:
       - "8123:8123"
       # tcp port for clickhouse (should not be required externally)
       #- "9000:9000"
     volumes:
-      - "clickhouse_data:/var/lib/clickhouse${SELINUX_MOUNT_FLAG}"
-      - "../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d${SELINUX_MOUNT_FLAG}"
+      - "clickhouse_data:/var/lib/clickhouse"
+      - "../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d${SELINUX_SUFFIX:-}"
     ulimits:
       nofile:
         soft: 262144
@@ -24,39 +25,62 @@ services:
       timeout: 10s
       retries: 5
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
-    command: server /data --console-address ":9001"
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "8333:8333" # S3 API port
     volumes:
-      - "minio_data:/data${SELINUX_MOUNT_FLAG}"
-    environment:
-      # Doubles as access key and secret key for the MinIO server
-      - MINIO_ROOT_USER=kvasir
-      - MINIO_ROOT_PASSWORD=kvasirkvasir
+      - "seaweedfs_data:/data"
+      - "./seaweedfs-config.json:/etc/seaweedfs/config.json${SELINUX_SUFFIX:-}"
+    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/config.json -s3.externalUrl=http://${COMPOSE_HOSTNAME:-localhost}:8333 -dir=/data -volume.max=0
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:9333/cluster/status",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   kafka:
-    command:
-      - redpanda
-      - start
-      - --kafka-addr internal://0.0.0.0:9092
-      - --advertise-kafka-addr internal://${KAFKA_ADVERTISED_HOSTNAME:-localhost}:9092
-      - --mode dev-container
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.18
+    image: apache/kafka:3.9.0
+    hostname: kafka
+    environment:
+      # Cluster ID for KRaft mode
+      CLUSTER_ID: "5L6g3nShT-eMCtK--X86sw"
+      # KRaft mode configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${COMPOSE_HOSTNAME:-localhost}:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Dev-friendly settings
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     ports:
       - "9092:9092"
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 40s
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.3
@@ -95,7 +119,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
     volumes:
-      - "postgresql_data:/var/lib/postgresql/data${SELINUX_MOUNT_FLAG}"
+      - "postgresql_data:/var/lib/postgresql/data"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 15s
@@ -135,7 +159,7 @@ services:
 volumes:
   clickhouse_data:
     driver: local
-  minio_data:
+  seaweedfs_data:
     driver: local
   postgresql_data:
     driver: local

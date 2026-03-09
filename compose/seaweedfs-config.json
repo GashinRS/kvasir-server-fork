@@ -1,0 +1,20 @@
+{
+  "identities": [
+    {
+      "name": "kvasir",
+      "credentials": [
+        {
+          "accessKey": "kvasir",
+          "secretKey": "kvasirkvasir"
+        }
+      ],
+      "actions": [
+        "Admin",
+        "Read",
+        "Write",
+        "List",
+        "Tagging"
+      ]
+    }
+  ]
+}
