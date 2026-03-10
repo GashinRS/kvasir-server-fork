@@ -6,11 +6,10 @@ import com.fasterxml.jackson.databind.introspect.JacksonAnnotationIntrospector
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module
 import io.quarkus.logging.Log
 import io.quarkus.runtime.Quarkus
-import io.quarkus.runtime.StartupEvent
+import io.quarkus.runtime.Startup
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.enterprise.event.Observes
 import jakarta.enterprise.inject.Instance
 import kvasir.definitions.annotations.StorageLevel
 import kvasir.definitions.auth.AuthInitializer
@@ -34,11 +33,10 @@ class Initializer(
 
     private val initializationComplete = AtomicBoolean(false)
 
-    fun init(
-        @Observes event: StartupEvent
-    ) {
+    @Startup
+    fun init(): Uni<Void> {
         // Init system db
-        val exitCode = dbInitializer.init(persistentEntityDetector.getDetectedEntityClasses(StorageLevel.SYSTEM))
+        return dbInitializer.init(persistentEntityDetector.getDetectedEntityClasses(StorageLevel.SYSTEM))
             // Init auth (global)
             .chain { _ ->
                 if (podAuthInitializer.isResolvable) {
@@ -80,12 +78,13 @@ class Initializer(
                 Log.error("Kvasir initialization failed: ${err.message}", err)
                 1 // Return exit code 1 on failure
             }
-            .await().indefinitely()
-
-        // Exit on failure, or when exitAfterSetup is set
-        if (exitCode != 0 || bootstrapConfig.exitAfterSetup()) {
-            Quarkus.asyncExit(exitCode)
-        }
+            .invoke { exitCode ->
+                // Exit on failure, or when exitAfterSetup is set
+                if (exitCode != 0 || bootstrapConfig.exitAfterSetup()) {
+                    Quarkus.asyncExit(exitCode)
+                }
+            }
+            .replaceWithVoid()
     }
 
     fun isInitialized(): Boolean = initializationComplete.get()

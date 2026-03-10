@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonValue
+import io.quarkus.cache.CacheInvalidate
+import io.quarkus.cache.CacheResult
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.Json
@@ -38,19 +40,10 @@ class UmaClient(
 ) {
 
     @Volatile
-    private var pat: String? = null
-
-    @Volatile
-    private var refresh: String? = null
-
-    @Volatile
-    private var cachedPatToken: Uni<JsonObject>? = null
-
-    @Volatile
     private var cachedUmaConfig: Uni<UMAConfig>? = null
 
-    private val tokenLock = Any() // Lock for token creation to prevent duplicate creation
     private val configLock = Any() // Lock for config fetching to prevent duplicate fetching
+    private var expireTime: Long? = null;
 
     /**
      * Get the UMA authorization server URL from the UMA configuration.
@@ -124,37 +117,49 @@ class UmaClient(
             }
     }
 
-
     /**
-     * Fetch a Protection API Token (PAT) for this UMA client.
-     * This method is memoized for the duration of the token's validity based on expires_in.
-     * @return A Uni that completes when the PAT token is fetched and stored.
+     * Fetch a PAT token for the UMA client using the client credentials grant.
+     * The token is cached. If the expirationTime expires, it will be invalidated before fetching anew.
      */
-    fun fetchPatToken(): Uni<JsonObject> {
-        // Fast path: check without synchronization (volatile read)
-        cachedPatToken?.let { return it }
-
-        // Slow path: synchronize to ensure only one thread creates the Uni
-        synchronized(tokenLock) {
-            // Double-check: another thread may have created it while we waited for the lock
-            cachedPatToken?.let { return it }
-
-            // Create and cache the new token fetch Uni
-            val newTokenUni = createTokenFetchUni()
-            cachedPatToken = newTokenUni
-            return newTokenUni
+    fun fetchPatToken(): Uni<String> {
+        return refreshConfig().chain { config ->
+            // If we have an expireTime set, and it's in the past, invalidate the cache and fetch a new token
+            if (expireTime != null && expireTime!! <= System.currentTimeMillis()) {
+                expireTime = null;
+                invalidatePatToken(config.clientId().get(), config.clientSecret().get())
+            }
+            // Fetch a new token, if none is cached already
+            getPatToken(config.clientId().get(), config.clientSecret().get())
+                .map {
+                    // If not set, set the expireTime
+                    if (expireTime == null) {
+                        val expiresIn = it.getNumber("expires_in")?.toLong();
+                        expireTime = System.currentTimeMillis() + (expiresIn ?: 0) * 1000
+                    }
+                    // return access toen
+                    it.getString("access_token")
+                }
         }
     }
 
+    @CacheInvalidate(cacheName = "patTokens")
+    fun invalidatePatToken(clientId: String, clientSecret: String): Unit {
+        // Invalidates token because of the @CacheInvalidate annotation.
+        // The method body can be empty because the caching mechanism will handle the invalidation
+        // based on the clientId and clientSecret parameters.
+    }
+
     /**
-     * Create a new tokenFetch Uni with memoization and scheduled invalidation.
+     * Fetch a new PAT token from the UMA authorization server using the client credentials grant.
+     * It is cached based on the clientId and clientSecret, so that subsequent calls with the same credentials will return the cached token until it expires.
      */
-    private fun createTokenFetchUni(): Uni<JsonObject> {
+    @CacheResult(cacheName = "patTokens")
+    fun getPatToken(clientId: String, clientSecret: String): Uni<JsonObject> {
         return getEndpointWithConfig(UMA_TOKEN_ENDPOINT)
             .chain { (tokenEndpoint, config) ->
                 webClient.postAbs(tokenEndpoint)
                     .putHeader(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded")
-                    .basicAuthentication(config.clientId().get(), config.clientSecret().get())
+                    .basicAuthentication(clientId, clientSecret)
                     .sendBuffer(
                         Buffer.buffer(
                             "grant_type=client_credentials&scope=uma_protection"
@@ -167,36 +172,9 @@ class UmaClient(
                                 .failure(Exception("Failed to fetch PAT token for UMA client of pod '${getPodName()}': ${response.statusCode()} ${response.statusMessage()}"))
                         }
                     }
-
             }
-            .invoke { json ->
-                val expiresIn = json.getInteger("expires_in")?.toLong() ?: 300L
-                // Store tokens in fields for easy access
-                val patToken = json.getString("access_token")
-                val refreshToken = json.getString("refresh_token")
-                pat = patToken
-                if (refreshToken != null) {
-                    refresh = refreshToken
-                }
-                Log.debugv(
-                    "Fetched PAT token for UMA client of pod {0}, expiring in {1} seconds",
-                    getPodName(),
-                    expiresIn
-                )
-
-                // Invalidate cache slightly before expiration (90% of the time)
-                val cacheTime = (expiresIn * 0.9).toLong()
-                // Schedule cache invalidation asynchronously
-                Uni.createFrom().voidItem()
-                    .onItem().delayIt().by(Duration.of(cacheTime, ChronoUnit.SECONDS))
-                    .subscribe().with { _ ->
-                        synchronized(tokenLock) {
-                            cachedPatToken = null
-                        }
-                    }
-            }
-            .memoize().indefinitely()
     }
+
 
     fun getTicket(resourceUri: String, requestedScopes: Set<Scope>): Uni<String?> {
         val requestBody = listOf(
@@ -206,14 +184,16 @@ class UmaClient(
             )
         )
         return getEndpointWithConfig(UMA_PERMISSION_ENDPOINT)
-            .call { _ -> fetchPatToken() } // Ensure we have a valid PAT token
+            // Ensure we have a valid PAT token
             .chain { (permissionEndpoint, config) ->
                 ensureResourceExists(resourceUri, setOf(Scope.READ, Scope.WRITE, Scope.DELETE))
                     .chain { _ ->
-                        webClient.postAbs(permissionEndpoint)
-                            .putHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                            .bearerTokenAuthentication(pat!!)
-                            .sendBuffer(Buffer.buffer(Json.encode(requestBody)))
+                        fetchPatToken().flatMap { pat ->
+                            webClient.postAbs(permissionEndpoint)
+                                .bearerTokenAuthentication(pat!!)
+                                .putHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                                .sendBuffer(Buffer.buffer(Json.encode(requestBody)))
+                        }
                     }.chain { response ->
                         when (response.statusCode()) {
                             201 -> Uni.createFrom().item(response.bodyAsJsonObject().getString("ticket"))
@@ -232,46 +212,48 @@ class UmaClient(
             resourceScopes = resourceScopes
         )
         return getEndpointWithConfig(UMA_RESOURCE_REGISTRATION_ENDPOINT)
-            .call { _ -> fetchPatToken() } // Ensure we have a valid PAT token
             .chain { (resourceRegistrationEndpoint, config) ->
-                webClient.postAbs(resourceRegistrationEndpoint)
-                    .putHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                    .bearerTokenAuthentication(pat!!)
-                    .sendBuffer(Buffer.buffer(Json.encode(requestBody))).chain { response ->
-                        when (response.statusCode()) {
-                            201 -> {
-                                Log.debug("Registered UMA resource $resourceUri")
-                                val id = response.bodyAsJsonObject().getString("_id")
-                                Log.debug("UMA server assigned resource ID $id to resource URI $resourceUri")
-                                require(resourceUri == id) {
-                                    "UMA server returned a different resource ID than the resource URI. This is not compatible with the current Kvasir implementation."
-                                }
-                                Uni.createFrom().voidItem()
+                fetchPatToken().flatMap { pat ->
+                    webClient.postAbs(resourceRegistrationEndpoint)
+                        .bearerTokenAuthentication(pat!!)
+                        .putHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                        .sendBuffer(Buffer.buffer(Json.encode(requestBody)))
+                }.chain { response ->
+                    when (response.statusCode()) {
+                        201 -> {
+                            Log.debug("Registered UMA resource $resourceUri")
+                            val id = response.bodyAsJsonObject().getString("_id")
+                            Log.debug("UMA server assigned resource ID $id to resource URI $resourceUri")
+                            require(resourceUri == id) {
+                                "UMA server returned a different resource ID than the resource URI. This is not compatible with the current Kvasir implementation."
                             }
-
-                            409 -> {
-                                Log.debug("Resource $resourceUri already registered with UMA server.")
-                                // Resource already exists, which is fine
-                                Uni.createFrom().voidItem()
-                            }
-
-                            else -> Uni.createFrom()
-                                .failure(RuntimeException("Failed to register UMA resource: ${response.statusCode()} ${response.bodyAsString()}"))
+                            Uni.createFrom().voidItem()
                         }
+
+                        409 -> {
+                            Log.debug("Resource $resourceUri already registered with UMA server.")
+                            // Resource already exists, which is fine
+                            Uni.createFrom().voidItem()
+                        }
+
+                        else -> Uni.createFrom()
+                            .failure(RuntimeException("Failed to register UMA resource: ${response.statusCode()} ${response.bodyAsString()}"))
                     }
+                }
             }
     }
 
     fun validateToken(token: String, requestedScopes: Set<Scope>): Uni<Void> {
         // Use the introspection endpoint to validate the JWT token.
         return getEndpointWithConfig(UMA_INTROSPECTION_ENDPOINT)
-            .call { _ -> fetchPatToken() } // Ensure we have a valid PAT token
             .chain { (introspectionEndpoint, config) ->
-                webClient.postAbs(introspectionEndpoint)
-                    .putHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED)
-                    .bearerTokenAuthentication(pat!!)
-                    .putHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON)
-                    .sendBuffer(Buffer.buffer("token_type_hint=access_token&token=$token"))
+                fetchPatToken().flatMap { pat ->
+                    webClient.postAbs(introspectionEndpoint)
+                        .bearerTokenAuthentication(pat!!)
+                        .putHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED)
+                        .putHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON)
+                        .sendBuffer(Buffer.buffer("token_type_hint=access_token&token=$token"))
+                }
                     .chain { resp ->
                         Log.debug("Response from introspection endpoint: ${resp.bodyAsString()}")
                         val introspectionResp = resp.bodyAsJsonObject()
@@ -309,22 +291,23 @@ class UmaClient(
      */
     fun registerResource(resource: ResourceInput): Uni<String> {
         return getEndpointWithConfig(UMA_RESOURCE_REGISTRATION_ENDPOINT)
-            .call { _ -> fetchPatToken() } // Ensure we have a valid PAT token
             .chain { (resourceRegistrationEndpoint, config) ->
-                webClient.postAbs(resourceRegistrationEndpoint)
-                    .putHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                    .bearerTokenAuthentication(pat!!)
-                    .sendBuffer(Buffer.buffer(Json.encode(resource)))
-                    .chain { response ->
-                        if (response.statusCode() == 201) {
-                            // Store the resource with its assigned ID
-                            val id = response.getHeader(HttpHeaders.LOCATION)
-                            Uni.createFrom().item(id)
-                        } else {
-                            Uni.createFrom()
-                                .failure(RuntimeException("Failed to register UMA resource: ${response.statusCode()} ${response.bodyAsString()}"))
+                fetchPatToken().flatMap { pat ->
+                    webClient.postAbs(resourceRegistrationEndpoint)
+                        .bearerTokenAuthentication(pat!!)
+                        .putHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                        .sendBuffer(Buffer.buffer(Json.encode(resource)))
+                        .chain { response ->
+                            if (response.statusCode() == 201) {
+                                // Store the resource with its assigned ID
+                                val id = response.getHeader(HttpHeaders.LOCATION)
+                                Uni.createFrom().item(id)
+                            } else {
+                                Uni.createFrom()
+                                    .failure(RuntimeException("Failed to register UMA resource: ${response.statusCode()} ${response.bodyAsString()}"))
+                            }
                         }
-                    }
+                }
             }
     }
 
