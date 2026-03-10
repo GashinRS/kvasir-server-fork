@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.18.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.0..v0.18.1) - 2026-03-10
+### Bug Fixes  ([63f086c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/63f086cd08626b659688776b5fc3f503b4d53520)) - Thomas Dupont
+**Fixes**
+- Finally ended the switching ContextClassLoader, by bumping the openfga-pep to 2.1.1, where that bug should be fixed.
+- Fixed UMA PAT caching issues when configuring an overall uma server in config, with `auto-register-uma` bootstrap pods
+- Fixes UMA principal-extraction configuration not showing up in ui (fix #26) by activating serialization in backend
+**Known issues**
+- Properties under `%dev` profiles, are not properly merged by the `PodConfigProvider#fromPod()` method. (to be solved later)
+- In the case of the A4DS UMA server, you cannot first register an overall UMA Client under `http://localhost:8080` and then use a podConfigOverride to configure a child url (eg. `http://localhost:8080/alice`), it will register as a 409 Conflict.
+
+---
+
 ## [0.18.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.17.1..v0.18.0) - 2026-03-09
 ### Bug Fixes
 - **(compose)** add SELinux bind-mount support via SELINUX_SUFFIX variable - ([49c9549](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/49c9549a58401ec7ae3f9ffee8344d34630ab207)) - Jasper Vaneessen
