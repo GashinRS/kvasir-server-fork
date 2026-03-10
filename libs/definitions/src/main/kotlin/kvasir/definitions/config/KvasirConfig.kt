@@ -154,7 +154,9 @@ interface HttpEndpointPolicyEnforcerConfig {
 }
 
 interface JWTPrincipalExtractorConfig {
+    @JsonProperty("class-name")
     fun className(): String
+    @JsonProperty("config")
     fun config(): Map<String, String>
 }
 

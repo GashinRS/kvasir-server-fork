@@ -3,10 +3,8 @@ package kvasir.utils.pod
 import io.smallrye.config.SmallRyeConfigBuilder
 import io.smallrye.config.source.yaml.YamlConfigSource
 import io.smallrye.mutiny.Uni
-import io.smallrye.mutiny.infrastructure.Infrastructure
 import io.vertx.core.http.HttpServerRequest
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.inject.Inject
 import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.config.PodConfig
 import kvasir.definitions.config.PodConfigOverride
@@ -15,16 +13,11 @@ import kvasir.definitions.persistence.RepositoryFactory
 import org.yaml.snakeyaml.Yaml
 
 @ApplicationScoped
-class PodConfigProvider {
-
-    @Inject
-    lateinit var config: HttpConfig
-
-    @Inject
-    lateinit var podConfig: PodConfig
-
-    @Inject
-    lateinit var repositoryFactory: RepositoryFactory
+class PodConfigProvider(
+    val config: HttpConfig,
+    val podConfig: PodConfig,
+    val repositoryFactory: RepositoryFactory
+) {
 
     companion object {
         fun deserializePodConfigOverride(input: String): PodConfigOverride {
