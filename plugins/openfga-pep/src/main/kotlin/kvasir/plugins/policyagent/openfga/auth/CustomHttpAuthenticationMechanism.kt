@@ -60,6 +60,7 @@ class CustomHttpAuthenticationMechanism :
     HttpAuthenticationMechanism, JWTAuthMechanism(object : SmallRyeJwtConfig {
     override fun blockingAuthentication() = Optional.of(false)
     override fun silent() = false
+    override fun priority() = 1
 }) {
 
     @Inject
@@ -222,7 +223,9 @@ class CustomHttpAuthenticationMechanism :
     }
 
     private fun loadJWTPrincipalExtractor(issuer: String, podConfig: PodConfig): JWTPrincipalExtractor {
-        val extractorConf = getJWTProviderConfig(issuer, podConfig, "$keycloakServerUrl/realms/$kvasirRealm")?.principalExtractor()?.getOrNull()
+        val extractorConf =
+            getJWTProviderConfig(issuer, podConfig, "$keycloakServerUrl/realms/$kvasirRealm")?.principalExtractor()
+                ?.getOrNull()
         return if (extractorConf != null) {
             val clazz = CustomHttpAuthenticationMechanism::class.java.classLoader.loadClass(extractorConf.className())
             clazz.getDeclaredConstructor(JSONObject::class.java)
