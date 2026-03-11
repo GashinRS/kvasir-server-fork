@@ -7,16 +7,13 @@
   nz-form
   [nzLayout]="'vertical'"
   [formGroup]="inputForm"
+  [nzAutoTips]="autoTips"
   (ngSubmit)="submitForm()"
 >
   <nz-row>
     <nz-col nzSpan="24">
       <nz-form-item>
-        <nz-form-label
-          >name<span class="info"
-            >if empty, name will be randomly generated</span
-          ></nz-form-label
-        >
+        <nz-form-label>name</nz-form-label>
         <nz-form-control>
           <input type="text" nz-input formControlName="name" />
         </nz-form-control>
