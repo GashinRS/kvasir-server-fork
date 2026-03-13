@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.18.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.1..v0.18.2) - 2026-03-13
+### Bug Fixes
+- **(ui)** slice name input fields are now validated before creation - ([11d65b8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/11d65b8b5bc1bb1c1644d2d9932c33ad5623124c), [204cdd1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/204cdd1834ded200dd5a3b483086205d72ce8273), [204cdd1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/204cdd1834ded200dd5a3b483086205d72ce8273)) - Thomas Dupont)
+- **(ui)** Kvasir errors are now properly displayed in the UI again.
+- fix UMA PAT issues and injectionPoint issues - ([573d3a0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/573d3a014bf84d8438834c3c36fc9a7f054b5fd9), [63f086c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/63f086cd08626b659688776b5fc3f503b4d53520)) - Thomas Dupont)
+- fix UMA concurrency issue - ([30074b0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/30074b012abb9e637ee86faab042ab499531262c), [b36f853](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b36f853b6c9574ce8178c777a56f42d3eee70ce6)) - Thomas Dupont)
+### Breaking Changes
+- Www-Authentication headers are no longer sent as 2 seperate headers, but instead as one with contanated values [See MDN - WWW-AUthenticate](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/WWW-Authenticate#issuing_multiple_authentication_challenges)  
+  This should help with typescript/javascript fetch, which cannot parse multiple Www-Authenticate headers correctly. If you need an example on how to parse multiple concatenated auth challenges, you can use this TypeScript class from our frontend as an example: [WwwAuthParser.ts](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/blob/main/services/ui-service/src/main/frontend/src/app/util/WwwAuthParser.ts)
+
+---
+
 ## [0.18.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.0..v0.18.1) - 2026-03-10
 ### Bug Fixes  ([63f086c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/63f086cd08626b659688776b5fc3f503b4d53520)) - Thomas Dupont
 **Fixes**
