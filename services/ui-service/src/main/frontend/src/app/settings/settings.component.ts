@@ -165,7 +165,7 @@ export class SettingsComponent {
     // REDACTED CREDENTIALS effects
     effect(() => {
       this.podResource.value();
-      if (this.clientIdSaved()) {
+      if (this.clientIdSaved() || this.umaDisabled()) {
         this.podSettingsForm.controls.umaClientId.disable();
       } else {
         this.podSettingsForm.controls.umaClientId.enable();
@@ -173,7 +173,7 @@ export class SettingsComponent {
     });
     effect(() => {
       this.podResource.value();
-      if (this.clientSecretSaved()) {
+      if (this.clientSecretSaved() || this.umaDisabled()) {
         this.podSettingsForm.controls.umaClientSecret.disable();
       } else {
         this.podSettingsForm.controls.umaClientSecret.enable();
