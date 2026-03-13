@@ -10,6 +10,7 @@ import jakarta.ws.rs.core.HttpHeaders
 import kvasir.plugins.policyagent.openfga.OpenFgaConstants
 import kvasir.plugins.policyagent.openfga.delegated.DelegatedCheckParams
 import kvasir.plugins.policyagent.openfga.delegated.DelegatedPolicyEnforcer
+import kvasir.plugins.policyagent.openfga.utils.addWwwAuthenticateValue
 import kvasir.plugins.policyagent.openfga.utils.parseJWT
 
 @ApplicationScoped
@@ -25,53 +26,51 @@ class UmaDelegatedPolicyEnforcer : DelegatedPolicyEnforcer {
     override fun isAllowed(params: DelegatedCheckParams): Uni<Boolean> {
         val request = params.request
         val execStart = System.currentTimeMillis()
-        val umaClient = umaClientManager.getUmaClient(request.getPodId())
         Log.debugv(
             "Retrieved UMA client ({0}) (obtained in {1} ms)",
             request.getPodId(), System.currentTimeMillis() - execStart
         )
-        return umaClient.getAuthServerUrl().chain { authServerUrl ->
-            val token = request.getHeader(HttpHeaders.AUTHORIZATION)
-                ?.takeIf { it.startsWith("Bearer") }
-                ?.removePrefix("Bearer ")?.trim()
-            // Determine the scopes required for this request
-            val requestedScopes = determineScopes(params.checkedTuple.relation)
-            if (token != null) {
-                val parsedToken = parseJWT(token)
-                val issuer = parsedToken.jwtClaims.issuer
-                if (issuer == authServerUrl) {
-                    // If a token is present and the issuer matches the configured server, validate it with the UMA server
-                    umaClient.validateToken(token, requestedScopes).map { true }
+        return umaClientManager.getUmaClient(request.getPodId())
+            .chain { umaClient ->
+                val authServerUrl = umaClient.extras.config.serverUrl()
+                val token = request.getHeader(HttpHeaders.AUTHORIZATION)
+                    ?.takeIf { it.startsWith("Bearer") }
+                    ?.removePrefix("Bearer ")?.trim()
+                // Determine the scopes required for this request
+                val requestedScopes = determineScopes(params.checkedTuple.relation)
+                if (token != null) {
+                    val parsedToken = parseJWT(token)
+                    val issuer = parsedToken.jwtClaims.issuer
+                    if (issuer == authServerUrl) {
+                        // If a token is present and the issuer matches the configured server, validate it with the UMA server
+                        umaClient.validateToken(token, requestedScopes).map { true }
+                    } else {
+                        // Issuer does not match, disallow access
+                        Uni.createFrom().item(false)
+                    }
                 } else {
-                    // Issuer does not match, disallow access
-                    Uni.createFrom().item(false)
-                }
-            } else {
-                // If no token is present, proceed to get a UMA ticket
-                // Retrieve a UMA ticket for this request
-                umaClient.getTicket(request.absoluteURI(), requestedScopes)
-                    .map { ticket ->
-                        if (ticket != null) {
-                            // Modify response code to 401 to indicate that authorization is required
-                            request.response().statusCode = 401
-                            // Write the ticket as a WWW-Authenticate challenge header
-                            request.response().putHeader(
-                                HttpHeaders.WWW_AUTHENTICATE,
-                                "UMA realm=\"solid\", as_uri=\"${authServerUrl}\", ticket=\"$ticket\""
-                            )
-                            false
-                        } else {
-                            // No ticket means the resource is public, allow access
-                            true
+                    // If no token is present, proceed to get a UMA ticket
+                    // Retrieve a UMA ticket for this request
+                    umaClient.getTicket(request.absoluteURI(), requestedScopes)
+                        .map { ticket ->
+                            if (ticket != null) {
+                                // Modify response code to 401 to indicate that authorization is required
+                                request.response().statusCode = 401
+                                // Write the ticket as a WWW-Authenticate challenge header
+                                request.response().addWwwAuthenticateValue("UMA realm=\"solid\", as_uri=\"${authServerUrl}\", ticket=\"$ticket\"")
+                                false
+                            } else {
+                                // No ticket means the resource is public, allow access
+                                true
+                            }
                         }
-                    }
-                    .onFailure().recoverWithItem { err ->
-                        Log.warn("Failed to get UMA challenge: ${err.message}", err)
-                        // In case of failure, disallow access
-                        false
-                    }
+                        .onFailure().recoverWithItem { err ->
+                            Log.warn("Failed to get UMA challenge: ${err.message}", err)
+                            // In case of failure, disallow access
+                            false
+                        }
+                }
             }
-        }
     }
 
     private fun determineScopes(permission: String): Set<Scope> {

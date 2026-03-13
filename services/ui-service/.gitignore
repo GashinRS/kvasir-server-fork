@@ -3,3 +3,4 @@
 /src/main/frontend/.angular
 /src/main/frontend/.vscode
 /src/main/resources/webroot/
+.pnpm-store/
