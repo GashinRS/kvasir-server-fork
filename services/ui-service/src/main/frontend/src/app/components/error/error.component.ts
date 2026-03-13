@@ -10,7 +10,7 @@ export interface KvasirError {
   statusCode?: number;
   description?: string;
   message: string;
-  stack?: string;
+  error?: string;
 }
 
 type CopyTxt = 'Copy error' | 'Copied...';

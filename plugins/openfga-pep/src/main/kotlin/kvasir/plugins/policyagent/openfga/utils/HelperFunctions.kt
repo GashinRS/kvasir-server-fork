@@ -3,10 +3,12 @@ package kvasir.plugins.policyagent.openfga.utils
 import dev.openfga.sdk.api.client.model.ClientTupleKey
 import idlab.quarkus.ext.pep.openfga.model.util.Codec.Encoder.encObject
 import idlab.quarkus.ext.pep.openfga.model.util.Codec.Encoder.encUser
+import io.vertx.core.http.HttpServerResponse
 import kvasir.definitions.config.JWTPrincipalExtractorConfig
 import kvasir.definitions.config.JWTProviderConfig
 import kvasir.definitions.config.PodConfig
 import kvasir.plugins.policyagent.openfga.extractors.SimpleJWTPrincipalExtractor
+import org.apache.http.HttpHeaders
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory
 import org.jose4j.jwt.consumer.JwtConsumerBuilder
 import org.jose4j.jwt.consumer.JwtContext
@@ -104,4 +106,18 @@ internal fun getJWTProviderConfig(
             null
         }
     }
+}
+
+/**
+ * Add another value to a possibly already existing Www-Authenticate header. This is required, because the fetch spec in
+ * javascript cannot deal with multiple Www-Authenticate headers.
+ */
+internal fun HttpServerResponse.addWwwAuthenticateValue(headerValue: String): HttpServerResponse {
+    val wwwAuth = this.headers().get(HttpHeaders.WWW_AUTHENTICATE);
+    if (wwwAuth.isNullOrBlank()) {
+        this.putHeader(HttpHeaders.WWW_AUTHENTICATE, headerValue)
+    } else {
+        this.putHeader(HttpHeaders.WWW_AUTHENTICATE, "$wwwAuth, $headerValue")
+    }
+    return this;
 }
