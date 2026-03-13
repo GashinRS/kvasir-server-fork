@@ -12,6 +12,7 @@ import jakarta.enterprise.inject.spi.CDI
 import jakarta.ws.rs.ClientErrorException
 import jakarta.ws.rs.core.HttpHeaders
 import kvasir.plugins.policyagent.openfga.OpenFgaConstants
+import kvasir.plugins.policyagent.openfga.utils.addWwwAuthenticateValue
 import kvasir.utils.pod.PodConfigProvider
 import kotlin.jvm.optionals.getOrNull
 
@@ -102,8 +103,7 @@ class PostCheckDelegator : PostOpenFgaCheckHook {
                             val oidcAuthServerUrl = podConfig?.auth()?.oidc()?.getOrNull()?.serverUrl()
                             if (oidcAuthServerUrl != null) {
                                 // Add the base WWW-Authenticate header
-                                request.response().headers().add(
-                                    HttpHeaders.WWW_AUTHENTICATE,
+                                request.response().addWwwAuthenticateValue(
                                     "Bearer as_uri=\"$oidcAuthServerUrl\""
                                 )
                             }

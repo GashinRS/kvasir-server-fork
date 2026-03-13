@@ -207,7 +207,7 @@ class PodManagementApi(
                 podStore.persist(existingPod.copyAndKeepUmaCredentials(input.configuration))
                     // When updating the podConfig, it is best to invalidate any cached UmaClients for this pod
                     .chain { _ ->
-                        umaClientManager.invalidateUmaClient(fqPodId)
+                        umaClientManager.invalidatePodConfigCache(fqPodId)
                     }
                     .chain { _ ->
                         // Emit life-cycle event

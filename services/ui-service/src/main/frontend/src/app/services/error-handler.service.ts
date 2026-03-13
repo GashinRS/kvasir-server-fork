@@ -12,8 +12,8 @@ import {
 } from '@angular/common/http';
 
 interface KvasirBackendError {
-  details: string;
-  stack: string;
+  error: string;
+  message: string;
 }
 
 @Injectable({
@@ -55,12 +55,12 @@ export class ErrorHandlerService {
     } else {
       return {
         statusCode: res.status,
+        error: isStringError
+          ? undefined
+          : (res.error as KvasirBackendError)?.error,
         message: isStringError
           ? res.error
-          : ((res.error as KvasirBackendError)?.details ?? ''),
-        stack: isStringError
-          ? undefined
-          : (res.error as KvasirBackendError)?.stack,
+          : ((res.error as KvasirBackendError)?.message ?? ''),
       };
     }
   }

@@ -65,6 +65,9 @@ export class SliceNewComponent {
   readonly autoTips = {
     default: {
       invalidJson: 'Invalid JSON',
+      required: 'This field is required',
+      pattern:
+        'Invalid format (only alphanumeric characters, hyphens, and underscores are allowed)',
     },
   };
 
@@ -73,7 +76,13 @@ export class SliceNewComponent {
     this.inputForm = fb.group({
       context: [DEFAULT_CONTEXT, Validators.compose(validators)],
       description: [],
-      name: null,
+      name: [
+        null,
+        Validators.compose([
+          Validators.required,
+          Validators.pattern(/^[a-zA-Z0-9\-\_]+$/),
+        ]),
+      ],
       schema: [SCHEMA_TEMPLATE, Validators.required],
     });
   }

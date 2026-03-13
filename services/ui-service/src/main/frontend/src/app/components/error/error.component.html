@@ -4,13 +4,12 @@
     <span>{{ error.description }}</span>
   </div>
 
-  @if (error.message; as message) {
-    <p class="message">
-      {{ message }}
-    </p>
+  @if (error.error; as error) {
+    <p class="message" nz-typography>{{ error }}</p>
   }
-  @if (error.stack; as stack) {
-    <div class="stack">{{ stack }}</div>
+
+  @if (error.message; as message) {
+    <p class="stack" nz-typography>{{ message }}</p>
   }
 </div>
 
