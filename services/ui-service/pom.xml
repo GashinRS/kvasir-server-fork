@@ -8,7 +8,7 @@
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>services-parent</artifactId>
-        <version>0.18.2</version>
+        <version>0.18.3</version>
     </parent>
 
     <dependencies>
@@ -19,7 +19,7 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>definitions</artifactId>
-            <version>0.18.2</version>
+            <version>0.18.3</version>
         </dependency>
     </dependencies>
 
