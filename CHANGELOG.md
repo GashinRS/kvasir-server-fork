@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file. See [conven
 
 ---
 
+## [0.18.3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.2..v0.18.3) - 2026-03-16
+### Bug Fixes
+- **(ui)** slice name input fields are now validated before creation - ([11d65b8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/11d65b8b5bc1bb1c1644d2d9932c33ad5623124c)) - Thomas Dupont
+- UMA PAT issues and injectionPoint issues - ([573d3a0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/573d3a014bf84d8438834c3c36fc9a7f054b5fd9)) - Thomas Dupont
+- fix UMA concurrency issue - ([30074b0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/30074b012abb9e637ee86faab042ab499531262c)) - Thomas Dupont
+- Bumped openfg-pep to 3.0.0 to fix concurrency bugs - ([5e5fdac3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/5e5fdac326c14672b0fe95ba0958f583f6a97d72)) - Thomas Dupont
+- Fixed minor query resolver issues - ([afdb8a3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/afdb8a383ecfd37e2fbab88e419abde9ff376fa5)) - Wannes Kerckhove
+
+---
+
 ## [0.18.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.1..v0.18.2) - 2026-03-13
 ### Bug Fixes
 - **(ui)** slice name input fields are now validated before creation - ([11d65b8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/11d65b8b5bc1bb1c1644d2d9932c33ad5623124c), [204cdd1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/204cdd1834ded200dd5a3b483086205d72ce8273), [204cdd1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/204cdd1834ded200dd5a3b483086205d72ce8273)) - Thomas Dupont)
