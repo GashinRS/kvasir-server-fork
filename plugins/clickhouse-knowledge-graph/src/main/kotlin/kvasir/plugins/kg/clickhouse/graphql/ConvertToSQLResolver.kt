@@ -5,6 +5,7 @@ import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
+import graphql.Scalars
 import graphql.language.*
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*
@@ -260,7 +261,8 @@ open class SQLConvertor(
     ): String {
         val name = field.aliasOrName()
         val (pageSize, offset) = field.getPaginationInfo(env.variables)
-        val joinField = "${name}_holder"
+        val joinFieldName = "${name}_holder"
+        var reverse = false
 
         // Implement Handling for special scalar fields e.g. _types, _relations, _predicates
         val (targetFilter, targetSelector) = when (field.name) {
@@ -285,8 +287,16 @@ open class SQLConvertor(
             else -> {
                 // Normal behaviour: filter by predicate and expected datatype
                 val predicate = getPredicateForField(field, fieldDefinition!!)
-                val rdfDataType = fieldDefinition.type.innerType<GraphQLScalarType>().rdfDatatype()
-                "predicate = '$predicate' AND datatype IN (${rdfDataType.joinToString { "'$it'" }})" to "object"
+                reverse = fieldDefinition.getAppliedDirective(DIRECTIVE_PREDICATE_NAME)?.getArgument(ARG_REVERSE_NAME)
+                    ?.getValue<Boolean>() ?: false
+                val rdfDataTypeCondition = fieldDefinition.type.innerType<GraphQLScalarType>().let { scalar ->
+                    if(scalar.name == "ID") {
+                        ""
+                    } else {
+                        " AND datatype IN (${scalar.rdfDatatype().joinToString { "'$it'" }})"
+                    }
+                }
+                "predicate = '$predicate'$rdfDataTypeCondition" to if(reverse) "subject" else "object"
             }
         }
 
@@ -297,12 +307,13 @@ open class SQLConvertor(
             context[JsonLdKeywords.language]?.let { "(datatype != '${RDFVocab.langString}' OR language = '$it')" }
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE ") ?: ""
         val joinType = overrideJoinType ?: getJoinType(field)
-        return "$joinType (SELECT subject AS $joinField, $targetSelector AS $name FROM $tableRef $whereClause GROUP BY ${
+        val joinField = "${if (reverse) "object" else "subject"} AS $joinFieldName"
+        return "$joinType (SELECT $joinField, $targetSelector AS $name FROM $tableRef $whereClause GROUP BY ${
             SORT_COLUMNS.joinToString(
                 prefix = "(",
                 postfix = ")"
             )
-        } $COLLAPSE_STATE_EXPR LIMIT $offset, $pageSize BY subject) ${name}_join ON $parentJoinField = $joinField"
+        } $COLLAPSE_STATE_EXPR LIMIT $offset, $pageSize BY subject) ${name}_join ON $parentJoinField = $joinFieldName"
     }
 
     fun relationFieldJoinStatement(

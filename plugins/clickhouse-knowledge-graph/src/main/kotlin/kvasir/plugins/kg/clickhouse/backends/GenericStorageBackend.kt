@@ -94,8 +94,9 @@ class GenericStorageBackend(
 
     override fun generateFilters(request: ChangeRecordRequest): String? {
         return listOfNotNull(
-            request.subjectIn?.let { subjects -> "subject IN ${subjects.joinToString(", ", "(", ")") { "'$it'" }}" },
-            request.predicateIn?.let { predicates ->
+            request.subjectIn?.takeIf { it.isNotEmpty() }
+                ?.let { subjects -> "subject IN ${subjects.joinToString(", ", "(", ")") { "'$it'" }}" },
+            request.predicateIn?.takeIf { it.isNotEmpty() }?.let { predicates ->
                 "predicate IN ${
                     predicates.joinToString(
                         ", ",
@@ -104,7 +105,7 @@ class GenericStorageBackend(
                     ) { "'$it'" }
                 }"
             },
-            request.objectIn?.let { objects ->
+            request.objectIn?.takeIf { it.isNotEmpty() }?.let { objects ->
                 "toString(object) IN ${
                     objects.joinToString(
                         ", ",
@@ -113,7 +114,8 @@ class GenericStorageBackend(
                     ) { "'$it'" }
                 }"
             },
-            request.graphIn?.let { graphs -> "graph IN ${graphs.joinToString(", ", "(", ")") { "'$it'" }}" },
+            request.graphIn?.takeIf { it.isNotEmpty() }
+                ?.let { graphs -> "graph IN ${graphs.joinToString(", ", "(", ")") { "'$it'" }}" },
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ")
     }
 

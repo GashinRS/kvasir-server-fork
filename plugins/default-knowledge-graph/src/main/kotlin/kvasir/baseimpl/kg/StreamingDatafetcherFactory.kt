@@ -3,6 +3,7 @@ package kvasir.baseimpl.kg
 import graphql.execution.MergedField
 import graphql.language.Argument
 import graphql.language.ArrayValue
+import graphql.language.EnumValue
 import graphql.language.StringValue
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironmentImpl
@@ -39,8 +40,8 @@ class StreamingDatafetcherFactory(
             val subscriptionType =
                 getFQName(env.fieldDefinition.type.innerType<GraphQLObjectType>(), request.context)
             val triggerType =
-                env.fieldDefinition.getDirectiveArg<StringValue>(DIRECTIVE_TRIGGER_NAME, ARG_TYPE_NAME)?.let {
-                    when (it.value) {
+                env.fieldDefinition.getDirectiveArg<EnumValue>(DIRECTIVE_TRIGGER_NAME, ARG_TYPE_NAME)?.let {
+                    when (it.name) {
                         ENUM_TRIGGER_TYPE_INSERT_VALUE -> ChangeRecordType.INSERT
                         ENUM_TRIGGER_TYPE_DELETE_VALUE -> ChangeRecordType.DELETE
                         else -> null
