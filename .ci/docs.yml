@@ -1,0 +1,118 @@
+# .ci/docs.yml
+# Documentation jobs: Writerside build, OpenAPI rendering, Pages deploy, Algolia index update.
+
+# Code changes that warrant a Maven build. Merged into rule entries with <<:.
+.code-changes:
+  - &code-changes
+    changes:
+      - "pom.xml"
+      - "**/pom.xml"
+      - "libs/**/*"
+      - "plugins/**/*"
+      - "services/**/*"
+
+docs:writerside:
+  extends: .branch-only
+  stage: test
+  image: $WRITERSIDE_IMAGE
+  script:
+    - set -xe
+    - export DISPLAY=:99
+    - Xvfb :99 &
+    - /opt/builder/bin/idea.sh helpbuilderinspect -source-dir . -product $INSTANCE --runner gitlab -output-dir public/
+    - echo "Checking for build errors..."
+    - curl -o public/wrs-checker.jar -L https://packages.jetbrains.team/maven/p/writerside/maven/com/jetbrains/writerside/writerside-ci-checker/1.0/writerside-ci-checker-1.0.jar
+    - /opt/builder/jbr/bin/java -jar public/wrs-checker.jar public/report.json $INSTANCE
+  artifacts:
+    paths:
+      - public/$ARTIFACT
+      - public/report.json
+      - public/$ALGOLIA_ARTIFACT
+    expire_in: 1 week
+  interruptible: true
+
+docs:api-render:
+  stage: package
+  needs:
+    - package:maven
+  rules:
+    # Run on MR pipelines when code files changed — for validation and MR preview.
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      <<: *code-changes
+    # Run on all tag pipelines (stable and prerelease) so the spec is always validated.
+    # docs:api-publish (below) gates the actual registry upload to stable tags only.
+    - if: $CI_COMMIT_TAG
+  image:
+    name: ${CI_TOOLS_REGISTRY}/redocly/cli:2.13.0
+    entrypoint: [""]
+  script:
+    - mkdir _openapi
+    - redocly build-docs -o ./_openapi/index.html ./services/monolith/target/openapi/openapi.yaml --theme.openapi.pathInMiddlePanel=true
+  artifacts:
+    paths:
+      - _openapi
+    expire_in: 1 week
+
+# Publish the rendered OpenAPI reference to the GitLab Generic Package Registry.
+# Only runs on stable release tags (vX.Y.Z — no prerelease suffix) so that the
+# main docs site never shows API docs for unreleased or prerelease versions.
+# deploy:docs on the default branch fetches the latest stable version from here.
+docs:api-publish:
+  stage: deploy
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+  needs:
+    - docs:api-render
+  image: ${CI_TOOLS_REGISTRY}/alpine:3.20
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      echo "Publishing API reference for ${CI_COMMIT_TAG} to Package Registry..."
+      UPLOAD_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/api-reference/${CI_COMMIT_TAG}/index.html"
+      curl --fail-with-body \
+        --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        --upload-file _openapi/index.html \
+        "${UPLOAD_URL}"
+      echo "Published: api-reference/${CI_COMMIT_TAG}/index.html"
+
+deploy:docs:
+  extends: .main-branch-only
+  stage: deploy
+  image: $CI_TOOLS_REGISTRY/alpine:3.20
+  pages: true
+  needs:
+    - job: docs:writerside
+  before_script:
+    - apk add --no-cache unzip curl git
+  script:
+    - set -xe
+    - unzip -d public public/$ARTIFACT
+    - git fetch --tags --quiet
+    - LATEST_STABLE=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | { IFS= read -r line; echo "$line"; cat > /dev/null; })
+    - 'if [ -z "$LATEST_STABLE" ]; then echo "WARNING: No stable release tag found."; else echo "Latest stable tag: ${LATEST_STABLE}"; HTTP_STATUS=$(curl -sf --output public/_openapi/index.html --create-dirs --write-out "%{http_code}" --header "JOB-TOKEN: ${CI_JOB_TOKEN}" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/api-reference/${LATEST_STABLE}/index.html" || echo "000"); if [ "$HTTP_STATUS" = "200" ]; then echo "API reference for ${LATEST_STABLE} fetched successfully."; else echo "WARNING: API reference not found (HTTP ${HTTP_STATUS})."; rm -rf public/_openapi; fi; fi'
+    - ls -l public/
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 week
+  interruptible: false
+
+docs:update-indexes:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $ALGOLIA_KEY == null"
+      when: never
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  needs: [docs:writerside]
+  image: registry.jetbrains.team/p/writerside/builder/algolia-publisher:2.0.32-3
+  script:
+    - unzip -O UTF-8 public/$ALGOLIA_ARTIFACT -d algolia-indexes
+    - env "algolia-key=$ALGOLIA_KEY" java -jar /opt/builder/help-publication-agent.jar update-index --application-name "$ALGOLIA_APP_NAME" --index-name "$ALGOLIA_INDEX_NAME" --product "$CONFIG_JSON_PRODUCT" --version "$CONFIG_JSON_VERSION" --index-directory algolia-indexes/ 2>&1 | tee algolia-update-index-log.txt
+  artifacts:
+    paths:
+      - algolia-update-index-log.txt
+    expire_in: 1 week
+  interruptible: false

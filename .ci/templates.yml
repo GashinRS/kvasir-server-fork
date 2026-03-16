@@ -1,39 +1,93 @@
-.ignore-tags:
-  rules:
-    - if: $CI_COMMIT_TAG
-      when: never
+# ── Anchor definitions ────────────────────────────────────────────────────────
+# All private anchors live under .anchors so GitLab ignores this as a hidden job.
+# They are referenced below to build rule lists and cache entries without repeating
+# identical lines across multiple hidden job templates.
 
-.maven-cache:
+.anchors:
+  # Rule entry anchors
+  - &never-on-tag
+    if: $CI_COMMIT_TAG
+    when: never
+  - &rule-mr
+    if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  - &rule-default-branch
+    if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+  - &rule-maintenance-branches
+    if: '$CI_COMMIT_BRANCH =~ /^(v\d+\..+|maint\/.+)$/'
+  # Cache entry anchor
+  - &pnpm-cache-entry
+    key:
+      files:
+        - services/ui-service/src/main/frontend/pnpm-lock.yaml
+    paths:
+      - services/ui-service/src/main/frontend/.pnpm-store
+
+# ── Rule templates (extended by jobs in other files) ──────────────────────────
+
+# MR pipelines only (tests, smoke tests).
+.mr-only:
+  rules:
+    - *never-on-tag
+    - *rule-mr
+
+# MR pipelines and the default branch (e.g. docs build).
+.branch-only:
+  rules:
+    - *never-on-tag
+    - *rule-mr
+    - *rule-default-branch
+
+# Default branch only (e.g. pages deploy).
+.main-branch-only:
+  rules:
+    - *never-on-tag
+    - *rule-default-branch
+
+# Default branch and maintenance/version branches (release jobs).
+# NOTE: the default branch uses a plain == check — variable expansion does not
+# work inside regex literals in GitLab CI if: expressions.
+.release-branches-only:
+  rules:
+    - *never-on-tag
+    - *rule-default-branch
+    - *rule-maintenance-branches
+
+# ── Cache templates (extended by jobs in other files) ─────────────────────────
+
+# Read/write Maven cache — used by test:maven.
+# Writes back the full dependency set (including test-scoped jars) so subsequent
+# jobs on the same branch start warm.
+# The release branch (fixed name, never writes) falls back to the main cache
+# automatically via fallback_keys on a cache miss.
+.maven-cache-rw:
   cache:
     - key: ${CI_COMMIT_REF_SLUG}
+      fallback_keys:
+        - ${CI_DEFAULT_BRANCH}
       paths:
         - .m2/repository/
       policy: pull-push
-    - key:
-        files:
-          - services/ui-service/src/main/frontend/pnpm-lock.yaml
+    - *pnpm-cache-entry
+
+# Read-only Maven cache — used by package:maven.
+# package:maven runs with -DskipTests so it resolves fewer dependencies than
+# test:maven; letting it write back would overwrite a complete cache with an
+# incomplete one and cause AccessDeniedException on the next test run.
+# The release branch falls back to the main cache via fallback_keys.
+.maven-cache-ro:
+  cache:
+    - key: ${CI_COMMIT_REF_SLUG}
+      fallback_keys:
+        - ${CI_DEFAULT_BRANCH}
       paths:
-        - services/ui-service/src/main/frontend/.pnpm-store
+        - .m2/repository/
+      policy: pull
+    - *pnpm-cache-entry
+
+# ── Infrastructure ────────────────────────────────────────────────────────────
 
 .docker-in-docker:
   services:
     - name: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind"
       alias: docker
   tags: ["docker"]
-
-.branch-only:
-  rules:
-    - if: $CI_COMMIT_TAG
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-
-.main-branch-only:
-  rules:
-    - if: $CI_COMMIT_TAG
-      when: never
-    - if: "$CI_COMMIT_BRANCH==$CI_DEFAULT_BRANCH"
-
-.release-commit-only:
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_MESSAGE =~ /^chore\(release\)/'

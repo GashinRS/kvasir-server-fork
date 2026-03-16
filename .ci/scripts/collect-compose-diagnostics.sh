@@ -1,27 +1,42 @@
 #!/usr/bin/env bash
 set +e  # Don't exit on errors - we want to collect as much info as possible
 
-# Script to collect comprehensive Docker Compose diagnostics for CI debugging
-# Usage: collect-compose-diagnostics.sh [compose-file] [output-dir] [services...]
+# Script to collect comprehensive Docker Compose diagnostics for CI debugging.
 #
-# Args:
-#   compose-file: Path to docker-compose file (optional, uses default if not provided)
-#   output-dir: Directory to write diagnostics to (default: compose-diagnostics)
-#   services: Space-separated list of services to collect logs for
+# Usage: collect-compose-diagnostics.sh [output-dir] [--file <compose-file>]
+#
+#   output-dir        Directory to write diagnostics to (default: compose-diagnostics)
+#   --file <path>     Path to the compose file (optional; uses Docker Compose default
+#                     discovery when omitted)
+#
+# Services are auto-discovered from the compose project via
+# `docker compose config --services`. An explicit list is no longer needed.
 #
 # Examples:
-#   collect-compose-diagnostics.sh compose/compose.devservices.yml diagnostics kafka clickhouse minio
-#   collect-compose-diagnostics.sh "" diagnostics monolith kafka
+#   collect-compose-diagnostics.sh compose-diagnostics --file compose/compose.devservices.yml
+#   collect-compose-diagnostics.sh diagnostics
+#   collect-compose-diagnostics.sh   # uses all defaults
 
-COMPOSE_FILE="${1:-}"
-OUTPUT_DIR="${2:-compose-diagnostics}"
-shift 2 2>/dev/null || shift 0
-SERVICES=("$@")
+OUTPUT_DIR="compose-diagnostics"
+COMPOSE_FILE=""
 
-# Set default services if none provided
-if [ ${#SERVICES[@]} -eq 0 ]; then
-    SERVICES=(kafka clickhouse minio keycloak postgresql openfga)
-fi
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --file)
+            COMPOSE_FILE="$2"
+            shift 2
+            ;;
+        --*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            OUTPUT_DIR="$1"
+            shift
+            ;;
+    esac
+done
 
 # Build compose command
 if [ -n "$COMPOSE_FILE" ]; then
@@ -30,10 +45,16 @@ else
     COMPOSE_CMD="docker compose"
 fi
 
+# Auto-discover services from the compose project
+SERVICES=()
+while IFS= read -r svc; do
+    [ -n "$svc" ] && SERVICES+=("$svc")
+done < <($COMPOSE_CMD config --services 2>/dev/null)
+
 echo "=== Docker Compose Diagnostics Collection ==="
 echo "Compose file: ${COMPOSE_FILE:-default}"
 echo "Output directory: $OUTPUT_DIR"
-echo "Services: ${SERVICES[*]}"
+echo "Services: ${SERVICES[*]:-none discovered}"
 echo ""
 
 # Create output directory
@@ -64,17 +85,17 @@ if [[ " ${SERVICES[*]} " =~ " kafka " ]]; then
     $COMPOSE_CMD exec -T kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 \
         >> "$OUTPUT_DIR/kafka-broker-versions.txt" 2>&1 || \
         echo "FAILED: Kafka broker API versions check" >> "$OUTPUT_DIR/kafka-broker-versions.txt"
-    
+
     echo "=== Kafka Topics ===" > "$OUTPUT_DIR/kafka-topics.txt"
     $COMPOSE_CMD exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list \
         >> "$OUTPUT_DIR/kafka-topics.txt" 2>&1 || \
         echo "FAILED: Kafka topics list" >> "$OUTPUT_DIR/kafka-topics.txt"
-    
+
     echo "=== Kafka Cluster Info ===" > "$OUTPUT_DIR/kafka-cluster-info.txt"
     $COMPOSE_CMD exec -T kafka /opt/kafka/bin/kafka-metadata.sh --bootstrap-server localhost:9092 describe --cluster \
         >> "$OUTPUT_DIR/kafka-cluster-info.txt" 2>&1 || \
         echo "FAILED: Kafka cluster info" >> "$OUTPUT_DIR/kafka-cluster-info.txt"
-    
+
     echo "=== Kafka Consumer Groups ===" > "$OUTPUT_DIR/kafka-consumer-groups.txt"
     $COMPOSE_CMD exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --list \
         >> "$OUTPUT_DIR/kafka-consumer-groups.txt" 2>&1 || \
@@ -92,13 +113,13 @@ if [[ " ${SERVICES[*]} " =~ " seaweedfs " ]]; then
     echo "=== SeaweedFS Status ===" > "$OUTPUT_DIR/seaweedfs-status.txt"
     $COMPOSE_CMD exec -T seaweedfs wget -qO- http://localhost:8333/ >> "$OUTPUT_DIR/seaweedfs-status.txt" 2>&1 || \
         echo "FAILED: SeaweedFS status check failed" >> "$OUTPUT_DIR/seaweedfs-status.txt"
-    
+
     echo -e "\n=== SeaweedFS Volume List ===" >> "$OUTPUT_DIR/seaweedfs-status.txt"
     $COMPOSE_CMD exec -T seaweedfs weed shell << 'EOF' >> "$OUTPUT_DIR/seaweedfs-status.txt" 2>&1 || true
 volume.list
 exit
 EOF
-    
+
     echo -e "\n=== SeaweedFS Cluster Info ===" >> "$OUTPUT_DIR/seaweedfs-status.txt"
     $COMPOSE_CMD exec -T seaweedfs weed shell << 'EOF' >> "$OUTPUT_DIR/seaweedfs-status.txt" 2>&1 || true
 cluster.check

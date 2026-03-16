@@ -1,0 +1,56 @@
+# releasaurus.toml — Release automation configuration
+# https://releasaurus.rgon.io/configuration.html
+
+# Target the main branch for release PRs and tagging
+base_branch = "main"
+
+# During 0.x development, breaking changes bump MINOR instead of MAJOR
+breaking_always_increment_major = false
+
+# Prerelease configuration — uncomment to produce rc/alpha/beta releases instead of stable ones.
+# Set the suffix to any identifier (common ones include "rc", "alpha", "beta") to enable a prerelease,
+# Omitting suffix or setting it to an empty string will disable the prerelease flow and produce stable releases.
+# With strategy = "versioned", versions increment as v1.0.0-rc.1, v1.0.0-rc.2, etc.
+# With strategy = "static",   every prerelease has the same suffix (e.g. v1.0.0-rc).
+# To graduate back to stable: comment out suffix field and push a chore: commit.
+[prerelease]
+# suffix = "rc"
+strategy = "versioned"
+
+[changelog]
+# When graduating from prerelease to stable, aggregate changelog entries from all
+# prior prereleases into the stable release notes. Has no effect on stable-only flows.
+aggregate_prereleases = true
+skip_chore = true
+skip_ci = true
+skip_docs = true
+skip_reverts = true
+skip_style = true
+skip_test = true
+skip_refactor = true
+skip_perf = true
+skip_miscellaneous = true
+skip_merge_commits = true
+skip_release_commits = true
+body = """## [{{ version }}]{% if tag_compare_link %}({{ tag_compare_link }}){% else %}({{ link }}){% endif %} - {{ timestamp | date(format="%Y-%m-%d") }}
+{% for group, commits in commits | filter(attribute="merge_commit", value=false) | sort(attribute="group") | group_by(attribute="group") %}
+### {{ group | striptags | trim | replace(from="❌ ", to="") | replace(from="🚀 ", to="") | replace(from="🐛 ", to="") | replace(from="📚 ", to="") | replace(from="🔒 ", to="") | replace(from="⚠️ ", to="") | replace(from="🔧 ", to="") | replace(from="🚜 ", to="") | replace(from="💼 ", to="") | replace(from="🧪 ", to="") | replace(from="🎨 ", to="") }}
+
+{% for commit in commits %}
+- {% if commit.scope %}**({{ commit.scope }})** {% endif %}{% if commit.breaking %}[**breaking**] {% endif %}{{ commit.title }} ([{{ commit.short_id }}]({{ commit.link }}))
+{% if commit.breaking_description %}
+  > {{ commit.breaking_description }}
+{% endif %}
+{% endfor %}
+{% endfor %}"""
+
+[[package]]
+path = "."
+release_type = "generic"
+tag_prefix = "v"
+additional_manifest_files = [
+    { path = "pom.xml",                          version_regex = "<revision>(?<version>\\d+\\.\\d+\\.\\d+[^<]*)</revision>" },
+    { path = "compose/compose.kvasir.yml",       version_regex = "image:.*:(?<version>\\d+\\.\\d+\\.\\d+\\S*)" },
+    { path = "kubernetes/kvasir/Chart.yaml",     version_regex = "\\n(?:app)?[Vv]ersion:\\s*\"?(?<version>\\d+\\.\\d+\\.\\d+\\S*)" },
+    { path = "kubernetes/kvasir/values.yaml",    version_regex = "tag:\\s*\"?(?<version>\\d+\\.\\d+\\.\\d+\\S*)" },
+]

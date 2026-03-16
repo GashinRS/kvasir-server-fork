@@ -6,7 +6,7 @@
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>api-services-parent</artifactId>
-        <version>0.18.2</version>
+        <version>${revision}</version>
         <relativePath>../api-services/pom.xml</relativePath>
     </parent>
 
@@ -16,27 +16,27 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>0.18.2</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>common-http-extensions</artifactId>
-            <version>0.18.2</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>kafka-messaging</artifactId>
-            <version>0.18.2</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>s3-storage</artifactId>
-            <version>0.18.2</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>clickhouse-knowledge-graph</artifactId>
-            <version>0.18.2</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
