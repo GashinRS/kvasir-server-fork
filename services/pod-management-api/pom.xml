@@ -3,12 +3,12 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>pod-management-api</artifactId>
-    <version>0.18.2</version>
+    <version>0.18.3</version>
 
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>api-services-parent</artifactId>
-        <version>0.18.2</version>
+        <version>0.18.3</version>
         <relativePath>../api-services/pom.xml</relativePath>
     </parent>
 
@@ -16,22 +16,22 @@
         <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>utils</artifactId>
-            <version>0.18.2</version>
+            <version>0.18.3</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>common-http-extensions</artifactId>
-            <version>0.18.2</version>
+            <version>0.18.3</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>clickhouse-knowledge-graph</artifactId>
-            <version>0.18.2</version>
+            <version>0.18.3</version>
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>kafka-messaging</artifactId>
-            <version>0.18.2</version>
+            <version>0.18.3</version>
         </dependency>
         
     </dependencies>
