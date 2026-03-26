@@ -13,15 +13,16 @@ import {
   onErrorResumeNextWith,
   throwError,
 } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { switchMap, tap } from 'rxjs/operators';
 import { KvasirError } from '../components/error/error.component';
 import {
   ChangeRecords,
-  ChangeReport,
+  ProcessedChange,
   ChangeRequest,
   GraphLD,
   LD,
   Paged,
+  PendingChangeRequest,
   Pod,
   PodConfiguration,
   PodDetails,
@@ -61,19 +62,39 @@ export class KvasirService {
       .pipe(map((response) => response.headers.get('Location')));
   }
 
-  listChangeReports(): Observable<ChangeReport[]> {
+  listChangeReports(): Observable<ProcessedChange[]> {
     return this.http
-      .get<GraphLD<ChangeReport>>(
+      .get<GraphLD<ProcessedChange>>(
         `${this.host}/${this.session.podName()}/changes`,
       )
       .pipe(this.convertErrorToKvasirError())
       .pipe(map((changeLd) => changeLd['@graph']));
   }
 
-  getChangeReport(changeReportId: string): Observable<ChangeReport> {
+  /**
+   * Get a processed change by its ChangeReport @id
+   * If the change is still pending, a PendingChangeRequest is returned
+   * @param changeReportId
+   * @returns
+   */
+  getProcessedChange(
+    changeReportId: string,
+  ): Observable<PendingChangeRequest | ProcessedChange> {
     return this.http
-      .get<ChangeReport>(decodeURIComponent(changeReportId))
-      .pipe(this.convertErrorToKvasirError());
+      .get<PendingChangeRequest | ProcessedChange>(
+        decodeURIComponent(changeReportId),
+        {
+          observe: 'response',
+        },
+      )
+      .pipe(
+        map((res) =>
+          res.redirected
+            ? (res.body as ProcessedChange)
+            : (res.body as PendingChangeRequest),
+        ),
+        this.convertErrorToKvasirError(),
+      );
   }
 
   /**
@@ -125,9 +146,9 @@ export class KvasirService {
       .pipe(map((response) => response.headers.get('Location')));
   }
 
-  listSliceChangeReports(sliceName: string): Observable<ChangeReport[]> {
+  listSliceChangeReports(sliceName: string): Observable<ProcessedChange[]> {
     return this.http
-      .get<GraphLD<ChangeReport>>(
+      .get<GraphLD<ProcessedChange>>(
         `${this.host}/${this.session.podName()}/slices/${sliceName}/changes`,
       )
       .pipe(this.convertErrorToKvasirError())

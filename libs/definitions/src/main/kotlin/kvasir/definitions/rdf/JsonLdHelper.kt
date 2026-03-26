@@ -10,7 +10,7 @@ import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
 import com.github.jsonldjava.utils.JsonUtils
-import kvasir.definitions.kg.Pod
+import com.google.common.hash.Hashing
 
 typealias JSONObject = Map<String, Any>
 
@@ -44,17 +44,18 @@ object JsonLdHelper {
         return JsonLdProcessor.compact(JsonLdProcessor.expand(doc), emptyMap<String, Any>(), options)
     }
 
-    fun compactUri(uri: String, context: JSONObject, separator: String = ":"): String {
+    fun compactUri(uri: String, context: JSONObject, separator: String = ":"): String? {
         val compactedString = JsonLdProcessor.compact(mapOf(uri to uri), context, JsonLdOptions())
-            .filter { it.key != "@context" }.keys.first()
-        return if (compactedString == uri) {
-            // Nothing to compact given the context
-            uri
-        } else {
-            compactedString.split(":", limit = 2).takeIf { parts -> parts.size == 2 }?.let { (prefix, rest) ->
-                "${prefix}${separator}${rest}"
-            } ?: compactedString
+            .filter { it.key != "@context" }.keys.firstOrNull()
 
+        return when(compactedString) {
+            null -> null // No compaction possible with the given context
+             uri -> compactedString // Nothing to compact given the context
+            else -> {
+                compactedString.split(":", limit = 2).takeIf { parts -> parts.size == 2 }?.let { (prefix, rest) ->
+                    "${prefix}${separator}${rest}"
+                } ?: compactedString
+            }
         }
     }
 
@@ -67,6 +68,26 @@ object JsonLdHelper {
         } else {
             val (prefix, localName) = name.split(separator, limit = 2)
             context[prefix]?.let { ns -> "$ns$localName" }
+        }
+    }
+
+    fun getUniqueVariableNameInContext(uri: String, context: Map<String, Any>): String {
+        return compactUri(uri, context, "_").takeIf { it != uri } ?: run {
+            val (ns, localName) = when {
+                uri.contains("#") -> {
+                    val hashIndex = uri.lastIndexOf("#")
+                    uri.substring(0, hashIndex) to uri.substring(hashIndex + 1)
+                }
+
+                uri.contains("/") -> {
+                    val slashIndex = uri.lastIndexOf("/")
+                    uri.substring(0, slashIndex) to uri.substring(slashIndex + 1)
+                }
+
+                else -> throw IllegalArgumentException("Invalid URI: $uri")
+            }
+            val encodedPrefix = Hashing.farmHashFingerprint64().hashString(ns, Charsets.UTF_8).toString()
+            "ns${encodedPrefix}_$localName"
         }
     }
 
@@ -137,4 +158,13 @@ fun JSONObject.getJsonObject(key: String): JSONObject? {
             throw IllegalArgumentException("Cannot convert value for key '$key' to Map, value is: '$result'")
         }
     }
+}
+
+fun main() {
+    val context = mapOf(
+        "ex" to "http://example.org/"
+    )
+    println(JsonLdHelper.getUniqueVariableNameInContext("http://example.org/Person", context))
+    //println(JsonLdHelper.getUniqueVariableNameInContext("ex:Person", context))
+    println(JsonLdHelper.getUniqueVariableNameInContext("_relations", context))
 }

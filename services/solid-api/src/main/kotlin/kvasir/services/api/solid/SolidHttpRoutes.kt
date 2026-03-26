@@ -27,12 +27,12 @@ import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
 import kvasir.plugins.messaging.kafka.StorageMutationEmitterProvider
 import kvasir.plugins.storage.s3.S3StorageConfig
+import kvasir.plugins.storage.s3.S3Utils
 import kvasir.services.api.solid.impl.bodyAsInputStream
 import kvasir.services.api.solid.impl.isRDFConvertableTo
 import kvasir.services.api.solid.impl.isSupportedContainerType
 import kvasir.services.api.solid.vocab.LDPVocab
 import kvasir.services.api.solid.vocab.PIMVocab
-import kvasir.utils.s3.S3Utils
 import org.apache.commons.lang3.StringUtils
 import org.eclipse.rdf4j.rio.Rio
 import org.jboss.resteasy.reactive.common.headers.LinkHeaders

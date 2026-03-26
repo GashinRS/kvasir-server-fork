@@ -31,7 +31,7 @@
         </dependency>
         <dependency>
             <groupId>kvasir-services</groupId>
-            <artifactId>kg-inbox-api</artifactId>
+            <artifactId>kg-changes-api</artifactId>
             <version>${revision}</version>
         </dependency>
         <dependency>

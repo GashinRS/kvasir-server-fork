@@ -7,15 +7,11 @@ import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.kg.QueryResult
-import kvasir.definitions.kg.changes.ChangeReport
 import kvasir.definitions.rdf.*
-import kvasir.services.api.kg.inbox.ChangeRequestInput
+import kvasir.services.api.kg.changes.ChangeRequestInput
 import kvasir.services.api.kg.query.QueryInputWithContext
 import kvasir.services.api.pods.RegisterPodInput
-import kvasir.utils.test.commons.SchemaVocab
-import kvasir.utils.test.commons.TestConstants
-import kvasir.utils.test.commons.TestDataGenerator
-import kvasir.utils.test.commons.getTokenForClient
+import kvasir.utils.test.commons.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.util.*
@@ -30,6 +26,9 @@ class MonolithTest {
 
     @Inject
     private lateinit var kvasirHttpConfig: HttpConfig
+
+    @Inject
+    private lateinit var testHelpers: TestHelpers
 
     @Test
     fun testPodCreationAndBasicUse() {
@@ -50,27 +49,13 @@ class MonolithTest {
 
         // Ingest some data
         val testData = TestDataGenerator.generatePersonData(5)
-        val changeId = given()
-            .auth().oauth2(getTokenForClient(TEST_CLIENT_ID, TEST_CLIENT_SECRET))
-            .body(JsonLdHelper.encode(ChangeRequestInput(insert = testData)))
-            .contentType(RDFMediaTypes.JSON_LD)
-            .post("$podUri/changes")
-            .then()
-            .statusCode(201)
-            .extract().header(HttpHeaders.LOCATION)
 
         // Wait the data is processed
-        do {
-            val statusJsonLd = given()
-                .auth().oauth2(getTokenForClient(TEST_CLIENT_ID, TEST_CLIENT_SECRET))
-                .accept(RDFMediaTypes.JSON_LD)
-                .get(changeId)
-                .then()
-                .statusCode(200)
-                .extract().body().asString()
-            val status = JsonLdHelper.decode(statusJsonLd, ChangeReport::class.java)
-            Thread.sleep(100)
-        } while (status.statusEntry.none { it.statusCode.terminalState })
+        testHelpers.requestChangeViaHTTPSync(
+            JsonLdHelper.encode(ChangeRequestInput(insert = testData)),
+            podUri,
+            optionalAuthToken = getTokenForClient(TEST_CLIENT_ID, TEST_CLIENT_SECRET)
+        )
 
         // Query the data
         val (selectedPersonID, selectedPersonGivenName) = testData.random()

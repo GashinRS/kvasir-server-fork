@@ -47,6 +47,18 @@ interface Repository<T : PersistentEntity> {
 
 }
 
+interface RepositoriesLifecycleManager {
+
+    fun initialize(detectedEntities: Set<Class<out PersistentEntity>>): Uni<Void>
+
+    fun initializeForPod(podId: String, detectedEntities: Set<Class<out PersistentEntity>>): Uni<Void>
+
+    fun cleanup(detectedEntities: Set<Class<out PersistentEntity>>): Uni<Void>
+
+    fun cleanupForPod(podId: String, detectedEntities: Set<Class<out PersistentEntity>>): Uni<Void>
+
+}
+
 abstract class PersistentEntity {
     abstract val id: String
 

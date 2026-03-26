@@ -6,7 +6,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { KvasirService } from '../services/kvasir.service';
-import { ChangeReport, ChangeStatusEntry } from '../types';
+import { ProcessedChange, ChangeStatusEntry } from '../types';
 import { sortByTimestamp } from '../util/utils';
 
 @Component({
@@ -32,8 +32,8 @@ export class ChangesComponent {
   private kvasir = inject(KvasirService);
   private router = inject(Router);
 
-  lastStatus = (report: ChangeReport): ChangeStatusEntry | undefined =>
-    report['kss:statusEntry'].sort(sortByTimestamp('desc'))?.at(0);
+  lastStatus = (report: ProcessedChange): ChangeStatusEntry | undefined =>
+    report['kss:processingHistory'].sort(sortByTimestamp('desc'))?.at(0);
 
   openChangeReport(changeReportId: string): void {
     this.router.navigate([

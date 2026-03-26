@@ -1,5 +1,6 @@
 package kvasir.utils.graphql
 
+import graphql.Scalars
 import graphql.language.*
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*
@@ -19,21 +20,46 @@ private val DEFAULT_OPS_ARG = ArrayValue.newArrayValue().values(
         StringValue.of(MUTATION_REMOVE_PREFIX)
     )
 ).build()
+private val DYNAMIC_INTROSPECTION_FIELD_NAMES = setOf(FIELD_RELATIONS_NAME, FIELD_OBJECT_NAME, FIELD_PREDICATES_NAME)
+
+private val ALL_SCALARS = setOf(
+    Scalars.GraphQLString.name,
+    Scalars.GraphQLInt.name,
+    Scalars.GraphQLFloat.name,
+    Scalars.GraphQLBoolean.name,
+    ExtendedScalars.Json.name,
+    ExtendedScalars.DateTime.name,
+    ExtendedScalars.Date.name,
+    ExtendedScalars.Time.name
+)
 
 class SliceGraphQLSchema(private val sliceSchema: String, private val context: JSONObject) {
 
     private val typeDefinitionRegistry = SchemaParser().parse(sliceSchema)
     private val queryType = typeDefinitionRegistry.getType(TYPE_QUERY, ObjectTypeDefinition::class.java).getOrNull()
-        ?: throw IllegalArgumentException("Query type '$TYPE_QUERY' is not defined in the schema")
-    val isGenerateMutationsGlobal = queryType.directives.any { it.name == DIRECTIVE_GENERATE_MUTATIONS_NAME }
+
+    val isGenerateMutationsGlobal = queryType?.directives?.any { it.name == DIRECTIVE_GENERATE_MUTATIONS_NAME } ?: false
     val generateMutationsOperationsGlobal =
-        queryType.getDirectiveArg<ArrayValue>(
+        queryType?.getDirectiveArg<ArrayValue>(
             DIRECTIVE_GENERATE_MUTATIONS_NAME,
             ARG_OPERATIONS_NAME,
             DEFAULT_OPS_ARG
-        ).values.filterIsInstance<StringValue>().map { it.value }
+        )?.values?.filterIsInstance<StringValue>()?.map { it.value } ?: emptyList()
 
     private val processedTypeDefinitionRegistry = run {
+        if (queryType == null) {
+            // If no Query type is defined, create a new one
+            typeDefinitionRegistry.add(
+                ObjectTypeDefinition.newObjectTypeDefinition()
+                    .name(TYPE_QUERY)
+                    .fieldDefinition(
+                        FieldDefinition.newFieldDefinition().name("noop").type(TypeName.newTypeName("String").build())
+                            .build()
+                    )
+                    .build()
+            )
+        }
+
         typeDefinitionRegistry.add(ScalarTypeDefinition.newScalarTypeDefinition().name("JSON").build())
         typeDefinitionRegistry.add(ScalarTypeDefinition.newScalarTypeDefinition().name("DateTime").build())
         typeDefinitionRegistry.add(ScalarTypeDefinition.newScalarTypeDefinition().name("Date").build())
@@ -244,9 +270,16 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
         val enhancedType = type.transform { typeBuilder ->
             val definedFieldNames = type.fieldDefinitions.map { it.name }.toSet()
             val (interfaces, commonFields) = if (type.name !in setOf(TYPE_QUERY, TYPE_MUTATION, TYPE_SUBSCRIPTION)) {
-                (type.implements + convertType(KvasirTypes.Resource) + convertType(KvasirTypes.RDFNode)) to
-                        (KvasirTypes.commonResourceFields.filterNot { definedFieldNames.contains(it.name) }
-                            .map { convertField(it) })
+                (type.implements + SchemaConversions.convertType(KvasirTypes.Resource) + SchemaConversions.convertType(
+                    KvasirTypes.RDFNode
+                )) to
+                        // Add Kvasir built-in common fields, but don't include already defined fields, nor the dynamic introspection fields (as these should not be used with Slices)
+                        (KvasirTypes.commonResourceFields.filter {
+                            !definedFieldNames.contains(it.name) && !DYNAMIC_INTROSPECTION_FIELD_NAMES.contains(
+                                it.name
+                            )
+                        }
+                            .map { SchemaConversions.convertField(it) })
             } else {
                 type.implements to emptyList()
             }
@@ -266,13 +299,17 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
         val enhancedType = type.transform { typeBuilder ->
             typeBuilder
                 // An interface always implements Resource
-                .implementz(type.implements + convertType(KvasirTypes.Resource) + convertType(KvasirTypes.RDFNode))
+                .implementz(
+                    type.implements + SchemaConversions.convertType(KvasirTypes.Resource) + SchemaConversions.convertType(
+                        KvasirTypes.RDFNode
+                    )
+                )
                 // Add common fields (e.g. id) to the type
                 .definitions(type.fieldDefinitions.map { field -> enhanceField(field) } + KvasirTypes.commonResourceFields.filterNot {
                     definedFieldNames.contains(
                         it.name
                     )
-                }.map { convertField(it) })
+                }.map { SchemaConversions.convertField(it) })
         }
         // TODO: Is there a better way to update the type definition?
         typeDefinitionRegistry.remove(type)
@@ -280,6 +317,11 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
     }
 
     private fun enhanceField(field: FieldDefinition): FieldDefinition = field.transform { builder ->
+        // Throw an exception if a field name starts with an underscore, as these are reserved for Kvasir system fields.
+        if (field.name.startsWith("_")) {
+            throw RuntimeException("Field names starting with an underscore are reserved for Kvasir system fields: '${field.name}'")
+        }
+
         // Add common arguments (pageSize, cursor, etc) to fields that return a collection
         if (TypeUtil.isList(field.type) || (TypeUtil.isNonNull(field.type) && TypeUtil.isList(
                 TypeUtil.unwrapOne(
@@ -289,19 +331,28 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
         ) {
             // Only add default arguments if they are not already defined
             val existingArgs = field.inputValueDefinitions.map { it.name }.toSet()
-            builder.inputValueDefinitions(field.inputValueDefinitions + KvasirTypes.defaultRelationArguments.filterNot {
+
+            val argsToAdd = if (TypeUtil.unwrapAll(field.type).let { ALL_SCALARS.contains(it.name) }) {
+                // For fields that return a list of scalar values, we add the scalar collection arguments (pageSize, cursor, desc)
+                KvasirTypes.scalarCollectionArguments
+            } else {
+                // For fields that return a list of non-scalar values, we add the default relation arguments (id, pageSize, cursor, orderBy)
+                KvasirTypes.defaultRelationArguments
+            }
+            builder.inputValueDefinitions(field.inputValueDefinitions + argsToAdd.filterNot {
                 existingArgs.contains(
                     it.name
                 )
-            }.map { convertArgument(it) })
+            }.map { SchemaConversions.convertArgument(it) })
         }
     }
 
     private fun addKvasirBuiltins() {
         typeDefinitionRegistry.addAll(KvasirTypes.all.map { type ->
+            // Do not generate dynamic introspection fields for GraphQL built-in types, as these break Slice data isolation (by supplying these field names as ignoreFields).
             when (type) {
-                is GraphQLInterfaceType -> convertInterface(type)
-                is GraphQLObjectType -> convertObject(type)
+                is GraphQLInterfaceType -> SchemaConversions.convertInterface(type, DYNAMIC_INTROSPECTION_FIELD_NAMES)
+                is GraphQLObjectType -> SchemaConversions.convertObject(type, DYNAMIC_INTROSPECTION_FIELD_NAMES)
                 else -> throw RuntimeException("Kvasir built-in setup does not support '${type::class.simpleName}'")
             }
         } + KvasirEnums.all.map { enum ->
@@ -311,60 +362,7 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
                     EnumValueDefinition.newEnumValueDefinition().name(enumVal.name).build()
                 })
                 .build()
-        } + KvasirDirectives.all.map { convertDirective(it) })
-    }
-
-    private fun convertInterface(type: GraphQLInterfaceType): InterfaceTypeDefinition {
-        return InterfaceTypeDefinition.newInterfaceTypeDefinition()
-            .name(type.name)
-            .implementz(type.interfaces.map { TypeName.newTypeName(it.name).build() })
-            .definitions(type.fieldDefinitions.map(::convertField))
-            .build()
-    }
-
-    private fun convertObject(type: GraphQLObjectType): ObjectTypeDefinition {
-        return ObjectTypeDefinition.newObjectTypeDefinition()
-            .name(type.name)
-            .implementz(type.interfaces.map { TypeName.newTypeName(it.name).build() })
-            .fieldDefinitions(type.fieldDefinitions.map(::convertField))
-            .build()
-    }
-
-    private fun convertField(field: GraphQLFieldDefinition): FieldDefinition {
-        return FieldDefinition.newFieldDefinition()
-            .name(field.name)
-            .type(convertType(field.type))
-            .inputValueDefinitions(field.arguments.map(::convertArgument))
-            .build()
-    }
-
-    private fun convertDirective(directive: GraphQLDirective): DirectiveDefinition {
-        return DirectiveDefinition.newDirectiveDefinition()
-            .name(directive.name)
-            .directiveLocations(
-                directive.validLocations()
-                    .map { location -> DirectiveLocation.newDirectiveLocation().name(location.name).build() })
-            .repeatable(directive.isRepeatable)
-            .inputValueDefinitions(directive.arguments.map(::convertArgument))
-            .build()
-    }
-
-    private fun convertType(type: GraphQLType): Type<*> {
-        return when {
-            GraphQLTypeUtil.isList(type) -> ListType.newListType(convertType(GraphQLTypeUtil.unwrapOne(type))).build()
-            GraphQLTypeUtil.isNonNull(type) -> NonNullType.newNonNullType()
-                .type(convertType(GraphQLTypeUtil.unwrapNonNull(type))).build()
-
-            type is GraphQLNamedType -> TypeName.newTypeName().name(type.name).build()
-            else -> throw IllegalArgumentException("Unsupported GraphQL type $type")
-        }
-    }
-
-    private fun convertArgument(argument: GraphQLArgument): InputValueDefinition {
-        return InputValueDefinition.newInputValueDefinition()
-            .name(argument.name)
-            .type(convertType(argument.type))
-            .build()
+        } + KvasirDirectives.all.map { SchemaConversions.convertDirective(it) })
     }
 
 }

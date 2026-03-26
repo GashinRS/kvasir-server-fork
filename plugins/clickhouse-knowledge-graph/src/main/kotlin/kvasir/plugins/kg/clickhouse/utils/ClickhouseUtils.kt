@@ -19,7 +19,8 @@ object ClickhouseUtils {
 }
 
 internal fun databaseFromPodId(podId: String): String {
-    return Hashing.farmHashFingerprint64().hashString(podId, Charsets.UTF_8).toString()
+    val dbName = Hashing.farmHashFingerprint64().hashString(podId, Charsets.UTF_8).toString()
+    return dbName
 }
 
 internal fun parsePersistentAnnotation(entityClass: Class<out PersistentEntity>): ParsedPersistentAnnotation {

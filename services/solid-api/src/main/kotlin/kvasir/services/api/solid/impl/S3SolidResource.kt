@@ -19,12 +19,12 @@ import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.rdf.XSDVocab
 import kvasir.definitions.reactive.toMulti
 import kvasir.definitions.reactive.toUni
+import kvasir.plugins.storage.s3.S3Utils
 import kvasir.services.api.solid.*
 import kvasir.services.api.solid.vocab.DCVocab
 import kvasir.services.api.solid.vocab.LDPVocab
 import kvasir.services.api.solid.vocab.PosixStatVocab
 import kvasir.utils.http.getChildUri
-import kvasir.utils.s3.S3Utils
 import org.eclipse.rdf4j.model.Model
 import org.eclipse.rdf4j.model.impl.DynamicModelFactory
 import org.eclipse.rdf4j.rio.RDFFormat

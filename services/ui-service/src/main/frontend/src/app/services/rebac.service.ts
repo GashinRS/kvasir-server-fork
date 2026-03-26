@@ -8,7 +8,7 @@ import { catchError, map, Observable, throwError } from 'rxjs';
 import { KvasirError } from '../components/error/error.component';
 import {
   ChangeRecords,
-  ChangeReport,
+  ProcessedChange,
   ChangeRequest,
   CheckResult,
   GraphLD,

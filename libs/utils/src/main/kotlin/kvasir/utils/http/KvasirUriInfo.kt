@@ -70,6 +70,6 @@ fun URI.getParentUri(level: Int = 1): URI {
     return if (level > 1) parent.getParentUri(level - 1) else parent
 }
 
-fun URI.getChildUri(childId: String): URI {
-    return URI.create("${this.toASCIIString().removeSuffix("/")}/${childId.removePrefix("/")}")
+fun URI.getChildUri(childId: String, separator: String = "/"): URI {
+    return URI.create("${this.toASCIIString().removeSuffix("/")}$separator${childId.removePrefix("/")}")
 }

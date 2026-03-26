@@ -2,9 +2,9 @@ package kvasir.plugins.kg.clickhouse
 
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
-import kvasir.definitions.kg.ChangeStatusCode
-import kvasir.definitions.kg.changes.ChangeReport
-import kvasir.definitions.kg.changes.ChangeReportStatusEntry
+import kvasir.definitions.kg.changes.ChangeProcessingHistoryEntry
+import kvasir.definitions.kg.changes.ChangeStatusCode
+import kvasir.definitions.kg.changes.ProcessedChange
 import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.persistence.Sort
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.UUID
+import java.util.*
 import kotlin.random.Random
 
 private val sliceRefs = setOf(null, "http://example.org/someSlice1", "http://example.org/someSlice2")
@@ -39,7 +39,7 @@ class TestClickhouseChangeLog {
 
     @BeforeAll
     fun setup() {
-        clichouseInitializer.initializePodSchema(testRunId, setOf(ChangeReport::class.java)).await().indefinitely()
+        clichouseInitializer.initializeForPod(testRunId, setOf(ProcessedChange::class.java)).await().indefinitely()
     }
 
     @AfterAll
@@ -49,29 +49,31 @@ class TestClickhouseChangeLog {
 
     @Test
     fun testInsertAndQuery() {
-        val changeHistory = repositoryFactory.getRepository(ChangeReport::class, testRunId)
+        val changeHistory = repositoryFactory.getRepository(ProcessedChange::class, testRunId)
 
         // Insert some history entries
         val historyRecords = (1..10).map { i ->
             val error = i == 1 || i == 5
-            ChangeReport(
-                id = "http://example.com/change$i",
+            val id = "http://example.com/change$i"
+            ProcessedChange(
+                id = id,
+                origRequestId = id,
                 requestingUser = "alice",
                 podId = testRunId,
-                statusEntry = listOf(
-                    ChangeReportStatusEntry(
+                processingHistory = listOf(
+                    ChangeProcessingHistoryEntry(
                         Instant.now().minus(Random.nextLong(15), ChronoUnit.MILLIS),
                         ChangeStatusCode.QUEUED
                     ),
-                    ChangeReportStatusEntry(
+                    ChangeProcessingHistoryEntry(
                         Instant.now(),
-                        if (error) ChangeStatusCode.INTERNAL_ERROR else ChangeStatusCode.COMMITTED
+                        if (error) ChangeStatusCode.INTERNAL_ERROR else ChangeStatusCode.COMMITTED,
+                        "Some error message".takeIf { error }
                     )
                 ),
                 sliceId = sliceRefs.random(),
                 nrOfInserts = Random.nextLong(500),
-                nrOfDeletes = Random.nextLong(500),
-                errorMessage = "Some error message".takeIf { error }
+                nrOfDeletes = Random.nextLong(500)
             )
         }
 
@@ -94,7 +96,7 @@ class TestClickhouseChangeLog {
         // Test ordering by POJO field
         val orderedRecords = changeHistory.find(sort = Sort.ascending("nrOfInserts", "id")).await().indefinitely()
         val expectedOrderedRecords = historyRecords.sortedWith(
-            compareBy<ChangeReport> { it.nrOfInserts }.thenBy { it.id }
+            compareBy<ProcessedChange> { it.nrOfInserts }.thenBy { it.id }
         )
         assertEquals(expectedOrderedRecords, orderedRecords.items)
 

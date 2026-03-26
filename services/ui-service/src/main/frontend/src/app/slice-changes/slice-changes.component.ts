@@ -7,7 +7,7 @@ import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { EMPTY, map } from 'rxjs';
 import { KvasirService } from '../services/kvasir.service';
-import { ChangeReport, ChangeStatusEntry, Slice } from '../types';
+import { ProcessedChange, ChangeStatusEntry, Slice } from '../types';
 import { sortByTimestamp } from '../util/utils';
 
 @Component({
@@ -38,8 +38,8 @@ export class SliceChangesComponent {
       params ? this.kvasir.listSliceChangeReports(params) : EMPTY,
   });
 
-  lastStatus = (report: ChangeReport): ChangeStatusEntry | undefined =>
-    report['kss:statusEntry'].sort(sortByTimestamp('desc'))?.at(0);
+  lastStatus = (report: ProcessedChange): ChangeStatusEntry | undefined =>
+    report['kss:processingHistory'].sort(sortByTimestamp('desc'))?.at(0);
 
   openChangeReport(changeReportId: string): void {
     this.router.navigate([

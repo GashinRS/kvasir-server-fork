@@ -1,12 +1,12 @@
-import { } from '@angular/cdk';
+import {} from '@angular/cdk';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, computed, inject, input, OnInit } from '@angular/core';
-import { rxResource, toObservable } from '@angular/core/rxjs-interop';
+import { Component, computed, effect, inject, input } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { NzButtonComponent } from "ng-zorro-antd/button";
+import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzDescriptionsModule } from 'ng-zorro-antd/descriptions';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
-import { NzFlexModule } from "ng-zorro-antd/flex";
+import { NzFlexModule } from 'ng-zorro-antd/flex';
 import { NzGridModule } from 'ng-zorro-antd/grid';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzModalService } from 'ng-zorro-antd/modal';
@@ -20,12 +20,18 @@ import { LiteralBadgeComponent } from '../components/literal-badge/literal-badge
 import { StatusEntriesComponent } from '../modals/status-entries/status-entries.component';
 import { RangeDiff, ServerPagedDirective } from '../server-paged.directive';
 import { KvasirService } from '../services/kvasir.service';
-import { ChangeReport, ChangeResultCode, ChangeStatusEntry } from '../types';
+import {
+  ChangeResultCode,
+  ChangeStatusEntry,
+  isPendingChangeRequest,
+  PendingChangeRequest,
+  ProcessedChange,
+} from '../types';
 import {
   ensureArray,
   mapToSignedN3Quads,
   SignedN3Quad,
-  sortStatusEntries
+  sortStatusEntries,
 } from '../util/utils';
 
 @Component({
@@ -46,38 +52,64 @@ import {
     LiteralBadgeComponent,
     NzIconModule,
     NzFlexModule,
-    NzButtonComponent,
-],
+    NzButtonModule,
+  ],
   templateUrl: './change.component.html',
   styleUrl: './change.component.less',
 })
-export class ChangeComponent implements OnInit {
+export class ChangeComponent {
   // DI
   private kvasir = inject(KvasirService);
-  private modal = inject(NzModalService)
+  private modal = inject(NzModalService);
 
   // Input params
   readonly changeReportId = input.required<string>();
 
-  change = rxResource<ChangeReport, { changeReportId: string }>({
+  change = rxResource<
+    PendingChangeRequest | ProcessedChange,
+    { changeReportId: string }
+  >({
     params: () => ({ changeReportId: this.changeReportId() }),
-    stream: ({ params: { changeReportId } }) => this.kvasir.getChangeReport(changeReportId),
+    stream: ({ params: { changeReportId } }) =>
+      this.kvasir.getProcessedChange(changeReportId),
   });
 
+  readonly isPending = computed(
+    () => this.change.hasValue() && isPendingChangeRequest(this.change.value()),
+  );
+
+  readonly pendingChange = computed<PendingChangeRequest | null>(() =>
+    this.change.hasValue()
+      ? (this.change.value() as PendingChangeRequest)
+      : null,
+  );
+  readonly processedChange = computed<ProcessedChange | null>(() =>
+    this.change.hasValue() ? (this.change.value() as ProcessedChange) : null,
+  );
+
   statusEntry = computed<ChangeStatusEntry>(() => {
-    const entries = this.change.value()?.['kss:statusEntry'];
-    if (Array.isArray(entries)) {
-      return entries?.sort(sortStatusEntries('desc'))[0];
+    if ((this.change.value() as any)['kss:podId'] != null) {
+      const changeReport = this.change.value() as ProcessedChange;
+      const entries = changeReport['kss:processingHistory'];
+      if (Array.isArray(entries)) {
+        return entries?.sort(sortStatusEntries('desc'))[0];
+      } else {
+        return entries as unknown as ChangeStatusEntry;
+      }
     } else {
-      return entries as unknown as ChangeStatusEntry;
+      return null as unknown as ChangeStatusEntry;
     }
   });
 
   records: SignedN3Quad[] = [];
   private cursor?: string;
 
-  ngOnInit(): void {
-    this.fetchPage();
+  constructor() {
+    effect(() => {
+      if (this.processedChange() != null) {
+        this.fetchPage();
+      }
+    });
   }
 
   trackByIndex(_: number, data: any): number {
@@ -103,40 +135,44 @@ export class ChangeComponent implements OnInit {
     this.modal.info({
       nzTitle: 'StatusEntries',
       nzContent: StatusEntriesComponent,
-      nzData: this.change.value()?.['kss:statusEntry'] ?? [],
+      nzData:
+        (this.change.value() as ProcessedChange)?.['kss:processingHistory'] ??
+        [],
       nzWidth: '40%',
     });
   }
 
   reload(): void {
-   this.change.reload();
     this.records = [];
     this.cursor = undefined;
-   this.fetchPage();
+    this.change.reload();
   }
 
   private fetchPage(cursor?: string) {
-    this.kvasir
-      .listChangeRecords(this.changeReportId()!, cursor)
-      .pipe(
-        map((page) => {
-          this.cursor = page.cursor;
-          const del = ensureArray(page.content['kss:delete'] ?? []);
-          const ins = ensureArray(page.content['kss:insert'] ?? []);
-          return {
-            deletes: del,
-            inserts: ins,
-            context: page.content['@context'],
-          };
-        }),
-        switchMap(({ deletes, inserts, context }) => {
-          const delObs = from(mapToSignedN3Quads(deletes, context, '-'));
-          const insObs = from(mapToSignedN3Quads(inserts, context, '+'));
-          return delObs.pipe(concatWith(insObs));
-        }),
-      )
-      .subscribe((quads) => {
-        this.records = [...this.records, ...quads];
-      });
+    if (!this.isPending()) {
+      const id = encodeURIComponent(this.processedChange()!['@id']!);
+      this.kvasir
+        .listChangeRecords(id, cursor)
+        .pipe(
+          map((page) => {
+            this.cursor = page.cursor;
+            const del = ensureArray(page.content['kss:delete'] ?? []);
+            const ins = ensureArray(page.content['kss:insert'] ?? []);
+            return {
+              deletes: del,
+              inserts: ins,
+              context: page.content['@context'],
+            };
+          }),
+          switchMap(({ deletes, inserts, context }) => {
+            const delObs = from(mapToSignedN3Quads(deletes, context, '-'));
+            const insObs = from(mapToSignedN3Quads(inserts, context, '+'));
+            return delObs.pipe(concatWith(insObs));
+          }),
+        )
+        .subscribe((quads) => {
+          this.records = [...this.records, ...quads];
+        });
+    }
   }
 }

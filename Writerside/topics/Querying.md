@@ -683,6 +683,9 @@ Returns:
 }
 ```
 
+> The fields `_relations`, `_predicates` and `_object` are not available when querying a [Slice](Slices.md) , since they can potentially expose information that is outside of the Slice's defined boundaries.
+> {style="warning"}
+
 ### `BoxedLiteral` _implements `RDFNode`_
 
 This type represents a boxed literal, can be useful to use in combination with the RDFNode supertype, in order to

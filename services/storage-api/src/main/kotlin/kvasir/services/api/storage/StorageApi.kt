@@ -5,6 +5,7 @@ import io.quarkus.logging.Log
 import io.quarkus.runtime.Startup
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.vertx.UniHelper
+import io.smallrye.reactive.messaging.kafka.KafkaRecord
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
@@ -21,7 +22,7 @@ import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
 import kvasir.plugins.messaging.kafka.StorageMutationEmitterProvider
 import kvasir.plugins.storage.s3.S3StorageConfig
-import kvasir.utils.s3.S3Utils
+import kvasir.plugins.storage.s3.S3Utils
 import uk.co.lucasweb.aws.v4.signer.Signer
 import uk.co.lucasweb.aws.v4.signer.credentials.AwsCredentials
 import java.net.URI
@@ -155,7 +156,7 @@ class S3Interceptor(
                         versionId = context.response().headers().get("x-amz-version-id"),
                         eventType = operationType
                     )
-                    storageEventEmitterProvider.getEmitter().send(event).replaceWithVoid()
+                    storageEventEmitterProvider.getEmitter().sendMessage(KafkaRecord.of(podId, event)).replaceWithVoid()
                 } else {
                     Uni.createFrom().voidItem()
                 }

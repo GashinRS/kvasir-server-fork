@@ -5,34 +5,32 @@ import graphql.ExecutionResult
 import graphql.GraphQL
 import graphql.GraphqlErrorBuilder
 import graphql.execution.*
-import graphql.language.AstPrinter
-import graphql.parser.Parser
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*
 import graphql.schema.idl.*
 import io.quarkus.logging.Log
-import io.smallrye.config.ConfigMapping
-import io.smallrye.config.WithDefault
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
+import io.smallrye.reactive.messaging.kafka.KafkaRecord
 import io.vertx.core.json.JsonObject
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.enterprise.inject.Instance
 import kvasir.definitions.kg.*
 import kvasir.definitions.kg.changes.*
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
+import kvasir.definitions.kg.exceptions.InvalidTemplateException
 import kvasir.definitions.kg.graphql.KvasirTypes
 import kvasir.definitions.kg.graphql.TYPE_MUTATION
 import kvasir.definitions.kg.graphql.TYPE_SUBSCRIPTION
 import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.persistence.Sort
+import kvasir.definitions.reactive.conditionalUni
 import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.cursors.OffsetBasedCursor
 import kvasir.utils.graphql.RDFClassTypeResolver
 import kvasir.utils.graphql.SliceGraphQLSchema
-import kvasir.utils.graphql.getStorageClass
 import kvasir.utils.idgen.ChangeRequestId
 import mutiny.zero.flow.adapters.AdaptersToFlow
 import org.dataloader.DataLoaderRegistry
@@ -41,22 +39,7 @@ import org.reactivestreams.Publisher
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.CompletableFuture
-
-@ConfigMapping(prefix = "kvasir-ext.changes.processing")
-interface ChangeRequestPipelineConfig {
-
-    fun pipeline(): List<ChangeRequestPipelineProcessorConfig>
-
-}
-
-interface ChangeRequestPipelineProcessorConfig {
-
-    fun className(): String
-
-    @WithDefault("false")
-    fun defaultStorage(): Boolean
-
-}
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * This class is used to implement common logic for knowledge graph implementations, including:
@@ -66,90 +49,184 @@ interface ChangeRequestPipelineProcessorConfig {
  */
 @ApplicationScoped
 class DefaultKnowledgeGraph(
-    @Channel(Channels.OUTBOX_PUBLISH)
-    private val outboxEmitter: MutinyEmitter<ChangeReport>,
+    private val evaluateAssertions: EvaluateAssertions,
+    private val materializeRecords: MaterializeRecords,
+    private val materializeS3References: MaterializeS3References,
+    private val sliceGraphQLBasedValidator: SliceGraphQLBasedValidator,
+    private val changeRecordBackend: ChangeRecordBackend,
     private val repositoryFactory: RepositoryFactory,
-    private val changeRequestTxBufferFactory: ChangeRequestTxBufferFactory,
-    private val pipelineConfig: ChangeRequestPipelineConfig,
-    private val processors: Instance<ChangeProcessor>,
     private val typeRegistry: TypeRegistry,
-    @Channel(Channels.CHANGE_REQUESTS_PUBLISH)
+    @Channel(Channels.CHANGES_INCOMING_PUBLISH)
     private val changeRequestEmitter: MutinyEmitter<ChangeRequest>,
     @Channel(Channels.QUERY_REQUESTS_PUBLISH)
     private val queryRequestEventEmitter: MutinyEmitter<QueryRequestEvent>,
     private val streamingDatafetcherFactory: StreamingDatafetcherFactory
 ) : KnowledgeGraph {
 
-    val defaultStorageBackend = (pipelineConfig.pipeline().find { it.defaultStorage() }?.let {
-        processors.handles().find { backend -> backend.bean.beanClass.name == it.className() }
-            ?.let { instanceHandle -> instanceHandle.get() as StorageBackend }
-            ?: throw RuntimeException("Configured default storage backend '${it.className()}' not found!")
-    } ?: processors.handles().map { it.get() }.filterIsInstance<StorageBackend>().firstOrNull())
-        ?: throw RuntimeException("No storage backend found!")
-
-    override fun process(request: ChangeRequest): Uni<Void> {
-        val start = System.currentTimeMillis()
-        val pipeline = pipelineConfig.pipeline().map { pipelineConfig ->
-            processors.handles().find { it.bean.beanClass.name == pipelineConfig.className() }?.get()
-                ?: throw RuntimeException("Change Request pipeline processor '${pipelineConfig.className()}' not found!")
+    override fun processPlain(requests: Collection<ChangeRequest>): Uni<Collection<ProcessedChange>> {
+        val mappedFailures = mutableMapOf<String, Throwable>()
+        // Map stateId to stats
+        val mappedStats = requests.associate { it.changeId to ChangeRequestStats() }
+        val targetPods = requests.map { it.podId }.distinct()
+        return if (targetPods.size == 1) {
+            val targetPod = targetPods.first()
+            Multi.createFrom().iterable(requests)
+                .onItem().transformToMultiAndConcatenate { request ->
+                    // Convert the JSON-LD insert/delete to change records
+                    materializeRecords.process(request)
+                        // Validate the records (only applies if the change is applied to a Slice)
+                        .chain { records -> sliceGraphQLBasedValidator.process(request, records).map { records } }
+                        .onFailure().recoverWithUni { err ->
+                            mappedFailures[request.id] = err
+                            Uni.createFrom().item(emptyList())
+                        }
+                        .onItem().disjoint<ChangeRecord>()
+                }
+                .group().intoLists().of(changeRecordBackend.preferredBatchSize)
+                .onItem().transformToUniAndConcatenate { batch ->
+                    // Write the records to the storage backend
+                    changeRecordBackend.write(targetPod, batch).onFailure().recoverWithUni { err ->
+                        // Map the failure to all change requests involved in this batch
+                        val involvedRequests = batch.forEach { record ->
+                            mappedFailures[record.changeId] = err
+                        }
+                        Uni.createFrom().voidItem()
+                    }
+                        .invoke { _ ->
+                            // Update stats
+                            batch.groupBy { it.changeId }.forEach { (stateId, records) ->
+                                val stats = mappedStats[stateId]!!
+                                records.forEach { record ->
+                                    when (record.type) {
+                                        ChangeRecordType.INSERT -> stats.insertCounter.incrementAndGet()
+                                        ChangeRecordType.DELETE -> stats.deleteCounter.incrementAndGet()
+                                    }
+                                }
+                            }
+                        }
+                }
+                .skipToLast()
+                .chain { _ ->
+                    // Create change reports
+                    Uni.createFrom()
+                        .item(requests.map { req ->
+                            createChangeReport(
+                                req,
+                                mappedStats[req.changeId]!!,
+                                mappedFailures[req.id]
+                            )
+                        })
+                }
+        } else {
+            Uni.createFrom()
+                .failure(IllegalArgumentException("All change requests in a plain batch must target the same pod"))
         }
-        return changeRequestTxBufferFactory.open(request)
-            .chain { txBuffer ->
-                Multi.createFrom().iterable(pipeline)
-                    .onItem().transformToUniAndConcatenate { processor -> processor.process(txBuffer) }
-                    .collect().asList().map { txBuffer to it }
+    }
+
+    override fun processStateDependent(request: ChangeRequest): Uni<ProcessedChange> {
+        val stats = ChangeRequestStats()
+        // Evaluate assertions
+        return evaluateAssertions.process(request)
+            .chain { _ ->
+                // Convert the JSON-LD insert/delete to change records and bind with-clauses
+                materializeRecords.process(request)
             }
-            // TODO: In the current implementation, progress events are not stored between stages. Process flow will be overhauled in future, so this is acceptable for now.
-            .chain { (txBuffer, progressEvent) ->
-                txBuffer.statistics().chain { stats ->
-                    val report = ChangeReport(
-                        id = request.id,
-                        podId = request.podId,
-                        requestingUser = request.requestingUser,
-                        statusEntry = listOf(
-                            ChangeReportStatusEntry(
-                                ChangeRequestId.fromId(request.id).timestamp(),
-                                ChangeStatusCode.QUEUED
-                            ),
-                            *progressEvent.filterNotNull().toTypedArray(),
-                            ChangeReportStatusEntry(Instant.now(), ChangeStatusCode.COMMITTED),
-                        ),
-                        sliceId = request.sliceId,
-                        nrOfInserts = stats.nrOfInserts,
-                        nrOfDeletes = stats.nrOfDeletes
-                    )
-                    repositoryFactory.getRepository(ChangeReport::class, request.podId).persist(report)
-                        .map { report }
+            .chain { records ->
+                // Validate the records (only applies if the change is applied to a Slice)
+                sliceGraphQLBasedValidator.process(request, records).map { records }
+            }
+            .chain { records ->
+                // Write the records to the storage backend
+                changeRecordBackend.write(request.podId, records).invoke { _ ->
+                    // Update stats
+                    records.forEach { record ->
+                        when (record.type) {
+                            ChangeRecordType.INSERT -> stats.insertCounter.incrementAndGet()
+                            ChangeRecordType.DELETE -> stats.deleteCounter.incrementAndGet()
+                        }
+                    }
                 }
             }
-            .invoke { _ -> Log.debug("Processed change request with id '${request.id}' in ${System.currentTimeMillis() - start} ms.") }
-            .onFailure(ChangeAssertionException::class.java).recoverWithUni { e ->
-                Log.warn("Failed to process change request due to assertion error: $request", e)
-                logFailedChangeRequest(
-                    request,
-                    ChangeStatusCode.ASSERTION_FAILED,
-                    e.message ?: "Assertion failed"
-                )
+            .wrapExceptionsAndCreateReport(request, stats)
+    }
+
+    override fun processReferenced(request: ChangeRequest): Uni<ProcessedChange> {
+        val stats = ChangeRequestStats()
+        return materializeS3References.process(request)
+            .group().intoLists().of(changeRecordBackend.preferredBatchSize)
+            .onItem().transformToUniAndConcatenate { batch ->
+                // Write the records to the storage backend
+                changeRecordBackend.write(request.podId, batch).invoke { _ ->
+                    // Update stats
+                    batch.forEach { record ->
+                        when (record.type) {
+                            ChangeRecordType.INSERT -> stats.insertCounter.incrementAndGet()
+                            ChangeRecordType.DELETE -> stats.deleteCounter.incrementAndGet()
+                        }
+                    }
+                }
             }
-            .onFailure(
-                InvalidChangeRequestException::class.java
-            ).recoverWithUni { e ->
-                Log.warn("Invalid change request: $request", e)
-                logFailedChangeRequest(
-                    request,
-                    ChangeStatusCode.VALIDATION_ERROR,
-                    e.message ?: "Invalid change request"
-                )
+            .skipToLast()
+            // Rollback on failure as there might have been intermediary state written to the backend
+            .wrapExceptionsAndCreateReport(request, stats, true)
+    }
+
+    private fun Uni<Void>.wrapExceptionsAndCreateReport(
+        request: ChangeRequest,
+        stats: ChangeRequestStats,
+        rollback: Boolean = false
+    ): Uni<ProcessedChange> {
+        return this
+            .map {
+                createChangeReport(request, stats, null)
             }
-            .onFailure().recoverWithUni { e ->
-                Log.error("Failed to process change request: $request", e)
-                logFailedChangeRequest(
-                    request,
-                    ChangeStatusCode.INTERNAL_ERROR,
-                    e.message ?: "An unexpected error occurred while processing the change request: '${e.message}'"
-                )
+            .onFailure().recoverWithUni { err ->
+                // There might have been intermediary state written to the backend, so perform rollback if required
+                conditionalUni(rollback) { rollback(ChangeRollbackRequest(request.podId, request.changeId!!)) }
+                    .onFailure().recoverWithUni { _ ->
+                        Log.debug("Failed to rollback change ${request.changeId} on pod ${request.podId}")
+                        Uni.createFrom().voidItem()
+                    }
+                    .map { createChangeReport(request, stats, err) }
             }
-            .onItem().transformToUni { report -> outboxEmitter.send(report) }
+    }
+
+    private fun createChangeReport(
+        request: ChangeRequest,
+        stats: ChangeRequestStats,
+        throwable: Throwable?
+    ): ProcessedChange {
+        val terminalState = when (throwable) {
+            is ChangeAssertionException -> ChangeStatusCode.ASSERTION_FAILED
+            is InvalidTemplateException -> ChangeStatusCode.VALIDATION_ERROR
+            is InvalidChangeRequestException -> ChangeStatusCode.VALIDATION_ERROR
+            null -> ChangeStatusCode.COMMITTED
+            else -> ChangeStatusCode.INTERNAL_ERROR
+        }
+        val report = ProcessedChange(
+            id = request.changeId!!,
+            origRequestId = request.id,
+            podId = request.podId,
+            requestingUser = request.requestingUser,
+            sliceId = request.sliceId,
+            nrOfInserts = stats.insertCounter.get(),
+            nrOfDeletes = stats.deleteCounter.get(),
+            processingHistory = listOf(
+                ChangeProcessingHistoryEntry(
+                    ChangeRequestId.fromId(request.id).timestamp(),
+                    ChangeStatusCode.QUEUED
+                ),
+                ChangeProcessingHistoryEntry(
+                    Instant.now(),
+                    terminalState,
+                    throwable?.message
+                )
+            ),
+            // Forward associated references (if any)
+            associatedReferences = request.insertFromRefs.map { AssociatedReference(it, ChangeRecordType.INSERT) } +
+                    request.deleteFromRefs.map { AssociatedReference(it, ChangeRecordType.DELETE) }
+        )
+        return report
     }
 
     override fun query(request: QueryRequest): Multi<QueryResult> {
@@ -159,31 +236,28 @@ class DefaultKnowledgeGraph(
             setupPredefinedSchema(request)
         } else {
             buildSchema(request.podId, request.context)
-                .chain { generatedSchema -> getRequestedStateAtTimestamp(request).map { it to generatedSchema } }
-                .map { (atTimestamp, generatedSchema) ->
+                .chain { generatedSchema -> evaluateChangeId(request).map { it to generatedSchema } }
+                .map { (atChangeId, generatedSchema) ->
                     val codeRegistry =
                         GraphQLCodeRegistry.newCodeRegistry()
-                            .defaultDataFetcher { _ -> buildDatafetcher(request, atTimestamp) }
+                            .defaultDataFetcher { _ -> buildDatafetcher(request, atChangeId) }
                     codeRegistry.typeResolver(KvasirTypes.Resource, RDFClassTypeResolver(request.context))
                     codeRegistry.typeResolver(KvasirTypes.RDFNode, RDFClassTypeResolver(request.context))
-                    generatedSchema.schemaBuilder.codeRegistry(codeRegistry.build()).build()
+                    VersionedGraphQLSchema(
+                        generatedSchema.schemaBuilder.codeRegistry(codeRegistry.build()).build(),
+                        atChangeId
+                    )
                 }
         }
         return subscribeToExecutableSchema.onItem().transformToMulti { executableSchema ->
-            val storageBackends = pipelineConfig.pipeline().map { pipelineConfig ->
-                processors.handles().find { it.bean.beanClass.name == pipelineConfig.className() }?.get()
-                    ?: throw RuntimeException("Storage backend '${pipelineConfig.className()}' not found!")
-            }.filterIsInstance<StorageBackend>()
-                .associateBy { it::class.qualifiedName } + mapOf(null to defaultStorageBackend)
-            val build = GraphQL.newGraphQL(executableSchema)
+            val build = GraphQL.newGraphQL(executableSchema.schema)
                 .defaultDataFetcherExceptionHandler(SanitizedExceptionHandler())
                 .subscriptionExecutionStrategy(SubscriptionExecutionStrategy())
                 .instrumentation(
-                    PaginationInstrumentation(
-                        storageBackends,
+                    changeRecordBackend.instrumentation(
                         request.podId,
                         request.context,
-                        request.atTimestamp
+                        executableSchema.changeId
                     )
                 )
                 .build()
@@ -196,7 +270,7 @@ class DefaultKnowledgeGraph(
                                 this.variables(request.variables)
                             }
                         }
-                        .query(getPreprocessedQuery(request))
+                        .query(request.query)
                         .build()
                 )
             )
@@ -263,39 +337,43 @@ class DefaultKnowledgeGraph(
     }
 
     override fun streamChangeRecords(request: ChangeRecordRequest): Multi<ChangeRecord> {
-        return Multi.createFrom().iterable(processors.filterIsInstance<StorageBackend>())
-            .onItem()
-            .transformToMultiAndConcatenate { backend -> backend.stream(request) }
+        return changeRecordBackend.stream(request)
     }
 
     override fun rollback(request: ChangeRollbackRequest): Uni<Void> {
-        // Rollback the change by executing a rollback on all the registered Storage Backends
-        return Multi.createFrom().iterable(processors.filterIsInstance<StorageBackend>())
-            .onItem()
-            .transformToUniAndMerge { backend -> backend.rollback(request) }
-            .skipToLast()
+        return changeRecordBackend.rollback(request)
     }
 
-    private fun getRequestedStateAtTimestamp(request: QueryRequest): Uni<Instant> {
+    /**
+     * Evaluate the change ID or timestamp specified in the query request to determine which state (determined by a change id) to query.
+     */
+    private fun evaluateChangeId(request: QueryRequest): Uni<String> {
         return when {
-            request.atTimestamp != null -> Uni.createFrom().item(request.atTimestamp)
-            request.atChangeRequestId != null -> repositoryFactory.getRepository(ChangeReport::class, request.podId)
-                .findById(request.atChangeRequestId!!)
-                .map { change -> change?.statusEntry?.find { it.statusCode == ChangeStatusCode.COMMITTED }?.timestamp }
+            request.atTimestamp != null -> repositoryFactory.getRepository(ProcessedChange::class, request.podId)
+                .find(
+                    filter = "writeTs<'${request.atTimestamp}' and statusCode==COMMITTED",
+                    sort = Sort.descending("writeTs"),
+                    limit = 1
+                )
+                .map { results ->
+                    results.items.firstOrNull()?.id
+                }
+
+            request.atChangeId != null -> Uni.createFrom().item(request.atChangeId)
 
             else -> Uni.createFrom().nullItem()
         }
     }
 
-    protected fun setupPredefinedSchema(request: QueryRequest): Uni<GraphQLSchema> {
-        return getRequestedStateAtTimestamp(request)
-            .map { atTimestamp ->
+    protected fun setupPredefinedSchema(request: QueryRequest): Uni<VersionedGraphQLSchema> {
+        return evaluateChangeId(request)
+            .map { atChangeId ->
                 val typeDefinitionRegistry =
                     SliceGraphQLSchema(request.predefinedSchema!!, request.context).getTypeDefinitionRegistry()
                 val dynamicWiringFactory = object : WiringFactory {
 
                     override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
-                        return buildDatafetcher(request, atTimestamp)
+                        return buildDatafetcher(request, atChangeId)
                     }
 
                     override fun providesTypeResolver(environment: InterfaceWiringEnvironment): Boolean {
@@ -325,7 +403,7 @@ class DefaultKnowledgeGraph(
                         .build()
                 val executableSchema =
                     graphql.schema.idl.SchemaGenerator().makeExecutableSchema(typeDefinitionRegistry, runtimeWiring)
-                executableSchema
+                VersionedGraphQLSchema(executableSchema, atChangeId)
             }
     }
 
@@ -354,41 +432,19 @@ class DefaultKnowledgeGraph(
         )
     }
 
-    private fun getPreprocessedQuery(request: QueryRequest): String {
-        val pipeline = pipelineConfig.pipeline().map { pipelineConfig ->
-            processors.handles().find { it.bean.beanClass.name == pipelineConfig.className() }?.get()
-                ?: throw RuntimeException("Change Request pipeline processor '${pipelineConfig.className()}' not found!")
-        }.filterIsInstance<StorageBackend>()
-
-        var queryDoc = Parser.parse(request.query)
-        pipeline.forEach { backend ->
-            queryDoc = backend.prepareQuery(request, queryDoc)
-        }
-        val processedQuery = AstPrinter.printAst(queryDoc)
-        return processedQuery
-    }
-
     fun buildDatafetcher(
         request: QueryRequest,
-        atTimestamp: Instant? = null,
+        atChangeId: String? = null,
         routeToSubscriptionHandler: Boolean = true
     ): DataFetcher<Any> {
         val podId = request.podId
         val context = request.context
 
-        // Retrieve an ordered list of the available datafetchers (backends that do not provide a datafetcher are filtered out)
-        val datafetcherMapping = pipelineConfig.pipeline().map { pipelineConfig ->
-            processors.handles().find { it.bean.beanClass.name == pipelineConfig.className() }?.get()
-                ?: throw RuntimeException("Storage backend '${pipelineConfig.className()}' not found!")
-        }.filterIsInstance<StorageBackend>()
-            .map { backend -> backend::class.qualifiedName to backend.datafetcher(podId, context, atTimestamp) }
-            .filter { it.second != null }.toMap()
-
-        val defaultDatafetcher = defaultStorageBackend.datafetcher(
+        val queryDataFetcher = changeRecordBackend.datafetcher(
             podId,
             context,
-            atTimestamp
-        ) ?: throw RuntimeException("The default storage backend must provide a non-null datafetcher!")
+            atChangeId
+        )
 
         val mutationHandler = MutationToChangeRequest(request)
         val streamingHandler = streamingDatafetcherFactory.createDatafetcher(request)
@@ -404,44 +460,30 @@ class DefaultKnowledgeGraph(
                     // Handle mutations
                     mutationHandler.add(env)
                     if (mutationHandler.isComplete(env)) {
-                        changeRequestEmitter.send(mutationHandler.getChangeRequest())
-                            .map { mutationHandler.changeRequestId }.convert().toCompletionStage()
+                        changeRequestEmitter.sendMessage(
+                            KafkaRecord.of(
+                                request.podId,
+                                mutationHandler.getChangeRequest()
+                            )
+                        )
+                            .map {
+                                val requestId = mutationHandler.changeRequestId
+                                // Qualify the request ID as a URI
+                                "${request.sliceId}/changes/pending/$requestId"
+                            }.convert().toCompletionStage()
                     } else {
-                        mutationHandler.changeRequestId
+                        val requestId = mutationHandler.changeRequestId
+                        // Qualify the request ID as a URI
+                        "${request.sliceId}/changes/pending/$requestId"
                     }
                 }
 
                 else -> {
                     // Handle queries
-                    // Determine which datafetcher to use
-                    val storageClass = env.getStorageClass()
-                    if (storageClass != null) {
-                        datafetcherMapping[storageClass]!!.get(env)
-                    } else {
-                        defaultDatafetcher.get(env)
-                    }
+                    queryDataFetcher.get(env)
                 }
             }
         }
-    }
-
-    private fun logFailedChangeRequest(
-        request: ChangeRequest,
-        resultCode: ChangeStatusCode,
-        errorMessage: String
-    ): Uni<ChangeReport> {
-        val report = ChangeReport(
-            id = request.id,
-            podId = request.podId,
-            requestingUser = request.requestingUser,
-            statusEntry = listOf(
-                ChangeReportStatusEntry(ChangeRequestId.fromId(request.id).timestamp(), ChangeStatusCode.QUEUED),
-                ChangeReportStatusEntry(Instant.now(), resultCode, errorMessage)
-            ),
-            sliceId = request.sliceId,
-            errorMessage = errorMessage
-        )
-        return repositoryFactory.getRepository(ChangeReport::class, request.podId).persist(report).map { report }
     }
 
 }
@@ -458,3 +500,13 @@ class SanitizedExceptionHandler : DataFetcherExceptionHandler {
     }
 
 }
+
+private class ChangeRequestStats(
+    val insertCounter: AtomicLong = AtomicLong(0),
+    val deleteCounter: AtomicLong = AtomicLong(0)
+)
+
+data class VersionedGraphQLSchema(
+    val schema: GraphQLSchema,
+    val changeId: String?
+)

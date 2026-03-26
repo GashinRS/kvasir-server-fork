@@ -1,23 +1,22 @@
 package kvasir.services.api.kg.query
 
-import com.github.jsonldjava.utils.JsonUtils
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
-import io.restassured.RestAssured.get
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
-import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.MediaType
-import kvasir.definitions.kg.*
+import kvasir.definitions.kg.ChangeRecordRequest
+import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.QueryResult
+import kvasir.definitions.kg.changes.ChangeRequest
+import kvasir.definitions.kg.changes.ChangeStatusCode
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
 import kvasir.definitions.kg.slices.Slice
-import kvasir.definitions.rdf.JSONObject
-import kvasir.definitions.rdf.JsonLdHelper
+import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.JsonLdKeywords
-import kvasir.definitions.rdf.RDFMediaTypes
-import kvasir.definitions.rdf.getJsonArray
 import kvasir.utils.idgen.ChangeRequestId
+import kvasir.utils.idgen.StateId
 import kvasir.utils.test.commons.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.MethodOrderer
@@ -35,6 +34,9 @@ class GraphSlicesApiTest : AbstractPodTest() {
     @Inject
     lateinit var kg: KnowledgeGraph
 
+    @Inject
+    lateinit var repositoryFactory: RepositoryFactory
+
     val sliceName = "test1"
     val filterEmailDomain = "@slice-test.org"
     lateinit var sliceUri: String
@@ -45,97 +47,47 @@ class GraphSlicesApiTest : AbstractPodTest() {
     lateinit var nonNamedSliceUri: String
 
     @Test
-    @Order(1)
-    @TestSecurity(user = "alice")
-    fun testCreateSlice() {
-        val sliceDefinition = """
-            type Query {
-                persons: [ex_Person!]!
-                person(id: ID!): ex_Person
-            }
-            
-            type ex_Person {
-                id: ID!
-                so_givenName: String!
-                familyName: String! @predicate(iri: "so:familyName")
-                so_email: [String!]! @filter(if: "it==*$filterEmailDomain")
-            }
-        """.trimIndent()
-        val input = SliceInput(
-            name = sliceName,
-            context = TestConstants.CONTEXT,
-            schema = sliceDefinition
-        )
-
-        sliceUri = given()
-            .contentType(RDFMediaTypes.JSON_LD)
-            .body(JsonLdHelper.encode(input))
-            .post("{podId}/slices", podName)
-            .then()
-            .statusCode(201)
-            .extract().header(HttpHeaders.LOCATION)
-
-        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().asString()
-            .let { JsonLdHelper.decode(it, Slice::class.java) }
-        assertFalse(sliceDef.supportsChanges)
-    }
-
-    @Test
-    @Order(2)
-    @TestSecurity(user = "alice")
-    fun testCreateNonNamedSlice() {
-        val sliceDefinition = """
-            type Query {
-                persons: [ex_Person!]!
-                person(id: ID!): ex_Person
-            }
-            
-            type ex_Person {
-                id: ID!
-                so_givenName: String!
-                familyName: String! @predicate(iri: "so:familyName")
-                so_email: [String!]! @filter(if: "it==*$filterEmailDomain")
-            }
-        """.trimIndent()
-        val input = SliceInput(
-            context = TestConstants.CONTEXT,
-            schema = sliceDefinition
-        )
-
-        nonNamedSliceUri = given()
-            .contentType(RDFMediaTypes.JSON_LD)
-            .body(JsonLdHelper.encode(input))
-            .post("{podId}/slices", podName)
-            .then()
-            .statusCode(201)
-            .extract().header(HttpHeaders.LOCATION)
-
-        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().asString()
-            .let { JsonLdHelper.decode(it, Slice::class.java) }
-        assertFalse(sliceDef.supportsChanges)
-    }
-
-    @Test
-    @Order(3)
-    @TestSecurity(user = "alice")
-    fun testListSlices() {
-        val result = JsonUtils.fromString(
-            get("{podId}/slices", podName)
-                .then()
-                .statusCode(200)
-                .extract().body().asString()
-        ) as JSONObject
-        assertEquals(setOf(sliceUri, nonNamedSliceUri), result.getJsonArray<JSONObject>(JsonLdKeywords.graph)?.map {
-            it.get(
-                JsonLdKeywords.id
-            )
-        }?.toSet())
-    }
-
-    @Test
     @Order(4)
     @TestSecurity(user = "alice")
     fun testSliceQuery() {
+        // Init the Slice
+        sliceUri = "$podUri/slices/$sliceName"
+        val sliceDefinition = """
+            type Query {
+                persons: [ex_Person!]!
+                person(id: ID!): ex_Person
+            }
+            
+            type Mutation {
+                insertPerson(input: PersonInput): ID!
+                deletePerson(input: PersonInput): ID!
+            }
+            
+            type ex_Person {
+                id: ID!
+                so_givenName: String!
+                familyName: String! @predicate(iri: "so:familyName")
+                so_email: [String!]! @filter(if: "it==*$filterEmailDomain")
+            }
+            
+            input PersonInput @class(iri: "ex:Person") {
+                id: ID!
+                so_givenName: String!
+                so_familyName: String!
+                so_email: [String!] @shape(pattern: "$filterEmailDomain")
+            }
+        """.trimIndent()
+        val slice = Slice(
+            id = sliceUri,
+            name = sliceName,
+            description = "",
+            author = "alice",
+            context = TestConstants.CONTEXT,
+            schema = sliceDefinition
+        )
+        repositoryFactory.getRepository(Slice::class, podUri).persist(slice).await().indefinitely()
+
+
         // Populate some data
         // Generate 15 persons and then another 5 persons with an email ending on the domain specified in the slice filter
         val slicePersonData = TestDataGenerator.generatePersonData(5).map { person ->
@@ -147,10 +99,12 @@ class GraphSlicesApiTest : AbstractPodTest() {
         val allPersonData = TestDataGenerator.generatePersonData(15) + slicePersonData
         kg.process(
             ChangeRequest(
-                ChangeRequestId.generate("$podUri/changes").encode(),
-                emptyMap(),
-                "alice",
-                podUri,
+                id = ChangeRequestId.generate("$podUri/changes").encode(),
+                // Arbitrary state id
+                changeId = StateId.generate(),
+                context = emptyMap(),
+                requestingUser = "alice",
+                podId = podUri,
                 insert = allPersonData
             )
         ).await().indefinitely()
@@ -188,53 +142,6 @@ class GraphSlicesApiTest : AbstractPodTest() {
             slicePersonData.map { it[JsonLdKeywords.id] }.toSet(),
             result.getDataField<List<Map<String, Any>>>("persons")!!.map { it[FIELD_ID_NAME] }.toSet()
         )
-    }
-
-    @Test
-    @Order(5)
-    @TestSecurity(user = "alice")
-    fun testUpdateSliceToAddMutations() {
-        val sliceDefinition = """
-            type Query {
-                persons: [ex_Person!]!
-                person(id: ID!): ex_Person
-            }
-            
-            type Mutation {
-                insertPerson(input: PersonInput): ID!
-                deletePerson(input: PersonInput): ID!
-            }
-            
-            type ex_Person {
-                id: ID!
-                so_givenName: String!
-                familyName: String! @predicate(iri: "so:familyName")
-                so_email: [String!]! @filter(if: "it==*$filterEmailDomain")
-            }
-            
-            input PersonInput @class(iri: "ex:Person") {
-                id: ID!
-                so_givenName: String!
-                so_familyName: String!
-                so_email: [String!] @shape(pattern: "$filterEmailDomain")
-            }
-        """.trimIndent()
-        val input = SliceInput(
-            name = sliceName,
-            context = TestConstants.CONTEXT,
-            schema = sliceDefinition
-        )
-
-        given()
-            .contentType(RDFMediaTypes.JSON_LD)
-            .body(JsonLdHelper.encode(input))
-            .put(sliceUri)
-            .then().statusCode(204)
-
-        // Fetch the Slice definition, mutations should now be enabled.
-        val sliceDef = get(sliceUri).then().statusCode(200).extract().body().asString()
-            .let { JsonLdHelper.decode(it, Slice::class.java) }
-        assertTrue(sliceDef.supportsChanges)
     }
 
     @Test
@@ -288,10 +195,9 @@ class GraphSlicesApiTest : AbstractPodTest() {
             .body(QueryInputImpl(q))
             .post("$sliceUri/query")
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
-        var changeId = result.getDataField<String>("insertPerson")!!
-        revisitChangeId = changeId
+        var changeRequestId = result.getDataField<String>("insertPerson")!!
 
-        testHelpers.waitForChangeRequest(changeId, podUri, ChangeStatusCode.COMMITTED).await()
+        revisitChangeId = testHelpers.waitForChangeRequest(changeRequestId, podUri, ChangeStatusCode.COMMITTED).await()
             .indefinitely()
 
         // The added person should be retrievable
@@ -327,9 +233,9 @@ class GraphSlicesApiTest : AbstractPodTest() {
             .body(QueryInputImpl(q))
             .post("$sliceUri/query")
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
-        changeId = result.getDataField<String>("deletePerson")!!
+        changeRequestId = result.getDataField<String>("deletePerson")!!
 
-        testHelpers.waitForChangeRequest(changeId, podUri, ChangeStatusCode.COMMITTED).await()
+        testHelpers.waitForChangeRequest(changeRequestId, podUri, ChangeStatusCode.COMMITTED).await()
             .indefinitely()
 
         // The person should no longer be retrievable
@@ -358,7 +264,7 @@ class GraphSlicesApiTest : AbstractPodTest() {
 
         val result = given()
             .contentType(MediaType.APPLICATION_JSON)
-            .body(QueryInputImpl(readQ, atChangeRequest = revisitChangeId)) // Use atChangeRequest to time travel
+            .body(QueryInputImpl(readQ, atChangeId = revisitChangeId)) // Use atChangeRequest to time travel
             .post("$sliceUri/query")
             .then().statusCode(200).extract().body().`as`(QueryResult::class.java)
 

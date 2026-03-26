@@ -32,7 +32,7 @@ class TestClickhouseSliceStore {
 
     @BeforeAll
     fun setup() {
-        clichouseInitializer.initializePodSchema(testRunId, setOf(Slice::class.java)).await().indefinitely()
+        clichouseInitializer.initializeForPod(testRunId, setOf(Slice::class.java)).await().indefinitely()
     }
 
     @AfterAll

@@ -1,7 +1,6 @@
 package kvasir.plugins.policyagent.openfga
 
 import com.fasterxml.jackson.annotation.JsonFormat
-import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.common.base.CaseFormat
 import dev.openfga.sdk.api.client.model.ClientRelationshipCondition
 import dev.openfga.sdk.api.client.model.ClientTupleKey
@@ -59,7 +58,7 @@ class FgaResource(
         return run {
             // Process deletes
             if (transaction.delete.isNotEmpty()) {
-                val tuples = convertToTuples(transaction.delete)
+                val tuples = convertToTuples(podId, transaction.delete)
                 fgaManager.removeTuples(podId, tuples)
             } else {
                 Uni.createFrom().voidItem()
@@ -67,7 +66,7 @@ class FgaResource(
         }.chain { _ ->
             // Process inserts
             if (transaction.insert.isNotEmpty()) {
-                val tuples = convertToTuples(transaction.insert)
+                val tuples = convertToTuples(podId, transaction.insert)
                 fgaManager.addTuples(podId, tuples)
             } else {
                 Uni.createFrom().voidItem()
@@ -80,7 +79,7 @@ class FgaResource(
     @POST
     @OpenFgaPolicyEnforcer
     fun check(@PathParam("podId") podId: String, input: JSONObject): Uni<CheckResult> {
-        val relTuples = convertToTuples(listOf(input))
+        val relTuples = convertToTuples(podId, listOf(input))
         return run {
             when (relTuples.size) {
                 0 -> Uni.createFrom().failure(IllegalArgumentException("No relationship provided in input."))
@@ -102,8 +101,8 @@ class FgaResource(
         }
     }
 
-    private fun convertToTuples(jsonLdList: List<JSONObject>): List<ClientTupleKey> {
-        val statements = RDFTransformer.toStatements(jsonLdList)
+    private fun convertToTuples(podId: String, jsonLdList: List<JSONObject>): List<ClientTupleKey> {
+        val statements = RDFTransformer.toStatements(jsonLdList, podId)
         val instanceToType = statements.filter { it.predicate == RDFVocab.type }
             .associate { it.subject to it.`object` as String }
         return statements.filter { it.predicate in FgaVocab.RESOURCE_RELATIONS }.map { statement ->

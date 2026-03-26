@@ -18,7 +18,7 @@ import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFVocab
 
 class ChangeRequestValidator(
-    private val records: Set<ChangeRecord>,
+    private val records: Collection<ChangeRecord>,
     sliceSchema: String,
     private val context: JSONObject
 ) {
@@ -137,7 +137,7 @@ class ChangeRequestValidator(
     ): FieldValidationResult {
         try {
             val allowMultipleValues = fieldDefinition.type.isList()
-            val optional = fieldDefinition.type.isOptional()
+            val optional = fieldDefinition.type.isNullable()
 
             if (matches.isEmpty() && !optional) {
                 throw InvalidChangeRequestException("Missing required property '$fqFieldName' for instance '$instanceId' of type '$fqTypeName'")

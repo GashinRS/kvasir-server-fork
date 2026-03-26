@@ -16,23 +16,25 @@ import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordRequest
 import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.QueryRequest
-import kvasir.definitions.kg.changes.ChangeReport
+import kvasir.definitions.kg.changes.ProcessedChange
 import kvasir.definitions.kg.graphql.*
+import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.persistence.Sort
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.graphql.getDirectiveArg
 import kvasir.utils.graphql.getFQName
 import kvasir.utils.graphql.innerType
-import kvasir.utils.idgen.ChangeRequestId
 import org.eclipse.microprofile.reactive.messaging.Channel
 import org.reactivestreams.Publisher
 import java.util.concurrent.CompletionStage
 
 @ApplicationScoped
 class StreamingDatafetcherFactory(
-    @Channel(Channels.OUTBOX_SUBSCRIBE)
-    private val outbox: Multi<ChangeReport>,
-    private val knowledgeGraph: DefaultKnowledgeGraph
+    @Channel(Channels.CHANGES_OUTGOING_SUBSCRIBE)
+    private val outbox: Multi<ProcessedChange>,
+    private val knowledgeGraph: DefaultKnowledgeGraph,
+    private val repositoryFactory: RepositoryFactory
 ) {
 
     fun createDatafetcher(request: QueryRequest): DataFetcher<Publisher<Any>> {
@@ -97,7 +99,8 @@ class StreamingDatafetcherFactory(
                                             ARG_ID_NAME
                                         ).value(
                                             ArrayValue.newArrayValue()
-                                                .values(changes.map { StringValue(it.statement.subject) }.distinct()).build()
+                                                .values(changes.map { StringValue(it.statement.subject) }.distinct())
+                                                .build()
                                         ).build()
                                     )
                                 )
@@ -107,24 +110,32 @@ class StreamingDatafetcherFactory(
                         val enrichedEnv = DataFetchingEnvironmentImpl.newDataFetchingEnvironment(env)
                             .mergedField(newMergedField)
                             .build()
-                        val changeRequestId = ChangeRequestId.fromId(changes.first().changeRequestId)
-                        val requestTimestamp = when (triggerType) {
-                            ChangeRecordType.INSERT, null -> changeRequestId.timestamp()
-                            ChangeRecordType.DELETE -> changeRequestId.timestamp()
-                                .minusNanos(1) // State before the statements were deleted
-                        }
 
-                        val dataFetcher = knowledgeGraph.buildDatafetcher(
-                            request,
-                            atTimestamp = requestTimestamp,
-                            routeToSubscriptionHandler = false
-                        )
-                        Uni.createFrom().completionStage { dataFetcher.get(enrichedEnv) as CompletionStage<Any> }
-                            .map { result ->
-                                // Create the appropriate result envelope
-                                result as Any
+                        // Fetch request changeId
+                        when (triggerType) {
+                            ChangeRecordType.INSERT, null -> Uni.createFrom().item(changes.first().changeId)
+                            ChangeRecordType.DELETE -> {
+                                // For deletions, we need to find the preceding changeId
+                                repositoryFactory.getRepository(ProcessedChange::class, request.podId)
+                                    .find(
+                                        filter = "id < '${changes.first().changeId}'",
+                                        sort = Sort.descending(),
+                                        limit = 1
+                                    )
+                                    .map { it.items.firstOrNull()?.id }
                             }
-                            .toMulti()
+                        }.onItem().transformToMulti { requestChangeId ->
+                            val dataFetcher = knowledgeGraph.buildDatafetcher(
+                                request,
+                                atChangeId = requestChangeId,
+                                routeToSubscriptionHandler = false
+                            )
+                            Uni.createFrom().completionStage { dataFetcher.get(enrichedEnv) as CompletionStage<Any> }
+                                .onItem().transformToMulti { result ->
+                                    // Create the appropriate result envelope
+                                    result?.let { Multi.createFrom().item(it) } ?: Multi.createFrom().empty()
+                                }
+                        }
                     } else {
                         Multi.createFrom().empty()
                     }
@@ -149,7 +160,7 @@ class StreamingDatafetcherFactory(
                 knowledgeGraph.getChangeRecords(
                     ChangeRecordRequest(
                         podId = msg.podId,
-                        changeRequestId = msg.id,
+                        changeId = msg.id,
                         subjectIn = subjectsIn,
                         predicateIn = predicatesIn,
                         objectIn = objectsIn,

@@ -1,16 +1,8 @@
 package kvasir.utils.graphql
 
 import graphql.TypeResolutionEnvironment
-import graphql.language.DirectivesContainer
-import graphql.language.Field
-import graphql.language.ListType
-import graphql.language.NonNullType
-import graphql.language.StringValue
-import graphql.language.Type
-import graphql.schema.GraphQLDirectiveContainer
-import graphql.schema.GraphQLNamedType
-import graphql.schema.GraphQLObjectType
-import graphql.schema.TypeResolver
+import graphql.language.*
+import graphql.schema.*
 import graphql.schema.idl.TypeUtil
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JSONObject
@@ -91,5 +83,62 @@ fun replaceInnerType(type: Type<*>, newType: Type<*>): Type<*> {
         }
 
         else -> newType
+    }
+}
+
+object SchemaConversions {
+    fun convertInterface(type: GraphQLInterfaceType, ignoreFields: Set<String>? = null): InterfaceTypeDefinition {
+        return InterfaceTypeDefinition.newInterfaceTypeDefinition()
+            .name(type.name)
+            .implementz(type.interfaces.map { TypeName.newTypeName(it.name).build() })
+            .definitions(type.fieldDefinitions.filterNot { ignoreFields?.contains(it.name) ?: false }
+                .map(::convertField))
+            .build()
+    }
+
+    fun convertObject(type: GraphQLObjectType, ignoreFields: Set<String>? = null): ObjectTypeDefinition {
+        return ObjectTypeDefinition.newObjectTypeDefinition()
+            .name(type.name)
+            .implementz(type.interfaces.map { TypeName.newTypeName(it.name).build() })
+            .fieldDefinitions(type.fieldDefinitions.filterNot { ignoreFields?.contains(it.name) ?: false }
+                .map(::convertField))
+            .build()
+    }
+
+    fun convertField(field: GraphQLFieldDefinition): FieldDefinition {
+        return FieldDefinition.newFieldDefinition()
+            .name(field.name)
+            .type(convertType(field.type))
+            .inputValueDefinitions(field.arguments.map(::convertArgument))
+            .build()
+    }
+
+    fun convertDirective(directive: GraphQLDirective): DirectiveDefinition {
+        return DirectiveDefinition.newDirectiveDefinition()
+            .name(directive.name)
+            .directiveLocations(
+                directive.validLocations()
+                    .map { location -> DirectiveLocation.newDirectiveLocation().name(location.name).build() })
+            .repeatable(directive.isRepeatable)
+            .inputValueDefinitions(directive.arguments.map(::convertArgument))
+            .build()
+    }
+
+    fun convertType(type: GraphQLType): Type<*> {
+        return when {
+            GraphQLTypeUtil.isList(type) -> ListType.newListType(convertType(GraphQLTypeUtil.unwrapOne(type))).build()
+            GraphQLTypeUtil.isNonNull(type) -> NonNullType.newNonNullType()
+                .type(convertType(GraphQLTypeUtil.unwrapNonNull(type))).build()
+
+            type is GraphQLNamedType -> TypeName.newTypeName().name(type.name).build()
+            else -> throw IllegalArgumentException("Unsupported GraphQL type $type")
+        }
+    }
+
+    fun convertArgument(argument: GraphQLArgument): InputValueDefinition {
+        return InputValueDefinition.newInputValueDefinition()
+            .name(argument.name)
+            .type(convertType(argument.type))
+            .build()
     }
 }

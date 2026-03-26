@@ -32,7 +32,7 @@ const val BOB_CLIENT_SECRET = "bob"
 abstract class AbstractFgaTest {
 
     @Inject
-    lateinit var authInitializer: OpenFgaInitializer
+    lateinit var authInitializer: OpenFgaLifecycleManager
 
     @Inject
     lateinit var fgaManager: OpenFgaManager

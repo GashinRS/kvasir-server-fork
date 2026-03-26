@@ -56,6 +56,12 @@
             <version>${revision}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>kvasir-services</groupId>
+            <artifactId>kg-changes-api</artifactId>
+            <version>${revision}</version>
+            <scope>test</scope>
+        </dependency>
         
     </dependencies>
 </project>

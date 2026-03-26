@@ -1,8 +1,8 @@
 package kvasir.definitions.kg.slices
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import kvasir.definitions.annotations.Persistent
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.annotations.Persistent
 import kvasir.definitions.annotations.StorageLevel
 import kvasir.definitions.persistence.PersistentEntity
 

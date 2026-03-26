@@ -26,7 +26,7 @@ class TestClickhousePodStore {
 
     @BeforeAll
     fun setup() {
-        clickhouseLifecycleManager.init(setOf(Pod::class.java)).await().indefinitely()
+        clickhouseLifecycleManager.initialize(setOf(Pod::class.java)).await().indefinitely()
     }
 
     @Test
@@ -54,7 +54,7 @@ class TestClickhousePodStore {
         // Clean up
         pods.forEach {
             podStore.deleteById(it.id).await().indefinitely()
-            clickhouseLifecycleManager.dropPodDatabase(it.id).await().indefinitely()
+            clickhouseLifecycleManager.cleanupForPod(it.id).await().indefinitely()
         }
 
         val retrievedPodsAfterDelete = podStore.find().await()

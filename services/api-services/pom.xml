@@ -13,7 +13,7 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>../kg-inbox-api</module>
+        <module>../kg-changes-api</module>
         <module>../kg-query-api</module>
         <module>../kg-stream-api</module>
         <module>../pod-management-api</module>

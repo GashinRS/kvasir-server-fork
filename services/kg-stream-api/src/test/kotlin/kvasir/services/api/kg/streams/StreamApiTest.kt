@@ -2,9 +2,7 @@ package kvasir.services.api.kg.streams
 
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
-import io.restassured.RestAssured.delete
-import io.restassured.RestAssured.get
-import io.restassured.RestAssured.given
+import io.restassured.RestAssured.*
 import io.restassured.http.ContentType
 import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.kg.LifeCycleEvent
@@ -15,7 +13,7 @@ import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.storage.StorageEvent
 import kvasir.definitions.storage.StorageEventType
 import kvasir.services.api.kg.query.QueryInputImpl
-import kvasir.services.api.kg.query.SliceInput
+import kvasir.services.api.pods.SliceInput
 import kvasir.utils.test.commons.AbstractPodTest
 import kvasir.utils.test.commons.TestConstants
 import kvasir.utils.test.http.ParseEventsFromJsonLD

@@ -2,23 +2,26 @@ package kvasir.services.storage.processors.rdf
 
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
-import io.vertx.core.json.JsonObject
 import jakarta.inject.Inject
 import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordRequest
+import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.KnowledgeGraph
-import kvasir.definitions.kg.changes.ChangeReport
+import kvasir.definitions.kg.changes.ChangeStatusCode
+import kvasir.definitions.kg.changes.ProcessedChange
+import kvasir.definitions.kg.changes.S3Reference
 import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.persistence.Sort
 import kvasir.definitions.persistence.SortOrder
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.utils.test.commons.AbstractPodTest
+import org.eclipse.rdf4j.rio.RDFFormat
+import org.eclipse.rdf4j.rio.Rio
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.fail
 import java.time.Instant
-
-private const val TEST_FILE_NUMBER_OF_STATEMENTS = 68976
 
 @QuarkusTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -32,9 +35,14 @@ class RDFStorageMutationListenerTest : AbstractPodTest() {
 
     @Test
     fun testMutationListener() {
+        val numberOfTriples = RDFStorageMutationListenerTest::class.java.getResourceAsStream("/SWAPI-WD-data.ttl").use { inputStream ->
+            val model = Rio.parse(inputStream, RDFFormat.TURTLE)
+            model.size
+        }
+
         // Fetch the inserted records
         val records = insertFileViaS3("SWAPI-WD-data.ttl", RDFMediaTypes.TURTLE)
-        assertEquals(TEST_FILE_NUMBER_OF_STATEMENTS, records.size)
+        assertEquals(numberOfTriples, records.size)
         // Delete the file
         deleteFileFromS3("SWAPI-WD-data.ttl")
     }
@@ -56,9 +64,11 @@ class RDFStorageMutationListenerTest : AbstractPodTest() {
     @Test
     fun testCanIngestNonStrictBooleans() {
         val records = insertFileViaS3("non-strict-booleans.nt", RDFMediaTypes.N_TRIPLES)
-        assertTrue(records.find { it.statement.predicate == "http://example.org/boolProperty1" }?.statement?.`object`?.let { it as Boolean }
+        assertTrue(
+            records.find { it.statement.predicate == "http://example.org/boolProperty1" }?.statement?.`object`?.toBoolean()
             ?: false)
-        assertFalse(records.find { it.statement.predicate == "http://example.org/boolProperty2" }?.statement?.`object`?.let { it as Boolean }
+        assertFalse(
+            records.find { it.statement.predicate == "http://example.org/boolProperty2" }?.statement?.`object`?.toBoolean()
             ?: true)
         // Delete the file
         deleteFileFromS3("non-strict-booleans.nt")
@@ -75,21 +85,20 @@ class RDFStorageMutationListenerTest : AbstractPodTest() {
 
         val changeHistoryResult = testHelpers.waitForCondition(
             {
-                repositoryFactory.getRepository(ChangeReport::class, podUri)
-                    .find(sort = Sort.by("writeTs", order = SortOrder.DESC))
+                repositoryFactory.getRepository(ProcessedChange::class, podUri)
+                    .find(sort = Sort.by("id", order = SortOrder.DESC))
             },
             { result ->
                 result.items.any { report -> changeRequestMatch(report, fileName, ts) }
             })
             .await().indefinitely()
-        val changeRequestId = changeHistoryResult.items.find { changeRequestMatch(it, fileName, ts) }!!.id
-
-        // Wait for the change request to be processed
-        testHelpers.waitForChangeRequest(changeRequestId, podUri).await()
-            .indefinitely()
+        val changeReport = changeHistoryResult.items.find { changeRequestMatch(it, fileName, ts) }!!
+        if (changeReport.getStatusCode() != ChangeStatusCode.COMMITTED) {
+            fail("Change request for '$fileName' failed, status: ${changeReport.getStatusCode()}; error: ${changeReport.getErrorMessage()}")
+        }
 
         // Fetch the inserted records
-        return kg.streamChangeRecords(ChangeRecordRequest(podUri, changeRequestId, pageSize = 10000)).collect().asList()
+        return kg.streamChangeRecords(ChangeRecordRequest(podUri, changeReport.id, pageSize = 10000)).collect().asList()
             .await()
             .indefinitely()
     }
@@ -100,17 +109,8 @@ class RDFStorageMutationListenerTest : AbstractPodTest() {
             .then().statusCode(204)
     }
 
-    private fun changeRequestMatch(report: ChangeReport, fileName: String, afterTs: Instant): Boolean {
-        // Find a report that references the uploaded s3 object and was being processed after the timestamp
-        val matchingReport =
-            report.statusEntry.any {
-                it.timestamp.isAfter(afterTs) && it.message?.contains("Finished processing external references") == true && run {
-                    val report = JsonObject(it.message!!.substringAfter("Details: "))
-                    report.getJsonArray("insert_refs").map { ref -> ref.toString() }
-                        .any { ref -> ref.endsWith(fileName) }
-                }
-            }
-        return matchingReport
+    private fun changeRequestMatch(report: ProcessedChange, fileName: String, afterTs: Instant): Boolean {
+        return afterTs.isBefore(report.writeTs) && report.associatedReferences.any { it.changeType == ChangeRecordType.INSERT && it.reference is S3Reference && (it.reference as S3Reference).key == fileName }
     }
 
 }
