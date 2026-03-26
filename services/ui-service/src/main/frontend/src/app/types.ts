@@ -6,14 +6,23 @@ export interface GraphLD<T> {
   '@graph': T[];
 }
 
-export interface ChangeReport {
+export interface ProcessedChange {
   '@id': string;
   'kss:podId': string;
-  'kss:statusEntry': ChangeStatusEntry[];
+  'kss:origRequestId': string;
+  'kss:requestingUser': string;
+  'kss:statusCode': ChangeStatusEntry;
+  'kss:processingHistory': ChangeStatusEntry[];
   'kss:sliceId'?: string;
   'kss:nrOfInserts'?: number;
   'kss:nrOfDeletes'?: number;
   'kss:errorMessage'?: string;
+}
+
+export function isPendingChangeRequest(
+  obj: PendingChangeRequest | ProcessedChange,
+): obj is PendingChangeRequest {
+  return (obj as ProcessedChange)['kss:podId'] === undefined;
 }
 
 export interface ChangeStatusEntry extends Timestamped {
@@ -36,6 +45,13 @@ export interface ChangeRecord extends Record<string, any> {
 export interface ChangeRequest extends WriteTransaction {
   'kss:with'?: any[];
   'kss:assert'?: any[];
+}
+
+export interface PendingChangeRequest {
+  '@id': string;
+  'kss:timestamp': string;
+  'kss:requestingUser': string;
+  'kss:statusCode': ChangeResultCode;
 }
 
 export interface WriteTransaction {

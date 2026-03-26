@@ -14,6 +14,10 @@ kvasir:
         "idlab":
           level: DEBUG
           min-level: DEBUG
+        # Reduce log level for Kafka Streams to WARN to avoid excessive logging during development
+        "org.apache.kafka.streams":
+          level: WARN
+          min-level: WARN
 
 "%test":
   quarkus:

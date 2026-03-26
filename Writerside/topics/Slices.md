@@ -50,6 +50,9 @@ type Person @class(iri: "http://schema.org/Person") {
 }
 ```
 
+> A field name cannot start with an underscore (`_`), as this is reserved for system fields.
+> {style="note"}
+
 By also supplying a JSON-LD context for the Slice definition, the schema can be simplified through prefixes (see
 also: [Querying - Namespace prefixes](Querying.md#namespace-prefixes)).
 
@@ -322,7 +325,7 @@ For example: we can allow Slice clients to subscribe to instances of Person bein
 Graph, by defining the following Subscription type:
 
 ```graphql
-type Subcription {
+type Subscription {
   onPersonAdded: Person!
   onPersonRemoved: Person!
 }
@@ -336,7 +339,7 @@ on the `ex:knows` relation).
 type Subscription {
   onPersonAdded: Person!
   onPersonRemoved: Person!
-  onAcquaintanceAdded: Person! @trigger(type: INSERTED, predicate: "ex:knows")
+  onAcquaintanceAdded: Person! @trigger(type: INSERT, predicate: "ex:knows", object: [])
 }
 ```
 

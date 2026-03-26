@@ -1,25 +1,24 @@
 package kvasir.utils.rdf
 
-import com.github.jsonldjava.core.JsonLdProcessor
-import com.github.jsonldjava.core.RDFDataset
 import com.github.jsonldjava.utils.JsonUtils
-import kvasir.definitions.kg.RDFStatement
+import io.smallrye.mutiny.Multi
+import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdKeywords
-import org.eclipse.rdf4j.model.IRI
-import org.eclipse.rdf4j.model.Model
+import kvasir.definitions.rdf.RDFStatement
+import kvasir.utils.http.getChildUri
+import org.eclipse.rdf4j.model.BNode
+import org.eclipse.rdf4j.model.Literal
 import org.eclipse.rdf4j.model.Statement
-import org.eclipse.rdf4j.model.impl.SimpleIRI
+import org.eclipse.rdf4j.model.Value
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory
 import org.eclipse.rdf4j.model.util.Values
 import org.eclipse.rdf4j.rio.RDFFormat
 import org.eclipse.rdf4j.rio.Rio
-import org.eclipse.rdf4j.rio.WriterConfig
-import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings
-import org.eclipse.rdf4j.rio.helpers.TurtleWriterSettings
-import java.io.StringWriter
+import java.io.*
 import java.net.URI
-import java.net.URISyntaxException
+import java.util.*
+import kotlin.jvm.optionals.getOrNull
 
 object RDFTransformer {
 
@@ -30,9 +29,9 @@ object RDFTransformer {
 
     fun asRDF4JStatement(statement: RDFStatement): Statement {
         val objVal = when {
-            statement.language != null -> factory.createLiteral(statement.`object`.toString(), statement.language)
-            statement.dataType == null -> factory.createIRI(statement.`object`.toString())
-            else -> factory.createLiteral(statement.`object`.toString(), Values.iri(statement.dataType))
+            statement.language != null -> factory.createLiteral(statement.`object`, statement.language)
+            statement.dataType == null -> factory.createIRI(statement.`object`)
+            else -> factory.createLiteral(statement.`object`, Values.iri(statement.dataType))
         }
         return if (statement.graph.isBlank()) {
             factory.createStatement(
@@ -54,48 +53,52 @@ object RDFTransformer {
         val rdf4jStatements = statements.map { asRDF4JStatement(it) }
         return StringWriter().use { writer ->
             Rio.write(rdf4jStatements, writer, RDFFormat.JSONLD)
-            val jsonld = JsonUtils.fromString(writer.toString())
-            if (jsonld is Iterable<*>) {
+            when (val jsonld = JsonUtils.fromString(writer.toString())) {
                 // If the result is a list, we wrap it in a map with a graph key
-                mapOf(JsonLdKeywords.graph to jsonld)
-            } else if (jsonld is Map<*, *>) {
+                is Iterable<*> -> mapOf(JsonLdKeywords.graph to jsonld)
                 // If it's already a map, we return it directly
-                jsonld as JSONObject
-            } else {
-                throw IllegalArgumentException("Unexpected JSON-LD format: $jsonld")
+                is Map<*, *> -> jsonld as JSONObject
+                else -> throw IllegalArgumentException("Unexpected JSON-LD format: $jsonld")
             }
         }
     }
 
-    fun toStatements(graphDoc: Map<String, Any>): List<RDFStatement> {
-        val dataset = JsonLdProcessor.toRDF(graphDoc) as RDFDataset
-        return dataset.graphNames().flatMap { graph ->
-            dataset.getQuads(graph).map { quad ->
-                RDFStatement(
-                    subject = ensureValidAbsoluteIri(quad.subject.value),
-                    predicate = ensureValidAbsoluteIri(quad.predicate.value),
-                    `object` = if (quad.`object`.isLiteral) (quad.`object` as RDFDataset.Literal).let {
-                        RDFLiteralUtils.getCompatibleRawValue(
-                            it.value,
-                            it.datatype
-                        )
-                    } else ensureValidAbsoluteIri(
-                        quad.`object`.value
-                    ),
-                    graph = quad.graph?.value?.let { ensureValidAbsoluteIri(it) } ?: "",
-                    dataType = quad.`object`.datatype?.toString(),
-                    language = quad.`object`.language?.toString()
-                )
-            }
+    fun toStatements(graphDoc: Map<String, Any>, docBaseUri: String? = null): List<RDFStatement> {
+        // Convert the graphDoc JSON-LD object to an inputStream
+        val graphDocInputStream = ByteArrayOutputStream().use { os ->
+            JsonUtils.write(OutputStreamWriter(os), graphDoc)
+            os.flush()
+            ByteArrayInputStream(os.toByteArray())
         }
+        val bNodeIdMap = mutableMapOf<BNode, String>()
+        return Rio.parse(graphDocInputStream, docBaseUri, RDFFormat.JSONLD)
+            .map { mapRioStatement(it, docBaseUri, bNodeIdMap) }
     }
 
-    fun toStatements(docs: List<Map<String, Any>>): List<RDFStatement> {
+    fun toStatements(inputStream: InputStream, contentType: String, docBaseUri: String? = null): Multi<RDFStatement> {
+        val bNodeIdMap = mutableMapOf<BNode, String>()
+        return ReactiveRDFParser.parseRdf(inputStream, parseLang(contentType), docBaseUri)
+            .map { mapRioStatement(it, docBaseUri, bNodeIdMap) }
+    }
+
+    fun toStatements(docs: List<Map<String, Any>>, docBaseUri: String? = null): List<RDFStatement> {
         val defaultStatements =
-            toStatements(mapOf(JsonLdKeywords.graph to docs.filterNot { it.containsKey(JsonLdKeywords.graph) }))
+            toStatements(
+                mapOf(JsonLdKeywords.graph to docs.filterNot { it.containsKey(JsonLdKeywords.graph) }),
+                docBaseUri
+            )
         val namedGraphStatements =
-            docs.filter { it.containsKey(JsonLdKeywords.graph) }.flatMap { doc -> toStatements(doc) }
+            docs.filter { it.containsKey(JsonLdKeywords.graph) }.flatMap { doc -> toStatements(doc, docBaseUri) }
         return defaultStatements + namedGraphStatements
+    }
+
+    fun isValidAbsoluteIri(iri: String): Boolean {
+        try {
+            ensureValidAbsoluteIri(iri)
+            return true
+        } catch (ex: IllegalArgumentException) {
+            return false
+        }
     }
 
     fun ensureValidAbsoluteIri(iri: String): String {
@@ -109,6 +112,50 @@ object RDFTransformer {
         } catch (e: Exception) {
             throw IllegalArgumentException("IRI is not a valid absolute IRI: '$iri'", e)
         }
+    }
+
+    private fun processedNonLiteralValue(
+        rdfValue: Value,
+        docBaseUri: String?,
+        bNodeIdMap: MutableMap<BNode, String>
+    ): String {
+        return if (rdfValue.isBNode) {
+            val proposedId =
+                docBaseUri?.let { URI.create(it).getChildUri(UUID.randomUUID().toString(), "#").toString() }
+                    ?: "urn:uuid:${UUID.randomUUID()}"
+            bNodeIdMap.getOrPut(rdfValue as BNode) { proposedId }
+        } else {
+            ensureValidAbsoluteIri(rdfValue.stringValue())
+        }
+    }
+
+    private fun parseLang(rawContentType: String): RDFFormat {
+        return when (val contentType = MediaType.valueOf(rawContentType).let { "${it.type}/${it.subtype}" }) {
+            "text/turtle" -> RDFFormat.TURTLE
+            "text/n3" -> RDFFormat.N3
+            "application/n-triples" -> RDFFormat.NTRIPLES
+            "application/ld+json" -> RDFFormat.JSONLD
+            else -> throw IllegalArgumentException("Unsupported content type: $contentType")
+        }
+    }
+
+    private fun mapRioStatement(
+        statement: Statement,
+        docBaseUri: String?,
+        bNodeIdMap: MutableMap<BNode, String>
+    ): RDFStatement {
+        return RDFStatement(
+            processedNonLiteralValue(statement.subject, docBaseUri, bNodeIdMap),
+            ensureValidAbsoluteIri(statement.predicate.stringValue()),
+            if (statement.`object`.isLiteral) statement.`object`.stringValue() else processedNonLiteralValue(
+                statement.`object`,
+                docBaseUri,
+                bNodeIdMap
+            ),
+            statement.context?.let { processedNonLiteralValue(it, docBaseUri, bNodeIdMap) } ?: "",
+            statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.datatype?.stringValue(),
+            statement.`object`.takeIf { it.isLiteral }?.let { it as Literal }?.language?.getOrNull(),
+        )
     }
 
 }

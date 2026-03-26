@@ -31,3 +31,16 @@ fun <T> Publisher<T>.toMulti(): Multi<T> {
 fun <T> Future<T>.toUni(): Uni<T> {
     return Uni.createFrom().completionStage { this.toCompletionStage() }
 }
+
+fun <T> Uni<T?>.notNullOrFail(exceptionSupplier: () -> Throwable): Uni<T> {
+    return onItem().ifNotNull().transform { it!! }
+        .onItem().ifNull().failWith(exceptionSupplier)
+}
+
+fun conditionalUni(condition: Boolean, supplier: () -> Uni<Void>): Uni<Void> {
+    return if (condition) {
+        supplier()
+    } else {
+        Uni.createFrom().voidItem()
+    }
+}

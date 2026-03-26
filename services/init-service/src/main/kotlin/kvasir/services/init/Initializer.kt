@@ -7,28 +7,39 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module
 import io.quarkus.logging.Log
 import io.quarkus.runtime.Quarkus
 import io.quarkus.runtime.Startup
+import io.smallrye.common.annotation.Identifier
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import kvasir.definitions.annotations.StorageLevel
-import kvasir.definitions.auth.AuthInitializer
+import kvasir.definitions.auth.AuthLifecycleManager
 import kvasir.definitions.config.BootstrapConfig
 import kvasir.definitions.config.HttpConfig
-import kvasir.definitions.persistence.StorageLifecycleManager
+import kvasir.definitions.persistence.RepositoriesLifecycleManager
+import kvasir.definitions.reactive.asMulti
 import kvasir.definitions.reactive.skipToLast
+import kvasir.definitions.reactive.toUni
+import kvasir.plugins.messaging.kafka.KafkaMessagingConfig
 import kvasir.utils.persistence.PersistentEntityDetector
 import kvasir.utils.pod.PodSetupHelper
+import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.clients.admin.AdminClientConfig
+import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.common.errors.TopicExistsException
 import java.util.concurrent.atomic.AtomicBoolean
 
 @ApplicationScoped
 class Initializer(
     private val podSetupHelper: PodSetupHelper,
-    private val podAuthInitializer: Instance<AuthInitializer>,
-    private val dbInitializer: StorageLifecycleManager,
+    private val podAuthLifecycleManager: Instance<AuthLifecycleManager>,
+    private val repositoriesLifecycleManager: RepositoriesLifecycleManager,
     private val httpConfig: HttpConfig,
     private val bootstrapConfig: BootstrapConfig,
-    private val persistentEntityDetector: PersistentEntityDetector
+    private val persistentEntityDetector: PersistentEntityDetector,
+    private val kafkaMessagingConfig: KafkaMessagingConfig,
+    @Identifier("default-kafka-broker")
+    private val kafkaBrokerConfig: Map<String, Any>
 ) {
 
     private val initializationComplete = AtomicBoolean(false)
@@ -36,12 +47,17 @@ class Initializer(
     @Startup
     fun init(): Uni<Void> {
         // Init system db
-        return dbInitializer.init(persistentEntityDetector.getDetectedEntityClasses(StorageLevel.SYSTEM))
+        return repositoriesLifecycleManager.initialize(persistentEntityDetector.getDetectedEntityClasses(StorageLevel.SYSTEM))
+            .chain { _ ->
+                Log.debug("Initializing Kafka topics")
+                // Init Kafka topics
+                initializeKafkaTopics()
+            }
             // Init auth (global)
             .chain { _ ->
-                if (podAuthInitializer.isResolvable) {
+                if (podAuthLifecycleManager.isResolvable) {
                     Log.debug("Initializing global auth configuration")
-                    podAuthInitializer.get().initialize()
+                    podAuthLifecycleManager.get().initialize()
                 } else {
                     Log.debug("No global auth initializer available, skipping global auth setup")
                     Uni.createFrom().voidItem()
@@ -88,5 +104,25 @@ class Initializer(
     }
 
     fun isInitialized(): Boolean = initializationComplete.get()
+
+    fun initializeKafkaTopics(): Uni<Void> {
+        val config = kafkaBrokerConfig.filter { AdminClientConfig.configNames().contains(it.key) }.toMap()
+        val adminClient = AdminClient.create(config)
+        return kafkaMessagingConfig.autoCreateTopics().map { topicConfig ->
+            NewTopic(
+                topicConfig.topicName(),
+                topicConfig.partitions(),
+                topicConfig.replicationFactor()
+            )
+        }.asMulti()
+            .onItem().transformToUniAndMerge { topic ->
+                adminClient.createTopics(setOf(topic)).all().toCompletionStage().toUni().replaceWithVoid()
+                    .onFailure(TopicExistsException::class.java).recoverWithUni { _ ->
+                        Log.debug("Kafka topic '${topic.name()}' already exists, skipping creation.")
+                        Uni.createFrom().voidItem()
+                    }
+            }
+            .skipToLast()
+    }
 
 }

@@ -3,16 +3,19 @@ package kvasir.utils.test.commons
 import io.quarkus.logging.Log
 import io.restassured.RestAssured.given
 import io.smallrye.mutiny.Uni
+import io.vertx.ext.web.client.WebClientOptions
+import io.vertx.mutiny.core.Vertx
+import io.vertx.mutiny.ext.web.client.WebClient
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.MediaType
+import jakarta.ws.rs.ext.Providers
 import kvasir.definitions.config.*
-import kvasir.definitions.kg.ChangeRequest
-import kvasir.definitions.kg.ChangeStatusCode
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryResult
-import kvasir.definitions.kg.changes.ChangeReport
+import kvasir.definitions.kg.changes.ChangeStatusCode
+import kvasir.definitions.kg.changes.ProcessedChange
 import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFMediaTypes
@@ -26,8 +29,12 @@ import kotlin.math.roundToLong
 class TestHelpers(
     val httpConfig: HttpConfig,
     val repositoryFactory: RepositoryFactory,
-    val kg: Instance<KnowledgeGraph>
+    val kg: Instance<KnowledgeGraph>,
+    val vertx: Vertx,
+    private val providers: Providers
 ) {
+
+    private val webClient = WebClient.create(vertx, WebClientOptions().setFollowRedirects(false))
 
     fun getPodUri(podId: String): String {
         return "${httpConfig.baseUri().removeSuffix("/")}/$podId"
@@ -51,18 +58,25 @@ class TestHelpers(
     /**
      * Schedules a Change Request via the HTTP API and then waits for the request to be processed,
      * resulting in the expected state (or committed if no explicit expected result is specified).
-     * Returns the URI of the change request.
+     *
+     * @return The id of the ProcessedChange resulting from the request
      */
     fun requestChangeViaHTTPSync(
         body: Any,
         podUri: String,
         expectedResult: ChangeStatusCode = ChangeStatusCode.COMMITTED,
-        sliceUri: String? = null
+        sliceUri: String? = null,
+        optionalAuthToken: String? = null
     ): String {
         // Perform the request
         val requestUri = "${sliceUri ?: podUri}/changes"
 
         val changeRequestUri = given()
+            .apply {
+                if (optionalAuthToken != null) {
+                    this.auth().oauth2(optionalAuthToken)
+                }
+            }
             .contentType(RDFMediaTypes.JSON_LD)
             .body(body)
             .post(requestUri)
@@ -71,8 +85,16 @@ class TestHelpers(
             .extract().header(HttpHeaders.LOCATION)
 
         // Wait for the request to be committed
-        waitForChangeRequest(changeRequestUri, podUri, expectedResult).await().indefinitely()
-        return changeRequestUri
+        val processedChangeUri = waitForChangeRequest(
+            changeRequestUri,
+            podUri,
+            expectedResult,
+            optionalAuthToken = optionalAuthToken
+        ).await().indefinitely()
+
+        // Extract the ProcessedChange ID from the URI (the last segment)
+        val processedChangeId = processedChangeUri.substringAfterLast('/')
+        return processedChangeId
     }
 
     fun waitForChangeRequest(
@@ -80,22 +102,36 @@ class TestHelpers(
         podUri: String,
         expectedResult: ChangeStatusCode = ChangeStatusCode.COMMITTED,
         retryInitialDelay: Duration = Duration.ofMillis(200),
-        delayFactor: Double = 1.2
-    ): Uni<Void> {
-        val changeHistory = repositoryFactory.getRepository(ChangeReport::class, podUri)
-        return changeHistory
-            .findById(changeRequestUri)
-            .chain { report ->
-                if (report != null) {
-                    val completedStatus =
-                        report.statusEntry.filter { it.statusCode.terminalState }.map { it.statusCode }.firstOrNull()
-                    when {
-                        completedStatus == expectedResult -> Uni.createFrom().voidItem()
-                        completedStatus != null -> Uni.createFrom()
-                            .failure(RuntimeException("Change request resulted in status '$completedStatus', expected '$expectedResult'"))
-
-                        else -> Uni.createFrom().failure(StillProcessingException())
-                    }
+        delayFactor: Double = 1.2,
+        optionalAuthToken: String? = null
+    ): Uni<String> {
+        return webClient.getAbs(changeRequestUri)
+            .apply {
+                if (optionalAuthToken != null) {
+                    this.bearerTokenAuthentication(optionalAuthToken)
+                }
+            }
+            .send()
+            .chain { response ->
+                // If the Change API is trying to redirect...
+                if (response.statusCode() == 303) {
+                    // Fetch the Location header
+                    webClient.getAbs(response.getHeader(HttpHeaders.LOCATION))
+                        .apply {
+                            if (optionalAuthToken != null) {
+                                this.bearerTokenAuthentication(optionalAuthToken)
+                            }
+                        }
+                        .send().chain { processedResp ->
+                            val processedChange =
+                                JsonLdHelper.decode(processedResp.bodyAsString(), ProcessedChange::class.java)
+                            if (processedChange.getStatusCode() == expectedResult) {
+                                Uni.createFrom().item(processedChange.id)
+                            } else {
+                                Uni.createFrom()
+                                    .failure(RuntimeException("Change request resulted in status '${processedChange.getStatusCode()}', expected '$expectedResult'"))
+                            }
+                        }
                 } else {
                     Uni.createFrom().failure(StillProcessingException())
                 }
@@ -108,7 +144,8 @@ class TestHelpers(
                         podUri,
                         expectedResult,
                         retryInitialDelay.plusMillis((retryInitialDelay.toMillis() * delayFactor).roundToLong()),
-                        delayFactor
+                        delayFactor,
+                        optionalAuthToken
                     )
                 }
             }

@@ -32,4 +32,4 @@ quarkus:
             default-context:
               ex: http://example.org/
               so: http://schema.org/
-            auto-ingest-rdf:  true
+            auto-ingest-rdf: true

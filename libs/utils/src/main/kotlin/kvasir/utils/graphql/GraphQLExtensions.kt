@@ -5,7 +5,6 @@ import graphql.language.*
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*
 import io.vertx.core.json.JsonObject
-import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
 import kvasir.definitions.kg.graphql.ARG_CURSOR_NAME
 import kvasir.definitions.kg.graphql.ARG_PAGE_SIZE_NAME
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
@@ -17,7 +16,7 @@ fun <T : GraphQLType> GraphQLType.innerType(): T {
     return GraphQLTypeUtil.unwrapAllAs(this)
 }
 
-fun GraphQLType.isOptional(): Boolean {
+fun GraphQLType.isNullable(): Boolean {
     return GraphQLTypeUtil.isNullable(this)
 }
 
@@ -66,6 +65,7 @@ fun Field.getStringArgument(name: String, variables: Map<String, Any>): String? 
     return this.arguments.find { it.name == name }?.let {
         when (val value = it.value) {
             is StringValue -> value.value
+            is EnumValue -> value.name
             is VariableReference -> {
                 variables[value.name].toString()
             }
@@ -95,11 +95,46 @@ fun Field.getStringArrayArgument(name: String, variables: Map<String, Any>): Lis
     }
 }
 
-fun Field.getPaginationInfo(variables: Map<String, Any>): Pair<Int, Long> {
-    val pageSize = this.getIntArgument(ARG_PAGE_SIZE_NAME, variables) ?: DEFAULT_PAGE_SIZE
+fun Field.getArrayArgumentAsString(name: String, variables: Map<String, Any>): List<String>? {
+    return this.arguments.find { it.name == name }?.value?.let { argVal ->
+        when (argVal) {
+            is ArrayValue -> argVal.values.map { value ->
+                when (value) {
+                    is StringValue -> value.value
+                    is IntValue -> value.value.toString()
+                    is FloatValue -> value.value.toString()
+                    is BooleanValue -> value.isValue.toString()
+                    is VariableReference -> {
+                        variables[value.name].toString()
+                    }
+
+                    else -> throw IllegalArgumentException("Unsupported argument type: ${value::class.simpleName}")
+                }
+            }
+
+            is StringValue -> listOf(argVal.value)
+            is IntValue -> listOf(argVal.value.toString())
+            is FloatValue -> listOf(argVal.value.toString())
+            is BooleanValue -> listOf(argVal.isValue.toString())
+            is VariableReference -> {
+                val value = variables[argVal.name]!!
+                if (value is List<*>) {
+                    value.map { it.toString() }
+                } else {
+                    listOf(value.toString())
+                }
+            }
+
+            else -> throw IllegalArgumentException("Unsupported argument type: ${argVal::class.simpleName}")
+        }
+    }
+}
+
+fun Field.getPaginationInfo(variables: Map<String, Any>): Pair<Int, Long>? {
+    val pageSize = this.getIntArgument(ARG_PAGE_SIZE_NAME, variables)
     val cursor =
         this.getStringArgument(ARG_CURSOR_NAME, variables)?.let { OffsetBasedCursor.fromString(it)?.offset } ?: 0L
-    return pageSize to cursor
+    return pageSize?.let { it to cursor }
 }
 
 fun Field.aliasOrName(): String {
@@ -118,10 +153,6 @@ fun <T> DataFetchingEnvironment.getFromSource(key: String): T? {
         is JsonObject -> source.getValue(key)
         else -> null
     } as T?
-}
-
-fun DataFetchingEnvironment.getStorageClass(): String? {
-    return this.mergedField.singleField.getDirectiveArg<StringValue>("storage", "class")?.value
 }
 
 fun <T : Value<*>> DirectivesContainer<*>.getDirectiveArg(

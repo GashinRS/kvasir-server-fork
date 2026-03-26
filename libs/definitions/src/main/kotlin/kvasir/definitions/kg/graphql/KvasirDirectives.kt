@@ -70,6 +70,10 @@ object KvasirDirectives {
     /**
      * When querying: indicate that a field is optional.
      * i.e. Instances not having a value for the field, are also included in the result.
+     *
+     * Two caveats:
+     * 1. This directive is only allowed on fields of a nullable type or list type. Applying it to a non-nullable field would be contradictory (there is no way to return a missing result) and is therefore disallowed.
+     * 2. When the accompanying field definition is annotated with @mustExist, specifying @optional on the field in the query will result in an error, since the field is required to exist according to the schema and cannot be treated as optional in the query.
      */
     val optionalDirective =
         GraphQLDirective.newDirective().name(DIRECTIVE_OPTIONAL_NAME)
@@ -77,6 +81,15 @@ object KvasirDirectives {
             .build()
 
     /**
+     * When defining a schema: indicate that a field must have a value (i.e. cannot be null or empty) for its encapsulating object to be considered a valid instance of the parent type.
+     */
+    val mustExistDirective =
+        GraphQLDirective.newDirective().name(DIRECTIVE_MUST_EXIST_NAME)
+            .validLocation(Introspection.DirectiveLocation.FIELD_DEFINITION)
+            .build()
+
+    /**
+     * When defining a schema: express conditions on when a field should be included in the result.
      * When querying: express additional matching conditions
      */
     val filterDirective =
@@ -89,7 +102,7 @@ object KvasirDirectives {
             .argument(GraphQLArgument.newArgument().name(ARG_IF_NAME).type(GraphQLString).build()).build()
 
     /**
-     * When querying: express the target graphs for the query.
+     * When querying/defining a schema: express the target graphs for the query.
      */
     val graphDirective =
         GraphQLDirective.newDirective().name(DIRECTIVE_GRAPH_NAME).validLocations(
@@ -97,14 +110,6 @@ object KvasirDirectives {
         )
             .argument(GraphQLArgument.newArgument().name(ARG_IRI_NAME).type(GraphQLList.list(GraphQLString)).build())
             .build()
-
-    /**
-     * When querying: explicitly set the target storage for a node
-     */
-    val storageDirective = GraphQLDirective.newDirective().name(DIRECTIVE_STORAGE_NAME).validLocations(
-        Introspection.DirectiveLocation.FIELD
-    )
-        .argument(GraphQLArgument.newArgument().name(ARG_CLASS_NAME).type(GraphQLString).build()).build()
 
     /**
      * When defining subscriptions: specify a trigger event for the subscription.
@@ -146,9 +151,9 @@ object KvasirDirectives {
         shapeDirective,
         optionalDirective,
         filterDirective,
-        storageDirective,
         graphDirective,
         triggerDirective,
-        generateMutationsDirective
+        generateMutationsDirective,
+        mustExistDirective
     )
 }

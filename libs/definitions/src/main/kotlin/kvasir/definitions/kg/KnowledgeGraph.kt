@@ -6,7 +6,9 @@ import com.github.jsonldjava.core.JsonLdProcessor
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
-import kvasir.definitions.kg.changes.Assertion
+import kvasir.definitions.kg.changes.ChangeRequest
+import kvasir.definitions.kg.changes.ProcessedChange
+import kvasir.definitions.kg.changes.Reference
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.*
 import java.time.Instant
@@ -15,7 +17,46 @@ const val DEFAULT_PAGE_SIZE = 100
 
 interface KnowledgeGraph {
 
-    fun process(request: ChangeRequest): Uni<Void>
+    /**
+     * Convenience function: introspects the request and forwards it to the appropriate processing function,
+     * depending on if it is state-dependent, contains references that should be resolved, etc.
+     *
+     * @param request The change request to process
+     * @return A Uni emitting the ChangeReport once processing is complete
+     */
+    fun process(request: ChangeRequest): Uni<ProcessedChange> = when {
+        request.isStateDependent() -> processStateDependent(request)
+        request.insertFromRefs.isNotEmpty() || request.deleteFromRefs.isNotEmpty() -> processReferenced(request)
+        else -> processPlain(setOf(request)).map { it.first() }
+    }
+
+    /**
+     * Process change requests that express only basic inserts/deletes.
+     * Feeding this method a change request with assertions, S3 references, with-clauses, will result in an exception!
+     * All requests must target the same Pod, otherwise an exception is produced via the returned Uni.
+     *
+     * @param requests The collection of change requests to process
+     * @return A Uni emitting the collection of ChangeReports once processing is complete
+     */
+    fun processPlain(requests: Collection<ChangeRequest>): Uni<Collection<ProcessedChange>>
+
+    /**
+     * Process a state-dependent change request
+     * (A request having assertions, S3-references, with-clauses)
+     *
+     * @param request The change request to process
+     * @return A Uni emitting the ChangeReport once processing is complete
+     */
+    fun processStateDependent(request: ChangeRequest): Uni<ProcessedChange>
+
+    /**
+     * Process a change request that contains a reference (e.g. S3)
+     * Processing these changes may be long-running (depending on the ref size)
+     *
+     * @param request The change request to process
+     * @return A Uni emitting the ChangeReport once processing is complete
+     */
+    fun processReferenced(request: ChangeRequest): Uni<ProcessedChange>
 
     fun query(request: QueryRequest): Multi<QueryResult>
 
@@ -28,131 +69,14 @@ interface KnowledgeGraph {
 
 interface ReferenceLoader {
 
-    fun isSupported(reference: Map<String, Any>): Boolean
+    fun isSupported(reference: Reference): Boolean
 
-    fun loadReference(podOrSliceId: String, reference: Map<String, Any>): Multi<RDFStatement>
-}
-
-@GenerateNoArgConstructor
-data class ChangeRequest(
-    /**
-     * The unique identifier of the Change Request.
-     */
-    val id: String,
-    /**
-     * The context used to produce the Change Request.
-     */
-    val context: Map<String, Any> = emptyMap(),
-    val requestingUser: String,
-    /**
-     * The unique identifier of the Pod where the Change Request should be applied.
-     */
-    val podId: String,
-    /**
-     * The unique identifier of the Slide where the Change Request should be applied.
-     */
-    val sliceId: String? = null,
-    /**
-     * The Change Request will only be applied if all assertions resolve to true.
-     */
-    val assert: List<Assertion> = emptyList(),
-    /**
-     * The with-clause value is a GraphQL query expression.
-     * The results of this query can be referenced in the insert and delete operations using JSONata template strings.
-     */
-    val with: String? = null,
-    /**
-     * Insert instructions as a List of:
-     * - Any Map<String, Any> instance, representing actual JSON-LD data to be inserted
-     * - A String representing a JSONata template to be resolved
-     */
-    val insert: List<Any> = emptyList(),
-    /**
-     * Insert instructions as a List of:
-     * - Any Map<String, Any> instance, representing actual JSON-LD data to be inserted
-     * - A String representing a JSONata template to be resolved
-     */
-    val delete: List<Any> = emptyList(),
-    /**
-     * Insert instruction to ingest data from an external source. At the moment, only the internal Pod S3 is supported.
-     * An S3 reference is modeled as a JSON-LD object with a property "@type" set to "kss:S3Reference".
-     *
-     * Cannot be combined with insert or delete.
-     */
-    val insertFromRefs: List<Map<String, Any>> = emptyList(),
-    /**
-     * Delete instruction to ingest data from an external source. At the moment, only the internal Pod S3 is supported.
-     * An S3 reference is modeled as a JSON-LD object with a property "@type" set to "kss:S3Reference".
-     *
-     * Cannot be combined with insert or delete.
-     */
-    val deleteFromRefs: List<Map<String, Any>> = emptyList()
-) {
-
-    init {
-        require(insert.isNotEmpty() || delete.isNotEmpty() || insertFromRefs.isNotEmpty() || deleteFromRefs.isNotEmpty()) {
-            "At least one of insert, delete, insertFromRefs or deleteFromRefs must be provided"
-        }
-        require(insertFromRefs.isEmpty() || (insert.isEmpty() && delete.isEmpty())) {
-            "insertFromRefs cannot be combined with regular insert or delete"
-        }
-        require(deleteFromRefs.isEmpty() || (insert.isEmpty() && delete.isEmpty())) {
-            "deleteFromRefs cannot be combined with regular insert or delete"
-        }
-        require(insert.filterIsInstance<String>().isEmpty() || with != null) {
-            "Insert templates require a with-clause"
-        }
-        require(delete.filterIsInstance<String>().isEmpty() || with != null) {
-            "Delete templates require a with-clause"
-        }
-    }
-}
-
-enum class ChangeStatusCode(val terminalState: Boolean = false) {
-    /**
-     * The Change Request was added to the processing queue
-     */
-    QUEUED,
-
-    /**
-     * The Change Request is being processed.
-     */
-    PROCESSING,
-
-    /**
-     * The Change Request was successfully applied.
-     */
-    COMMITTED(true),
-
-    /**
-     * The Change Request was not applied because one or more assertions failed.
-     */
-    ASSERTION_FAILED(true),
-
-    /**
-     * The Change Request was not applied because the with-clause did not return any results.
-     */
-    NO_MATCHES(true),
-
-    /**
-     * The Change Request was not applied because the with-clause returned too many results.
-     */
-    TOO_MANY_MATCHES(true),
-
-    /**
-     * The Change Request was not applied because of a validation error.
-     */
-    VALIDATION_ERROR(true),
-
-    /**
-     * The Change Request was not applied because of an internal error.
-     */
-    INTERNAL_ERROR(true)
+    fun loadReference(podOrSliceId: String, reference: Reference): Multi<RDFStatement>
 }
 
 data class ChangeRollbackRequest(
     val podId: String,
-    val changeRequestId: String
+    val changeId: String
 )
 
 @GenerateNoArgConstructor
@@ -166,12 +90,12 @@ data class QueryRequest(
     val operationName: String? = null,
     val predefinedSchema: String? = null,
     val atTimestamp: Instant? = null,
-    val atChangeRequestId: String? = null
+    val atChangeId: String? = null
 )
 
 data class ChangeRecordRequest(
     val podId: String,
-    val changeRequestId: String,
+    val changeId: String,
     var cursor: String? = null,
     val pageSize: Int = 100,
     // Optional subject filter (subject must be in the supplied set)
@@ -276,18 +200,8 @@ data class QueryResult(
     }
 }
 
-@JsonInclude(JsonInclude.Include.NON_DEFAULT)
-data class RDFStatement(
-    val subject: String,
-    val predicate: String,
-    val `object`: Any,
-    val graph: String = "",
-    val dataType: String? = null,
-    val language: String? = null
-)
-
 data class ChangeRecord(
-    val changeRequestId: String,
+    val changeId: String,
     val timestamp: Instant,
     val type: ChangeRecordType,
     val statement: RDFStatement
@@ -348,8 +262,8 @@ data class QueryRequestEvent(
                 query = queryRequest.query,
                 variables = queryRequest.variables,
                 operationName = queryRequest.operationName,
-                atTimestamp = queryRequest.atTimestamp ?: timestamp.takeIf { queryRequest.atChangeRequestId == null },
-                atChangeRequestId = queryRequest.atChangeRequestId,
+                atTimestamp = queryRequest.atTimestamp ?: timestamp.takeIf { queryRequest.atChangeId == null },
+                atChangeRequestId = queryRequest.atChangeId,
                 message = errorMessage
             )
         }
@@ -362,13 +276,6 @@ interface TypeRegistry {
     fun getTypeInfo(podId: String): Uni<List<KGType>>
 
 }
-
-data class MetadataEntry(
-    val typeUri: String,
-    val propertyUri: String,
-    val propertyKind: KGPropertyKind,
-    val propertyRef: String
-)
 
 data class KGType(
     val uri: String,

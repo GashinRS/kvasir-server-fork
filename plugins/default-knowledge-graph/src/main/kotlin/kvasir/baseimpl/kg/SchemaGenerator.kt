@@ -1,11 +1,14 @@
 package kvasir.baseimpl.kg
 
-import com.google.common.hash.Hashing
 import graphql.Scalars.*
-import graphql.language.*
+import graphql.language.BooleanValue
+import graphql.language.StringValue
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*
-import kvasir.definitions.kg.*
+import kvasir.definitions.kg.KGProperty
+import kvasir.definitions.kg.KGPropertyKind
+import kvasir.definitions.kg.KGType
+import kvasir.definitions.kg.KGTypeReference
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.*
 import kvasir.utils.graphql.innerType
@@ -48,7 +51,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
     }
 
     private fun generateGraphQLType(type: KGType): GraphQLObjectType {
-        val prefixedTypeName = graphqLCompatibleName(type.uri, context)
+        val prefixedTypeName = JsonLdHelper.getUniqueVariableNameInContext(type.uri, context)
         val typeDirective = KvasirDirectives.classDirective.toAppliedDirective()
         return GraphQLObjectType.newObject().name(prefixedTypeName).description(type.uri)
             .withInterfaces(KvasirTypes.Resource, KvasirTypes.RDFNode)
@@ -73,7 +76,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         reverse: Boolean = false,
         overrideName: String? = null
     ): GraphQLFieldDefinition {
-        val prefixedProperty = overrideName ?: graphqLCompatibleName(property.uri, context)
+        val prefixedProperty = overrideName ?: JsonLdHelper.getUniqueVariableNameInContext(property.uri, context)
         val propertyType = getGraphQLPropertyType(property, context)
         val predicateDirective = KvasirDirectives.predicateDirective.toAppliedDirective()
         val propertyBuilder = GraphQLFieldDefinition.newFieldDefinition()
@@ -123,6 +126,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
         if (type !is GraphQLObjectType) {
             return emptyList()
         }
+        // TODO: filter on limited list of Kvasir built-ins instead of ignoring all fields starting with "_"?
         return type.fieldDefinitions.filterNot { it.name.startsWith("_") }.map { field ->
             val argType = if (field.type.isScalar()) field.type.innerType() else GraphQLID
             GraphQLArgument.newArgument().name(field.name).type(GraphQLList.list(argType)).build()
@@ -151,7 +155,7 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
                         if (typeRef.name == RDFSVocab.Resource) {
                             TYPE_RESOURCE
                         } else {
-                            graphqLCompatibleName(typeRef.name, context)
+                            JsonLdHelper.getUniqueVariableNameInContext(typeRef.name, context)
                         }
                     )
                 }
@@ -169,26 +173,6 @@ class SchemaGenerator(private val types: List<KGType>, private val context: Map<
             }
         } else {
             outputTypes.first()
-        }
-    }
-
-    private fun graphqLCompatibleName(name: String, context: Map<String, Any>): String {
-        return JsonLdHelper.compactUri(name, context, "_").takeIf { it != name } ?: run {
-            val (ns, localName) = when {
-                name.contains("#") -> {
-                    val hashIndex = name.lastIndexOf("#")
-                    name.substring(0, hashIndex) to name.substring(hashIndex + 1)
-                }
-
-                name.contains("/") -> {
-                    val slashIndex = name.lastIndexOf("/")
-                    name.substring(0, slashIndex) to name.substring(slashIndex + 1)
-                }
-
-                else -> throw IllegalArgumentException("Invalid URI: $name")
-            }
-            val encodedPrefix = Hashing.farmHashFingerprint64().hashString(ns, Charsets.UTF_8).toString()
-            "ns${encodedPrefix}_$localName"
         }
     }
 

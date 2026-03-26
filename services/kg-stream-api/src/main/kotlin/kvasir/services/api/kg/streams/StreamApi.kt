@@ -8,7 +8,7 @@ import io.vertx.mutiny.kafka.client.consumer.KafkaConsumer
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.changes.ChangeReport
+import kvasir.definitions.kg.changes.ProcessedChange
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
@@ -23,7 +23,6 @@ import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
-import org.eclipse.microprofile.reactive.messaging.Channel
 import org.eclipse.microprofile.reactive.messaging.Message
 import org.jboss.resteasy.reactive.RestStreamElementType
 import org.jboss.resteasy.reactive.server.spi.ServerRequestContext
@@ -40,12 +39,6 @@ class StreamApi(
     private val knowledgeGraph: KnowledgeGraph,
     private val kafkaConfig: KafkaMessagingConfig,
     private val uriInfo: KvasirUriInfo,
-    @Channel(Channels.QUERY_REQUESTS_SUBSCRIBE)
-    private val queryRequestsSubscriber: Multi<QueryRequestEvent>,
-    @Channel(Channels.LIFECYCLE_EVENTS_SUBSCRIBE)
-    private val lifecycleEventsSubscriber: Multi<LifeCycleEvent>,
-    @Channel(Channels.STORAGE_EVENTS_SUBSCRIBE)
-    private val storageMutationSubscriber: Multi<StorageEvent>,
     private val requestContext: ServerRequestContext
 ) {
 
@@ -77,7 +70,7 @@ class StreamApi(
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
-            Channels.OUTBOX_TOPIC, ChangeReport::class.java, "sse-consumer-$streamId",
+            Channels.CHANGES_OUTGOING_TOPIC, ProcessedChange::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
             true
         )
@@ -87,13 +80,13 @@ class StreamApi(
                 knowledgeGraph.streamChangeRecords(
                     ChangeRecordRequest(
                         podId = msg.payload.podId,
-                        changeRequestId = msg.payload.id
+                        changeId = msg.payload.id
                     )
                 )
             }
             .group().intoLists().of(STREAMING_BUFFER_SIZE, Duration.ofMillis(STREAMING_BUFFERING_MAX_DELAY_MS))
             .map { buffer ->
-                buffer.groupBy { it.changeRequestId }.map { (changeRequestId, records) ->
+                buffer.groupBy { it.changeId }.map { (changeRequestId, records) ->
                     ChangeRecords(
                         KvasirVocab.context,
                         changeRequestId,

@@ -5,7 +5,6 @@ import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
 import io.smallrye.reactive.messaging.MutinyEmitter
-import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
 import jakarta.annotation.security.PermitAll
 import jakarta.enterprise.inject.Instance
@@ -16,21 +15,15 @@ import jakarta.ws.rs.core.UriBuilder
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.auth.AuthConstants.REDACTED_CREDENTIAL
-import kvasir.definitions.config.BootstrapPodConfig
-import kvasir.definitions.config.GenerateClientConfig
-import kvasir.definitions.config.HttpConfig
-import kvasir.definitions.config.OpenFgaClientConfig
-import kvasir.definitions.config.OpenFgaPermissionConfig
-import kvasir.definitions.config.PodConfig
-import kvasir.definitions.config.PodConfigOverride
+import kvasir.definitions.config.*
 import kvasir.definitions.kg.LifeCycleEvent
 import kvasir.definitions.kg.LifeCycleEventType
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.persistence.RepositoryFactory
-import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.definitions.rdf.KvasirVocab
+import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.plugins.policyagent.openfga.delegated.uma.UmaClientManager
 import kvasir.utils.http.KvasirUriInfo
@@ -64,7 +57,7 @@ class PodManagementApi(
 
     @PermitAll
     @POST
-    @Consumes(JSON_LD_MEDIA_TYPE)
+    @Consumes(RDFMediaTypes.JSON_LD)
     @Tag(name = ApiDocTags.PODS_API)
     @Operation(
         summary = "Register a new pod",
@@ -100,7 +93,7 @@ class PodManagementApi(
 
     @PermitAll
     @GET
-    @Produces(JSON_LD_MEDIA_TYPE)
+    @Produces(RDFMediaTypes.JSON_LD)
     @Tag(name = ApiDocTags.PODS_API)
     @Operation(
         summary = "List all pods",
@@ -117,13 +110,13 @@ class PodManagementApi(
         val uiUri = UriBuilder.fromUri(httpConfig.webclientUri()).build();
         return if (httpConfig.redirectToWebclient()) Uni.createFrom()
             .item(Response.seeOther(uiUri).build()) else listPodInfo().map {
-            Response.ok(it, JSON_LD_MEDIA_TYPE).build()
+            Response.ok(it, RDFMediaTypes.JSON_LD).build()
         };
     }
 
 
     @GET
-    @Produces(JSON_LD_MEDIA_TYPE)
+    @Produces(RDFMediaTypes.JSON_LD)
     @Path("{podId}")
     @Tag(name = ApiDocTags.PODS_API)
     @Operation(
@@ -188,7 +181,7 @@ class PodManagementApi(
     }
 
     @PUT
-    @Consumes(JSON_LD_MEDIA_TYPE)
+    @Consumes(RDFMediaTypes.JSON_LD)
     @Path("{podId}")
     @Tag(name = ApiDocTags.PODS_API)
     @Operation(

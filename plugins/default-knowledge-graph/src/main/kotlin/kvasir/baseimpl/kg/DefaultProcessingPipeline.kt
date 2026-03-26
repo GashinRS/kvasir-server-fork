@@ -5,43 +5,37 @@ import io.quarkus.arc.All
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
-import io.vertx.core.json.Json
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.changes.ChangeProcessor
-import kvasir.definitions.kg.changes.ChangeReportStatusEntry
-import kvasir.definitions.kg.changes.ChangeRequestTxBuffer
+import kvasir.definitions.kg.changes.ChangeRequest
+import kvasir.definitions.kg.changes.Reference
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.persistence.RepositoryFactory
-import kvasir.definitions.rdf.JsonLdHelper
-import kvasir.definitions.rdf.JsonLdKeywords
-import kvasir.definitions.rdf.KvasirNamedGraphs
-import kvasir.definitions.rdf.KvasirVocab
+import kvasir.definitions.rdf.*
 import kvasir.definitions.reactive.skipToLast
 import kvasir.utils.graphql.ChangeRequestValidator
 import kvasir.utils.idgen.getTimestamp
 import kvasir.utils.rdf.RDFTransformer
 
 private const val ASSERTION_CHECKING_PARALLELISM = 4
-private const val REF_HANDLING_BUFFER_SIZE = 50000
 
 @ApplicationScoped
 class EvaluateAssertions(
     private val parent: KnowledgeGraph
-) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
+) {
+    fun process(request: ChangeRequest): Uni<Void> {
         val startTs = System.currentTimeMillis()
-        Log.debug("Evaluating assertions for change request ${buffer.request.id}...")
-        val request = buffer.request
+        Log.debug("Evaluating assertions for change request ${request.id}...")
         return Multi.createFrom().iterable(request.assert)
             .onItem()
             .transformToUni { assertion ->
                 val q = QueryRequest(
                     context = request.context,
-                    requestingUser = buffer.request.requestingUser,
+                    atChangeId = request.previousChangeId,
+                    requestingUser = request.requestingUser,
                     podId = request.podId,
                     sliceId = request.sliceId,
                     query = assertion.query
@@ -91,14 +85,8 @@ class EvaluateAssertions(
             }
             .merge(ASSERTION_CHECKING_PARALLELISM)
             .skipToLast()
-            .map {
-                val log =
-                    "Finished evaluating assertions (${request.assert.size}) for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms"
-                Log.debug(log)
-                ChangeReportStatusEntry(
-                    statusCode = ChangeStatusCode.PROCESSING,
-                    message = log
-                ).takeIf { request.assert.isNotEmpty() }
+            .invoke { _ ->
+                Log.debug("Finished evaluating assertions (${request.assert.size}) for change request ${request.id} in ${System.currentTimeMillis() - startTs} ms")
             }
     }
 
@@ -108,69 +96,41 @@ class EvaluateAssertions(
 class MaterializeS3References(
     @All
     private val referenceLoaders: MutableList<ReferenceLoader>
-) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
+) {
+    fun process(request: ChangeRequest): Multi<ChangeRecord> {
         val startTs = System.currentTimeMillis()
-        Log.debug("Processing external references for change request ${buffer.request.id}...")
-        val request = buffer.request
-        val deletedS3Objects = mutableListOf<String>()
-        val insertedS3Objects = mutableListOf<String>()
+        Log.debug("Processing and storing external references for change request ${request.id}...")
         return if (request.insertFromRefs.isNotEmpty() || request.deleteFromRefs.isNotEmpty()) {
-            // Delete from external sources
-            Multi.createFrom().iterable(request.deleteFromRefs)
-                .onItem().transformToMultiAndConcatenate { ref ->
-                    extractObject(ref)?.let { deletedS3Objects.add(it) }
-                    loadReference(request.podId, ref)
-                }
-                .group().intoLists().of(REF_HANDLING_BUFFER_SIZE)
-                .onItem().transformToUni { deleteTuples ->
-                    buffer.add(
-                        deleteTuples.map {
-                            ChangeRecord(
-                                request.id,
-                                request.getTimestamp(),
-                                ChangeRecordType.DELETE,
-                                it
-                            )
-                        })
-                }
-                .concatenate()
-                .skipToLast()
-                .chain { _ ->
-                    // Insert from external sources
-                    Multi.createFrom().iterable(request.insertFromRefs)
-                        .onItem().transformToMultiAndConcatenate { ref ->
-                            extractObject(ref)?.let { insertedS3Objects.add(it) }
-                            loadReference(request.podId, ref)
-                        }
-                        .group().intoLists().of(REF_HANDLING_BUFFER_SIZE)
-                        .onItem().transformToUni { insertTuples ->
-                            buffer.add(
-                                insertTuples.map {
-                                    ChangeRecord(
-                                        request.id,
-                                        request.getTimestamp(),
-                                        ChangeRecordType.INSERT,
-                                        it
-                                    )
-                                }
-                            )
-                        }
-                        .concatenate()
-                        .skipToLast()
-                }
+            // Concatenate RDF statement streams of...
+            Multi.createBy().concatenating().streams(
+                // ... delete refs
+                Multi.createFrom().iterable(request.deleteFromRefs)
+                    .onItem().transformToMultiAndConcatenate { ref -> loadReference(request.podId, ref) }
+                    .map { statement ->
+                        ChangeRecord(
+                            request.changeId!!,
+                            request.getTimestamp(),
+                            ChangeRecordType.DELETE,
+                            statement
+                        )
+                    },
+                // ... insert refs
+                Multi.createFrom().iterable(request.insertFromRefs)
+                    .onItem().transformToMultiAndConcatenate { ref -> loadReference(request.podId, ref) }
+                    .map { statement ->
+                        ChangeRecord(
+                            request.changeId!!,
+                            request.getTimestamp(),
+                            ChangeRecordType.INSERT,
+                            statement
+                        )
+                    }
+            )
         } else {
-            Uni.createFrom().voidItem()
+            Multi.createFrom().empty()
         }
-            .map {
-                val report = Json.encode(mapOf("insert_refs" to insertedS3Objects, "delete_refs" to deletedS3Objects))
-                val log =
-                    "Finished processing external references for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms. Details: $report"
-                Log.debug(log)
-                ChangeReportStatusEntry(
-                    statusCode = ChangeStatusCode.PROCESSING,
-                    message = log
-                ).takeIf { insertedS3Objects.isNotEmpty() || deletedS3Objects.isNotEmpty() }
+            .onCompletion().invoke {
+                Log.debug("Finished processing external references for change request ${request.id} in ${System.currentTimeMillis() - startTs} ms.")
             }
     }
 
@@ -178,66 +138,61 @@ class MaterializeS3References(
      * Load a reference from an external source and return it as a Mutiny stream (Multi).
      */
 
-    private fun loadReference(podId: String, reference: Map<String, Any>): Multi<RDFStatement> {
+    private fun loadReference(podId: String, reference: Reference): Multi<RDFStatement> {
         return referenceLoaders.firstOrNull { loader -> loader.isSupported(reference) }
             ?.loadReference(podId, reference)
             ?: Multi.createFrom().failure(RuntimeException("Unsupported reference type: $reference"))
     }
 
-    private fun extractObject(reference: Map<String, Any>): String? {
-        return if (reference[JsonLdKeywords.type] == KvasirVocab.S3Reference) reference[KvasirVocab.key] as String? else null
-    }
-
 }
 
+/**
+ * Materializes records for a ChangeRequest (read from JSON-LD or generated via with-clauses).
+ *
+ * TODO: Not future proof, as it takes all records in-memory (or performs a large query for evaluating with-clauses)
+ */
 @ApplicationScoped
 class MaterializeRecords(
     private val kg: KnowledgeGraph,
     private val repositoryFactory: RepositoryFactory
-) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
+) {
+    fun process(request: ChangeRequest): Uni<out List<ChangeRecord>> {
         val startTs = System.currentTimeMillis()
-        Log.debug("Processing with clauses for change request ${buffer.request.id}...")
+        Log.debug("Materializing change records for change request ${request.id}...")
         // Process embedded inserts/deletes
-        val request = buffer.request
+        val request = request
         var deleteStatementsCount = 0
         var insertStatementsCount = 0
         return bindWhere(request)
-            .chain { bindings ->
+            .map { bindings ->
+                val records = mutableListOf<ChangeRecord>()
                 // Delete the specified records
                 val deleteJsonLd = materializeRecords(request, request.delete, bindings)
-                val deleteStatements = RDFTransformer.toStatements(deleteJsonLd)
+                val deleteStatements = RDFTransformer.toStatements(deleteJsonLd, request.sliceId ?: request.podId)
                 deleteStatementsCount = deleteStatements.size
-                buffer.add(
+                records.addAll(
                     deleteStatements.map {
                         ChangeRecord(
-                            request.id, request.getTimestamp(),
+                            request.changeId!!, request.getTimestamp(),
                             ChangeRecordType.DELETE, it
                         )
                     }
                 )
-                    .chain { _ ->
-                        val insertJsonLd = materializeRecords(request, request.insert, bindings)
-                        val insertStatements = RDFTransformer.toStatements(insertJsonLd)
-                        insertStatementsCount = insertStatements.size
-                        buffer.add(
-                            insertStatements.map {
-                                ChangeRecord(
-                                    request.id, request.getTimestamp(),
-                                    ChangeRecordType.INSERT, it
-                                )
-                            }
+                val insertJsonLd = materializeRecords(request, request.insert, bindings)
+                val insertStatements = RDFTransformer.toStatements(insertJsonLd, request.sliceId ?: request.podId)
+                insertStatementsCount = insertStatements.size
+                records.addAll(
+                    insertStatements.map {
+                        ChangeRecord(
+                            request.changeId!!, request.getTimestamp(),
+                            ChangeRecordType.INSERT, it
                         )
                     }
+                )
+                records
             }
-            .map {
-                val log =
-                    "Finished processing with clauses for change request ${buffer.request.id} in ${System.currentTimeMillis() - startTs} ms. Materialized $insertStatementsCount inserts and $deleteStatementsCount deletes."
-                Log.debug(log)
-                ChangeReportStatusEntry(
-                    statusCode = ChangeStatusCode.PROCESSING,
-                    message = log
-                ).takeIf { insertStatementsCount + deleteStatementsCount > 0 }
+            .invoke { _ ->
+                Log.debug("Finished materializing change request ${request.id} in ${System.currentTimeMillis() - startTs} ms. Materialized $insertStatementsCount inserts and $deleteStatementsCount deletes.")
             }
     }
 
@@ -245,6 +200,7 @@ class MaterializeRecords(
         return if (request.with == null) {
             Uni.createFrom().item(QueryResult(data = emptyMap()))
         } else {
+            Log.debug("Binding 'with' clauses for change request ${request.id}...")
             // For change requests on a Slice, load the Slice schema
             (request.sliceId?.let { sliceId ->
                 repositoryFactory.getRepository(Slice::class, request.podId).findById(sliceId)
@@ -254,6 +210,7 @@ class MaterializeRecords(
                 .chain { slice ->
                     val q = QueryRequest(
                         context = slice?.context ?: request.context,
+                        atChangeId = request.previousChangeId,
                         requestingUser = request.requestingUser,
                         podId = request.podId,
                         sliceId = request.sliceId,
@@ -261,11 +218,13 @@ class MaterializeRecords(
                         predefinedSchema = slice?.schema
                     )
                     kg.query(q).toUni()
-                        .onFailure().recoverWithItem { err ->
-                            QueryResult(
-                                data = emptyMap(),
-                                errors = listOf(mapOf("message" to (err.message ?: "")))
-                            )
+                        .chain { result ->
+                            if (result.errors?.isNotEmpty() == true) {
+                                Uni.createFrom()
+                                    .failure(IllegalArgumentException("Error executing 'with' clause: ${result.errors}"))
+                            } else {
+                                Uni.createFrom().item(result)
+                            }
                         }
                 }
         }
@@ -314,35 +273,37 @@ class MaterializeRecords(
     }
 }
 
+/**
+ * Validates a collection of change records (mutation) according to the Slice schema.
+ *
+ * TODO: Warning, this is not future-proof as the implementation must see the full recordset at once (so it needs to be loaded in-memory).
+ * A stream capable implementation would be better.
+ */
 @ApplicationScoped
-class SliceGraphQLBasedValidator(private val repositoryFactory: RepositoryFactory) : ChangeProcessor {
-    override fun process(buffer: ChangeRequestTxBuffer): Uni<ChangeReportStatusEntry?> {
-        return buffer.request.sliceId?.let { sliceId ->
+class SliceGraphQLBasedValidator(private val repositoryFactory: RepositoryFactory) {
+    fun process(request: ChangeRequest, records: Collection<ChangeRecord>): Uni<Void> {
+        return request.sliceId?.let { sliceId ->
             val startTs = System.currentTimeMillis()
-            Log.debug("Validating change request ${buffer.request.id} against Slice GraphQL schema...")
+            Log.debug("Validating change request ${request.id} against Slice GraphQL schema...")
             // Load Slice schema
-            repositoryFactory.getRepository(Slice::class, buffer.request.podId).findById(sliceId)
+            repositoryFactory.getRepository(Slice::class, request.podId).findById(sliceId)
                 .chain { sliceSpec ->
                     if (sliceSpec != null) {
-                        buffer.stream().collect().asSet().chain { records ->
-                            val validator = ChangeRequestValidator(records, sliceSpec.schema, sliceSpec.context)
-                            try {
-                                validator.validate()
-                                Uni.createFrom().voidItem()
-                            } catch (t: Throwable) {
-                                Uni.createFrom().failure(t)
-                            }
+
+                        val validator = ChangeRequestValidator(records, sliceSpec.schema, sliceSpec.context)
+                        try {
+                            validator.validate()
+                            Uni.createFrom().voidItem()
+                        } catch (t: Throwable) {
+                            Uni.createFrom().failure(t)
                         }
                     } else {
                         Uni.createFrom()
                             .failure(InvalidChangeRequestException("Cannot validate change request: no spec found for Slice '$sliceId'!"))
                     }
                 }
-                .map {
-                    val log =
-                        "Finished validating change request ${buffer.request.id} against Slice GraphQL schema in ${System.currentTimeMillis() - startTs} ms"
-                    Log.debug(log)
-                    ChangeReportStatusEntry(statusCode = ChangeStatusCode.PROCESSING, message = log)
+                .invoke { _ ->
+                    Log.debug("Finished validating change request ${request.id} against Slice GraphQL schema in ${System.currentTimeMillis() - startTs} ms")
                 }
         } ?: Uni.createFrom().nullItem()
     }

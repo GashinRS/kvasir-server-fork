@@ -7,12 +7,13 @@ import io.quarkus.test.security.TestSecurity
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
 import jakarta.ws.rs.core.MediaType
-import kvasir.definitions.kg.ChangeRequest
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryResult
+import kvasir.definitions.kg.changes.ChangeRequest
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.*
 import kvasir.utils.idgen.ChangeRequestId
+import kvasir.utils.idgen.StateId
 import kvasir.utils.test.commons.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -35,10 +36,11 @@ class QueryApiTest : AbstractPodTest() {
         personData = TestDataGenerator.generatePersonData(100)
         kg.process(
             ChangeRequest(
-                ChangeRequestId.generate("$podUri/changes").encode(),
-                emptyMap(),
-                "alice",
-                podUri,
+                id = ChangeRequestId.generate("$podUri/changes").encode(),
+                changeId = StateId.generate(),
+                context = emptyMap(),
+                requestingUser = "alice",
+                podId = podUri,
                 insert = personData
             )
         ).await().indefinitely()
@@ -256,10 +258,11 @@ class QueryApiTest : AbstractPodTest() {
         // Add parent relation to parentPerson for the selected children
         kg.process(
             ChangeRequest(
-                ChangeRequestId.generate("$podUri/changes").encode(),
-                emptyMap(),
-                "alice",
-                podUri,
+                id = ChangeRequestId.generate("$podUri/changes").encode(),
+                changeId = StateId.generate(),
+                context = emptyMap(),
+                requestingUser = "alice",
+                podId = podUri,
                 // Include type info for both sides of the relation to help the metadata generator
                 insert = children.map {
                     mapOf(
@@ -479,10 +482,11 @@ class QueryApiTest : AbstractPodTest() {
             )
         }
         val changeRequest = ChangeRequest(
-            ChangeRequestId.generate("$podUri/changes").encode(),
-            emptyMap(),
-            "alice",
-            podUri,
+            id = ChangeRequestId.generate("$podUri/changes").encode(),
+            changeId = StateId.generate(),
+            context = emptyMap(),
+            requestingUser = "alice",
+            podId = podUri,
             // Include type info for both sides of the relation to help the metadata generator
             insert = listOf(
                 mapOf(
@@ -523,10 +527,11 @@ class QueryApiTest : AbstractPodTest() {
 
         // Now add literal values as object for the knows relation, making the return type of the field an RDFNode
         val changeRequest2 = ChangeRequest(
-            ChangeRequestId.generate("$podUri/changes").encode(),
-            emptyMap(),
-            "alice",
-            podUri,
+            id = ChangeRequestId.generate("$podUri/changes").encode(),
+            changeId = StateId.generate(),
+            context = emptyMap(),
+            requestingUser = "alice",
+            podId = podUri,
             insert = listOf(
                 mapOf(
                     JsonLdKeywords.id to selectedPerson[JsonLdKeywords.id],
@@ -553,10 +558,11 @@ class QueryApiTest : AbstractPodTest() {
         )
 
         val reverseChanges = ChangeRequest(
-            ChangeRequestId.generate("$podUri/changes").encode(),
-            emptyMap(),
-            "alice",
-            podUri,
+            id = ChangeRequestId.generate("$podUri/changes").encode(),
+            changeId = StateId.generate(),
+            context = emptyMap(),
+            requestingUser = "alice",
+            podId = podUri,
             delete = listOf(
                 mapOf(
                     JsonLdKeywords.id to selectedPerson[JsonLdKeywords.id],

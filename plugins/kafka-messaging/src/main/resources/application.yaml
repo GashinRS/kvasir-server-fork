@@ -1,14 +1,36 @@
+kvasir:
+  messaging:
+    kafka:
+      auto-create-topics:
+        - topic-name: changes.incoming
+          partitions: 4
+          replication-factor: 1
+        - topic-name: changes.processing-completed
+          partitions: 4
+          replication-factor: 1
+        - topic-name: changes.outgoing
+          partitions: 4
+          replication-factor: 1
+        - topic-name: changes.plain-processing-queue
+          partitions: 4
+          replication-factor: 1
+        - topic-name: changes.stateful-processing-queue
+          partitions: 4
+          replication-factor: 1
+        - topic-name: changes.ref-processing-queue
+          partitions: 4
+          replication-factor: 1
 mp:
   messaging:
     outgoing:
-      change_requests_publish:
+      changes_incoming_publish:
         connector: smallrye-kafka
-        topic: change.requests
+        topic: changes.incoming
         merge: true
         waitForWriteCompletion: false
-      outbox_publish:
+      changes_processing_completed_publish:
         connector: smallrye-kafka
-        topic: outbox
+        topic: changes.processing-completed
         merge: true
         waitForWriteCompletion: false
       storage_events_publish:
@@ -27,9 +49,10 @@ mp:
         merge: true
         waitForWriteCompletion: false
     incoming:
-      change_requests_subscribe:
+      changes_plain_processing_queue_subscribe:
         connector: smallrye-kafka
-        topic: change.requests
+        topic: changes.plain-processing-queue
+        batch: true
         broadcast: true
         commit-strategy: throttled
         throttled:
@@ -41,9 +64,37 @@ mp:
               ms: 5000
           offset:
             reset: earliest
-      outbox_subscribe:
+      changes_stateful_processing_queue_subscribe:
         connector: smallrye-kafka
-        topic: outbox
+        topic: changes.stateful-processing-queue
+        broadcast: true
+        commit-strategy: throttled
+        throttled:
+          unprocessed-record-max-age:
+            ms: 60000
+        auto:
+          commit:
+            interval:
+              ms: 5000
+          offset:
+            reset: earliest
+      changes_ref_processing_queue_subscribe:
+        connector: smallrye-kafka
+        topic: changes.ref-processing-queue
+        broadcast: true
+        commit-strategy: throttled
+        throttled:
+          unprocessed-record-max-age:
+            ms: 60000
+        auto:
+          commit:
+            interval:
+              ms: 5000
+          offset:
+            reset: earliest
+      changes_outgoing_subscribe:
+        connector: smallrye-kafka
+        topic: changes.outgoing
         broadcast: true
         auto:
           offset:
@@ -51,20 +102,6 @@ mp:
       storage_events_subscribe:
         connector: smallrye-kafka
         topic: storage.events
-        broadcast: true
-        auto:
-          offset:
-            reset: earliest
-      query_requests_subscribe:
-        connector: smallrye-kafka
-        topic: query.requests
-        broadcast: true
-        auto:
-          offset:
-            reset: earliest
-      lifecycle_events_subscribe:
-        connector: smallrye-kafka
-        topic: lifecycle.events
         broadcast: true
         auto:
           offset:

@@ -1,5 +1,36 @@
-@if (change.hasValue()) {
-  @let ch = change.value()!;
+@if (isPending()) {
+  @let pch = pendingChange()!;
+  <nz-row class="header-row">
+    <!-- <nz-space nzDirection="vertical"> -->
+    <nz-col nzFlex="1">
+      <nz-descriptions
+        nzTitle="Pending Change Request"
+        nzBordered
+        [nzColumn]="2"
+        nzSize="small"
+      >
+        <nz-descriptions-item nzTitle="Pending Change Request ID" [nzSpan]="2">
+          {{ pch["@id"] }}
+        </nz-descriptions-item>
+        <nz-descriptions-item nzTitle="Result Code">
+          {{ pch["kss:statusCode"] }}
+        </nz-descriptions-item>
+        <nz-descriptions-item nzTitle="Timestamp">
+          {{ pch["kss:timestamp"] | date: "d MMM, yyyy @ hh:mm:ss" }}
+        </nz-descriptions-item>
+      </nz-descriptions>
+    </nz-col>
+  </nz-row>
+  <nz-row nzJustify="center">
+    <nz-col>
+      <button nz-button nzType="dashed" (click)="reload()" nzSize="large">
+        <nz-icon nzType="reload"></nz-icon>
+        Refresh
+      </button>
+    </nz-col>
+  </nz-row>
+} @else if (change.hasValue()) {
+  @let ch = processedChange()!;
   <nz-row class="header-row">
     <!-- <nz-space nzDirection="vertical"> -->
     <nz-col nzFlex="1">
@@ -11,6 +42,9 @@
       >
         <nz-descriptions-item nzTitle="Change Report ID" [nzSpan]="2">
           {{ ch["@id"] }}
+        </nz-descriptions-item>
+        <nz-descriptions-item nzTitle="Original Request ID" [nzSpan]="2">
+          {{ ch["kss:origRequestId"] }}
         </nz-descriptions-item>
         <nz-descriptions-item
           nzTitle="Pod ID"

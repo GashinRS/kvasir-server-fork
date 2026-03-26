@@ -8,6 +8,7 @@ import kvasir.definitions.config.JWTPrincipalExtractorConfig
 import kvasir.definitions.config.JWTProviderConfig
 import kvasir.definitions.config.PodConfig
 import kvasir.plugins.policyagent.openfga.extractors.SimpleJWTPrincipalExtractor
+import kvasir.utils.rdf.RDFTransformer
 import org.apache.http.HttpHeaders
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory
 import org.jose4j.jwt.consumer.JwtConsumerBuilder
@@ -22,21 +23,12 @@ internal fun contextualizeSubject(subject: String): String {
         // The subject is an email address
         subject.matches(emailRegex) -> "mailto:$subject"
         // The subject is a valid URI
-        isValidURI(subject) -> subject
+        RDFTransformer.isValidAbsoluteIri(subject) -> subject
         // The subject is not a valid URI, we assume it's a local identifier
         else -> "urn:kvasir-user:$subject"
     }
     // OpenFga-pep encodes internally
     return fqSubject
-}
-
-private fun isValidURI(uri: String): Boolean {
-    try {
-        SimpleValueFactory.getInstance().createIRI(uri)
-        return true
-    } catch (ex: Throwable) {
-        return false
-    }
 }
 
 internal fun getContextForParents(objectId: String): Collection<ClientTupleKey> {

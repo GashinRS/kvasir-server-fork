@@ -12,6 +12,9 @@ const val TYPE_BOXED_LITERAL = "BoxedLiteral"
 const val ENUM_TRIGGER_TYPE_NAME = "TriggerType"
 const val ENUM_TRIGGER_TYPE_INSERT_VALUE = "INSERT"
 const val ENUM_TRIGGER_TYPE_DELETE_VALUE = "DELETE"
+const val ENUM_SORT_ORDER_NAME = "SortOrder"
+const val ENUM_SORT_ORDER_ASC_VALUE = "ASC"
+const val ENUM_SORT_ORDER_DESC_VALUE = "DESC"
 const val FIELD_ID_NAME = "id"
 const val FIELD_RAW_RDF_NAME = "_rawRDF"
 const val FIELD_OBJECT_NAME = "_object"
@@ -25,9 +28,9 @@ const val DIRECTIVE_SHAPE_NAME = "shape"
 const val DIRECTIVE_OPTIONAL_NAME = "optional"
 const val DIRECTIVE_FILTER_NAME = "filter"
 const val DIRECTIVE_GRAPH_NAME = "graph"
-const val DIRECTIVE_STORAGE_NAME = "storage"
 const val DIRECTIVE_TRIGGER_NAME = "trigger"
 const val DIRECTIVE_GENERATE_MUTATIONS_NAME = "generateMutations"
+const val DIRECTIVE_MUST_EXIST_NAME = "mustExist"
 const val ARG_IRI_NAME = "iri"
 const val ARG_REVERSE_NAME = "reverse"
 const val ARG_IF_NAME = "if"
@@ -47,6 +50,7 @@ const val ARG_IN_NAME = "in"
 const val ARG_PAGE_SIZE_NAME = "pageSize"
 const val ARG_CURSOR_NAME = "cursor"
 const val ARG_ORDER_BY_NAME = "orderBy"
+const val ARG_SORT_NAME = "sort"
 const val ARG_ID_NAME = "id"
 const val ARG_TYPE_NAME = "type"
 const val ARG_SUBJECT_NAME = "subject"
@@ -58,3 +62,12 @@ const val MUTATION_ADD_PREFIX = "add"
 const val MUTATION_REMOVE_PREFIX = "remove"
 const val MUTATION_INSERT_PREFIX = "insert"
 const val MUTATION_DELETE_PREFIX = "delete"
+
+val KVASIR_BUILT_IN_FIELDS = setOf(
+    FIELD_ID_NAME,
+    FIELD_RELATIONS_NAME,
+    FIELD_PREDICATES_NAME,
+    FIELD_TYPES_NAME,
+    FIELD_RAW_RDF_NAME,
+    FIELD_OBJECT_NAME
+)

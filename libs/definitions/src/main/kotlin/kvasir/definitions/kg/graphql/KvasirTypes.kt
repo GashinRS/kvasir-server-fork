@@ -31,6 +31,19 @@ object KvasirTypes {
             .type(GraphQLList.list(GraphQLString)).build()
     )
 
+    val scalarCollectionArguments = listOf(
+        GraphQLArgument.newArgument().name(ARG_PAGE_SIZE_NAME)
+            .description("Limit the amount of returned results to the specified value.").type(GraphQLInt)
+            .defaultValueProgrammatic(DEFAULT_PAGE_SIZE)
+            .build(),
+        GraphQLArgument.newArgument().name(ARG_CURSOR_NAME).description("List results from the specified cursor.")
+            .type(GraphQLString).build(),
+        GraphQLArgument.newArgument().name(ARG_SORT_NAME)
+            .description("Specify the sort order of the returned results.")
+            .type(KvasirEnums.sortOrderEnum)
+            .build()
+    )
+
     val commonResourceFields = listOf(
         GraphQLFieldDefinition.newFieldDefinition().name(FIELD_ID_NAME).description("The id of the Resource.")
             .type(GraphQLNonNull.nonNull(GraphQLID)).build(),

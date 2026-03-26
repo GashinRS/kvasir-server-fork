@@ -4,7 +4,7 @@ import com.github.jsonldjava.utils.JsonUtils
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
-import kvasir.definitions.auth.AuthInitializer
+import kvasir.definitions.auth.AuthLifecycleManager
 import kvasir.definitions.config.HttpConfig
 import kvasir.definitions.kg.Pod
 import kvasir.definitions.persistence.RepositoryFactory
@@ -24,7 +24,7 @@ class FgaResourceTest {
 
 
     @Inject
-    lateinit var authInitializer: AuthInitializer
+    lateinit var authLifecycleManager: AuthLifecycleManager
 
     @Inject
     lateinit var repositoryFactory: RepositoryFactory
@@ -49,7 +49,7 @@ class FgaResourceTest {
         val pod = Pod(podId, "{}")
         repositoryFactory.getRepository(Pod::class).persist(pod).await().indefinitely()
         // Init openfga-policy-agent
-        authInitializer.initializeForPod(
+        authLifecycleManager.initializeForPod(
             pod, TestPodConfig(
                 testRunId, "bob", listOf(
                     TestGenerateClientConfig(BOB_CLIENT_NAME, BOB_CLIENT_SECRET, true)

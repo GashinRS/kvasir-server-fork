@@ -9,12 +9,12 @@ import jakarta.ws.rs.*
 import jakarta.ws.rs.core.MediaType
 import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.config.PodConfig
-import kvasir.definitions.kg.*
-import kvasir.definitions.kg.slices.Slice
+import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.QueryRequest
+import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
-import kvasir.definitions.persistence.Repository
-import kvasir.definitions.rdf.JSON_LD_MEDIA_TYPE
+import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLPostRelationExtractor
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
@@ -60,7 +60,7 @@ class QueryApi(
 
     @Path("{podId}$QUERY_API_PATH")
     @POST
-    @Produces(JSON_LD_MEDIA_TYPE)
+    @Produces(RDFMediaTypes.JSON_LD)
     @APIResponse(
         responseCode = "200",
         content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
@@ -94,7 +94,7 @@ class QueryApi(
             input.variables,
             input.operationName,
             atTimestamp = input.atTimestamp,
-            atChangeRequestId = input.atChangeRequest
+            atChangeId = input.atChangeId?.substringAfterLast("/")
         )
     }
 }
@@ -126,7 +126,7 @@ interface QueryInput {
     @get:Schema(
         description = "Query the state of the KG when the specified change request was applied."
     )
-    val atChangeRequest: String?
+    val atChangeId: String?
 }
 
 data class QueryInputImpl(
@@ -134,7 +134,7 @@ data class QueryInputImpl(
     override val operationName: String? = null,
     override val variables: Map<String, Any>? = null,
     override val atTimestamp: Instant? = null,
-    override val atChangeRequest: String? = null
+    override val atChangeId: String? = null
 ) : QueryInput
 
 data class QueryInputWithContext(
@@ -142,7 +142,7 @@ data class QueryInputWithContext(
     override val operationName: String? = null,
     override val variables: Map<String, Any>? = null,
     override val atTimestamp: Instant? = null,
-    override val atChangeRequest: String? = null,
+    override val atChangeId: String? = null,
     @get:JsonProperty("@context")
     @get:Schema(
         name = "@context",
@@ -151,15 +151,3 @@ data class QueryInputWithContext(
     )
     val providedContext: Map<String, Any>? = null
 ) : QueryInput
-
-internal fun getPodOrThrow404(podStore: Repository<Pod>, podId: String): Uni<Pod> {
-    return podStore.findById(podId)
-        .onItem().ifNull().failWith(NotFoundException("Pod not found: $podId"))
-        .onItem().ifNotNull().transform { it!! }
-}
-
-internal fun getSliceOrThrow404(sliceStore: Repository<Slice>, podId: String, sliceId: String): Uni<Slice> {
-    return sliceStore.findById(sliceId)
-        .onItem().ifNull().failWith(NotFoundException("Slice not found: $sliceId"))
-        .onItem().ifNotNull().transform { it!! }
-}

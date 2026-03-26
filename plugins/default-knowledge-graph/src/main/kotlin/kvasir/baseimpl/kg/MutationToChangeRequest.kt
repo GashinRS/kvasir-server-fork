@@ -3,13 +3,9 @@ package kvasir.baseimpl.kg
 import graphql.Scalars
 import graphql.language.*
 import graphql.scalars.ExtendedScalars
-import graphql.schema.DataFetchingEnvironment
-import graphql.schema.GraphQLArgument
-import graphql.schema.GraphQLInputObjectField
-import graphql.schema.GraphQLInputObjectType
-import graphql.schema.GraphQLScalarType
-import kvasir.definitions.kg.ChangeRequest
+import graphql.schema.*
 import kvasir.definitions.kg.QueryRequest
+import kvasir.definitions.kg.changes.ChangeRequest
 import kvasir.definitions.kg.graphql.ARG_REVERSE_NAME
 import kvasir.definitions.kg.graphql.DIRECTIVE_PREDICATE_NAME
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
@@ -28,8 +24,7 @@ import java.time.OffsetTime
 class MutationToChangeRequest(private val request: QueryRequest) {
 
     private val mutationFields = mutableListOf<Field>()
-    private val changesBaseUri = (request.sliceId ?: request.podId) + "/changes"
-    val changeRequestId = ChangeRequestId.generate(changesBaseUri).encode()
+    val changeRequestId = ChangeRequestId.generate(request.requestingUser).encode()
 
     private val inserts = mutableListOf<Map<String, Any>>()
     private val deletes = mutableListOf<Map<String, Any>>()
@@ -59,11 +54,11 @@ class MutationToChangeRequest(private val request: QueryRequest) {
 
     fun getChangeRequest(): ChangeRequest {
         return ChangeRequest(
-            changeRequestId,
-            request.context,
-            request.requestingUser,
-            request.podId,
-            request.sliceId,
+            id = changeRequestId,
+            context = request.context,
+            requestingUser = request.requestingUser,
+            podId = request.podId,
+            sliceId = request.sliceId,
             insert = inserts,
             delete = deletes
         )

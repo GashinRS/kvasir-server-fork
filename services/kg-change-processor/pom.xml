@@ -37,5 +37,21 @@
             <artifactId>s3-storage</artifactId>
             <version>${revision}</version>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-kafka-streams</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-libs</groupId>
+            <artifactId>test-utils</artifactId>
+            <version>${revision}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-services</groupId>
+            <artifactId>init-service</artifactId>
+            <version>${revision}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>
