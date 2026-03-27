@@ -4,7 +4,12 @@ kvasir:
     webclient-uri: ${kvasir.http.base-uri}_ui/
 
 "%dev":
+  kvasir:
+    http:
+      base-uri: http://localhost:28080/
   quarkus:
+    http:
+      port: 28080
     log:
       level: INFO
       category:
@@ -20,7 +25,12 @@ kvasir:
           min-level: WARN
 
 "%test":
+  kvasir:
+    http:
+      base-uri: http://localhost:28180/
   quarkus:
+    http:
+      port: 28180
     log:
       level: INFO
       category:

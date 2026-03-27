@@ -5,7 +5,7 @@ services:
     environment:
       - CLICKHOUSE_LOG_TO_CONSOLE=1
     ports:
-      - "8123:8123"
+      - "${KVASIR_PORT_CLICKHOUSE:-8123}:8123"
       # tcp port for clickhouse (should not be required externally)
       #- "9000:9000"
     volumes:
@@ -28,11 +28,11 @@ services:
   seaweedfs:
     image: chrislusf/seaweedfs:latest
     ports:
-      - "8333:8333" # S3 API port
+      - "${KVASIR_PORT_S3:-8333}:8333" # S3 API port
     volumes:
       - "seaweedfs_data:/data"
       - "./seaweedfs-config.json:/etc/seaweedfs/config.json${SELINUX_SUFFIX:-}"
-    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/config.json -s3.externalUrl=http://${COMPOSE_HOSTNAME:-localhost}:8333 -dir=/data -volume.max=0
+    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/config.json -s3.externalUrl=http://${COMPOSE_HOSTNAME:-localhost}:${KVASIR_PORT_S3:-8333} -dir=/data -volume.max=0
     healthcheck:
       test:
         [
@@ -58,7 +58,7 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${COMPOSE_HOSTNAME:-localhost}:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${COMPOSE_HOSTNAME:-localhost}:${KVASIR_PORT_KAFKA:-9092}
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
@@ -70,7 +70,7 @@ services:
       KAFKA_NUM_PARTITIONS: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     ports:
-      - "9092:9092"
+      - "${KVASIR_PORT_KAFKA:-9092}:9092"
     healthcheck:
       test:
         [
@@ -87,7 +87,7 @@ services:
     depends_on:
       - postgresql
     ports:
-      - "8280:8080"
+      - "${KVASIR_PORT_KEYCLOAK:-8280}:8080"
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
@@ -114,7 +114,7 @@ services:
     networks:
       - default
     ports:
-      - "5432:5432"
+      - "${KVASIR_PORT_POSTGRES:-5432}:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
@@ -148,8 +148,8 @@ services:
       - OPENFGA_DATASTORE_MAX_OPEN_CONNS=100 #see postgres container
       - OPENFGA_PLAYGROUND_ENABLED=true
     ports:
-      - "8380:8080" #http
-      - "8381:8081" #grpc
+      - "${KVASIR_PORT_OPENFGA_HTTP:-8380}:8080" #http
+      - "${KVASIR_PORT_OPENFGA_GRPC:-8381}:8081" #grpc
     healthcheck:
       test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=openfga:8081"]
       interval: 15s

@@ -20,12 +20,18 @@ test:maven:
   image: $CI_TOOLS_IMAGE
   tags: ["cache", "docker"]
   variables:
+    # In CI, Docker-in-Docker services are reachable via the 'docker' hostname, not 'localhost'.
+    # Setting COMPOSE_HOSTNAME propagates this to all services in compose.devservices.yml
+    # (Kafka advertised listeners, SeaweedFS externalUrl) and compose.kvasir.yml.
+    # The KVASIR_* variables below override the application defaults so that the test JVM
+    # connects to the correct hostnames as well.
     COMPOSE_HOSTNAME: docker
     KVASIR_KG_CLICKHOUSE_HOST: docker
-    KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS: docker:9092
-    KVASIR_STORAGE_S3_ENDPOINT: http://docker:8333
-    KVASIR_AUTH_KEYCLOAK_URL: http://docker:8280
-    KVASIR_PEP_OPENFGA_URL: http://docker:8380
+    KVASIR_KG_CLICKHOUSE_PORT: 28123
+    KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS: docker:29092
+    KVASIR_STORAGE_S3_ENDPOINT: http://docker:28333
+    KVASIR_AUTH_KEYCLOAK_URL: http://docker:28280
+    KVASIR_PEP_OPENFGA_URL: http://docker:28380
   rules:
     - if: $CI_COMMIT_TAG
       when: never
@@ -33,7 +39,7 @@ test:maven:
       <<: *code-changes
   script:
     - set -xe
-    - docker compose -f compose/compose.devservices.yml up --wait --quiet-pull --no-color
+    - docker compose -f compose/compose.devservices.yml --env-file compose/.env.devservices up --wait --quiet-pull --no-color
     - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true
   interruptible: true
   after_script:

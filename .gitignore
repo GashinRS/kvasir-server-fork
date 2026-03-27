@@ -55,5 +55,10 @@ _openapi
 # Ignore environment files in the compose directory
 *.env
 
+# API test local config and generated reports
+api-tests/hurl.env
+api-tests/report
+api-tests/junit.xml
+
 *.tgz
 kubernetes/.kvasir.env
