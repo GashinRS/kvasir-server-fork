@@ -12,12 +12,36 @@ docker compose up
 
 A demo pod will be available at `http://localhost:8080/alice`.
 
+### Port Configuration
+
+The full compose stack runs on standard service ports out of the box:
+
+| Variable                   | Default | Service             |
+| -------------------------- | ------- | ------------------- |
+| `KVASIR_PORT_HTTP`         | 8080    | Kvasir HTTP         |
+| `KVASIR_PORT_CLICKHOUSE`   | 8123    | ClickHouse HTTP API |
+| `KVASIR_PORT_S3`           | 8333    | SeaweedFS S3 API    |
+| `KVASIR_PORT_KAFKA`        | 9092    | Kafka bootstrap     |
+| `KVASIR_PORT_KEYCLOAK`     | 8280    | Keycloak HTTP       |
+| `KVASIR_PORT_POSTGRES`     | 5432    | PostgreSQL          |
+| `KVASIR_PORT_OPENFGA_HTTP` | 8380    | OpenFGA HTTP        |
+| `KVASIR_PORT_OPENFGA_GRPC` | 8381    | OpenFGA gRPC        |
+
+To override ports (e.g. to run alongside dev services or another project), copy `compose/.env.example` to `compose/.env` and uncomment the desired variables. The example file shows 28xxx values for simultaneous stack operation:
+
+```bash
+cp compose/.env.example compose/.env
+# edit compose/.env to set the ports you need
+```
+
+Dev services managed by Maven and `just dev-services-up` always run on the 28xxx range (`compose/.env.devservices`) so they never clash with the full stack at default ports.
+
 ### Development: Dev Services Only
 
 For local development, the backing services lifecycle is managed by Maven. From the project root:
 
 ```bash
-# Start services
+# Start services (on 28xxx ports, via compose/.env.devservices)
 ./mvnw compile
 
 # Stop and remove services
@@ -29,7 +53,8 @@ Skip compose management with `-Dcompose.skip=true`. Switch container engine with
 To manage dev services manually:
 
 ```bash
-docker compose -f compose.devservices.yml up
+just dev-services-up    # starts on 28xxx, containers named kvasir-dev-*
+just dev-services-down
 ```
 
 ### SELinux (Fedora / RHEL)
@@ -56,8 +81,8 @@ A single variable, `COMPOSE_HOSTNAME`, controls all host references:
 
 Setting `COMPOSE_HOSTNAME=docker` in CI ensures:
 
-- **Kafka** advertises `PLAINTEXT://docker:9092` so brokers are reachable from the test JVM
-- **SeaweedFS** uses `docker:8333` as its external host for AWS Signature V4 verification (required because the Vert.x proxy adds an `X-Forwarded-Host` header that SeaweedFS would otherwise use, causing signature mismatches)
+- **Kafka** advertises `PLAINTEXT://docker:29092` so brokers are reachable from the test JVM
+- **SeaweedFS** uses `docker:28333` as its external host for AWS Signature V4 verification (required because the Vert.x proxy adds an `X-Forwarded-Host` header that SeaweedFS would otherwise use, causing signature mismatches)
 
 In addition, the `KVASIR_*` application variables are set explicitly in CI so the test JVM connects to the `docker` hostname rather than `localhost`:
 
@@ -65,8 +90,10 @@ In addition, the `KVASIR_*` application variables are set explicitly in CI so th
 variables:
   COMPOSE_HOSTNAME: docker
   KVASIR_KG_CLICKHOUSE_HOST: docker
-  KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS: docker:9092
-  KVASIR_STORAGE_S3_ENDPOINT: http://docker:8333
-  KVASIR_AUTH_KEYCLOAK_URL: http://docker:8280
-  KVASIR_PEP_OPENFGA_URL: http://docker:8380
+  KVASIR_KG_CLICKHOUSE_PORT: 28123
+  KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS: docker:29092
+  KVASIR_STORAGE_S3_ENDPOINT: http://docker:28333
+  KVASIR_AUTH_KEYCLOAK_URL: http://docker:28280
+  KVASIR_PEP_OPENFGA_URL: http://docker:28380
 ```
+

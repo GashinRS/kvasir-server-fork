@@ -10,7 +10,7 @@ The fastest way to get a dev server (with persistent storage) up and running is 
 
 ![](docker_host_networking.png)
 
-2. Now clone [this repository](https://gitlab.ilabt.imec.be/kvasir/kvasir-server) and run the following commands:
+1. Now clone [this repository](https://gitlab.ilabt.imec.be/kvasir/kvasir-server) and run the following commands:
 
 **Docker:**
 
@@ -24,7 +24,7 @@ If you are on a system with SELinux enabled (like Fedora), first create a file n
 with the following content:
 
 ```
-SELINUX_MOUNT_FLAG=:Z
+SELINUX_SUFFIX=:z,ro
 ```
 
 Then, from the `compose` directory, run:
@@ -33,11 +33,11 @@ Then, from the `compose` directory, run:
 podman compose up -d
 ```
 
-3. This will automatically create a pod
+1. This will automatically create a pod
    at <a href="http://localhost:8080/alice" target="_blank">http://localhost:8080/alice</a> for you to play with.
    The settings for this pod can be modified via the file `application.yaml` in the `kvasir-config` folder.
 
-4. You can view the [Kvasir UI](Kvasir-UI.md)
+2. You can view the [Kvasir UI](Kvasir-UI.md)
    at <a href="http://localhost:8080/_ui/" target="_blank">http://localhost:8080/\_ui/</a> to play around with your pod.
 
 > Be sure to read the [Authentication & Access Control](Identity-and-Security.md) section when you want to develop your own
@@ -127,22 +127,19 @@ helmfile sync --state-values-set kvasirHost=kvasir.example.com \
 ## Running in dev mode
 
 If you want to experiment with modifications to the code, you can run the server in dev mode via the Maven wrapper. This
-requires you to have Java JDK 21 installed.
+requires Java JDK 25 and [just](https://github.com/casey/just#packages).
 
-The backing services for development are managed by Maven and will be started automatically.
-
-To run the application in dev mode, execute:
-```bash
-./mvnw compile quarkus:dev
-```
-
-To stop the backing services and remove their volumes, run:
+Backing services are started automatically by Maven on first run (on 28xxx ports). Kvasir itself binds to port 28080 in dev mode.
 
 ```bash
-./mvnw clean
+just dev            # start with hot reload
+just dev-no-ui      # skip UI build for faster startup
+just clean          # stop backing services and clean build output
 ```
 
-You can skip the compose lifecycle (for the Docker dependencies) by adding `-Dcompose.skip=true` to your Maven command.
+Run `just --list` to see all available developer recipes.
+
+You can skip the compose lifecycle by adding `-Dcompose.skip=true` to your Maven command.
 
 ## Issues
 
