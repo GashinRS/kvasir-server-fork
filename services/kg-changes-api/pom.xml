@@ -56,11 +56,5 @@
             <version>${revision}</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>kvasir-plugins</groupId>
-            <artifactId>default-knowledge-graph</artifactId>
-            <version>${revision}</version>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 </project>
