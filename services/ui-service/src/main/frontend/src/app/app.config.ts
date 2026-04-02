@@ -1,6 +1,8 @@
 import {
   ApplicationConfig,
   importProvidersFrom,
+  inject,
+  provideAppInitializer,
   Provider,
   provideZoneChangeDetection,
 } from '@angular/core';
@@ -21,12 +23,17 @@ import { routes } from './app.routes';
 import { provideIcons } from './icons-provider';
 import { provideRequiredKeycloakProviders } from './keycloak.config';
 import { APP_CONFIG_TOKEN, AppConfig } from './services/config.service';
+import { SessionService } from './services/session.service';
 
 registerLocaleData(en);
 
 export function appConfig(config: AppConfig): ApplicationConfig {
   return {
     providers: [
+      provideAppInitializer(() => {
+        const session = inject(SessionService);
+        session.initialize();
+      }),
       provideAppConfigToken(config),
       provideRequiredKeycloakProviders(config),
       provideZoneChangeDetection({ eventCoalescing: true }),

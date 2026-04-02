@@ -7,9 +7,9 @@
         <div class="title">Cannot list pods: could not connect to backend!</div>
       </div>
     } @else {
-      <form [formGroup]="myForm" (submit)="doLogin()">
+      <form>
         <nz-space>
-          <nz-select formControlName="podName" *nzSpaceItem>
+          <nz-select [formField]="podForm.selectedPod" *nzSpaceItem>
             @for (pod of podsResource.value(); track pod["@id"]) {
               <nz-option
                 [nzValue]="name(pod)"
@@ -17,7 +17,13 @@
               ></nz-option>
             }
           </nz-select>
-          <button nz-button nzType="primary" *nzSpaceItem type="submit">
+          <button
+            nz-button
+            nzType="primary"
+            *nzSpaceItem
+            type="button"
+            (click)="doLogin()"
+          >
             Log in
           </button>
         </nz-space>

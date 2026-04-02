@@ -4,8 +4,8 @@ import { AppConfig } from './app/services/config.service';
 import { appConfig } from './app/app.config';
 
 const DEFAULT_CONFIG: AppConfig = {
-  KVASIR_HOST: 'http://localhost:8080/',
-  KVASIR_AUTH_HOST: 'http://localhost:8280',
+  KVASIR_HOST: 'http://localhost:28080/',
+  KVASIR_AUTH_HOST: 'http://localhost:28280',
   KVASIR_AUTH_REALM: 'quarkus',
 };
 
