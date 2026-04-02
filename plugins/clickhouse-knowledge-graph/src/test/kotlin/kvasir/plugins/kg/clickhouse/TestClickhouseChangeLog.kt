@@ -44,7 +44,7 @@ class TestClickhouseChangeLog {
 
     @AfterAll
     fun teardown() {
-        clickhouseClient.execute("DROP DATABASE IF EXISTS ${databaseFromPodId(testRunId)}").await().indefinitely()
+        clickhouseClient.execute("DROP DATABASE IF EXISTS `${databaseFromPodId(testRunId)}`").await().indefinitely()
     }
 
     @Test

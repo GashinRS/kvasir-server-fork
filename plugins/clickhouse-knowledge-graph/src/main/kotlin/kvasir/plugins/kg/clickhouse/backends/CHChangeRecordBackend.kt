@@ -36,7 +36,7 @@ class CHChangeRecordBackend(
             compareBy(
                 { it.statement.subject },
                 { it.statement.predicate },
-                { it.statement.`object`.toString() },
+                { it.statement.`object` },
                 { it.statement.dataType ?: "" },
                 { it.statement.language ?: "" },
                 { it.statement.graph },
@@ -54,7 +54,7 @@ class CHChangeRecordBackend(
             generateFilters(request)
         ).takeIf { it.isNotEmpty() }?.joinToString(" AND ", "WHERE (", ")") ?: ""
         val sql =
-            "SELECT ${DATA_COLUMNS.joinToString()} FROM ${databaseFromPodId(request.podId)}.$DATA_TABLE $whereClause LIMIT ${pageSize + 1} OFFSET $offset"
+            "SELECT ${DATA_COLUMNS.joinToString()} FROM $DATA_TABLE $whereClause LIMIT ${pageSize + 1} OFFSET $offset"
         return clickhouseClient.query(
             GenericQuerySpec(databaseFromPodId(request.podId), DATA_TABLE, DATA_COLUMNS),
             sql
@@ -83,7 +83,7 @@ class CHChangeRecordBackend(
 
     override fun rollback(request: ChangeRollbackRequest): Uni<Void> {
         return clickhouseClient.execute(
-            "ALTER TABLE ${databaseFromPodId(request.podId)}.$DATA_TABLE DELETE WHERE change_id = '${request.changeId}'",
+            "ALTER TABLE $DATA_TABLE DELETE WHERE change_id = '${request.changeId}'",
             databaseFromPodId(request.podId)
         )
     }
