@@ -6,7 +6,7 @@ import {
   inject,
   model,
   viewChild,
-  ViewEncapsulation
+  ViewEncapsulation,
 } from '@angular/core';
 import {
   FormBuilder,
@@ -21,19 +21,26 @@ import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NZ_MODAL_DATA, NzModalModule, NzModalRef } from 'ng-zorro-antd/modal';
-import { NzPopoverModule } from "ng-zorro-antd/popover";
+import { NzPopoverModule } from 'ng-zorro-antd/popover';
 import { NzRadioModule } from 'ng-zorro-antd/radio';
 import { NzSelectComponent, NzSelectModule } from 'ng-zorro-antd/select';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTabsModule } from 'ng-zorro-antd/tabs';
-import { NzTooltipModule } from "ng-zorro-antd/tooltip";
+import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import { SelectRelationComponent } from '../../components/select-relation/select-relation.component';
 import { ConfigService } from '../../services/config.service';
-import { LoginSessionService } from '../../services/login-session.service';
+import { SessionService } from '../../services/session.service';
 import { RelationshipDefinition } from '../../types';
-import { KSS_FGA_EXTERNAL_ACCESS, KSS_FGA_EXTERNAL_ACCESS_HTTP_ENDPOINT, KSS_FGA_EXTERNAL_ACCESS_UMA, KSS_FGA_RESOURCE_TYPE, KSS_FGA_USER_ANONYMOUS, KSS_FGA_USER_TYPE, KSS_FGA_USER_WILDCARD } from '../../util/constants';
+import {
+  KSS_FGA_EXTERNAL_ACCESS,
+  KSS_FGA_EXTERNAL_ACCESS_HTTP_ENDPOINT,
+  KSS_FGA_EXTERNAL_ACCESS_UMA,
+  KSS_FGA_RESOURCE_TYPE,
+  KSS_FGA_USER_ANONYMOUS,
+  KSS_FGA_USER_TYPE,
+  KSS_FGA_USER_WILDCARD,
+} from '../../util/constants';
 import { ensureSlashAtStart } from '../../util/utils';
-
 
 type SubjectAddon = 'email' | 'webid' | 'user' | 'everyone' | 'unauthed';
 
@@ -109,7 +116,7 @@ const RELATIONS: RelationOption[] = [
     ReactiveFormsModule,
     FormsModule,
     SelectRelationComponent,
-],
+  ],
   templateUrl: './create-relationship.component.html',
   styleUrl: './create-relationship.component.less',
   encapsulation: ViewEncapsulation.None,
@@ -132,7 +139,7 @@ export class CreateRelationshipComponent {
   //DI
   private modalRef = inject(NzModalRef);
   private config = inject(ConfigService);
-  private session = inject(LoginSessionService);
+  private session = inject(SessionService);
 
   subjectSelector = viewChild<NzSelectComponent>('subjectSelector');
 
@@ -191,22 +198,24 @@ export class CreateRelationshipComponent {
           this.subjectAddon.set('everyone');
           this.subjectSelector()!.setDisabledState(true);
           break;
-
       }
       this.relationshipForm.reset(model, { emitEvent: false });
     });
     effect(() => {
       const control = this.relationshipForm.controls.subject;
-      if (this.subjectAddon() == 'everyone' || this.subjectAddon() == 'unauthed') {
+      if (
+        this.subjectAddon() == 'everyone' ||
+        this.subjectAddon() == 'unauthed'
+      ) {
         control.disable();
       } else {
         control.enable();
       }
-    })
+    });
   }
 
   get pathPrefix(): string {
-    return `/${this.session.getCurrentLoginSession()!.podName}`;
+    return `/${this.session.podName()}`;
   }
 
   convertToPrefix(key: SubjectAddon): string {
@@ -221,7 +230,7 @@ export class CreateRelationshipComponent {
       case 'everyone':
         return KSS_FGA_USER_WILDCARD;
       case 'unauthed':
-        return KSS_FGA_USER_ANONYMOUS
+        return KSS_FGA_USER_ANONYMOUS;
     }
   }
 
@@ -313,18 +322,31 @@ export class CreateRelationshipComponent {
     let { value: rel } = this.relationshipForm;
     let userId = this.prefix() + (rel.subject ?? '');
     let relation = {
-        '@id': `${this.config.host}${this.pathPrefix}${ensureSlashAtStart(rel.object!)}`,
-        '@type': KSS_FGA_RESOURCE_TYPE,
-      };
+      '@id': `${this.config.host}${this.pathPrefix}${ensureSlashAtStart(rel.object!)}`,
+      '@type': KSS_FGA_RESOURCE_TYPE,
+    };
     if (this.acType == 'uma') {
-      relation = {...relation, ...{[KSS_FGA_EXTERNAL_ACCESS]: {"@id": KSS_FGA_EXTERNAL_ACCESS_UMA}}};
+      relation = {
+        ...relation,
+        ...{
+          [KSS_FGA_EXTERNAL_ACCESS]: { '@id': KSS_FGA_EXTERNAL_ACCESS_UMA },
+        },
+      };
     } else if (this.acType == 'httpPep') {
-      relation = {...relation, ...{[KSS_FGA_EXTERNAL_ACCESS]: {"@id": KSS_FGA_EXTERNAL_ACCESS_HTTP_ENDPOINT}}};    }
-    
+      relation = {
+        ...relation,
+        ...{
+          [KSS_FGA_EXTERNAL_ACCESS]: {
+            '@id': KSS_FGA_EXTERNAL_ACCESS_HTTP_ENDPOINT,
+          },
+        },
+      };
+    }
+
     return {
       '@id': userId,
       '@type': KSS_FGA_USER_TYPE,
-      [rel.relation!]: relation
+      [rel.relation!]: relation,
     } as RelationshipDefinition;
   }
 

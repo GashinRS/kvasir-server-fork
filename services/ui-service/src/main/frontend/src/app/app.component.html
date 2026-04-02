@@ -7,9 +7,15 @@
       <li nz-menu-item routerLink="s3" nzMatchRouter>S3 Browser</li>
       <li nz-menu-item routerLink="changes" nzMatchRouter>Changes</li>
       <li nz-menu-item routerLink="slices" nzMatchRouter>Slices</li>
-      @if (sessionActive()) {
+      @if (sessionActive) {
         <li nz-menu-item class="right-menu" (click)="doLogout()">
-          {{ podName() }} <span class="logout">(logout)</span>
+          <div class="authed">
+            <span class="owner">
+              <span nz-icon nzType="user"></span>{{ podOwner() }}
+            </span>
+            <span class="pod">pod: {{ podName() }}</span>
+            <span class="logout">(logout)</span>
+          </div>
         </li>
       } @else {
         <li nz-menu-item class="right-menu" routerLink="register" nzMatchRouter>

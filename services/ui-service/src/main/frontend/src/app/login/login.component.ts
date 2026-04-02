@@ -1,6 +1,7 @@
-import { Component, effect, inject, linkedSignal } from '@angular/core';
+import { Component, inject, linkedSignal, OnInit } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
-import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { ReactiveFormsModule } from '@angular/forms';
+import { form, FormField } from '@angular/forms/signals';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzFlexModule } from 'ng-zorro-antd/flex';
 import { NzGridModule } from 'ng-zorro-antd/grid';
@@ -10,7 +11,7 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { map } from 'rxjs';
 import { ConfigService } from '../services/config.service';
 import { KvasirService } from '../services/kvasir.service';
-import { LoginFSM } from '../services/login-fsm';
+import { SessionService } from '../services/session.service';
 import { Pod } from '../types';
 
 @Component({
@@ -23,22 +24,16 @@ import { Pod } from '../types';
     NzSelectModule,
     NzSpaceModule,
     ReactiveFormsModule,
+    FormField,
   ],
   templateUrl: './login.component.html',
   styleUrl: './login.component.less',
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   private kvasir = inject(KvasirService);
   private config = inject(ConfigService);
-  private fsm = inject(LoginFSM);
+  private session = inject(SessionService);
 
-  podName: string = 'alice';
-  myForm: FormGroup;
-  selectedPod = linkedSignal<string | null>(() =>
-    (this.podsResource.value()?.length ?? 0) > 0
-      ? this.name(this.podsResource.value()!.at(0)!)
-      : null,
-  );
   podsResource = rxResource<Pod[], void>({
     stream: () =>
       this.kvasir
@@ -47,21 +42,26 @@ export class LoginComponent {
           map((pods) => pods.sort((a, b) => a['@id'].localeCompare(b['@id']))),
         ),
   });
+  podModel = linkedSignal<{ selectedPod: string | null }>(() => {
+    return { selectedPod: this.name(this.podsResource.value()?.at(0) ?? null) };
+  });
+  podForm = form(this.podModel);
 
-  constructor(fb: FormBuilder) {
-    this.myForm = fb.group({
-      podName: [this.selectedPod()],
-    });
-    effect(() => this.myForm.get('podName')?.setValue(this.selectedPod()));
+  constructor() {}
+
+  ngOnInit(): void {
+    const params = new URLSearchParams(window.location.search);
+    const podFromQuery = params.get('selectedPod');
+    if (podFromQuery) {
+      this.session.doLogin(podFromQuery);
+    }
   }
 
-  name = (pod: Pod): string => {
-    return pod?.['@id']?.slice(this.config.host.length + 1);
+  name = (pod: Pod | null): string | null => {
+    return pod?.['@id']?.slice(this.config.host.length + 1) || null;
   };
 
   async doLogin(): Promise<void> {
-    const podName = this.myForm.get('podName')?.value;
-    // this.session.newSession(podName);
-    this.fsm.login(podName);
+    this.session.doLogin(this.podModel().selectedPod!);
   }
 }

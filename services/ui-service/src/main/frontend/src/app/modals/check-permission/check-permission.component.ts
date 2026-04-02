@@ -27,8 +27,8 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
 import { FormErrorsComponent } from '../../components/form-errors/form-errors.component';
 import { ConfigService } from '../../services/config.service';
-import { LoginSessionService } from '../../services/login-session.service';
 import { RebacService } from '../../services/rebac.service';
+import { SessionService } from '../../services/session.service';
 import { RelationshipDefinition } from '../../types';
 import {
   AT_CONTEXT_KSS_FGA,
@@ -38,7 +38,6 @@ import {
   KSS_FGA_USER_WILDCARD,
 } from '../../util/constants';
 import { ensureSlashAtStart } from '../../util/utils';
-import { JsonPipe } from '@angular/common';
 
 type SubjectAddon = 'email' | 'webid' | 'user' | 'everyone' | 'unauthed';
 
@@ -113,7 +112,7 @@ export class CheckPermissionComponent implements OnInit {
   private modalRef = inject(NzModalRef);
   private config = inject(ConfigService);
   private rebac = inject(RebacService);
-  private session = inject(LoginSessionService);
+  private session = inject(SessionService);
 
   // SIGNAL FORMS
   // FormModel
@@ -161,7 +160,7 @@ export class CheckPermissionComponent implements OnInit {
   ngOnInit(): void {}
 
   get pathPrefix(): string {
-    return `/${this.session.getCurrentLoginSession()!.podName}`;
+    return `/${this.session.podName()}`;
   }
 
   convertToPrefix(key: SubjectAddon): string {
