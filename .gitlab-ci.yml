@@ -2,16 +2,10 @@
 
 include:
   - local: /.ci/templates.yml
-  - local: /.ci/build.yml
-  - local: /.ci/test.yml
-  - local: /.ci/deploy.yml
-  - component: $CI_SERVER_FQDN/components/releaser/release@v0.3.0
-    inputs:
-      bump_versions_script_path: $CI_PROJECT_DIR/.ci/scripts/bump-versions.sh
-      release_stage: release
-      proposal_stage: pre
-      sync_stage: sync
-      image_flavors_array: ["a4ds", "openfga", "noauth"]
+  - local: /.ci/maven.yml
+  - local: /.ci/compose.yml
+  - local: /.ci/docs.yml
+  - local: /.ci/release.yml
 
 variables:
   GIT_STRATEGY: clone
@@ -29,7 +23,6 @@ variables:
     --fail-at-end
     --show-version
     -DinstallAtEnd=true
-    -DdeployAtEnd=true
     -Dstyle.color=always
   MAVEN_OPTS: >-
     -Dhttps.protocols=TLSv1.2
@@ -52,24 +45,30 @@ variables:
   QUARKUS_CONTAINER_IMAGE_PASSWORD: $CI_REGISTRY_PASSWORD
 
 stages:
-  - pre
   - test
   - package
   - verify
   - deploy
   - release
-  - sync
 
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /^(\[Draft\]|\(Draft\)|Draft:)/
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      variables: &commitBranchVersions
+      variables:
         IMAGE_TAG: "$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
         IMAGE_ADDITIONAL_TAG: "$CI_COMMIT_REF_SLUG"
         QUARKUS_CONTAINER_IMAGE_PUSH: "true"
+    # Always run a pipeline on the default branch, even when an MR is open.
+    # This is required for release-pr and release:publish to trigger after a release MR is merged.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Suppress redundant branch pipelines when an MR is open for that branch.
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
+    - if: $CI_COMMIT_TAG
+      variables:
+        IMAGE_TAG: "$CI_COMMIT_TAG"
+        IMAGE_ADDITIONAL_TAG: "latest"
+        QUARKUS_CONTAINER_IMAGE_PUSH: "true"
     - if: $CI_COMMIT_BRANCH
-      variables: *commitBranchVersions

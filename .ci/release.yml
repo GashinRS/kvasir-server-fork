@@ -1,0 +1,105 @@
+# .ci/release.yml
+# Release automation using Releasaurus (https://releasaurus.rgon.io/)
+#
+# Two core jobs run on every push to main (or a maintenance branch):
+#   - release:publish → publishes the release (tag + GitLab Release) when a release PR is merged
+#   - release:pr      → proposes a release by creating/updating a PR if there are releasable commits
+#
+# All version-bearing files (pom.xml, compose, Helm chart/values) are updated by Releasaurus
+# as part of the release PR, so the tagged commit always has the correct versions baked in.
+# There is no post-tag version bump job — it is no longer needed.
+
+variables:
+  RELEASAURUS_IMAGE: "gitlab.ilabt.imec.be:4567/discover/ci-tools/releasaurus:0.17.0-jveessen.1"
+
+.releasaurus-image:
+  - &releasaurus-image
+    name: $RELEASAURUS_IMAGE
+    entrypoint: [""]
+
+# Publish the release after a Releasaurus release PR is merged.
+# Releasaurus validates internally whether the current commit is a release commit;
+# it exits cleanly when there is nothing to release (e.g. a regular feature merge).
+#
+# Idempotency guard: Releasaurus sometimes creates a second changelog-only commit on
+# its release branch after the real release MR merges (only touching CHANGELOG.md).
+# With GitLab merge_method=ff this second commit fast-forwards onto the base branch
+# and triggers a new push pipeline, causing release:publish to fail because the GitLab
+# Release already exists. We guard against this by skipping the job when the current
+# commit only touches CHANGELOG.md and not pom.xml (the real release commit always
+# bumps pom.xml; the duplicate changelog-only commit does not).
+release:publish:
+  extends: .release-branches-only
+  stage: release
+  needs: []
+  image: *releasaurus-image
+  before_script:
+    - apk add --no-cache git
+  script:
+    - |
+      CHANGED_FILES=$(git diff-tree --no-commit-id -r --name-only "$CI_COMMIT_SHA")
+      echo "Files changed in this commit:"
+      echo "$CHANGED_FILES"
+      if echo "$CHANGED_FILES" | grep -q "^pom.xml$"; then
+        echo "pom.xml changed — this is a real release commit, proceeding."
+      else
+        echo "pom.xml not changed — this looks like a duplicate changelog-only release commit."
+        echo "Skipping release:publish to avoid duplicate release error."
+        exit 0
+      fi
+    - |
+      BASE_BRANCH=${CI_COMMIT_BRANCH}
+      echo "Running release targeting branch: ${BASE_BRANCH}"
+      releasaurus release \
+        --forge gitlab \
+        --repo "$CI_PROJECT_URL" \
+        --token "$RELEASAURUS" \
+        --base-branch "$BASE_BRANCH"
+
+# Propose a release PR when new releasable commits land on the default branch.
+# Also runs on maintenance branches (e.g. v1.x) so hotfix releases work the same way.
+# Must run AFTER release:publish so it never sees an untagged release commit
+# (which would cause it to error out thinking a previous release is still pending).
+#
+# After Releasaurus creates/updates the MR, we immediately patch squash=false via the
+# GitLab API. Squash-merging the release MR rewrites the commit SHA so the release tag
+# (created by release:publish on the release branch) no longer appears in main's ancestry —
+# Releasaurus then can't find the last release and re-proposes the same version indefinitely.
+# The releasaurus image is Alpine-based so we can install curl inline with no extra job.
+# This is a workaround until the upstream fix lands in a fork (see HANDOVER-fork-releasaurus.md).
+release:pr:
+  extends: .release-branches-only
+  stage: release
+  needs: [release:publish]
+  image: *releasaurus-image
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      BASE_BRANCH=${CI_COMMIT_BRANCH}
+      echo "Running release-pr targeting branch: ${BASE_BRANCH}"
+      releasaurus release-pr \
+        --forge gitlab \
+        --repo "$CI_PROJECT_URL" \
+        --token "$RELEASAURUS" \
+        --base-branch "$BASE_BRANCH"
+    - |
+      RELEASE_BRANCH="releasaurus-release-${CI_COMMIT_BRANCH}"
+      echo "Patching release MR: setting squash=false on branch ${RELEASE_BRANCH}"
+      MR_IID=$(curl -sf \
+        --header "PRIVATE-TOKEN: ${RELEASAURUS}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests?source_branch=${RELEASE_BRANCH}&state=opened" \
+        | grep -o '"iid":[0-9]*' \
+        | { IFS= read -r line; echo "$line"; cat > /dev/null; } \
+        | grep -o '[0-9]*' || true)
+      if [ -z "$MR_IID" ]; then
+        echo "No open release MR found — nothing to patch (no releasable commits)."
+        exit 0
+      fi
+      echo "Setting squash=false on MR !${MR_IID}"
+      curl -sf --request PUT \
+        --header "PRIVATE-TOKEN: ${RELEASAURUS}" \
+        --form "squash=false" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}" \
+        | grep -o '"squash":[a-z]*' || true
+      echo "Done."

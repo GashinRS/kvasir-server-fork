@@ -6,7 +6,7 @@
     <parent>
         <groupId>kvasir-services</groupId>
         <artifactId>services-parent</artifactId>
-        <version>0.18.3</version>
+        <version>${revision}</version>
         <relativePath>..</relativePath>
     </parent>
     <artifactId>api-services-parent</artifactId>

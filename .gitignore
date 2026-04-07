@@ -10,6 +10,7 @@ cache
 .kotlin
 **/target
 .m2
+.flattened-pom.xml
 
 ### Java ###
 # Compiled class file
