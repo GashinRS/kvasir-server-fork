@@ -239,9 +239,14 @@ openapi:
 
 # ── Release ───────────────────────────────────────────────────────────────────
 
-# Bump all version references (auto-detects next version via git-cliff, or pass explicit)
-# Usage: just bump-version          (auto)
-#        just bump-version 1.2.3    (explicit)
+# Dry-run the Releasaurus release-pr locally.
+# Uses --forge local so no remote forge is contacted and no PR is created.
+# Releasaurus requires the URL path to match the local filesystem path, so we
+# construct the repo URL from justfile_directory() rather than hardcoding it.
 [group('release')]
-bump-version version="":
-    ./.ci/scripts/bump-versions.sh {{version}}
+release-dry-run:
+    releasaurus release-pr \
+        --forge local \
+        --repo "https://localhost{{justfile_directory()}}" \
+        --base-branch main \
+        --dry-run
