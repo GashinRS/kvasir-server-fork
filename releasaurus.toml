@@ -44,6 +44,10 @@ body = """## [{{ version }}]{% if tag_compare_link %}({{ tag_compare_link }}){% 
 {% endfor %}
 {% endfor %}"""
 
+[[changelog.reword]]
+sha = "ef26745"
+message = "feat!: Overhaul of the ingest flow and GraphQL query resolver"
+
 [[package]]
 path = "."
 release_type = "generic"
