@@ -32,10 +32,97 @@ conventional commits and merge features into `main` — the rest is automated.
 - **`fix:`** — Bug fix (PATCH version bump).
 - **`refactor:`**, `docs:`, `style:`, `ci:`, `chore:` — Non-releasable (no version
   bump, not included in changelog).
-- **Breaking changes**: Add `!` to the type (e.g., `feat!:`) or add a
-  `BREAKING CHANGE:` footer.
+- **Breaking changes**: Add `!` to the type (e.g., `feat!:`). For non-trivial
+  breaks, add a `BREAKING CHANGE:` footer with migration details (see
+  [Breaking Changes](#breaking-changes) below).
 
 > While in `0.x` development, breaking changes bump MINOR instead of MAJOR.
+
+### Breaking Changes
+
+A breaking change requires **at minimum** the `!` indicator in the commit subject
+(e.g., `feat!:`) to signal the version bump.
+
+For anything beyond a self-explanatory one-liner, **strongly consider** adding a
+`BREAKING CHANGE:` footer in the commit body that explains *what* broke and how
+to migrate. The footer text is rendered as a separate description in the changelog
+beneath the commit title — giving consumers clear upgrade guidance.
+
+If the commit title already tells the full story (e.g.,
+`feat!: remove deprecated /v1 endpoints`), the footer can be omitted — the
+changelog will show only the title.
+
+#### Format
+
+**Minimal** (title is self-explanatory):
+
+```
+feat!: remove deprecated /v1 endpoints
+```
+
+**With migration guidance** (recommended for non-trivial breaks):
+
+```
+feat!: redesign user authentication API
+
+Switched from session-based auth to JWT tokens.
+
+BREAKING CHANGE: The `/auth/session` endpoint has been removed.
+Use `/auth/token` instead. See docs/migration-v2.md for details.
+```
+
+**Rules for the footer:**
+- Must appear after a blank line (standard git trailer position).
+- Use `BREAKING CHANGE:` (with colon) or `BREAKING-CHANGE:` — both are recognized.
+- The text after the colon is rendered as the breaking change description in the
+  changelog, separate from the commit title.
+- If multiple footers are present, the `BREAKING CHANGE:` footer is extracted
+  specifically for the changelog.
+
+#### Squash-Merge Workflow
+
+When squash-merging an MR, GitLab constructs the final commit message as:
+
+```
+{MR title}
+
+{MR description}
+```
+
+To get a proper breaking change commit via squash merge:
+
+1. **Set the MR title** to: `feat!: short summary of the change`
+2. **If the break needs explanation**, include in the MR description (which
+   becomes the commit body):
+
+   ```
+   Optional detailed explanation of the changes.
+
+   BREAKING CHANGE: Detailed explanation of what broke and migration steps.
+   ```
+
+> **Tip**: GitLab's "Squash commit message" field in the merge dialog lets you
+> edit the final message. Use it to add or verify the footer before merging.
+
+#### Changelog Output
+
+With the footer, the changelog renders with a description:
+
+```markdown
+### Breaking
+
+- [**breaking**] Redesign user authentication API ([a1b2c3d](link))
+  > The `/auth/session` endpoint has been removed. Use `/auth/token` instead.
+```
+
+Without the footer (just `feat!:`), only the title appears — which is fine when
+the title is self-explanatory:
+
+```markdown
+### Breaking
+
+- [**breaking**] Remove deprecated /v1 endpoints ([a1b2c3d](link))
+```
 
 ### Merge Strategy
 

@@ -38,7 +38,7 @@ body = """## [{{ version }}]{% if tag_compare_link %}({{ tag_compare_link }}){% 
 
 {% for commit in commits %}
 - {% if commit.scope %}**({{ commit.scope }})** {% endif %}{% if commit.breaking %}[**breaking**] {% endif %}{{ commit.title }} ([{{ commit.short_id }}]({{ commit.link }}))
-{% if commit.breaking_description %}
+{% if commit.breaking_description and commit.breaking_description != commit.title %}
   > {{ commit.breaking_description }}
 {% endif %}
 {% endfor %}
