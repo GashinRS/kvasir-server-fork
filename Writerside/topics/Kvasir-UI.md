@@ -40,7 +40,7 @@ by creating and defining a new Slice schema.
 
 ![Kvasir UI - Slices](05_slices.png){ thumbnail="true" width="700" }
 
-Once a Slice is created, you can click the _query_ button to open an GraphiQL editor specifically for this Slice and
+Once a Slice is created, you can click the _query_ button to open a GraphiQL editor specifically for this Slice and
 its definition. You can query the custom created GraphQL Schema based on your Slice definition.
 
 ![Kvasir UI - Slices - Query](06_slices_query.png){ thumbnail="true" width="700" }
@@ -54,15 +54,15 @@ its definition. You can query the custom created GraphQL Schema based on your Sl
 This page allows you to manage the access control policies for your pod, by creating or deleting relationships between
 users and resources.
 
-You can even create access control delegations, referring to an externally configured UMA server or Http Policy 
+You can even create access control delegations, referring to an externally configured UMA server or HTTP Policy 
 Enforcement Point. 
 
 ![Kvasir UI - Access Control](07_accesscontrol.png){ thumbnail="true" width="700" }
 
 ## Settings
 The Settings page allows you to configure some general settings overrides for your pod. Settings that appear _locked_ 
-are following the default platform configures settings. Unlock them by clicking them, and you can override them and save
-you pod-specific overrides. (The _Runtime Config_ button shows the effective configuration of your pod, including all 
+are following the default platform configuration settings. Unlock them to override and save
+your pod-specific settings. (The _Runtime Config_ button shows the effective configuration of your pod, including all 
 overrides)
 
 ![Kvasir UI - Settings](08_settings.png){ thumbnail="true" width="700" }

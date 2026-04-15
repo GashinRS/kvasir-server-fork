@@ -14,4 +14,20 @@
         <description>Created after removal of "Deploying to Kubernetes" from Kvasir Documentation</description>
         <accepts>Deploying-to-Kubernetes.html</accepts>
     </rule>
+    <rule id="756439">
+        <description>Created after removal of "Custom backends" from Kvasir Documentation</description>
+        <accepts>Timeseries.html</accepts>
+    </rule>
+    <rule id="1336cc86">
+        <description>Created after removal of "Custom backends" from Kvasir Documentation</description>
+        <accepts>Timeseries.html</accepts>
+    </rule>
+    <rule id="7ad85948">
+        <description>Created after removal of "Custom backends" from Kvasir Documentation</description>
+        <accepts>Timeseries.html</accepts>
+    </rule>
+    <rule id="383bbc03">
+        <description>Created after removal of "Custom backends" from Kvasir Documentation</description>
+        <accepts>Timeseries.html</accepts>
+    </rule>
 </rules>

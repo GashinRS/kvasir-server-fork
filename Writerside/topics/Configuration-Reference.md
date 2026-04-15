@@ -51,7 +51,7 @@ If true, HTTP requests to the base URI will be redirected to the web client URI.
 
 ### Default Pod Configuration
 
-Default configuration related to Pods. May be overridden per Pod (see [](Pod-Management.md#pod-configuration)).
+Default configuration related to Pods. May be overridden per Pod (see [Pod configuration](Pod-Management.md#pod-configuration)).
 
 <deflist type="full">
 <def title="kvasir.pod.default-context">
@@ -121,7 +121,7 @@ default: <code>false</code>
 
 Whether to require DPoP (Demonstrating Proof-of-Possession) tokens for protected resources (more secure).
 </def>
-<def title="kvasir.pod.auth.skip-dpop-auth-check">
+<def title="kvasir.pod.auth.skip-dpop-ath-check">
 default: <code>false</code>
 
 Whether to skip the access token hash (ath) check for DPoP tokens. This setting is primarily intended for backward compatibility with clients that implement an earlier version of the DPoP specification.

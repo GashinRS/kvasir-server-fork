@@ -1,5 +1,7 @@
 # Getting started
 
+If you are new to Kvasir terminology, read [What is a Pod?](Usage.md#what-is-a-pod) first.
+
 ## Running with Compose
 
 The fastest way to get a dev server (with persistent storage) up and running is to use Compose.

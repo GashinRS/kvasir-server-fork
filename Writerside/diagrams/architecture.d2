@@ -1,0 +1,123 @@
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 1
+    theme-overrides: {
+      B1: "#3A9F8E" # Solid borders and connections
+      B2: "#3A9F8E" # Dashed borders and connection
+    }
+    dark-theme-id: 200
+    dark-theme-overrides: {
+      B1: "#3A9F8E" # Solid borders and connections
+      B2: "#8DB7C7" # Dashed borders and connection
+      N7: "#19191C" # Diagram background (matching kvasir docs dark theme)
+    }
+  }
+}
+
+# Common styling templates
+classes: {
+  container: {
+    style.font-size: 20
+    style.border-radius: 12
+    label.near: border-top-right
+  }
+  component: {
+    style.border-radius: 12
+    label.near: border-top-left
+  }
+  EMPTY: {
+    style: {
+      opacity: 0
+    }
+  }
+}
+
+grid-rows: 3
+
+p1.class: EMPTY
+p2.class: EMPTY
+Producer {
+  shape: person
+  height: 120
+}
+p3.class: EMPTY
+p4.class: EMPTY
+p5.class: EMPTY
+p6.class: EMPTY
+p7.class: EMPTY
+
+
+pep: enforced policy boundary {
+    class: container
+
+    in: Ingress {
+      class: component
+      storage-api
+      kg-changes-api
+    }
+
+    ps: Processing & Storage {
+      class: component
+      incoming-changes.shape: queue
+      storage: low-level storage
+      storage.shape: cylinder
+      storage-events.shape: queue
+      outgoing-changes.shape: queue
+      structured-data.shape: cylinder
+      query-events.shape: queue
+
+      incoming-changes -> kg-change-processor
+      storage-events -> rdf-ingester -> incoming-changes
+      kg-change-processor -> structured-data
+      kg-change-processor -> outgoing-changes
+    }
+
+    out: Egress {
+      class: component
+      storage-api
+      kg-stream-api
+      kg-query-api
+    }
+
+    in.kg-changes-api -> ps.incoming-changes
+    in.storage-api -> ps.storage
+      in.storage-api -> ps.storage-events: {
+        style: {
+          stroke-dash: 3
+        }
+      }
+    ps.structured-data -> out.kg-query-api
+    out.kg-query-api -> ps.query-events: {
+      style: {
+        stroke-dash: 3
+      }
+    }
+    ps.outgoing-changes -> out.kg-stream-api
+    ps.storage-events -> out.kg-stream-api
+    ps.query-events -> out.kg-stream-api
+    ps.storage -> out.storage-api
+}
+
+c1.class: EMPTY
+c2.class: EMPTY
+c3.class: EMPTY
+c4.class: EMPTY
+c5.class: EMPTY
+c6.class: EMPTY
+Consumer {
+  shape: person
+  height: 90
+}
+c7.class: EMPTY
+c8.class: EMPTY
+c9.class: EMPTY
+c10.class: EMPTY
+c11.class: EMPTY
+c12.class: EMPTY
+
+Producer -> pep.in.kg-changes-api
+Producer -> pep.in.storage-api
+pep.out.kg-query-api -> Consumer
+pep.out.kg-stream-api -> Consumer
+pep.out.storage-api -> Consumer

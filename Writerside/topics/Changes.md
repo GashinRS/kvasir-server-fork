@@ -2,6 +2,9 @@
 
 <show-structure depth="2"/>
 
+The Changes API is the write path for Knowledge Graph data. It accepts insert/delete mutations, processes them
+asynchronously, and exposes status/history endpoints so clients can track the outcome.
+
 ## Requesting changes
 
 A single inbox endpoint accepts mutations to the Knowledge Graph of a Pod and can be used to insert or delete RDF data.
@@ -82,7 +85,7 @@ Request body:
 ```
 
 <warning>
-When a change request includes both insert and delete statements, the delete statements are always executed first.
+When a change request includes both insert and delete statements, the delete statements are always executed first. As such, update mutations (i.e. delete followed by insert) can be implemented in a single change request.
 </warning>
 
 ### Assertions
@@ -314,9 +317,9 @@ This should return a `200 OK` response with a JSON-LD object containing the reco
 
 ## Streaming changes
 
-You can subcribe to changes in a pod by using the changes endpoint with the `Accept: text/event-stream` header. This
+You can subscribe to changes in a pod by using the changes endpoint with the `Accept: text/event-stream` header. This
 will return a stream of Server-Sent Events (SSE), containing the changes that are being made to the Pod in
-near-realtime.
+near real-time.
 
 **GET** `http://localhost:8080/alice/events/changes` with header `Accept: text/event-stream`
 

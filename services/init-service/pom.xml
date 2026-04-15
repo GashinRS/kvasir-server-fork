@@ -33,6 +33,11 @@
             <artifactId>kafka-messaging</artifactId>
             <version>${revision}</version>
         </dependency>
+        <dependency>
+            <groupId>kvasir-plugins</groupId>
+            <artifactId>kafka-messaging</artifactId>
+            <version>0.18.3</version>
+        </dependency>
     </dependencies>
 
 </project>

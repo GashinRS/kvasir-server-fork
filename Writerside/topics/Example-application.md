@@ -34,7 +34,7 @@ Make sure you have Docker Desktop installed, with Docker host networking enabled
 
 ## Starting the main components
 
-We've bundled a Compose file that can be used to start a Kvasir server and all of its dependecies, initialized
+We've bundled a Compose file that can be used to start a Kvasir server and all of its dependencies, initialized
 with a demo pod for a test user `alice` at `http://localhost:8080/alice` and preconfigured clients for the various
 components of the music-tracker.
 
@@ -50,7 +50,7 @@ Running this command will also build and start the `py-change-processor` and the
 At this time, Kvasir does not support booting with preconfigured Slice definitions. However, the music-tracker
 application requires a specific Slice definition to exist.
 
-To setup the Slice, go to http://localhost:8081/ and login into the `alice` pod using the demo credentials
+To set up the Slice, go to http://localhost:8080/_ui/ and log in to the `alice` pod using the demo credentials
 `alice:alice` (username:password). Next, click on `Slices` in the top menu-bar and then click on `Create Slice` in the
 top right of the screen.
 
@@ -67,11 +67,11 @@ The page should now look like this:
 Feel free to inspect the GraphQL schema. It defines which GraphQL query operations can be performed and the types that
 are returned (and thus which data fields are accessible), which mutations can be performed (and which input data is
 supported) and which subscription events are supported. The schema also maps these types to RDF either explicitly (via
-`@class` or `@predicate` directives) or implicitly by specifiying a prefix (followed by an underscore) before a type or
+`@class` or `@predicate` directives) or implicitly by specifying a prefix (followed by an underscore) before a type or
 field name.
 
 Kvasir can automatically handle incoming data, GraphQL queries on the Slice Knowledge Graph and Server-Sent-Event
-subscriptions, based purely on the contents of the scheme definition.
+subscriptions, based purely on the contents of the schema definition.
 
 **Now don't forget to register the Slice by clicking `Save`!**
 
@@ -117,10 +117,10 @@ You can now visit the web-app at http://localhost:5173 and authenticate using al
 
 # Troubleshooting
 
-* **When browsing to the Kvasir UI at http://localhost:8081/, it does not show Alice's pod.** => Check if Docker host
+* **When browsing to the Kvasir UI at http://localhost:8080/_ui/, it does not show Alice's pod.** => Check if Docker host
   networking is enabled.
 * **The spotify-client is producing ListenActions, but the web-app dashboard remains empty.** => Check if the
   py-change-processor is operating correctly (by checking the logs of its container). Try restarting it! Alternatively:
-  try clicking on the menu tabs at the top. Someties viewing the page in incognito mode can also work.
+  try clicking on the menu tabs at the top. Sometimes viewing the page in incognito mode can also work.
 * **I've made changes to the py-change-processor or web-app, but these are not showing up when running the deployment.**
   => Run `cd compose && docker compose up -d --build`, this will trigger a rebuild of those components.

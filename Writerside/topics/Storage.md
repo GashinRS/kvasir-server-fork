@@ -2,6 +2,9 @@
 
 <show-structure depth="2"/>
 
+Kvasir exposes two storage interfaces per Pod: an S3-compatible API and a Solid-compatible API backed by the same
+underlying objects. This page shows the core operations and how they relate to optional RDF auto-ingest.
+
 ## S3-compatible storage API
 
 Each Kvasir pod exposes an Amazon S3 compatible storage API at the base path `/{podId}/s3`. This API can be used to

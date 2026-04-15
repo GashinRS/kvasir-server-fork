@@ -1,5 +1,7 @@
 # Access Control
 
+<show-structure depth="2"/>
+
 Kvasir uses OpenFGA to manage access control. OpenFGA is a ReBAC (Relationship-Based Access Control) system, which means
 that access control is based on relationships between users and resources. This allows for fine-grained access
 control policies that can be tailored to specific use cases.
@@ -210,7 +212,7 @@ the [KNoWS UMA Authorization Server](https://github.com/SolidLabResearch/user-ma
 questions you may have regarding setting up an Authorization server, configuring policies, how to create and
 authenticate users & clients, etc; please refer to the documentation of the Authorization Server you are using.
 
-Contact information for the KNoWS group can be found at [](https://knows.idlab.ugent.be).
+Contact information for the KNoWS group can be found at [knows.idlab.ugent.be](https://knows.idlab.ugent.be).
 
 ### How it works
 
@@ -295,7 +297,7 @@ example:
 ```
 
 Read this relationship as: _"When no direct access is granted by regular OpenFGA rules, delegate policy decisions up
-to `owner`-level access, to the external system identified by `kss-fga:HttEndpoint`, regardless of the requesting
+to `owner`-level access, to the external system identified by `kss-fga:HttpEndpoint`, regardless of the requesting
 user."_
 
 ### HTTP Endpoint Policy Enforcer contract

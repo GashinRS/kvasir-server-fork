@@ -1,5 +1,7 @@
 # Pod Management
 
+<show-structure depth="2"/>
+
 The Pod Management API can be used to create and manage Pods, but is subject to change in future releases. We are
 working on a more extensible mechanism to allow integrations with other specifications and ecosystems (
 e.g. [Trustflows specification](https://spec.knows.idlab.ugent.be/trustflows/all/e45c02bd3711f5734eeb75548ff37a70f57c465e/)
@@ -10,7 +12,7 @@ and EU Data Spaces).
 A Pod can be configured with various settings that affect its behavior. The configuration is supplied as a YAML (or
 JSON) string for which the structure and possible values are defined by the PodConfig interface
 in [KvasirConfig.kt](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/blob/main/libs/definitions/src/main/kotlin/kvasir/definitions/config/KvasirConfig.kt).
-See also: [](Configuration-Reference.md#default-pod-configuration)
+See also: [Configuration Reference](Configuration-Reference.md#default-pod-configuration)
 
 The following sections describe the available configuration options.
 
@@ -90,7 +92,7 @@ and customize the `jwt-allowed-clock-skew-seconds`.
 ### External HTTP Endpoint Policy Enforcer
 
 You can configure an external HTTP Endpoint Policy Enforcer for the Pod. This allows delegating policy decisions to an
-external service (see [](Access-Control.md#delegating-to-an-external-http-endpoint-policy-enforcer)).
+external service (see [Delegating to an external HTTP Endpoint Policy Enforcer](Access-Control.md#delegating-to-an-external-http-endpoint-policy-enforcer)).
 
 For example:
 
@@ -121,7 +123,7 @@ auth:
   skip-dpop-ath-check: false
 ```
 
-For more context on these options, please refer to the [](Identity-and-Security.md)
+For more context on these options, please refer to the [Identity & Security](Identity-and-Security.md)
 section.
 
 ## Creating a Pod
@@ -135,7 +137,7 @@ You can create a Pod by adding entries to the `kvasir.bootstrap.pods` node in th
 Each pod bootstrap entry consists of a Pod configuration as described in the previous section, along with some
 additional settings (such as the pod name, user-id for the owner, etc).
 
-The pod boostrap configuration is defined by the `BootstrapPodConfig` interface
+The pod bootstrap configuration is defined by the `BootstrapPodConfig` interface
 in [KvasirConfig.kt](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/blob/main/libs/definitions/src/main/kotlin/kvasir/definitions/config/KvasirConfig.kt).
 
 For example:
@@ -166,7 +168,7 @@ can have a `client-id`, `client-secret`, and an optional `enable-service-account
 a service account should be created for the client. The `openfga` section allows you to specify the OpenFGA
 relationships for the client, which define the permissions that the client has on the Pod's resources. In this example,
 the client has `reader`, `writer`, and `deleter` permissions on the Pod's root resource (`/`). See
-also: [](Configuration-Reference.md#bootstrap-configuration).
+also: [Configuration Reference](Configuration-Reference.md#bootstrap-configuration).
 
 > Creating clients is only supported when using a Keycloak OIDC server that is managed by Kvasir (i.e. the Kvasir
 > instance has a Keycloak admin client configured).
@@ -193,7 +195,7 @@ Request body:
 ```
 
 The value for `kss:configuration` is a YAML (or JSON) string representing the Pod configuration, as described
-in [](#pod-configuration). An empty object (`{}`) can be provided to use the system defaults.
+in [Pod configuration](#pod-configuration). An empty object (`{}`) can be provided to use the system defaults.
 
 ## Get Pod configuration
 

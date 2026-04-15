@@ -239,7 +239,7 @@ data class QueryRequestEvent(
     val variables: Map<String, Any>? = null,
     val operationName: String? = null,
     val atTimestamp: Instant? = null,
-    val atChangeRequestId: String? = null,
+    val atChangeId: String? = null,
     val message: String? = null
 ) {
     companion object {
@@ -263,7 +263,7 @@ data class QueryRequestEvent(
                 variables = queryRequest.variables,
                 operationName = queryRequest.operationName,
                 atTimestamp = queryRequest.atTimestamp ?: timestamp.takeIf { queryRequest.atChangeId == null },
-                atChangeRequestId = queryRequest.atChangeId,
+                atChangeId = queryRequest.atChangeId,
                 message = errorMessage
             )
         }

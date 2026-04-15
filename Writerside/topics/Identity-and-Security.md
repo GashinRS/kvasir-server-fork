@@ -21,16 +21,16 @@ architecture, based around [OpenFGA](https://openfga.dev):
 
 ## Keycloak
 
-By default, Kvasir installations come with a Keycloak server that is used as a OIDC-compliant Identity Provider for
+By default, Kvasir installations come with a Keycloak server that is used as an OIDC-compliant Identity Provider for
 authentication.
 OpenFGA is used to manage authorization. Some of the main benefits for choosing Keycloak are:
 
 - Uses battle-tested
   standards ([OpenID Connect 1.0](https://openid.net/specs/openid-connect-core-1_0.html), [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-11))
-- Also acts as an Identity Broker, allowing integration with other OpenId Providers for authentication.
+- Also acts as an Identity Broker, allowing integration with other OpenID Providers for authentication.
 - Widespread use & large support community
 - Client libraries available in multiple languages (not all
-  official): [javascript](https://www.keycloak.org/securing-apps/javascript-adapter), [java](https://github.com/keycloak/keycloak-client), [python](https://pypi.org/project/python-keycloak/)
+  official): [JavaScript](https://www.keycloak.org/securing-apps/javascript-adapter), [Java](https://github.com/keycloak/keycloak-client), [Python](https://pypi.org/project/python-keycloak/)
 
 ## OpenFGA
 

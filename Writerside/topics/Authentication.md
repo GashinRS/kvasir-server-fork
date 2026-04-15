@@ -11,14 +11,14 @@ user authentication and issue JSON Web Tokens (JWTs) for secure access to its AP
 Once you start Kvasir (through either [Docker Compose](Getting-started.md#running-with-compose)
 or [Dev mode](Getting-started.md#running-in-dev-mode)) the following will happen on boot:
 
-- A keycloak instance is spun up, it will have a default `master` realm and a generated `quarkus` realm for initial
+- A Keycloak instance is spun up, it will have a default `master` realm and a generated `quarkus` realm for initial
   setup
 - In the `quarkus` realm, one client is created automatically:
     - **kvasir-ui**: this client manages authentication for the Kvasir UI client, which is a Single Page Application. It
       is there mainly to be able to log into the pod's realm and thus get a token. This
       bearer token can then be sent to the [Kvasir APIs](API-Reference.md).
 - A default user is created for each Pod. Temporary credentials for that user are set to
-  `podname:podname` (eg. `alice:alice`).
+  `podname:podname` (e.g. `alice:alice`).
 
 ## Creating your own client
 
@@ -29,7 +29,7 @@ When creating your own client, an important distinction must be made: _Is the cl
   client_.
 
 Examples of public clients are Single Page Applications (client-side code), examples of confidential clients are
-Unattended backend services. Usage examples for both types of clients are provided below.
+unattended backend services. Usage examples for both types of clients are provided below.
 
 ### Public client {collapsible="true" default-state="expanded"}
 
@@ -41,7 +41,7 @@ by [OpenID Connect 1.0](https://openid.net/specs/openid-connect-core-1_0.html).
 #### 1. Create a public client for a Pod
 
 At the time of writing, the easiest way to create a public client is via the Pod bootstrap configuration (
-see [](Pod-Management.md#via-configuration-file)).
+see [Via configuration file](Pod-Management.md#via-configuration-file)).
 
 ```yaml
 kvasir:
@@ -54,7 +54,7 @@ kvasir:
               - http://localhost:4200/test
 ```
 
-Now you have all you need to let your public client request a user to authenticate with the keycloak realm and receive a
+Now you have all you need to let your public client request a user to authenticate with the Keycloak realm and receive a
 bearer token.
 
 > **PKCE** is an extension to the Authorization Code flow to prevent CSRF and authorization code injection attacks. For
@@ -75,7 +75,7 @@ bearer token.
 
 #### 2. Code the Authorization Code Flow
 
-In the example below, you can see how to request a token via the Authorization Code Flow in typescript.
+In the example below, you can see how to request a token via the Authorization Code Flow in TypeScript.
 
 ```ts
 /** Fetch important urls. (helper class below) */
@@ -194,10 +194,10 @@ Authorization: Bearer <token>
 To be able to get a bearer token that can access the Kvasir APIs, a confidential client can authenticate as itself.
 To do this, it can use its client credentials to request a bearer token directly from the `token_endpoint`.
 
-#### 1. Create a confidential client in keycloak
+#### 1. Create a confidential client in Keycloak
 
 At the time of writing, the easiest way to create a confidential client is via the Pod bootstrap configuration (
-see [](Pod-Management.md#via-configuration-file)).
+see [Via configuration file](Pod-Management.md#via-configuration-file)).
 
 ```yaml
 kvasir:
@@ -210,7 +210,7 @@ kvasir:
             enable-service-account: true
 ```
 
-Now you have all you need to let your confidential client request a bearer token from the keycloak realm and be
+Now you have all you need to let your confidential client request a bearer token from the Keycloak realm and be
 authenticated as itself.
 
 #### 2. Code the Client Credentials Flow

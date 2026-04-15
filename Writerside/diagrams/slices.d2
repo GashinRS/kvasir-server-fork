@@ -1,0 +1,65 @@
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 1
+    theme-overrides: {
+      B1: "#3A9F8E" # Solid borders and connections
+      B2: "#3A9F8E" # Dashed borders and connection
+    }
+    dark-theme-id: 200
+    dark-theme-overrides: {
+      B1: "#3A9F8E" # Solid borders and connections
+      B2: "#8DB7C7" # Dashed borders and connection
+      N7: "#19191C" # Diagram background (matching kvasir docs dark theme)
+    }
+  }
+}
+
+# Common styling templates
+classes: {
+  container: {
+    style.font-size: 20
+    style.border-radius: 12
+    label.near: border-top-right
+  }
+  component: {
+    style.border-radius: 12
+    label.near: border-top-left
+  }
+  EMPTY: {
+    style: {
+      opacity: 0
+    }
+  }
+}
+
+kg-query-api: Pod GraphQL API
+
+kg-changes-api: Pod Changes API
+
+changes {
+  shape: queue
+}
+
+slice-query-api: Slice GraphQL API {
+  Query
+  Mutation
+  Subscription
+}
+
+store: RDF Database {
+  shape: cylinder
+}
+
+slice-store: Slice Store {
+  shape: cylinder
+}
+
+kg-query-api -> store: Query
+kg-query-api <- store: Generate schema
+kg-changes-api -> changes
+slice-query-api <- slice-store: Load schema
+slice-query-api.Query -> store: Query
+slice-query-api.Mutation -> changes
+slice-query-api.Subscription -> store: Query on trigger
+slice-query-api.Subscription <- changes

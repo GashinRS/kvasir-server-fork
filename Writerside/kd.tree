@@ -14,7 +14,7 @@
             <toc-element topic="Changes.md"/>
             <toc-element topic="Querying.md"/>
             <toc-element topic="Slices.md"/>
-            <toc-element topic="Timeseries.md"/>
+            <toc-element topic="Slice-Walkthrough.md"/>
         </toc-element>
         <toc-element topic="Storage.md"/>
         <toc-element topic="Pod-Management.md"/>

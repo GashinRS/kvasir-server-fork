@@ -39,6 +39,11 @@
             <version>${revision}</version>
         </dependency>
         <dependency>
+            <groupId>kvasir-plugins</groupId>
+            <artifactId>default-knowledge-graph</artifactId>
+            <version>0.18.3</version>
+        </dependency>
+        <dependency>
             <groupId>kvasir-libs</groupId>
             <artifactId>test-utils</artifactId>
             <version>${revision}</version>

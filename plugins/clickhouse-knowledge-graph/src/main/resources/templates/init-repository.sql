@@ -1,6 +1,6 @@
-CREATE DATABASE IF NOT EXISTS {cfg.database};
+CREATE DATABASE IF NOT EXISTS `{cfg.database}`;
 
-CREATE TABLE IF NOT EXISTS {cfg.database}.{cfg.collectionName} (
+CREATE TABLE IF NOT EXISTS `{cfg.database}`.{cfg.collectionName} (
     id String,
     write_ts DateTime64 (3) Codec (DoubleDelta, LZ4),
     model_version LowCardinality(String),

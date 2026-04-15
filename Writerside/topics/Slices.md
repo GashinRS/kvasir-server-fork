@@ -2,28 +2,60 @@
 
 <show-structure depth="2"/>
 
-The Changes and Query APIs are expressive ways to interact with the Knowledge Graph of a Pod. However, they provide
-access to the entire Knowledge Graph, which may not always be necessary or desirable. In most cases, it is more
-efficient to work with a well-defined subset of the Knowledge Graph, known as a "slice". Also from the perspective of
-access control, it is easier to manage coarse-grained permissions on such a slice, compared to fine-grained permissions
-on the entire Knowledge Graph.
+A **Slice** is a named, schema-driven subset of a Pod's Knowledge Graph and is the **primary way for applications to
+interact with Kvasir**. In the real world, a data owner will almost never grant an application access to the full
+Knowledge Graph. Instead, the owner publishes one or more Slices — each exposing exactly the data the intended audience
+is allowed to see and modify — and then grants the application access to those Slices only.
 
-In a way, a slice is similar to a view in a relational database, where only a subset of the data is exposed to the user.
-Slices can be used to filter the data based on certain criteria, such as a specific type of resource, a particular
-property, a specific value range, etc. However, unlike views, slices are not restricted to read-only access; they can
-also be used for write operations (e.g. restricting the data that can be inserted for a specific slice to a certain
-shape).
+Conceptually, a Slice is similar to a view in a relational database: only a subset of the data is exposed. However,
+Slices are considerably more powerful:
+
+* **Fine-grained access control by design.** The schema structure combined with `@filter` directives and input
+  constraints defines what data is readable and writable. There is no separate, parallel policy configuration needed
+  for common access-control scenarios.
+* **Not read-only.** Unlike database views, Slices can expose full read/write/subscribe capabilities through a clean
+  GraphQL interface, comprising Query, Mutation and Subscription types.
+* **Self-describing.** Slices carry their own schema, context and metadata, so clients don't need any prior knowledge
+  of the underlying RDF model.
+
+```D2
+```
+
+{ src="../diagrams/slices.d2" }
+
+The diagram above contrasts the Pod-level APIs with the Slice-specific GraphQL API.
+
+At the Pod level, the global GraphQL API resolves queries against an auto-generated schema for the full Knowledge
+Graph, while the global Changes API accepts general change requests. A Slice, by contrast, exposes its own GraphQL API
+based on a user-defined schema that is part of the Slice definition.
+
+That Slice schema does more than describe the response shape:
+
+* It limits what data can be queried.
+* It defines which mutations are allowed.
+* It determines which subscriptions can be triggered by matching changes.
+
+In other words, the Slice-specific GraphQL API is both the contract and the boundary for read, write and subscription
+operations on the Slice.
+
+> A Slice can also expose a Slice-specific Changes API at `/{podId}/slices/{sliceId}/changes`.
+> Change requests posted to this endpoint are validated against the Slice schema before they are applied to the
+> Knowledge Graph via the [Changes Processor service](Architecture.md#kg-changes-processor-service).
+> This additional ingest path is intentionally omitted from the diagram to keep the main flow readable.
+> {style="note"}
+
+> For a guided, end-to-end example of authoring a Slice from scratch, see [Slice walkthrough](Slice-Walkthrough.md).
 
 The following table summarizes the differences between the capabilities of the global KG GraphQL interface and the Slice
 specific GraphQL interface:
 
 |                                         | Global KG GraphQL interface                                                                                                  | Slice GraphQL interface                                                                                                                                         |
 |-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Endpoint**                            | `/{podId}/kg/query`                                                                                                          | `/{podId}/slices/{sliceId}/query`                                                                                                                               |
+| **Endpoint**                            | `/{podId}/query`                                                                                                             | `/{podId}/slices/{sliceId}/query`                                                                                                                               |
 | **Schema**                              | [Auto-generated](Querying.md#auto-generated-schema) based on incoming changes. Best effort, cannot be customized.            | User-defined. Slice author has full control of the exposed Graph structure (and its mapping from RDF).                                                          |
 | **Requires JSON-LD context?**           | Yes <br/> _Although a prefix mapping is auto-generated when no context is provided, resulting in a quite unreadable schema._ | No <br/> _The context is embedded in the Slice definition._                                                                                                     |
-| **Supports GraphQL mutations?**         | No.                                                                                                                          | Yes, see [](#mutation-type).                                                                                                                                    |
-| **Supports GraphQL subscriptions?**     | Yes.                                                                                                                         | Yes, see [](#subscription-type).                                                                                                                                |
+| **Supports GraphQL mutations?**         | No.                                                                                                                          | Yes, see [Mutation type](#mutation-type).                                                                                                                       |
+| **Supports GraphQL subscriptions?**     | No.                                                                                                                          | Yes, see [Subscription type](#subscription-type).                                                                                                               |
 | **Allows fine-grained access control?** | No, all data in the KG is retrievable.                                                                                       | Yes, the schema structure in combination with additional directives, give the author full control on what data can be retrieved from and modified on the Slice. |
 
 ## Defining a Slice
@@ -146,8 +178,10 @@ when authoring Slices:
   see [Resource](Querying.md#resource-implements-rdfnode). As such, the `id` field in the previous examples can
   be omitted.
 - All fields that have a List type (e.g. `persons: [schema_Person!]!`), are modified to support arguments for
-  filtering, sorting and pagination. These arguments include `id` (see filtering by id [](Querying.md#arguments)),
-  `pageSize`, `cursor` (see pagination [](Querying.md#pagination)) and `orderBy` (see [](Querying.md#sorting)).
+  filtering, sorting and pagination. These arguments include `id` (see filtering by
+  id [Arguments](Querying.md#arguments)),
+  `pageSize`, `cursor` (see pagination [Pagination](Querying.md#pagination)) and `orderBy` (
+  see [Sorting](Querying.md#sorting)).
 
 ### Mutation type
 
@@ -434,6 +468,36 @@ a Person is inserted. Make sure your GraphQL client can handle SSE as a transpor
 
 ## Advanced
 
+### Ensuring field presence with `@mustExist`
+
+Use `@mustExist` on a field definition when resources should only be visible if that field has a value. This is
+especially important when a Slice uses field-level restrictions (for example `@filter` on `schema_email`) and clients
+may
+issue queries that do not select that restricted field.
+
+For example:
+
+```graphql
+type Query {
+  persons: [schema_Person!]!
+}
+
+type schema_Person {
+  id: ID!
+  schema_givenName: String!
+  schema_familyName: String!
+  schema_email: [String!] @mustExist @filter(if: "it==*@example.org")
+}
+```
+
+With this definition:
+
+- `schema_email` must exist for a resource to be considered a valid `schema_Person` in the Slice.
+- The email value must match `*@example.org`.
+- Queries that omit `schema_email` from the selection set still respect this visibility boundary.
+
+In other words, `@mustExist` enforces membership at the type level, while `@filter` constrains allowed values.
+
 ### Fields with multiple types
 
 A limitation of GraphQL is that Union types cannot encompass scalar values. By contrast, RDF frequently permits
@@ -468,7 +532,7 @@ input InstrumentInput @class(iri: "ex:Instrument") {
 
 The mutation supports inserting the manufacturer as either a literal String value (using the `manufacturer` field) or as
 an IRI (using the `manufacturerRef` field). When not adding data using GraphQL, but instead using the Changes API
-directly (by performing a POST at `/{podId}/slices/{slideId}/changes`), you can use either a literal value or an IRI for
+directly (by performing a POST at `/{podId}/slices/{sliceId}/changes`), you can use either a literal value or an IRI for
 the `ex:manufacturer` predicate, both will be accepted by the Slice data validator.
 
 To retrieve the manufacturer of an instrument, use the `_rawRDF` property of `RDFNode`, for example:
@@ -540,3 +604,12 @@ input InstrumentInput @class(iri: "ex:Instrument") {
     priceDecimal: Float @predicate(iri: "ex:price")
 }
 ```
+
+<seealso>
+    <category ref="related">
+        <a href="Slice-Walkthrough.md">Slice walkthrough — end-to-end example</a>
+        <a href="Changes.md">Changes API</a>
+        <a href="Querying.md">Query API</a>
+        <a href="API-Reference.md">API Reference</a>
+    </category>
+</seealso>

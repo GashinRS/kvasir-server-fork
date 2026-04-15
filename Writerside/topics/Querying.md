@@ -6,358 +6,267 @@ The standard query mechanism for the Pod KG uses GraphQL (inspired by Ruben
 Taelman's [GraphQL to SPARQL library](https://github.com/rubensworks/graphql-to-sparql.js) and
 the [Stardog GraphQL API](https://docs.stardog.com/query-stardog/graphql)).
 
-The query endpoint is available at `/{podId}/kg/query` and accepts POST requests with a JSON body **[1]**, which should
-conform
-to the [GraphQL specification](https://graphql.org/learn/serving-over-http/#post-request). The request body may contain
-a `@context` object, to provide aliases for the predicate IRIs used in the query. If no content is explicitly provided,
-the system will fall back to the default mapping that is configured for the pod (
-see [](Pod-Management.md#default-context)).
+The query endpoint is available at `/{podId}/query` and accepts `POST` requests whose body conforms to
+the [GraphQL-over-HTTP specification](https://graphql.org/learn/serving-over-http/#post-request). The body may contain
+a `@context` object to provide aliases for the predicate IRIs used in the query. If no context is provided, the system
+falls back to the default mapping configured for the pod (see [Pod Management](Pod-Management.md#default-context)).
 
-> **[1]**: Alternatively, you can also use the `GET` method with query parameters, but you won't be able to provide a
-> JSON-LD context. This approach primarily has it uses when [querying a Slice](Slices.md). See
-> the [](API-Reference.md) for more information.
+> **Alternatives**: you can also use the `GET` method with query parameters, but you won't be able to provide a
+> JSON-LD context. This is mainly useful when [querying a Slice](Slices.md). See the [API Reference](API-Reference.md) for details.
 
 While a global query endpoint is useful for exploring the entire Knowledge Graph, in practice it will rarely occur that
-an application requires access to all of a Pod's data (let alone gets granted such a permission). Kvasir introduces to
-concept of [](Slices.md) which allows defining restricted subsets of the Knowledge Graph with which clients can
-then interact with. The query endpoint for a specific Slice is available at `/{podId}/slices/{sliceId}/query`.
+an application requires access to all of a Pod's data. Kvasir introduces the concept of [Slices](Slices.md) to define
+restricted subsets of the Knowledge Graph with which clients interact. The query endpoint for a specific Slice is
+available at `/{podId}/slices/{sliceId}/query`.
 
-The following sections explain the basic usage of the global query endpoint, but the same principles apply to the Slice
-specific GraphQL query endpoints.
+> The following sections explain the basic usage of the **global** query endpoint. The same principles apply to Slice
+> specific GraphQL query endpoints; see [Slices](Slices.md) for the differences.
 
 ## Why GraphQL?
 
-When choosing a query language for the Knowledge Graph, we considered several options, including SPARQL, GraphQL,
-RESTful APIs (centered around collections of specific RDF classes), or a proprietary query language (e.g. similar to
-what [Fluree](https://developers.flur.ee/docs/learn/foundations/querying/) is doing). In the end we chose GraphQL
-as the main querying mechanism **[2]** for the following reasons:
+When choosing a query language for the Knowledge Graph, we considered several options: SPARQL, GraphQL, RESTful APIs
+centred around collections of specific RDF classes, or a proprietary query language (e.g. similar to what
+[Fluree](https://developers.flur.ee/docs/learn/foundations/querying/) is doing). We chose GraphQL as the main querying
+mechanism **[1]** for the following reasons:
 
-* GraphQL is a widely adopted query language that is easy to learn and use. It is especially popular in the context of
-  modern web applications and APIs. By using GraphQL, we aim to make the Knowledge Graph accessible to a broad audience.
-* GraphQL is technology-agnostic, meaning that it can be used with any backend system. This allows us to experiment with
-  different
-  storage solutions for the Knowledge Graph. Whereas with SPARQL, the query language is tightly coupled to the RDF data
-  model and storage technologies that exist within the Semantic Web ecosystem.
-* GraphQL strikes a nice balance between expressiveness and simplicity. It allows for complex queries, while still being
-  easy to understand and use. This is important for users who are not familiar with RDF or SPARQL. More importantly, it
-  limits the implementation scope, enhancing performance and simplifying the process for third parties to develop a
+* GraphQL is a widely adopted query language that is easy to learn and use, especially in the context of modern web
+  applications.
+* GraphQL is technology-agnostic, meaning it can be used with any backend. This lets us experiment with different
+  storage solutions without coupling the query language to a specific RDF storage technology (as SPARQL would).
+* GraphQL strikes a nice balance between expressiveness and simplicity. It allows for complex queries while remaining
+  easy to understand, limits the implementation scope, and simplifies the process for third parties to develop a
   Kvasir-compatible API.
 
-> **[2]**: The architecture of Kvasir is designed to be modular and flexible, so it is possible to add additional query
-> mechanisms in the future, if needed.
+> **[1]**: The architecture of Kvasir is modular and flexible, so additional query mechanisms can be added in the
+> future if needed.
+
+## How to read the examples
+
+The query endpoint accepts a JSON body containing a `query` field and an optional `@context` field. To keep the
+examples readable, the **full HTTP call is shown once below**, and all subsequent code blocks show only the GraphQL
+query (and where relevant the response `data` object), assuming the same endpoint and context.
+
+**Full example — POST** `http://localhost:8080/alice/query`
+
+```json
+{
+  "@context": {
+    "ex":     "http://example.org/",
+    "schema": "http://schema.org/"
+  },
+  "query": "{ ex_Person { schema_givenName schema_email } }"
+}
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "ex_Person": [
+      { "schema_givenName": ["Alice"], "schema_email": ["alice@example.org"] },
+      { "schema_givenName": ["Bob"],   "schema_email": ["bob@example.org"]   }
+    ]
+  }
+}
+```
+
+> In all following examples the endpoint is `POST http://localhost:8080/alice/query` and the context contains at
+> least `"ex": "http://example.org/"` and `"schema": "http://schema.org/"`, unless stated otherwise.
+> {style="note"}
 
 ## Basic usage
 
-The top-level field in the query represents the type of resource you want to retrieve. The exact GraphQL schema for your
-pod is auto-generated, based on the inserted content, see [](#auto-generated-schema) for more details.
-E.g. The following query retrieves all resources of the type `http://example.org/Person` that have a name and an email
-address:
+The top-level field in the query represents the RDF class of resources you want to retrieve. The exact GraphQL schema
+is auto-generated from the inserted content; see [Auto-generated schema](#auto-generated-schema) for details.
 
-**POST** `http://localhost:8080/alice/query`
+The following query retrieves all `ex:Person` resources that have a `schema:givenName` and a `schema:email`:
 
-Request body:
-
-```json
-{
-  "@context": {
-    "Person": "http://example.org/Person",
-    "name": "http://schema.org/givenName",
-    "email": "http://schema.org/email"
-  },
-  "query": "{ Person { name email } }"
-}
+```graphql
+{ ex_Person { schema_givenName schema_email } }
 ```
 
-Response body:
+Nested traversal is also supported:
 
-```json
+```graphql
 {
-  "data": {
-    "Person": [
-      {
-        "email": [
-          "alice@example.org"
-        ],
-        "name": [
-          "Alice"
-        ]
-      },
-      {
-        "email": [
-          "bob@example.org"
-        ],
-        "name": [
-          "Bob"
-        ]
-      }
-    ]
+  ex_Person {
+    schema_givenName
+    schema_email
+    ex_knows {
+      schema_givenName
+      schema_email
+    }
   }
 }
 ```
 
-Nested queries are also supported:
-
-**POST** `http://localhost:8080/alice/query`
+Response:
 
 ```json
 {
-  "@context": {
-    "Person": "http://example.org/Person",
-    "name": "http://schema.org/givenName",
-    "email": "http://schema.org/email",
-    "knows": "http://example.org/knows"
-  },
-  "query": "{ Person { name email knows { name email } } }"
-}
-```
-
-Returns:
-
-```json
-{
-  "data": {
-    "Person": [
-      {
-        "email": [
-          "alice@example.org"
-        ],
-        "name": [
-          "Alice"
-        ],
-        "knows": [
-          {
-            "email": [
-              "bob@example.org"
-            ],
-            "name": [
-              "Bob"
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "ex_Person": [
+    {
+      "schema_email":    ["alice@example.org"],
+      "schema_givenName": ["Alice"],
+      "ex_knows": [
+        { "schema_email": ["bob@example.org"], "schema_givenName": ["Bob"] }
+      ]
+    }
+  ]
 }
 ```
 
 ## Additional features
 
-For more advanced querying, the current prototype already supports some useful features:
-
 ### Namespace prefixes
 
-Up until now, the examples used complete aliases for the fields, declared in the `@context` instance. However, the
-system also supports namespace prefixes. Typically, prefixes are separated from the field name by a colon,
-e.g. `ex:name` instead of `http://example.org/name`. However, GraphQL does not support colons in field names. Therefore,
-Kvasir uses the underscore character `_` as a substitute for the colon. For example, the previous example query can be
-rewritten as:
-
-```json
-{
-  "@context": {
-    "so": "http://schema.org/",
-    "ex": "http://example.org/"
-  },
-  "query": "{ ex_Person { so_givenName so_email ex_knows { so_givenName so_email } } }"
-}
-```
+The examples above use namespace prefixes (`ex_`, `schema_`) where the underscore substitutes the colon that GraphQL
+does not allow in field names. The full prefix mapping is supplied in the `@context` object of the request body.
 
 ### Context language-tag
 
-By default, Kvasir will return all possible values for language-tagged string literals. However, you can request a
-specific language
-by adding an entry for `@language` in the `@context` object. For example, the following query retrieves the name of a
-Person, only if it is in English (en) or when no language is specified:
-
-**POST** `http://localhost:8080/alice/query`
+By default, Kvasir returns all values for language-tagged string literals. You can request a specific language by
+adding `@language` to the context:
 
 ```json
 {
-  "@context": {
-    "so": "http://schema.org/",
-    "ex": "http://example.org/",
-    "@language": "en"
-  },
+  "@context": { "so": "http://schema.org/", "ex": "http://example.org/", "@language": "en" },
   "query": "{ ex_Person { so_givenName so_email } }"
 }
 ```
 
+This returns only values tagged `en` (or values with no language tag).
+
 ### Arguments
 
-You can use GraphQL arguments to impose additional conditions on resources or linked resources. For example, the
-following query retrieves the Person resource with a specific id:
+Use GraphQL arguments to filter resources by a specific value. The most common case is filtering by `id`:
 
-**POST** `http://localhost:8080/alice/query`
+```graphql
+{ ex_Person(id: "ex:bob") { id schema_givenName schema_email } }
+```
+
+Response:
 
 ```json
 {
-  "@context": {
-    "so": "http://schema.org/",
-    "ex": "http://example.org/"
-  },
-  "query": "{ ex_Person(id: \"ex:bob\") { id so_givenName so_email } }"
+  "ex_Person": [
+    { "schema_email": ["bob@example.org"], "schema_givenName": ["Bob"], "id": "http://example.org/bob" }
+  ]
 }
 ```
 
-This returns:
+Pass an array to match multiple values:
 
-```json
-{
-  "data": {
-    "ex_Person": [
-      {
-        "so_email": [
-          "bob@example.org"
-        ],
-        "so_givenName": [
-          "Bob"
-        ],
-        "id": "http://example.org/bob"
-      }
-    ]
-  }
-}
+```graphql
+{ ex_Person(id: ["ex:bob", "ex:alice"]) { id schema_givenName schema_email } }
 ```
 
-You can use an array to match multiple values:
-
-**POST** `http://localhost:8080/alice/query`
-
-```json
-{
-  "@context": {
-    "so": "http://schema.org/",
-    "ex": "http://example.org/"
-  },
-  "query": "{ ex_Person(id: [\"ex:bob\", \"ex:alice\"]) { id so_givenName so_email } }"
-}
-```
-
-> This feature also works for other properties, not just the `id` field. When the property is a relation, the expected
-> argument value is a string (or string array), representing the URI(s) of the target resource(s).
+> This also works for other properties, not just `id`. When the property is a relation, the argument value should be
+> the URI (or an array of URIs) of the target resource(s).
 > {style="note"}
 
 ### Filters
 
-You can use filter directives to further restrict the results. The filter expressions are written in a simple expression
-language ([RSQL](https://github.com/nstdio/rsql-parser)) that allows you to compare values and combine checks using
-logical operators.
+Use `@filter` directives to narrow down results with [RSQL](https://github.com/nstdio/rsql-parser) expressions:
 
-For example, the following query retrieves the person with the name 'Bob':
+```graphql
+{ ex_Person @filter(if: "schema_givenName==Bob") { schema_givenName } }
+```
 
-**POST** `http://localhost:8080/alice/query`
+If your expression only references a single selected field, you can move the filter down to that field:
+
+```graphql
+{ ex_Person { schema_givenName @filter(if: "schema_givenName==Bob") } }
+```
+
+In that field-level form, you can shorten the expression by referring to the field value as `it`:
+
+```graphql
+{ ex_Person { schema_givenName @filter(if: "it==Bob") } }
+```
+
+Response:
 
 ```json
 {
-  "@context": {
-    "ex": "http://example.org/",
-    "schema": "http://schema.org/"
-  },
-  "query": "{ ex_Person { schema_givenName @filter(if: \"schema_givenName==Bob\") } }"
+  "ex_Person": [
+    { "schema_givenName": ["Bob"] }
+  ]
 }
 ```
 
-Returns:
+> **Tip**: use `it` to refer to the annotated field's value when the filter is placed on that field.
 
-```json
+### Optional fields (`@optional`)
+
+By default, requesting a field behaves like an **inner join** on that relation/property: resources for which the field
+has no value are not included in the result path for that selection.
+
+Use `@optional` when you want **left-join-like** behavior: keep matching resources even if the selected field has no
+value.
+
+Without `@optional`:
+
+```graphql
+{ ex_Person { id schema_email } }
+```
+
+With `@optional`:
+
+```graphql
+{ ex_Person { id schema_email @optional } }
+```
+
+In the second query, persons without `schema_email` are still returned, with an empty value for that field in the
+response path.
+
+`@optional` is also useful on nested relations when you want to keep the parent result even if the relation is missing:
+
+```graphql
 {
-  "data": {
-    "ex_Person": [
-      {
-        "schema_givenName": [
-          "Bob"
-        ]
-      }
-    ]
+  ex_Person {
+    id
+    ex_knows @optional {
+      schema_givenName
+    }
   }
 }
 ```
 
-> **Tip**: you can refer to the annotated field using `it` in the filter directive. The filter expression in the
-> previous example can thus be abbreviated to `@filter(if: "it==Bob")`.
+> `@optional` is a query-time directive. In Slice schemas, if a field is marked with `@mustExist`, that field cannot be
+> queried with `@optional`.
+> {style="note"}
 
 ### Sorting
 
-You can specify a sorting order for fields that return multiple results by providing an `orderBy` argument.
-Multiple sorting fields are supported, as well as modifying the ordering (ascending or descending) for each individual
-field.
+Use the `orderBy` argument with a list of field names to sort the results. Prefix a field name with `-` to sort
+descending:
 
-The `orderBy` argument expects a list of strings, with each entry referring to a **GraphQL field name** (and not the RDF
-property URI). To sort a specific field in descending order, prefix the field name with a `-` character.
-
-For example, the following query retrieves a list of persons, first ordered by `schema_email` and then
-`schema_givenName` in descending order:
-
-**POST** `http://localhost:8080/alice/query`
-
-```json
-{
-  "@context": {
-    "ex": "http://example.org/",
-    "schema": "http://schema.org/"
-  },
-  "query": "{ ex_Person(orderBy: [\"schema_email\", \"-schema_givenName\"]) { id schema_givenName schema_email } }"
-}
+```graphql
+{ ex_Person(orderBy: ["schema_email", "-schema_givenName"]) { id schema_givenName schema_email } }
 ```
 
 ### Pagination
 
-Some GraphQL query paths may return a large number of results. Kvasir supports paginating through the results via a
-cursor-based mechanism. Each field that returns a collection has two additional system arguments: `pageSize` allows you
-to set the maximum size of the returned collection and `cursor` allows you to provide a cursor which points to the range
-of data to retrieve. When the query results do not contain the full result (the provided maximum `pageSize` was
-reached),
-the `extensions` part of the GraphQL response will contain a reference to the collection, with pagination information,
-such as cursors to the next and previous page, the total count of the collection, etc.
+Use `pageSize` to limit the number of results per page and `cursor` to navigate to the next page. When the result set
+is larger than `pageSize`, the `extensions.pagination` block in the response will contain a `next` cursor:
 
-For example the following query retrieves the first three entries for the `ex_Person` collection:
-
-```json
-{
-  "@context": {
-    "ex": "http://example.org/",
-    "schema": "http://schema.org/"
-  },
-  "query": "{ ex_Person(pageSize: 3) { id schema_givenName schema_email } }"
-}
+```graphql
+{ ex_Person(pageSize: 3) { id schema_givenName schema_email } }
 ```
 
-Returns:
+Response:
 
 ```json
 {
   "data": {
     "ex_Person": [
-      {
-        "id": "http://example.org/alice",
-        "schema_givenName": [
-          "Alice"
-        ],
-        "schema_email": [
-          "alice@example.org"
-        ]
-      },
-      {
-        "id": "http://example.org/john",
-        "schema_givenName": [
-          "John"
-        ],
-        "schema_email": [
-          "jdoe@example.org"
-        ]
-      },
-      {
-        "id": "http://example.org/bob",
-        "schema_givenName": [
-          "Bob"
-        ],
-        "schema_email": [
-          "bob@example.org"
-        ]
-      }
+      { "id": "http://example.org/alice", "schema_givenName": ["Alice"], "schema_email": ["alice@example.org"] },
+      { "id": "http://example.org/john",  "schema_givenName": ["John"],  "schema_email": ["jdoe@example.org"]  },
+      { "id": "http://example.org/bob",   "schema_givenName": ["Bob"],   "schema_email": ["bob@example.org"]   }
     ]
   },
-  "errors": [],
   "extensions": {
     "pagination": [
       {
@@ -372,195 +281,223 @@ Returns:
 }
 ```
 
-The `next` cursor in `extensions.pagination` for the path `/ex_Person` can then be used to fetch the remaining results:
+Use the `next` cursor to fetch the remaining results:
 
-```json
-{
-  "@context": {
-    "ex": "http://example.org/",
-    "schema": "http://schema.org/"
-  },
-  "query": "{ ex_Person(pageSize: 3, cursor: \"gaFvAw==\") { id schema_givenName schema_email } }"
-}
-```
-
-Returns:
-
-```json
-{
-  "data": {
-    "ex_Person": [
-      {
-        "id": "http://example.org/trudy",
-        "schema_givenName": [
-          "Trudy"
-        ],
-        "schema_email": [
-          "trudy@example.org"
-        ]
-      }
-    ]
-  }
-}
+```graphql
+{ ex_Person(pageSize: 3, cursor: "gaFvAw==") { id schema_givenName schema_email } }
 ```
 
 ### Time travel
 
-Since the Knowledge Graph retains a complete history of all changes, it is possible to query the state of the graph at a
-specific point in time. This is done by adding a field to the request body:
+Since the Knowledge Graph retains a complete history of all changes, you can query its state at a specific point in
+time by adding one of these fields to the request body:
 
-* `atTimestamp`: Perform the query on the state of the Knowledge Graph at the specified ISO 8601 timestamp.
-* `atChangeRequest`: Perform the query on the state of the Knowledge Graph right after the specified change request was
-  committed.
-
-For example, the following query retrieves the state of the Knowledge Graph at a change request:
-
-**POST** `http://localhost:8080/alice/query`
+* `atTimestamp` — query the state of the KG at the specified ISO 8601 timestamp.
+* `atChangeId` — query the state right after a specific change request was committed.
 
 ```json
 {
-  "@context": {
-    "ex": "http://example.org/",
-    "schema": "http://schema.org/"
-  },
+  "@context": { "ex": "http://example.org/", "schema": "http://schema.org/" },
   "query": "{ ex_Person { schema_givenName } }",
-  "atChangeRequest": "http://localhost:8080/alice/changes/716131e7-a373-4f31-8b4f-fc37c5af19cc"
+  "atChangeId": "http://localhost:8080/alice/changes/716131e7-a373-4f31-8b4f-fc37c5af19cc"
 }
 ```
 
 ### Reversing traversal
 
-Kvasir supports the JSON-LD `@reverse` keyword in the provided context for introducing reverse relationships,
-which can then be used for querying.
-
-For example: say we have some Person resources with an `ex:parent` relation to another person. By defining a relation
-`children` as the reverse of `ex:parent`, we can query the parents for a specific person as follows:
-
-**POST** `http://localhost:8080/alice/query`
+Kvasir supports the JSON-LD `@reverse` keyword in the context for introducing reverse relationships:
 
 ```json
 {
   "@context": {
     "ex": "http://example.org/",
     "schema": "http://schema.org/",
-    "children": {
-      "@reverse": "ex:parent"
-    }
+    "children": { "@reverse": "ex:parent" }
   },
   "query": "{ ex_Person(id: \"ex:trudy\") { children { id } } }"
 }
 ```
 
-Returns:
+Response:
 
 ```json
 {
-  "data": {
-    "ex_Person": [
-      {
-        "children": [
-          {
-            "id": "http://example.org/bob"
-          },
-          {
-            "id": "http://example.org/alice"
-          }
-        ]
-      }
-    ]
-  }
+  "ex_Person": [
+    { "children": [ { "id": "http://example.org/bob" }, { "id": "http://example.org/alice" } ] }
+  ]
 }
 ```
 
 ### Type selection
 
-For example, querying people a Person knows that are also musicians:
+Query only linked resources of a specific type using inline fragments:
 
 ```graphql
 {
   ex_Person {
     id
     ex_knows {
-      ... on ex_Musician {
-        id
-      }
+      ... on ex_Musician { id }
     }
   }
 }
-``` 
+```
 
-Alternatively, you can also use the special field `_types` (see also [Resource](#resource-implements-rdfnode)):
+Alternatively, use the special field `_types` together with a filter (see also
+[Resource](#resource-implements-rdfnode)):
 
 ```graphql
 {
   ex_Person {
     id
-    ex_knows @filter(if:"_types==ex:Musician") {
-      id
-    }
+    ex_knows @filter(if: "_types==ex:Musician") { id }
   }
 }
 ```
 
 ## Introspection
 
-The Query endpoint implements the standard [GraphQL introspection mechanism](https://graphql.org/learn/introspection/).
-This allows clients to discover the schema of the Knowledge Graph, including the types and fields that are available for
-querying.
+The query endpoint implements the standard [GraphQL introspection mechanism](https://graphql.org/learn/introspection/),
+allowing clients to discover the schema of the Knowledge Graph including all available types and fields.
 
-This means that you can run [GraphiQL](https://github.com/graphql/graphiql/) or other GraphQL tools against the Query
-endpoint to explore the schema and run queries interactively, with support for auto-completion, etc.
+This means you can point [GraphiQL](https://github.com/graphql/graphiql/) or any other GraphQL tooling at the query
+endpoint to explore the schema and run queries interactively with auto-completion.
 
 ![](graphiql.png)
 
-> Note that GraphiQL will not work out-of-the-box once the endpoints are protected by authentication. Our goal is to
-> provide a GraphiQL build that includes an extension that allows you to authenticate in a Solid-compatible way.
+> For authenticated environments, use the GraphiQL views in the Kvasir UI. The built-in UI supports both the global Pod
+> query endpoint and Slice-specific query endpoints.
 > {style="note"}
 
 ## Outputting JSON-LD
 
-By default the query endpoint adheres to the GraphQL specification, which means that the response is a JSON object with
-a `data` key, holding the results as an array of JSON objects. However, the system also supports outputting JSON-LD
-directly, by setting the `Accept` header to `application/ld+json`.
+By default the query endpoint adheres to the GraphQL specification and returns a JSON `data` object. You can request
+JSON-LD output by setting the `Accept` header to `application/ld+json`:
 
-For example:
-
-**POST** `http://localhost:8080/alice/query`
-
-`Accept: application/ld+json`
+**POST** `http://localhost:8080/alice/query`  
+**Accept**: `application/ld+json`
 
 ```json
 {
-  "@context": {
-    "so": "http://schema.org/",
-    "ex": "http://example.org/"
-  },
+  "@context": { "so": "http://schema.org/", "ex": "http://example.org/" },
   "query": "{ ex_Person { so_givenName so_email ex_knows { so_givenName so_email } } }"
 }
 ```
 
-Returns:
+Response:
 
 ```json
 {
-  "@context": {
-    "so": "http://schema.org/",
-    "ex": "http://example.org/"
-  },
+  "@context": { "so": "http://schema.org/", "ex": "http://example.org/" },
   "ex:Person": {
-    "ex:knows": {
-      "so:email": "bob@example.org",
-      "so:givenName": "Bob"
-    },
-    "so:email": "alice@example.org",
+    "ex:knows":     { "so:email": "bob@example.org",   "so:givenName": "Bob"   },
+    "so:email":     "alice@example.org",
     "so:givenName": "Alice"
   }
 }
 ```
 
-> When using GraphQL aliases in JSON-LD output mode, make sure to include these aliases in your context (or use prefixed
-> names).
+> When using GraphQL aliases in JSON-LD output mode, make sure to include those aliases in your context (or use
+> prefixed names).
 > {style="warning"}
+
+## Auto-generated schema
+
+A GraphQL interface is defined by its schema, which is typically authored upfront in SDL or generated from programmatic
+definitions. What makes Kvasir different is that we don't know beforehand what data will be available for querying.
+A GraphQL schema for the entire KG is **auto-generated** based on the data inserted via [Changes API](Changes.md) for
+the global Pod endpoint `/{podId}/query`.
+
+This auto-generation mechanism does **not** apply to [Slices](Slices.md). Slice schemas are authored explicitly by the
+Slice author in GraphQL SDL (with Kvasir directives), and Kvasir then post-processes those definitions with additional
+system types/fields and helper arguments.
+
+Although accepting only RDF data (which is contextually qualified) helps with schema generation, it is not always
+possible to deduce the full structure of the incoming data.
+
+**The automated schema generation for the KG is a best-effort approach, with the goal of allowing users to quickly
+explore the entire content.** If a specific, stable structure is required, use [Slices](Slices.md).
+
+Limitations include:
+
+* If type information is spread over multiple change requests (e.g. change 1 adds a relation between A and B, change 2
+  adds type info for B), Kvasir may not have full type information. Inserting important type info together with the
+  instance data in a single batch helps.
+* Kvasir does not assume any vocabularies, shapes or ontologies **[2]**. Predicates used for a Resource are associated
+  with all RDF classes that resource is an instance of.
+* Complex type hierarchies are abstracted away via supertypes such as `RDFNode` and `Resource`
+  (see [next section](#common-supertypes)).
+
+> **[2]**: In regard to the full KG. When requesting changes to a Slice via the Changes API, SHACL Shape restrictions
+> may apply.
+
+## Common supertypes
+
+### `RDFNode`
+
+A common interface for values that can be either a Resource or a Literal. Exposes a single field `_rawRDF`:
+
+* Resource: `{ "@id": "http://example.org/alice" }`
+* Literal: `{ "@value": "1024", "@type": "http://www.w3.org/2001/XMLSchema#integer" }`
+
+### `Resource` _implements `RDFNode`_ {id="resource-implements-rdfnode"}
+
+Common supertype for RDF resources. Exposes an `id` field (the IRI) and utility fields for exploration:
+
+* `_relations` — discover relations between resources:
+
+```graphql
+{ ex_Person(id: "ex:alice") { _relations(id: "ex:bob") } }
+```
+
+Response:
+
+```json
+{ "ex_Person": [ { "_relations": ["http://example.org/knows"] } ] }
+```
+
+* `_predicates` — list all predicates a Resource uses.
+* `_types` — list all RDF classes the Resource is an instance of.
+* `_object` — force-retrieve the value for a specific predicate that may not be part of the auto-generated schema:
+
+```graphql
+{ Resource(id: "ex:alice") { _object(predicate: "schema:givenName") { _rawRDF } } }
+```
+
+Response:
+
+```json
+{
+  "Resource": [
+    { "_object": [ { "_rawRDF": { "@type": "http://www.w3.org/2001/XMLSchema#string", "@value": "Alice" } } ] }
+  ]
+}
+```
+
+> The fields `_relations`, `_predicates` and `_object` are **not** available when querying a [Slice](Slices.md),
+> since they could expose data outside the Slice's defined boundaries.
+> {style="warning"}
+
+### `BoxedLiteral` _implements `RDFNode`_
+
+Represents a boxed literal. Useful in combination with `RDFNode` to support fields that can hold either resources or
+literals.
+
+```graphql
+{ ex_Musician { id ex_plays { _rawRDF } } }
+```
+
+Response:
+
+```json
+{
+  "ex_Musician": [
+    { "id": "http://example.org/alice", "ex_plays": [ { "_rawRDF": { "@id": "http://example.org/guitar" } } ] },
+    { "id": "http://example.org/john",  "ex_plays": [ { "_rawRDF": { "@type": "http://www.w3.org/2001/XMLSchema#string",  "@value": "piano" } } ] },
+    { "id": "http://example.org/trudy", "ex_plays": [ { "_rawRDF": { "@type": "http://www.w3.org/2001/XMLSchema#integer", "@value": "234"   } } ] }
+  ]
+}
+```
 
 <seealso>
     <category ref="api-ref">
@@ -568,181 +505,3 @@ Returns:
     </category>
 </seealso>
 
-## Auto-generated schema
-
-A GraphQL interface is defined by its schema, which is typically authored upfront in SDL, or generated based on the
-programmatic definitions of the various types and fields. What makes Kvasir different, is that we don't know beforehand
-what data will be available for querying. A GraphQL schema for the entire KG is auto-generated based on the data that is
-inserted via [](Changes.md). Although only accepting RDF data, which has the benefit of being contextually qualified,
-helps with generating a usable schema, it is not always possible to deduct the full structure of the incoming data.
-
-**The automated schema generation for the KG is a best effort approach, with the goal of allowing users to quickly
-explore the entire content.** If a specific structure is required, we refer to [](Slices.md).
-
-Some limitations include:
-
-* If type information is spread out over multiple change requests (e.g. change request 1 adds a relation between
-  resources A and B, while change request 2 adds type information for resource B), Kvasir may not be aware of detailed
-  type information. Users can assist the schema generation by inserting important type information via concrete
-  instances in a single insert batch.
-* Kvasir does not assume any vocabularies, shapes or ontologies to apply **[3]**. This means e.g. that we will associate
-  predicates used for a specific Resource, with all RDF classes the Resource is an instance of.
-* Complex type hierarchies are automatically abstracted away via common supertypes such as `RDFNode` and `Resource` (see
-  [next section](#common-supertypes)). It is than up to the user to have knowledge of which subtypes are available for a
-  specific relation (although the GraphQL interface provides introspection and discovery mechanisms).
-
-> **[3]**: In regard to the full KG. When requesting changes to a Slice via the Changes API, SHACL Shape restrictions
-> may apply!
-
-## Common supertypes
-
-### `RDFNode`
-
-A common interface for representing values that can either be a Resource or a Literal. Exposes a single field `_rawRDF`,
-which allows accessing the raw RDF representation of the instance.
-
-E.g. the IRI when the node is a Resource: `{ "@id": "http://example.org/alice>" }`
-E.g. a JSON-LD object instance representing a Literal value when the node is a Literal:
-
-```json
-{
-  "@value": "1024",
-  "@type": "http://www.w3.org/2001/XMLSchema#integer"
-}
-```
-
-### `Resource` _implements `RDFNode`_
-
-Common supertype for representing RDF resources. Exposes an `id` field (IRI of the Resource) and a number of utility
-fields that can be used for exploration.
-
-Use `_relations` to discover relations between Resources, for example:
-
-```graphql
-{
-  ex_Person(id: "ex:alice") {
-    _relations(id: "ex:bob")
-  }
-}
-```
-
-Returns:
-
-```json
-{
-  "data": {
-    "ex_Person": [
-      {
-        "_relations": [
-          "http://example.org/knows"
-        ]
-      }
-    ]
-  }
-}
-
-```
-
-Use `_predicates` to get a list of predicates a Resources uses.
-
-Use `_types` to get a list of the RDF classes the Resource is an instance of.
-
-Use `_object` to force retrieving the value for a specific predicate, without it being explicitly being a part of the
-auto-generated schema.
-
-For example, get the email address of Alice, via the Resource entry-point:
-
-```GRAPHQL
-{
-  Resource(id: "ex:alice") {
-    _object(predicate: "schema:givenName") {
-      _rawRDF
-    }
-  }
-}
-```
-
-Returns:
-
-```JSON
-{
-  "data": {
-    "Resource": [
-      {
-        "_object": [
-          {
-            "_rawRDF": {
-              "@type": "http://www.w3.org/2001/XMLSchema#string",
-              "@value": "Alice"
-            }
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-> The fields `_relations`, `_predicates` and `_object` are not available when querying a [Slice](Slices.md) , since they can potentially expose information that is outside of the Slice's defined boundaries.
-> {style="warning"}
-
-### `BoxedLiteral` _implements `RDFNode`_
-
-This type represents a boxed literal, can be useful to use in combination with the RDFNode supertype, in order to
-support fields which can either have Resources or literals as values.
-
-Example:
-
-```GraphQL
-{
-  ex_Musician {
-    id
-    ex_plays {
-      _rawRDF
-    }
-  }
-}
-```
-
-Returns:
-
-```JSON
-{
-  "data": {
-    "ex_Musician": [
-      {
-        "id": "http://example.org/alice",
-        "ex_plays": [
-          {
-            "_rawRDF": {
-              "@id": "http://example.org/guitar"
-            }
-          }
-        ]
-      },
-      {
-        "id": "http://example.org/john",
-        "ex_plays": [
-          {
-            "_rawRDF": {
-              "@type": "http://www.w3.org/2001/XMLSchema#string",
-              "@value": "piano"
-            }
-          }
-        ]
-      },
-      {
-        "id": "http://example.org/trudy",
-        "ex_plays": [
-          {
-            "_rawRDF": {
-              "@type": "http://www.w3.org/2001/XMLSchema#integer",
-              "@value": "234"
-            }
-          }
-        ]
-      }
-    ]
-  }
-}
-```
