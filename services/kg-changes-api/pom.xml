@@ -41,7 +41,7 @@
         <dependency>
             <groupId>kvasir-plugins</groupId>
             <artifactId>default-knowledge-graph</artifactId>
-            <version>0.18.3</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>kvasir-libs</groupId>
