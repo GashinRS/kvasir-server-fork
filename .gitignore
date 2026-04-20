@@ -62,3 +62,4 @@ api-tests/junit.xml
 
 *.tgz
 kubernetes/.kvasir.env
+.worktrees

@@ -1,11 +1,9 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
-
----
-
 ## [0.18.3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.2..v0.18.3) - 2026-03-16
+
 ### Bug Fixes
+
 - **(ui)** slice name input fields are now validated before creation - ([11d65b8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/11d65b8b5bc1bb1c1644d2d9932c33ad5623124c)) - Thomas Dupont
 - UMA PAT issues and injectionPoint issues - ([573d3a0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/573d3a014bf84d8438834c3c36fc9a7f054b5fd9)) - Thomas Dupont
 - fix UMA concurrency issue - ([30074b0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/30074b012abb9e637ee86faab042ab499531262c)) - Thomas Dupont
@@ -15,78 +13,107 @@ All notable changes to this project will be documented in this file. See [conven
 ---
 
 ## [0.18.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.1..v0.18.2) - 2026-03-13
+
 ### Bug Fixes
+
 - **(ui)** slice name input fields are now validated before creation - ([11d65b8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/11d65b8b5bc1bb1c1644d2d9932c33ad5623124c), [204cdd1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/204cdd1834ded200dd5a3b483086205d72ce8273), [204cdd1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/204cdd1834ded200dd5a3b483086205d72ce8273)) - Thomas Dupont)
 - **(ui)** Kvasir errors are now properly displayed in the UI again.
 - fix UMA PAT issues and injectionPoint issues - ([573d3a0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/573d3a014bf84d8438834c3c36fc9a7f054b5fd9), [63f086c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/63f086cd08626b659688776b5fc3f503b4d53520)) - Thomas Dupont)
 - fix UMA concurrency issue - ([30074b0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/30074b012abb9e637ee86faab042ab499531262c), [b36f853](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b36f853b6c9574ce8178c777a56f42d3eee70ce6)) - Thomas Dupont)
+
 ### Breaking Changes
+
 - Www-Authentication headers are no longer sent as 2 seperate headers, but instead as one with contanated values [See MDN - WWW-AUthenticate](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/WWW-Authenticate#issuing_multiple_authentication_challenges)  
   This should help with typescript/javascript fetch, which cannot parse multiple Www-Authenticate headers correctly. If you need an example on how to parse multiple concatenated auth challenges, you can use this TypeScript class from our frontend as an example: [WwwAuthParser.ts](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/blob/main/services/ui-service/src/main/frontend/src/app/util/WwwAuthParser.ts)
 
 ---
 
 ## [0.18.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.0..v0.18.1) - 2026-03-10
-### Bug Fixes  ([63f086c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/63f086cd08626b659688776b5fc3f503b4d53520)) - Thomas Dupont
+
+### Bug Fixes ([63f086c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/63f086cd08626b659688776b5fc3f503b4d53520)) - Thomas Dupont
+
 **Fixes**
+
 - Finally ended the switching ContextClassLoader, by bumping the openfga-pep to 2.1.1, where that bug should be fixed.
 - Fixed UMA PAT caching issues when configuring an overall uma server in config, with `auto-register-uma` bootstrap pods
 - Fixes UMA principal-extraction configuration not showing up in ui (fix #26) by activating serialization in backend
-**Known issues**
+  **Known issues**
 - Properties under `%dev` profiles, are not properly merged by the `PodConfigProvider#fromPod()` method. (to be solved later)
 - In the case of the A4DS UMA server, you cannot first register an overall UMA Client under `http://localhost:8080` and then use a podConfigOverride to configure a child url (eg. `http://localhost:8080/alice`), it will register as a 409 Conflict.
 
 ---
 
 ## [0.18.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.17.1..v0.18.0) - 2026-03-09
+
 ### Bug Fixes
+
 - **(compose)** add SELinux bind-mount support via SELINUX_SUFFIX variable - ([49c9549](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/49c9549a58401ec7ae3f9ffee8344d34630ab207)) - Jasper Vaneessen
 - **(storage-api)** use configurable region instead of hardcoded us-east-1 - ([49c9549](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/49c9549a58401ec7ae3f9ffee8344d34630ab207)) - Jasper Vaneessen
+
 ### Features
+
 - **(compose)** migrate to Apache Kafka and SeaweedFS, unify CI hostname config - ([49c9549](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/49c9549a58401ec7ae3f9ffee8344d34630ab207)) - Jasper Vaneessen
 
 ---
 
 ## [0.17.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.17.0..v0.17.1) - 2026-02-25
+
 ### Bug Fixes
+
 - uma credential edge cases - ([3c0e77f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/3c0e77f4b3370e86baa7bab013a94ddeb1439039)) - Thomas Dupont
 - Fixed runtime errors related to config injection in some environments by upgrading to JDK 25 (and Quarkus 3.31.4) - ([cca40cd](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/cca40cd6c41be7c417a22c9b3321f20865bdba63)) - Thomas Dupont
 
 ---
 
 ## [0.17.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.16.1..v0.17.0) - 2026-02-13
+
 ### Bug Fixes
+
 - **(ui)** check permissions modal works again - ([7f4fb54](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7f4fb548220319d3832cbf17e99649f889f5b227)) - Thomas Dupont
--  [**breaking**] access control checks work again - ([7962e1e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7962e1e2a5f46aec73abfcdfd373b985b4381092)) - Thomas Dupont
+- [**breaking**] access control checks work again - ([7962e1e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7962e1e2a5f46aec73abfcdfd373b985b4381092)) - Thomas Dupont
 - use field injection instead of constructor injection - ([a2605c3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a2605c3669b6bf1d359b2b1841a47891fd9a5f6e)) - Thomas Dupont
+
 ### Breaking
+
 Although this release is auto-marked as breaking, it is only breaking when you are using `{podId}/rebac/check` API. This API now returns a message with the key `kss:allowed` instead of `kss-fga:allowed`.
 
 ---
 
 ## [0.16.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.16.0..v0.16.1) - 2026-01-30
+
 ### Bug Fixes
+
 - configproperty classloading issue - ([b663f3e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b663f3eaf88cdd32eca24287b7017debc476ebf3)) - Thomas Dupont
+
 ### Other
+
 - Updated documentation to reflect changes in UMA integration - Thomas Dupont
 
 ---
 
 ## [0.16.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.15.0..v0.16.0) - 2026-01-29
+
 ### Bug Fixes
+
 - **(ui)** upon posting a CR the page is no longer blank - ([f373bf4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/f373bf494fb19fb07526fb2087e916fafc658560)) - Thomas Dupont
 - Fixed issue with timestamp serializing to JSON-LD - ([b0f8ade](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/b0f8adee074bab764adb6ab909ed5de4bc818b04)) - Wannes Kerckhove
+
 ### Features
+
 - uma integration - ([5a64aca](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5a64acacc142a47c02e6de7830f3b22edfdd1c9f)) - Thomas Dupont
 
 ---
 
 ## [0.15.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.14.0..v0.15.0) - 2026-01-23
+
 ### Bug Fixes
+
 - **(ui)** extra guard against platform config still being fetched - ([d7e3f4c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d7e3f4cf7dbd5cd3188a572cecaf18c66836be8a)) - Thomas Dupont
--  [**breaking**]Updated generic POJO ORM implementation (fixing some conceptual issues) - ([0068d21](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/0068d21506baa0fdf86702729e895b6568332ddf)) - Wannes Kerckhove
+- [**breaking**]Updated generic POJO ORM implementation (fixing some conceptual issues) - ([0068d21](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/0068d21506baa0fdf86702729e895b6568332ddf)) - Wannes Kerckhove
 - podconfig overrides functionality - ([7174a20](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7174a2083e92979f600dc0e4eeee1f68354931eb)) - Thomas Dupont
+
 ### Features
+
 - **(deps)** Update Kotlin to 2.0.21 and manage with BOM - ([bf5e793](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/bf5e793e3324f620d166249fdd59c8b1e2ae8c62)) - Thomas Dupont
 - **(ui)** settings overhaul - ([a4afb24](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a4afb24498278c9134629fcd1d295afc851a5801)) - Thomas Dupont
 - When registering a pod via the API, an optional admin client credential pair can now be set (for quick bootstrapping) - ([31f7d423](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/31f7d4233b4a24ebf63b9fdb10d76219b3225d9f)) - Wannes Kerckhove
@@ -94,64 +121,88 @@ Although this release is auto-marked as breaking, it is only breaking when you a
 ---
 
 ## [0.14.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.13.0..v0.14.0) - 2025-12-08
+
 ### Notable changes
+
 1. Auth system overhaul - ([4ca4f6c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4ca4f6c9a05344424222b43d47f6e16999082f3f)) - Wannes
-  - New auth framework allows multiple policy mechanism to be active within the same runtime.
-  - Supported policy mechanisms are:
-    - OpenFGA
-    - A4DS/UMA
-    - External HTTP endpoint PEP
-  - Added support for DPoP (can be configured to be required for additional security)
-  - Added support for Solid-OIDC (authenticating via a WebID)
-2. New Pod configuration system  - ([4ca4f6c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4ca4f6c9a05344424222b43d47f6e16999082f3f)) - Wannes
-  - Updated model provides clear distinction between default system Pod settings, Pod bootstrap settings and User-defined Pod settings
-  - User-defined Pod settings (`kss:configuration`) are now represented as a string that follows the exact same structure as the Kvasir config files (vs. having a separate RDF-based model).
-  - User-defined Pod settings are overlayed on top of the system settings using the [SmallRye Config system](https://smallrye.io/smallrye-config/Latest/) (vs. the custom built solution before)
-3. Kvasir UI updated to reflect backend changes - ([5c306e0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5c306e0269ae6dca63208286729c9faef6802a12)) - Thomas Dupont
-  - When a Keycloak user is available with owner-level-access to the pod (configured in OpenFGA), you can login and use the Kvasir UI, even when UMA is enabled for the Pod.
-  - Improved access control UI
-  - Added forms for managing the Pod configuration.
+
+- New auth framework allows multiple policy mechanism to be active within the same runtime.
+- Supported policy mechanisms are:
+  - OpenFGA
+  - A4DS/UMA
+  - External HTTP endpoint PEP
+- Added support for DPoP (can be configured to be required for additional security)
+- Added support for Solid-OIDC (authenticating via a WebID)
+
+1. New Pod configuration system - ([4ca4f6c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4ca4f6c9a05344424222b43d47f6e16999082f3f)) - Wannes
+
+- Updated model provides clear distinction between default system Pod settings, Pod bootstrap settings and User-defined Pod settings
+- User-defined Pod settings (`kss:configuration`) are now represented as a string that follows the exact same structure as the Kvasir config files (vs. having a separate RDF-based model).
+- User-defined Pod settings are overlayed on top of the system settings using the [SmallRye Config system](https://smallrye.io/smallrye-config/Latest/) (vs. the custom built solution before)
+
+1. Kvasir UI updated to reflect backend changes - ([5c306e0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5c306e0269ae6dca63208286729c9faef6802a12)) - Thomas Dupont
+
+- When a Keycloak user is available with owner-level-access to the pod (configured in OpenFGA), you can login and use the Kvasir UI, even when UMA is enabled for the Pod.
+- Improved access control UI
+- Added forms for managing the Pod configuration.
 
 ---
 
 ## [0.13.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.12.0..v0.13.0) - 2025-10-28
+
 ### Features
+
 - Add Solid compliant storage API - ([855932c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/855932c497f5c4e34cf046ddb84abe2272dbbe2f)) - Wannes Kerckhove
 - **(ui)** Enforces UI logout on Keycloak state error - ([a522ef3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a522ef3b01a69a59a03dc7545c13834aa1b5a4ba)) - Thomas Dupont
+
 ### Bug Fixes
+
 - Support reverse relations via predicate directive for GraphQL mutations - ([bc5c11a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/bc5c11a975003c53e2cb1886b161054be0b392f3)) - Wannes Kerckhove
 
 ---
 
 ## [0.12.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.11.1..v0.12.0) - 2025-10-10
+
 ### Bug Fixes
+
 - Blank nodes are now skolemized for change requests - ([5838c3a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/5838c3af10205932323c581325d552cac3cb1246)) - Wannes Kerckhove
 - Workaround for reading body in HttpAuthenticationMechanism - ([a827b23](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a827b2370638ecea13cbbf967727c484b3c6638e)) - Wannes Kerckhove
 - Resource IDs should not be included in results after removal of all its properties - ([cbc82da](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/cbc82daa6f8586d96f8321ae8aed2564765575d4)) - Wannes Kerckhove
+
 ### Features
+
 - **(ui)** Support for result code history in change request details - ([4d94cc4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4d94cc4f5acc9387dcc5d75a18cc017c6a562136)) - Thomas Dupont
 - Expose the policy.agent property to the ui - ([447c426](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/447c426571a1a8391046ccec3b290506bd27a06c)) - Thomas Dupont
 
 ---
 
 ## [0.11.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.11.0..v0.11.1) - 2025-09-22
+
 ### Bug Fixes
+
 - missing builds due to CI misconfig - ([921b5de](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/921b5de25ee2f57ddd83537d9efa2ad6dbc72d06)) - Jasper Vaneessen
 
 ---
 
 ## [0.11.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.10.0..v0.11.0) - 2025-09-22
+
 ### Bug Fixes
+
 - Introducing proper isolation between the policy modes (via classpath and maven profiles) - ([d0e03c4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d0e03c4786c2902f34533e8b773d79d44396ee3a)) - Wannes Kerckhove
+
 ### Features
+
 - preview SDL schema functionality - ([69d2d1b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/69d2d1bedaf0d668b8d78f07b8ddd7d1aa490931)) - Thomas Dupont
 - init-service can now be configured to terminate after completion via kvasir.bootstrap.exit-after-setup=true - ([2250a49](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/2250a496e05c31211a00a063da95c1459c42bf6d)) - Jasper Vaneessen
 
 ---
 
 ## [0.10.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.2..v0.10.0) - 2025-09-15
+
 **Warning**: This update modifies the storage schema for Clickhouse. At this time, we cannot provide a migration script, meaning you will have to manually reset the database (e.g. by clearing storage volumes) before using this update!
+
 ### Features
+
 - Extended the GraphQL typesystem with support for Date, Time & DateTime - ([a451bbc](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/a451bbc6a3a7b63b8d0d2b3a86e2cdaa89d525a8)) - Wannes Kerckhove
 - Implemented (basic) support for Authorization for Data Spaces (A4DS) - ([04bece3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/04bece33e891549a49b0697393591ebc72c76571)) - Wannes Kerckhove
 - [**breaking**] Implemented ORM layer for persisting POJOs. Added identity to storage records. - ([651a4d7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/651a4d74a0ad396824bd166471dc82a8908988ce)) - Wannes Kerckhove
@@ -160,32 +211,44 @@ Although this release is auto-marked as breaking, it is only breaking when you a
 - **(ui)** Name is no longer required when creating a slice - ([4cb38ed](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/4cb38eddf2dc7153f4be8385ded367959ae9c675)) - Thomas Dupont
 - **(ui)** new slices now have a simple template to start with - ([d169738](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/d16973841afd17655337e5c5a15cbe8c9d782ad1)) - Thomas Dupont
 - **(ui)** improved error body handling - ([9d298a2f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/9d298a2fed78ac629d616b9eb154f9b4923faf49)) - Thomas Dupont
+
 ### Bug Fixes
+
 - **(ui)** removing kss prefix from context no longer breaks Slice edit/create - ([1a6e95a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/1a6e95a9a0550fdc649184bd75b400c42bbc974e)) - Thomas Dupont
 
 ---
 
 ## [0.9.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.1..v0.9.2) - 2025-09-03
+
 ### Bug Fixes
+
 - Fixed broken @generateMutations for types with explicit @predicate directives instead of prefix-based qualifications. - ([21b8c13](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/21b8c136eac09a44a47c9043ad46a45e7dc1905f)) - Wannes Kerckhove
 - IRI validation should check if the IRI is an absolute IRI based on a set of known schemes. - ([7e40c1b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7e40c1bdeb29c1e5a292bc5708580370e928db57)) - Wannes Kerckhove
+
 ### Improvements
+
 - Improved how errors are outputted for the GraphQL endpoints (we used to serialize the entire stack trace as JSON, which is not readable but also caused issues with the GraphiQL client getting stuck). - ([7e40c1b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/7e40c1bdeb29c1e5a292bc5708580370e928db57)) - Wannes Kerckhove
 
 ---
 
 ## [0.9.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.9.0..v0.9.1) - 2025-08-26
+
 ### Bug Fixes
+
 - Fixed GraphQL & Slice regression bugs - ([2bdaae4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/2bdaae445f75445d39c8cd88fc24d95a610c1a0b)) - Wannes Kerckhove
 
 ---
 
 ## [0.9.0](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/0.8.0..0.9.0) - 2025-08-22
+
 ### Bug Fixes
+
 - Add /robots.txt to default exclude path prefixes - ([ad32257](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/ad32257440be011ce1594d726a8f4b4d0a285f20)) - Thomas Dupont
 - Made ingesting RDF files more robust, fixes #4, #5 - ([c4d0008](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/c4d0008b6aa44be810e45d82fd3eea716d0eeef4)) - Wannes Kerckhove
--  Fixed FQN not properly being resolved for input types when validating a Slice change request - ([57a04b7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/57a04b7a2e9bc12fedec74ba8083d1f2304405b9)) - Wannes Kerckhove
+- Fixed FQN not properly being resolved for input types when validating a Slice change request - ([57a04b7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/57a04b7a2e9bc12fedec74ba8083d1f2304405b9)) - Wannes Kerckhove
+
 ### Features
+
 - Slice name is now optional - ([469a2c5](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/469a2c5cd4e0202cd93a145ba5eb7c6be1b8186c)) - Wannes Kerckhove
 - QoL improvements when authoring Slices - ([57a04b7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/57a04b7a2e9bc12fedec74ba8083d1f2304405b9)) - Wannes Kerckhove
 - Added generate-client bootstrap config property that enables enforcing PKCE for public clients. - ([9caeb38](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/commit/9caeb3847ac8aacb2a1ef56b8f2c640b48adef61)) - Wannes Kerckhove

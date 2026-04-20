@@ -238,7 +238,7 @@
                     <executions>
                         <execution>
                             <id>flatten</id>
-                            <phase>process-resources</phase>
+                            <phase>initialize</phase>
                             <goals>
                                 <goal>flatten</goal>
                             </goals>
