@@ -9,8 +9,10 @@ import io.smallrye.reactive.messaging.kafka.KafkaRecord
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.http.impl.HttpServerRequestWrapper
 import io.vertx.core.net.HostAndPort
 import io.vertx.ext.web.Router
+import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.httpproxy.*
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
@@ -35,6 +37,7 @@ import java.util.*
 
 internal const val HEADER_X_AMZ_CONTENT_SHA256 = "x-amz-content-sha256"
 internal const val HEADER_X_AMZ_DATE = "x-amz-date"
+internal const val BODY_KEY = "body"
 
 /**
  * Proxy for an S3 backend.
@@ -55,15 +58,22 @@ class StorageApi(
         val proxy = HttpProxy.reverseProxy(proxyClient)
         proxy.origin(s3Url.port, s3Url.host).addInterceptor(s3Interceptor)
 
-        val setupRoute = {
-            if (authHandler.isResolvable) {
-                router.route("/:podId/s3/*")
-                    .handler(authHandler.get())
-            } else {
-                router.route("/:podId/s3/*")
+        router.route("/:podId/s3/*")
+            .handler(BodyHandler.create().setBodyLimit(-1))
+            .apply {
+                if (authHandler.isResolvable) {
+                    this.handler(authHandler.get())
+                }
             }
-        }
-        setupRoute().handler { ctx -> proxy.handle(ctx.request()) }
+            .handler { ctx ->
+                ctx.body().buffer()?.let {
+                    if (it.length() > 0) {
+                        val reqContext = (ctx.request() as HttpServerRequestWrapper).context()
+                        reqContext.putLocal(BODY_KEY, it)
+                    }
+                }
+                proxy.handle(ctx.request())
+            }
     }
 
 }
@@ -87,42 +97,38 @@ class S3Interceptor(
 
     override fun handleProxyRequest(context: ProxyContext): Future<ProxyResponse> {
         val proxiedRequest = context.request().proxiedRequest()
+        val buffer =
+            (proxiedRequest as HttpServerRequestWrapper).context().getLocal<Buffer?>(BODY_KEY) ?: Buffer.buffer()
 
-        return if (proxiedRequest.isEnded) {
-            Future.succeededFuture(Buffer.buffer())
+        context.request().body = Body.body(buffer)
+        val podId = context.request().proxiedRequest().getParam("podId")
+        val sliceId = context.request().proxiedRequest().getParam("sliceId")
+        val target = replacePath(context.request().uri, podId, sliceId)
+        context.request().uri = target
+        val isoDateTime = getIsoDateTime(context)
+        val payloadHash = getPayloadHash(context, buffer)
+        val targetUri = URI.create(target);
+        val targetDecoded = arrayOf(targetUri.path, targetUri.query ?: "").joinToString("?");
+        val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
+        val hostHeader = if (s3Url.port == -1 || s3Url.port in listOf(80, 443)) {
+            s3Url.host
         } else {
-            proxiedRequest.resume().body()
-        }.compose { buffer ->
-            context.request().body = Body.body(buffer)
-            val podId = context.request().proxiedRequest().getParam("podId")
-            val sliceId = context.request().proxiedRequest().getParam("sliceId")
-            val target = replacePath(context.request().uri, podId, sliceId)
-            context.request().uri = target
-            val isoDateTime = getIsoDateTime(context)
-            val payloadHash = getPayloadHash(context, buffer)
-            val targetUri = URI.create(target);
-            val targetDecoded = arrayOf(targetUri.path, targetUri.query ?: "").joinToString("?");
-            val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
-            val hostHeader = if (s3Url.port == -1 || s3Url.port in listOf(80, 443)) {
-                s3Url.host
-            } else {
-                "${s3Url.host}:${s3Url.port}"
-            }
-            val sig = Signer.builder()
-                .awsCredentials(AwsCredentials(s3Config.accessKey(), s3Config.secretKey()))
-                .header("host", hostHeader)
-                .header("x-amz-date", isoDateTime)
-                .header("x-amz-content-sha256", payloadHash)
-                .region(s3Config.region())
-                .buildS3(signUri, payloadHash)
-                .signature
-            context.request().putHeader("Authorization", sig)
-            context.request().putHeader("x-amz-date", isoDateTime)
-            context.request().putHeader("x-amz-content-sha256", payloadHash)
-            context.request().putHeader("Host", hostHeader)
-            context.request().authority = HostAndPort.authority(s3Url.host, s3Url.port)
-            context.sendRequest()
+            "${s3Url.host}:${s3Url.port}"
         }
+        val sig = Signer.builder()
+            .awsCredentials(AwsCredentials(s3Config.accessKey(), s3Config.secretKey()))
+            .header("host", hostHeader)
+            .header("x-amz-date", isoDateTime)
+            .header("x-amz-content-sha256", payloadHash)
+            .region(s3Config.region())
+            .buildS3(signUri, payloadHash)
+            .signature
+        context.request().putHeader("Authorization", sig)
+        context.request().putHeader("x-amz-date", isoDateTime)
+        context.request().putHeader("x-amz-content-sha256", payloadHash)
+        context.request().putHeader("Host", hostHeader)
+        context.request().authority = HostAndPort.authority(s3Url.host, s3Url.port)
+        return context.sendRequest()
     }
 
     override fun handleProxyResponse(context: ProxyContext): Future<Void> {
