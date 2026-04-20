@@ -17,6 +17,15 @@ quarkus:
         - Www-Authenticate
   smallrye-openapi:
     store-schema-directory: target/openapi
+  # Kafka Streams must use a distinct application-id so it never shares a
+  # consumer group with the SmallRye Reactive Messaging consumers (which
+  # default their group.id to the Quarkus application name, i.e. "monolith").
+  # Mixing classic and stream consumer protocols in the same group causes
+  # InconsistentGroupProtocolException and kills the Streams topology.
+  # In dev/test a random UUID avoids state sharing across parallel runs.
+  kafka-streams:
+    application-id: change-processor
+    topics: changes.incoming,changes.processing-completed
 
 "%dev":
   quarkus:
@@ -24,6 +33,8 @@ quarkus:
       host: 0.0.0.0
       access-log:
         enabled: false
+    kafka-streams:
+      application-id: ${quarkus.uuid}
   kvasir:
     bootstrap:
       pods:

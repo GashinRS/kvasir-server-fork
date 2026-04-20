@@ -14,13 +14,6 @@
     if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
   - &rule-maintenance-branches
     if: '$CI_COMMIT_BRANCH =~ /^(v\d+\..+|maint\/.+)$/'
-  # Cache entry anchor
-  - &pnpm-cache-entry
-    key:
-      files:
-        - services/ui-service/src/main/frontend/pnpm-lock.yaml
-    paths:
-      - services/ui-service/src/main/frontend/.pnpm-store
 
 # ── Rule templates (extended by jobs in other files) ──────────────────────────
 
@@ -52,37 +45,78 @@
     - *rule-default-branch
     - *rule-maintenance-branches
 
-# ── Cache templates (extended by jobs in other files) ─────────────────────────
+# ── Cache templates ───────────────────────────────────────────────────────────
+# GitLab CI `extends` overwrites arrays (including `cache:`), it does NOT merge
+# them. Therefore we pre-compose every required combination here using anchors.
+#
+# Anchors are file-local, which is fine — all cache templates live in this file
+# and consumer jobs in other files reference them via `extends`.
+#
+# Cache ownership:
+#   test:maven   → .test-cache    (pull-push: primes maven, pnpm, and mise)
+#   package:maven → .package-cache (pull: reads all three)
+#   all others   → .mise-cache-ro (pull: reads mise only)
 
-# Read/write Maven cache — used by test:maven.
-# Writes back the full dependency set (including test-scoped jars) so subsequent
-# jobs on the same branch start warm.
-# The release branch (fixed name, never writes) falls back to the main cache
-# automatically via fallback_keys on a cache miss.
-.maven-cache-rw:
-  cache:
-    - key: ${CI_COMMIT_REF_SLUG}
-      fallback_keys:
-        - ${CI_DEFAULT_BRANCH}
-      paths:
-        - .m2/repository/
-      policy: pull-push
-    - *pnpm-cache-entry
+.anchors-cache:
+  - &maven-cache-rw
+    key: ${CI_COMMIT_REF_SLUG}
+    fallback_keys:
+      - ${CI_DEFAULT_BRANCH}
+    paths:
+      - .m2/repository/
+    policy: pull-push
+  - &maven-cache-ro
+    key: ${CI_COMMIT_REF_SLUG}
+    fallback_keys:
+      - ${CI_DEFAULT_BRANCH}
+    paths:
+      - .m2/repository/
+    policy: pull
+  - &pnpm-cache
+    key:
+      files:
+        - services/ui-service/src/main/frontend/pnpm-lock.yaml
+    paths:
+      - services/ui-service/src/main/frontend/.pnpm-store
+  - &mise-cache-rw
+    key:
+      prefix: mise-
+      files: ["mise.toml"]
+    paths:
+      - .mise/installs
+    policy: pull-push
+  - &mise-cache-ro
+    key:
+      prefix: mise-
+      files: ["mise.toml"]
+    paths:
+      - .mise/installs
+    policy: pull
 
-# Read-only Maven cache — used by package:maven.
-# package:maven runs with -DskipTests so it resolves fewer dependencies than
-# test:maven; letting it write back would overwrite a complete cache with an
-# incomplete one and cause AccessDeniedException on the next test run.
-# The release branch falls back to the main cache via fallback_keys.
-.maven-cache-ro:
+# test:maven — primes all three caches.
+.test-cache:
+  variables:
+    MISE_DATA_DIR: "$CI_PROJECT_DIR/.mise"
   cache:
-    - key: ${CI_COMMIT_REF_SLUG}
-      fallback_keys:
-        - ${CI_DEFAULT_BRANCH}
-      paths:
-        - .m2/repository/
-      policy: pull
-    - *pnpm-cache-entry
+    - *maven-cache-rw
+    - *pnpm-cache
+    - *mise-cache-rw
+
+# package:maven — reads all three caches (never writes back).
+.package-cache:
+  variables:
+    MISE_DATA_DIR: "$CI_PROJECT_DIR/.mise"
+  cache:
+    - *maven-cache-ro
+    - *pnpm-cache
+    - *mise-cache-ro
+
+# Jobs that only need mise tools (compose, kind, timoni).
+.mise-cache-ro:
+  variables:
+    MISE_DATA_DIR: "$CI_PROJECT_DIR/.mise"
+  cache:
+    - *mise-cache-ro
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 

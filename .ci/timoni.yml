@@ -1,0 +1,57 @@
+# .ci/timoni.yml
+# Timoni module distribution: lint on MRs, push to OCI registry on tags.
+# timoni version is pinned in mise.toml.
+
+variables:
+  TIMONI_REGISTRY: "harbor.discover.ilabt.imec.be"
+  TIMONI_MODULE_URL: "oci://${TIMONI_REGISTRY}/library/kvasir"
+
+.timoni-changes:
+  - &timoni-changes
+    changes:
+      - "timoni/**/*"
+
+# Validate the Timoni module on MR pipelines when timoni/ files change.
+timoni:lint:
+  extends: .mise-cache-ro
+  stage: test
+  image: $CI_TOOLS_IMAGE
+  needs: []
+  script:
+    - mise install
+    - mise x -- timoni mod vet timoni/kvasir
+    # Secret-management regression suite: vet matrix + build assertions over
+    # positive/negative fixtures in timoni/kvasir/test-values/.
+    - mise x -- .ci/scripts/timoni-secrets-regression.sh
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      <<: *timoni-changes
+  interruptible: true
+
+# Push the Timoni module to the OCI registry on release tags.
+# Strips the leading "v" from the Git tag so the module version is bare semver
+# (matching the convention used by package:maven for container images).
+timoni:push:
+  extends: .mise-cache-ro
+  stage: package
+  image: $CI_TOOLS_IMAGE
+  needs: []
+  script:
+    - mise install && eval "$(mise env -s bash)"
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - timoni registry login ${TIMONI_REGISTRY}
+      -u "${HARBOR_USER}"
+      -p "${HARBOR_PASSWORD}"
+    - timoni mod push timoni/kvasir
+      ${TIMONI_MODULE_URL}
+      --version="${VERSION}"
+      --latest=true \
+      -a "org.opencontainers.image.source=${CI_PROJECT_URL}"
+      -a "org.opencontainers.image.description=Timoni module for deploying Kvasir to Kubernetes"
+      -a "org.opencontainers.image.vendor=idlab-imec"
+      -a "org.opencontainers.image.licenses=Apache-2.0"
+      -a "org.opencontainers.image.documentation=https://kvasir.pages.ilabt.imec.be"
+  rules:
+    - if: $CI_COMMIT_TAG

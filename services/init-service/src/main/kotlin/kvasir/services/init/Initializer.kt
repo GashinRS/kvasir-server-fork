@@ -39,15 +39,15 @@ class Initializer(
     private val persistentEntityDetector: PersistentEntityDetector,
     private val kafkaMessagingConfig: KafkaMessagingConfig,
     @Identifier("default-kafka-broker")
-    private val kafkaBrokerConfig: Map<String, Any>
+    private val kafkaBrokerConfig: Map<String, Any>,
 ) {
-
     private val initializationComplete = AtomicBoolean(false)
 
     @Startup
     fun init(): Uni<Void> {
         // Init system db
-        return repositoriesLifecycleManager.initialize(persistentEntityDetector.getDetectedEntityClasses(StorageLevel.SYSTEM))
+        return repositoriesLifecycleManager
+            .initialize(persistentEntityDetector.getDetectedEntityClasses(StorageLevel.SYSTEM))
             .chain { _ ->
                 Log.debug("Initializing Kafka topics")
                 // Init Kafka topics
@@ -62,67 +62,80 @@ class Initializer(
                     Log.debug("No global auth initializer available, skipping global auth setup")
                     Uni.createFrom().voidItem()
                 }
-            }
-            .chain { _ ->
+            }.chain { _ ->
                 // Init pods based on config
-                Multi.createFrom().iterable(bootstrapConfig.pods())
-                    .onItem().transformToUni { podConfig ->
+                Multi
+                    .createFrom()
+                    .iterable(bootstrapConfig.pods())
+                    .onItem()
+                    .transformToUni { podConfig ->
                         val podId = "${httpConfig.baseUri()}${podConfig.name()}"
                         // Create a custom ObjectMapper that bypasses @JsonSerialize annotations of UMAConfig
-                        val customMapper = ObjectMapper()
-                            .registerModule(Jdk8Module())
-                            .setAnnotationIntrospector(object : JacksonAnnotationIntrospector() {
-                                override fun findSerializer(a: Annotated): Any? {
-                                    return null // Ignore @JsonSerialize annotations
-                                }
-                            })
+                        val customMapper =
+                            ObjectMapper()
+                                .registerModule(Jdk8Module())
+                                .setAnnotationIntrospector(
+                                    object : JacksonAnnotationIntrospector() {
+                                        override fun findSerializer(a: Annotated): Any? {
+                                            return null // Ignore @JsonSerialize annotations
+                                        }
+                                    },
+                                )
                         podSetupHelper.createPod(
                             podId,
                             podConfig,
-                            customMapper.writeValueAsString(podConfig.configuration())
+                            customMapper.writeValueAsString(podConfig.configuration()),
                         )
-                    }
-                    .concatenate()
-                    .onCompletion().invoke { initializationComplete.set(true) }
+                    }.concatenate()
+                    .onCompletion()
+                    .invoke { initializationComplete.set(true) }
                     .skipToLast()
-            }
-            .map {
+            }.map {
                 Log.info("Kvasir initialization completed successfully.")
                 0 // Return exit code 0 on success
-            }
-            .onFailure().recoverWithItem { err ->
+            }.onFailure()
+            .recoverWithItem { err ->
                 Log.error("Kvasir initialization failed: ${err.message}", err)
                 1 // Return exit code 1 on failure
-            }
-            .invoke { exitCode ->
+            }.invoke { exitCode ->
                 // Exit on failure, or when exitAfterSetup is set
                 if (exitCode != 0 || bootstrapConfig.exitAfterSetup()) {
                     Quarkus.asyncExit(exitCode)
                 }
-            }
-            .replaceWithVoid()
+            }.replaceWithVoid()
     }
 
     fun isInitialized(): Boolean = initializationComplete.get()
 
     fun initializeKafkaTopics(): Uni<Void> {
-        val config = kafkaBrokerConfig.filter { AdminClientConfig.configNames().contains(it.key) }.toMap()
+        val config =
+            kafkaBrokerConfig
+                .filter {
+                    AdminClientConfig.configNames().contains(it.key) || it.key == "tls-configuration-name"
+                }.toMap()
         val adminClient = AdminClient.create(config)
-        return kafkaMessagingConfig.autoCreateTopics().map { topicConfig ->
-            NewTopic(
-                topicConfig.topicName(),
-                topicConfig.partitions(),
-                topicConfig.replicationFactor()
-            )
-        }.asMulti()
-            .onItem().transformToUniAndMerge { topic ->
-                adminClient.createTopics(setOf(topic)).all().toCompletionStage().toUni().replaceWithVoid()
-                    .onFailure(TopicExistsException::class.java).recoverWithUni { _ ->
+        return kafkaMessagingConfig
+            .autoCreateTopics()
+            .map { topicConfig ->
+                NewTopic(
+                    topicConfig.topicName(),
+                    topicConfig.partitions(),
+                    topicConfig.replicationFactor(),
+                )
+            }.asMulti()
+            .onItem()
+            .transformToUniAndMerge { topic ->
+                adminClient
+                    .createTopics(setOf(topic))
+                    .all()
+                    .toCompletionStage()
+                    .toUni()
+                    .replaceWithVoid()
+                    .onFailure(TopicExistsException::class.java)
+                    .recoverWithUni { _ ->
                         Log.debug("Kafka topic '${topic.name()}' already exists, skipping creation.")
                         Uni.createFrom().voidItem()
                     }
-            }
-            .skipToLast()
+            }.skipToLast()
     }
-
 }

@@ -1,6 +1,8 @@
 # Deploying to Kubernetes
 
-> The current Kubernetes deployment setup is out of sync with recent changes to Kvasir and may not work correctly. Additionally, our workaround using nip.io no longer functions due to changes by Let's Encrypt and other certificate authorities. Please use the Docker Compose setup for local development instead, or expect potential issues when following these instructions.
+> This page describes the **legacy** Helm/Helmfile deployment that is no longer maintained.
+> For the current Timoni-based deployment and Kind quickstart, see
+> [Kubernetes Deployment](Kubernetes-Deployment.md).
 > {style="warning"}
 
 ## Prerequisites

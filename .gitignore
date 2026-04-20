@@ -26,12 +26,16 @@ cache
 *.zip
 *.tar.gz
 *.rar
+*.tgz
 
 # Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
 !gradle-wrapper.jar
 
 # IntelliJ
 .idea
+
+# Kotlin LSP db
+**/kls_database.db
 
 # Ignore load testing results
 load-tests/results
@@ -44,22 +48,20 @@ load-tests/results
 kubernetes/.certs
 kubernetes/.env
 
-**/kls_database.db
-
 # Ignore _openapi folder
 _openapi
 
 # Local folder
 .local
 
-# Ignore environment files in the compose directory
+# Ignore environment files
 *.env
 
 # API test local config and generated reports
 api-tests/hurl.env
 api-tests/report
-api-tests/junit.xml
+api-tests/junit-*.xml
 
-*.tgz
-kubernetes/.kvasir.env
+# worktrees
 .worktrees
+.mise

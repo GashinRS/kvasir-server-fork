@@ -220,7 +220,7 @@ sent using the [Basic Authentication Scheme](https://datatracker.ietf.org/doc/ht
 `grant_type` parameter is required.
 
 ```http
-POST http://localhost:8280/realms/quarkus/protocol/openid-connect/token
+POST http://localhost:8280/realms/kvasir/protocol/openid-connect/token
 Authorization: Basic bXktY29uZmlkZW50aWFsLWNsaWVudDpteS1zZWNyZXQ=
 Content-Type: application/x-www-form-urlencoded
 

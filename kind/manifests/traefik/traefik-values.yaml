@@ -1,0 +1,36 @@
+# Traefik Helm values for Kind quickstart.
+# Install with: helm install traefik traefik/traefik -n traefik -f kind/manifests/traefik/traefik-values.yaml
+#
+# Port mapping (kind/cluster-config.yaml):
+#   host:80  → containerPort:30080 → Traefik web entrypoint
+#   host:443 → containerPort:30443 → Traefik websecure entrypoint
+
+deployment:
+  kind: DaemonSet
+
+nodeSelector:
+  ingress-ready: "true"
+
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+
+service:
+  type: NodePort
+
+ports:
+  web:
+    nodePort: 30080
+  websecure:
+    nodePort: 30443
+
+additionalArguments:
+  - "--api.insecure=true"
+
+ingressRoute:
+  dashboard:
+    enabled: false

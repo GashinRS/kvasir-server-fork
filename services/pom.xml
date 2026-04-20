@@ -18,6 +18,8 @@
 
     <properties>
         <quarkus.jib.jvm-additional-arguments>-Djava.net.preferIPv4Stack=true</quarkus.jib.jvm-additional-arguments>
+        <quarkus.jib.base-jvm-image>eclipse-temurin:25-jre</quarkus.jib.base-jvm-image>
+        <quarkus.container-image.group>kvasir</quarkus.container-image.group>
     </properties>
 
     <modules>

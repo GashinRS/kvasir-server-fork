@@ -54,7 +54,7 @@ For example:
 ```yaml
 auth:
   oidc:
-    server-url: http://localhost:8280/auth/realms/quarkus
+    server-url: http://localhost:8280/auth/realms/kvasir
     principal-extractor:
       class-name: kvasir.plugins.policyagent.openfga.extractors.SimpleJWTPrincipalExtractor
       config:

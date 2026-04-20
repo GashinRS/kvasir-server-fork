@@ -14,17 +14,12 @@
 
 test:maven:
   extends:
-    - .maven-cache-rw
+    - .test-cache
     - .docker-in-docker
   stage: test
-  image: $CI_TOOLS_IMAGE
+  image: $CI_TOOLS_IMAGE-docker
   tags: ["cache", "docker"]
   variables:
-    # In CI, Docker-in-Docker services are reachable via the 'docker' hostname, not 'localhost'.
-    # Setting COMPOSE_HOSTNAME propagates this to all services in compose.devservices.yml
-    # (Kafka advertised listeners, SeaweedFS externalUrl) and compose.kvasir.yml.
-    # The KVASIR_* variables below override the application defaults so that the test JVM
-    # connects to the correct hostnames as well.
     COMPOSE_HOSTNAME: docker
     KVASIR_KG_CLICKHOUSE_HOST: docker
     KVASIR_KG_CLICKHOUSE_PORT: 28123
@@ -39,6 +34,7 @@ test:maven:
       <<: *code-changes
   script:
     - set -xe
+    - mise install && eval "$(mise env -s bash)"
     - docker compose -f compose/compose.devservices.yml --env-file compose/.env.devservices up --wait --quiet-pull --no-color
     - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true
   interruptible: true
@@ -61,7 +57,7 @@ test:maven:
 
 package:maven:
   extends:
-    - .maven-cache-ro
+    - .package-cache
     - .docker-in-docker
   stage: package
   needs:
@@ -78,9 +74,10 @@ package:maven:
       <<: *code-changes
       variables:
         MAVEN_SKIP_MAIN_COMPILE: "-Dmaven.main.skip=true"
-  image: $JDK_IMAGE
-  tags: ["cache", "docker"]
+  image: $CI_TOOLS_IMAGE
+  tags: ["cache"]
   script:
+    - mise install && eval "$(mise env -s bash)"
     # Strip the "v" prefix from IMAGE_TAG so container images use bare semver (0.21.0)
     # matching the versions in pom.xml, compose.kvasir.yml, and values.yaml.
     # Git tags carry the prefix (v0.21.0) but manifests and image tags do not.

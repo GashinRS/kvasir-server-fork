@@ -60,7 +60,7 @@ class OpenFgaLifecycleManager(
             val realmExists = keycloak.realms().findAll().any { kvasirRealm == it.realm }
             if (!realmExists) {
                 // Create realm
-                Log.debug("Default quarkus realm not present, creating it...")
+                Log.debug("Default kvasir realm not present, creating it...")
                 keycloak.realms().create(RealmRepresentation().apply {
                     this.realm = kvasirRealm
                     this.isEnabled = true

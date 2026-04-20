@@ -1,0 +1,12 @@
+[tools]
+java = "temurin-25"
+
+# CI / kind tools — versions pinned here are the single source of truth for local dev and CI.
+just    = "1.49.0"
+kubectl = "1.35.3"
+helm    = "4.1.4"
+kind    = "0.31.0"
+timoni  = "0.26.0"
+hurl    = "7.1.0"
+yq      = "4.53.2"
+docker-cli = "29.3.1"

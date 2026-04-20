@@ -37,7 +37,7 @@ runtime variable (`ts`) is injected automatically by the `just` recipes.
 
 ```env
 keycloak_url=http://localhost:28280
-realm=quarkus
+realm=kvasir
 kvasir_url=http://localhost:28080
 kss_vocab=https://kvasir.discover.ilabt.imec.be/vocab#
 ```

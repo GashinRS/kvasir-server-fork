@@ -67,6 +67,40 @@ just compose-up
 This starts Kvasir and all backing services. A demo pod will be available
 at `http://localhost:8080/alice`.
 
+### Kubernetes (Kind)
+
+Deploy a full Kvasir stack to a local [Kind](https://kind.sigs.k8s.io) cluster in one command.
+Requires ~3 GB of free RAM and access to the GitLab container registry.
+
+Additional prerequisites (beyond the table above):
+
+| Tool | Min version | Install |
+|------|-------------|---------|
+| **kind** | any recent | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) |
+| **kubectl** | 1.28 | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
+| **helm** | 3.x | [helm.sh](https://helm.sh/docs/intro/install/) |
+| **timoni** | 0.22 | [timoni.sh](https://timoni.sh/install/) |
+| **hurl** | 7.0 | [hurl.dev](https://hurl.dev/docs/installation.html) |
+
+```bash
+just kind-up     # create cluster, deploy all services, wait for ready
+just kind-test   # run API test suite against the cluster
+just kind-down   # delete the cluster
+```
+
+Once running, Kvasir is available at `http://kvasir.localhost` and
+Keycloak at `http://keycloak.localhost`.
+
+Deploys: ClickHouse, Kafka (KRaft), SeaweedFS, PostgreSQL, OpenFGA, Keycloak,
+Kvasir monolith, and Traefik ingress — all from raw manifests and a Timoni module.
+
+To test a locally built image:
+
+```bash
+KVASIR_IMAGE=kvasir/monolith KVASIR_TAG=local KVASIR_PULL_POLICY=Never \
+  just kind-deploy-kvasir             # redeploy Kvasir with a local image
+```
+
 ## Development
 
 ### Dev mode

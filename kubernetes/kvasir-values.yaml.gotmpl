@@ -39,10 +39,10 @@ global:
 
   oidc:
     enabled: true
-    authServerUrl: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.keycloakHost }}/realms/quarkus"
+    authServerUrl: "http{{ if .StateValues.tlsEnabled }}s{{ end }}://{{ .StateValues.keycloakHost }}/realms/kvasir"
     clientId: "quarkus-app"
     clientSecret: "secret"
-    realm: "quarkus"
+    realm: "kvasir"
     existingSecret: ""
     clientIdSecretKey: ""
     clientSecretSecretKey: ""

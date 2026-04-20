@@ -1,5 +1,4 @@
 # Configuration Reference
-
 <show-structure for="chapter,procedure" depth="3"/>
 
 This page provides a reference of the configuration options available for Kvasir.
@@ -25,7 +24,7 @@ For example, the configuration variable `kvasir.pod.auto-ingest-rdf` can be set 
 The following sections provide an overview of the main configuration categories and their options.
 
 > Configuration variables that do not specify a default value are unset by default and must be explicitly configured when required.
-> {style=note}
+{style=note}
 
 ## Kvasir Core Configuration
 
@@ -38,7 +37,7 @@ default: <code>http://localhost:8080/</code>
 The base URI where Kvasir is accessible.
 </def>
 <def title="kvasir.http.webclient-uri">
-default: <code>${kvasir.http.base-uri}/\_ui/</code>
+default: <code>${kvasir.http.base-uri}/_ui/</code>
 
 The URI where the Kvasir web client is accessible.
 </def>
@@ -62,11 +61,8 @@ default: <code>false</code>
 
 If true, RDF data will be automatically ingested into the KG when uploaded via the storage-api.
 </def>
-</deflist>
-
-<deflist>
 <def title="kvasir.pod.auth.oidc.server-url">
-default: <code>${kvasir.auth.keycloak.url}/realms/quarkus</code>
+default: <code>${kvasir.auth.keycloak.url}/realms/kvasir</code>
 
 URL of the OIDC-compliant server.
 </def>
@@ -85,9 +81,6 @@ default: <code>30</code>
 
 Allowed clock skew in seconds to apply during JWT token validation.
 </def>
-</deflist>
-
-<deflist>
 <def title="kvasir.pod.auth.uma.server-url">
 default: <code>http://localhost:4000/uma</code>
 
@@ -108,9 +101,6 @@ default: <code>30</code>
 
 Allowed clock skew in seconds to apply during JWT token validation.
 </def>
-</deflist>
-
-<deflist>
 <def title="kvasir.pod.auth.enable-solid-web-id">
 default: <code>false</code>
 
@@ -126,9 +116,6 @@ default: <code>false</code>
 
 Whether to skip the access token hash (ath) check for DPoP tokens. This setting is primarily intended for backward compatibility with clients that implement an earlier version of the DPoP specification.
 </def>
-</deflist>
-
-<deflist>
 <def title="kvasir.pod.auth.http-endpoint-policy-enforcer.url">
 URL of the external HTTP endpoint for the policy enforcer.
 </def>
@@ -237,11 +224,14 @@ default: <code>localhost:9092</code>
 Comma-separated list of Kafka brokers.
 </def>
 
-[//]: # '<def title="kvasir.messaging.kafka.advertised-hostname">'
-[//]: # "default: <code>localhost</code>"
-[//]: #
-[//]: # "Hostname to advertise to Kafka clients."
-[//]: # "</def>"
+[//]: # (<def title="kvasir.messaging.kafka.advertised-hostname">)
+
+[//]: # (default: <code>localhost</code>)
+
+[//]: # ()
+[//]: # (Hostname to advertise to Kafka clients.)
+
+[//]: # (</def>)
 
 </deflist>
 
@@ -286,7 +276,7 @@ default: <code>admin</code>
 
 <deflist type="full">
 <def title="kvasir.storage.s3.endpoint">
-default: <code>http://localhost:8333</code>
+default: <code>http://localhost:28333</code>
 
 S3 server endpoint.
 </def>

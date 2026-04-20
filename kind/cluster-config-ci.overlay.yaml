@@ -1,0 +1,23 @@
+# CI-only overlay applied on top of kind/cluster-config.yaml inside
+# docker-in-docker, where the runner reaches the kind apiserver via the
+# 'docker' hostname rather than 127.0.0.1.
+#
+# Merged in .ci/kind.yml with:
+#   yq ea '
+#     select(fi == 0) as $base | select(fi == 1) as $overlay
+#     | $base
+#     | .networking = $overlay.networking
+#     | .nodes[0].kubeadmConfigPatches += [$overlay.controlPlanePatch]
+#   ' kind/cluster-config.yaml kind/cluster-config-ci.overlay.yaml
+#
+# Everything else (nodes, extra port mappings, kubelet patches) is inherited
+# from the base config — keep CI-specific deltas here only.
+
+controlPlanePatch: |
+  kind: ClusterConfiguration
+  apiServer:
+    certSANs:
+      - "docker"
+
+networking:
+  apiServerAddress: "0.0.0.0"

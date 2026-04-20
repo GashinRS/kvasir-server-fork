@@ -107,6 +107,50 @@ prereqs:
       warn "Node.js" "not found — needed for ui-* and openapi recipes  →  https://nodejs.org"
     fi
 
+    # timoni 0.22+ (timoni-* recipes)
+    if command -v timoni >/dev/null 2>&1; then
+      timoni_ver=$(timoni version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      if version_gte "$timoni_ver" "0.22.0"; then
+        pass "timoni" "$timoni_ver  (timoni-*)"
+      else
+        warn "timoni" "version $timoni_ver found, need ≥ 0.22 for timoni-*  →  https://timoni.sh/install/"
+      fi
+    else
+      warn "timoni" "not found — needed for timoni-* recipes  →  https://timoni.sh/install/"
+    fi
+
+    # cosign (optional, for signed module distribution)
+    if command -v cosign >/dev/null 2>&1; then
+      cosign_ver=$(cosign version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      pass "cosign" "${cosign_ver:-unknown}  (timoni signing)"
+    else
+      warn "cosign" "not found — needed for signed timoni module distribution  →  https://docs.sigstore.dev/cosign/system_config/installation/"
+    fi
+
+    # kind (kind-* recipes)
+    if command -v kind >/dev/null 2>&1; then
+      kind_ver=$(kind version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      pass "kind" "${kind_ver:-unknown}  (kind-*)"
+    else
+      warn "kind" "not found — needed for kind-* recipes  →  https://kind.sigs.k8s.io/docs/user/quick-start/#installation"
+    fi
+
+    # kubectl 1.28+ (kind-* recipes)
+    if command -v kubectl >/dev/null 2>&1; then
+      kubectl_ver=$(kubectl version --client -o json 2>/dev/null | grep -oE '"gitVersion": "v[0-9]+\.[0-9]+\.[0-9]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      pass "kubectl" "${kubectl_ver:-unknown}  (kind-*)"
+    else
+      warn "kubectl" "not found — needed for kind-* recipes  →  https://kubernetes.io/docs/tasks/tools/"
+    fi
+
+    # helm 3+ (kind-* Traefik install)
+    if command -v helm >/dev/null 2>&1; then
+      helm_ver=$(helm version --short 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      pass "helm" "${helm_ver:-unknown}  (kind-* Traefik)"
+    else
+      warn "helm" "not found — needed for Traefik install in kind-*  →  https://helm.sh/docs/intro/install/"
+    fi
+
     echo ""
     echo "────────────────────────────────────────"
     if [ "$failed" = "true" ]; then
@@ -250,3 +294,139 @@ release-dry-run:
         --repo "https://localhost{{justfile_directory()}}" \
         --base-branch main \
         --dry-run
+
+# ── Timoni ────────────────────────────────────────────────────────────────────
+
+timoni_registry := "harbor.discover.ilabt.imec.be"
+timoni_module   := "oci://" + timoni_registry + "/library/kvasir"
+
+# Validate the Timoni module CUE schema
+[group('timoni')]
+timoni-lint:
+    timoni mod vet timoni/kvasir
+
+# Push the Timoni module to the OCI registry (version from pom.xml)
+[group('timoni')]
+timoni-push:
+    #!/usr/bin/env sh
+    set -eu
+    VERSION=$(grep -oP '(?<=<revision>)[^<]+' pom.xml)
+    echo "Pushing timoni module v${VERSION} to {{timoni_module}}..."
+    timoni mod push timoni/kvasir \
+      {{timoni_module}} \
+      --version="${VERSION}" \
+      --latest=true \
+      -a "org.opencontainers.image.source=$(git remote get-url origin)" \
+      -a "org.opencontainers.image.description=Timoni module for deploying Kvasir to Kubernetes" \
+      -a "org.opencontainers.image.vendor=imec"
+
+# List published Timoni module versions
+[group('timoni')]
+timoni-list:
+    timoni mod list {{timoni_module}}
+
+# Pull and inspect a module version: just timoni-pull 0.18.3
+[group('timoni')]
+timoni-pull version:
+    timoni mod pull {{timoni_module}}:{{version}} --output /tmp/kvasir-module
+    ls -la /tmp/kvasir-module/
+
+# ── Kind (local Kubernetes quickstart) ──────────────────────────────────────
+
+# Create Kind cluster, deploy all dependencies and Kvasir, wait for ready
+[group('kind')]
+kind-up:
+    #!/usr/bin/env sh
+    set -e
+    echo "==> Creating Kind cluster..."
+    kind create cluster --config kind/cluster-config.yaml --name kvasir --wait 60s
+    kubectl config use-context kind-kvasir
+    just kind-deploy-deps
+    just kind-deploy-traefik
+    just kind-deploy-kvasir
+    echo ""
+    echo "Kvasir is running!"
+    echo "  Kvasir:     http://kvasir.localhost"
+    echo "  Keycloak:  http://keycloak.localhost"
+    echo ""
+
+# Delete the Kind cluster
+[group('kind')]
+kind-down:
+    kind delete cluster --name kvasir
+
+# Deploy only dependency manifests (does not recreate cluster)
+[group('kind')]
+kind-deploy-deps:
+    #!/usr/bin/env sh
+    set -e
+    kubectl apply -f kind/manifests/namespaces.yaml
+    kubectl apply -f kind/manifests/postgres/postgres.yaml
+    kubectl rollout status deployment/postgresql -n openfga --timeout=120s
+    kubectl apply -f kind/manifests/clickhouse/clickhouse.yaml
+    kubectl apply -f kind/manifests/kafka/kafka.yaml
+    kubectl apply -f kind/manifests/seaweedfs/seaweedfs.yaml
+    kubectl apply -f kind/manifests/openfga/openfga.yaml
+    kubectl apply -f kind/manifests/keycloak/keycloak.yaml
+    kubectl rollout status deployment/clickhouse -n clickhouse --timeout=120s
+    kubectl rollout status deployment/kafka -n kafka --timeout=120s
+    kubectl rollout status deployment/seaweedfs -n seaweedfs --timeout=120s
+    kubectl rollout status deployment/openfga -n openfga --timeout=120s
+    kubectl rollout status deployment/keycloak -n keycloak --timeout=180s
+
+# Install Traefik via Helm, apply IngressRoutes, and patch CoreDNS for *.localhost resolution.
+[group('kind')]
+kind-deploy-traefik:
+    #!/usr/bin/env sh
+    set -e
+    helm repo add traefik https://traefik.github.io/charts --force-update
+    helm repo update
+    helm upgrade --install traefik traefik/traefik \
+      --namespace traefik --create-namespace \
+      -f kind/manifests/traefik/traefik-values.yaml \
+      --wait --timeout 120s
+    kubectl apply -f kind/manifests/traefik/ingress-routes.yaml
+    kubectl apply -f kind/manifests/coredns-patch.yaml
+    kubectl rollout restart deployment/coredns -n kube-system
+    kubectl rollout status deployment/coredns -n kube-system --timeout=60s
+
+# Deploy Kvasir via Timoni (cluster and deps must already be running).
+# Override image with KVASIR_IMAGE / KVASIR_TAG / KVASIR_PULL_POLICY env vars.
+[group('kind')]
+kind-deploy-kvasir:
+    #!/usr/bin/env sh
+    set -e
+    OVERRIDE_FILE=""
+    if [ -n "${KVASIR_IMAGE:-}" ] || [ -n "${KVASIR_TAG:-}" ] || [ -n "${KVASIR_PULL_POLICY:-}" ]; then
+      OVERRIDE_FILE="$(mktemp /tmp/kind-image-override.XXXXXX.cue)"
+      printf 'values: image: {\n' > "$OVERRIDE_FILE"
+      [ -n "${KVASIR_IMAGE:-}" ]       && printf '  repository: "%s"\n' "${KVASIR_IMAGE}"       >> "$OVERRIDE_FILE"
+      [ -n "${KVASIR_TAG:-}" ]         && printf '  tag: "%s"\n'        "${KVASIR_TAG}"         >> "$OVERRIDE_FILE"
+      [ -n "${KVASIR_PULL_POLICY:-}" ] && printf '  pullPolicy: "%s"\n' "${KVASIR_PULL_POLICY}" >> "$OVERRIDE_FILE"
+      printf '}\n' >> "$OVERRIDE_FILE"
+    fi
+    if [ -n "$OVERRIDE_FILE" ]; then
+      timoni apply -n kvasir kvasir timoni/kvasir --values kind/values-kind.cue --values "$OVERRIDE_FILE"
+      rm -f "$OVERRIDE_FILE"
+    else
+      timoni apply -n kvasir kvasir timoni/kvasir --values kind/values-kind.cue
+    fi
+
+# Run hurl API tests against the Kind cluster.
+# In CI set KIND_RESOLVE_ARGS="--resolve kvasir.localhost:80:<ip> --resolve keycloak.localhost:80:<ip>".
+# Locally defaults to empty (resolved via /etc/hosts).
+[group('kind')]
+kind-test:
+    #!/usr/bin/env sh
+    set -e
+    hurl --variables-file api-tests/hurl.env.kind \
+         --variable ts={{ts}} \
+         --test \
+         --report-junit api-tests/junit-kind.xml \
+         ${KIND_RESOLVE_ARGS:-} \
+         api-tests/
+
+# Load a locally built Docker image into the Kind cluster: just kind-load-image my-image:tag
+[group('kind')]
+kind-load-image image:
+    kind load docker-image {{image}} --name kvasir

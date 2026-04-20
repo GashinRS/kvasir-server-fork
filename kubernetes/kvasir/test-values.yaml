@@ -16,10 +16,10 @@ global:
 
   oidc:
     enabled: true
-    authServerUrl: "http://keycloak.10.10.135.157.nip.io/realms/quarkus"
+    authServerUrl: "http://keycloak.10.10.135.157.nip.io/realms/kvasir"
     clientId: "quarkus-app"
     clientSecret: "secret"
-    realm: "quarkus"
+    realm: "kvasir"
     existingSecret: ""
     clientIdSecretKey: ""
     clientSecretSecretKey: ""

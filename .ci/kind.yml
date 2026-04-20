@@ -1,0 +1,101 @@
+# .ci/kind.yml
+# Kind E2E test: spins up a Kind cluster and runs end-to-end checks against Kvasir.
+# Tool versions (kind, kubectl, helm, timoni, hurl, just) are pinned in mise.toml.
+
+# Changes that warrant a Kind-based E2E run.
+.kind-changes:
+  - &kind-changes
+    changes:
+      - "kind/**/*"
+      - "timoni/**/*"
+      - "pom.xml"
+      - "**/pom.xml"
+      - "libs/**/*"
+      - "plugins/**/*"
+      - "services/**/*"
+      - ".ci/kind.yml"
+      - ".ci/templates.yml"
+      - "Justfile"
+      - "mise.toml"
+      - "api-tests/**/*"
+
+verify:kind:
+  extends:
+    - .mise-cache-ro
+    - .docker-in-docker
+  tags: ["docker"]
+  image: $CI_TOOLS_IMAGE-docker
+  stage: verify
+  variables:
+    KIND_CLUSTER_NAME: "kvasir"
+    KUBECONFIG: "/tmp/kube-config"
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      <<: *kind-changes
+  needs:
+    - job: package:maven
+      optional: true
+  interruptible: true
+  before_script:
+    - set -xe
+    - ./.ci/scripts/wait-for-docker.sh
+    - echo "$DOCKER_TOKEN" | docker login -u $DOCKER_USER --password-stdin
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
+  script:
+    - set -xe
+    - mise install && eval "$(mise env -s bash)"
+    # Resolve which image to use (built in this pipeline, or fallback)
+    - |
+      REGISTRY="$CI_REGISTRY/$CI_PROJECT_PATH"
+      for tag in "${IMAGE_TAG:-}" "${CI_COMMIT_REF_SLUG:-}" "latest"; do
+        [ -z "$tag" ] && continue
+        if docker manifest inspect "${REGISTRY}/monolith:${tag}" > /dev/null 2>&1; then
+          export KVASIR_IMAGE="${REGISTRY}/monolith"
+          export KVASIR_TAG="${tag}"
+          echo "Using image: ${KVASIR_IMAGE}:${KVASIR_TAG}"
+          break
+        fi
+      done
+      [ -z "${KVASIR_TAG:-}" ] && echo "ERROR: no usable image found in registry" >&2 && exit 1
+      export KVASIR_PULL_POLICY="IfNotPresent"
+    - |
+      yq ea '
+        select(fi == 0) as $base | select(fi == 1) as $overlay
+        | $base
+        | .networking = $overlay.networking
+        | .nodes[0].kubeadmConfigPatches += [$overlay.controlPlanePatch]
+      ' kind/cluster-config.yaml kind/cluster-config-ci.overlay.yaml > /tmp/kind-cluster-config.yaml
+    - kind create cluster --config /tmp/kind-cluster-config.yaml --name $KIND_CLUSTER_NAME --kubeconfig "$KUBECONFIG" --wait 60s
+    - sed -i 's/0\.0\.0\.0/docker/g' "$KUBECONFIG"
+    - kubectl config use-context kind-${KIND_CLUSTER_NAME}
+    - kubectl cluster-info
+    # Deploy dependencies via just recipe (includes all rollout waits)
+    - just kind-deploy-deps
+    # Install Traefik, apply IngressRoutes, and patch CoreDNS via just recipe
+    - just kind-deploy-traefik
+    - kubectl port-forward -n traefik svc/traefik 80:80 &
+    # Deploy Kvasir with resolved image via just recipe
+    - just kind-deploy-kvasir
+    - kubectl rollout status deployment/kvasir -n kvasir --timeout=180s
+    - kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=kvasir -n kvasir --timeout=120s
+    - export KIND_RESOLVE_ARGS="--resolve kvasir.localhost:80:127.0.0.1 --resolve keycloak.localhost:80:127.0.0.1"
+    - just kind-test
+    # Secret-management cluster regression: validates rendered manifests from
+    # kind/values-kind-secrets-test.cue against the live apiserver and asserts
+    # the Deployment env contains the expected secretKeyRef shapes.
+    - .ci/scripts/kind-secrets-regression.sh
+  after_script:
+    - mkdir -p kind-diagnostics
+    - mise x -- kubectl get pods -A -o wide > kind-diagnostics/pods.txt 2>&1
+    - mise x -- kubectl get events -A --sort-by='.lastTimestamp' > kind-diagnostics/events.txt 2>&1
+    - mise x -- kubectl logs -n kvasir -l app.kubernetes.io/name=kvasir --tail=100 > kind-diagnostics/kvasir.txt 2>&1
+    - mise x -- kubectl logs -n kube-system -l k8s-app=kube-dns --tail=50 > kind-diagnostics/coredns.txt 2>&1
+  artifacts:
+    paths:
+      - kind-diagnostics/
+    reports:
+      junit: api-tests/junit-kind.xml
+    when: always
+    expire_in: 1 week
