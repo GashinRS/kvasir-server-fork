@@ -10,6 +10,7 @@
 # There is no post-tag version bump job — it is no longer needed.
 
 variables:
+  # renovate: datasource=docker depName=rgonnella/releasaurus
   RELEASAURUS_IMAGE: "gitlab.ilabt.imec.be:4567/discover/ci-tools/rgonnella/releasaurus:v0.17.0-rc.2"
 
 .releasaurus-image:

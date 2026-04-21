@@ -35,9 +35,11 @@ variables:
     -XX:+HeapDumpOnOutOfMemoryError
     -XX:HeapDumpPath=target/
   CI_TOOLS_REGISTRY: "gitlab.ilabt.imec.be:4567/discover/ci-tools"
+  # renovate: datasource=docker depName=registry.jetbrains.team/p/writerside/builder/writerside-builder
   WRITERSIDE_IMAGE: "${CI_TOOLS_REGISTRY}/writerside-builder:2025.04.8412"
+  # renovate: datasource=docker depName=eclipse-temurin
   QUARKUS_JIB_BASE_JVM_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:25_36-jre-noble"
-  JDK_IMAGE: "${CI_TOOLS_REGISTRY}/eclipse-temurin:25_36-jdk-noble"
+  # renovate: datasource=docker depName=gitlab.ilabt.imec.be:4567/discover/ci-tools
   CI_TOOLS_IMAGE: "${CI_TOOLS_REGISTRY}:4.1.1"
   QUARKUS_JIB_PLATFORMS: "linux/amd64,linux/arm64/v8"
   QUARKUS_CONTAINER_IMAGE_PUSH: "false"

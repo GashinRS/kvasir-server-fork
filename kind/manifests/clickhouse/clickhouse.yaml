@@ -37,7 +37,7 @@ spec:
     spec:
       containers:
         - name: clickhouse
-          image: altinity/clickhouse-server:24.8.14.10459.altinitystable
+          image: docker.io/altinity/clickhouse-server:24.8.14.10459.altinitystable
           env:
             - name: CLICKHOUSE_LOG_TO_CONSOLE
               value: "1"

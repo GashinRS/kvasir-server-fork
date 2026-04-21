@@ -43,7 +43,7 @@ spec:
     spec:
       containers:
         - name: seaweedfs
-          image: chrislusf/seaweedfs:latest
+          image: docker.io/chrislusf/seaweedfs:4.21
           args:
             - server
             - -s3

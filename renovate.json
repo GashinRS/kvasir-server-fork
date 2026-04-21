@@ -1,5 +1,30 @@
 {
   "baseBranches": ["main"],
+  "kubernetes": {
+    "fileMatch": ["^kind/manifests/.+\\.ya?ml$"]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "GitLab CI image variables — extract upstream depName from a renovate hint comment on the preceding line. Lookups go to upstream registries (Docker Hub / quay) rather than the ci-tools mirror, since the mirror just re-tags upstream releases.",
+      "fileMatch": ["^\\.gitlab-ci\\.yml$", "^\\.ci/.+\\.ya?ml$"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s*\\n\\s*\\S+:\\s*[\"']?[^\"'\\s]+:(?<currentValue>[^\"'\\s]+)[\"']?"
+      ],
+      "datasourceTemplate": "{{datasource}}",
+      "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}docker{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Inline CI image: lines that aren't variable definitions (e.g. `image: registry/foo:tag` or `name: registry/foo:tag`).",
+      "fileMatch": ["^\\.ci/.+\\.ya?ml$"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s*\\n\\s*(?:image|name):\\s*[\"']?[^\"'\\s]+:(?<currentValue>[^\"'\\s]+)[\"']?"
+      ],
+      "datasourceTemplate": "{{datasource}}",
+      "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}docker{{/if}}"
+    }
+  ],
   "packageRules": [
     {
       "matchCategories": ["helm"],
@@ -19,9 +44,35 @@
       "groupName": "Docker images"
     },
     {
+      "description": "Group all images declared in compose/ and kind/manifests/ so a single MR bumps them in lockstep and triggers both verify:compose and verify:kind. Path-based so adding a new service requires no changes here.",
+      "matchManagers": ["docker-compose", "kubernetes"],
+      "matchFileNames": ["compose/**", "kind/manifests/**"],
+      "groupName": "Backing service images",
+      "addLabels": ["dep::docker"]
+    },
+    {
       "matchManagers": ["maven", "maven-wrapper"],
       "enabled": true,
       "addLabels": ["dep::maven"]
+    },
+    {
+      "matchManagers": ["mise"],
+      "enabled": true,
+      "groupName": "Mise tools",
+      "addLabels": ["dep::ci"]
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchFileNames": ["services/ui-service/src/main/frontend/package.json"],
+      "enabled": true,
+      "addLabels": ["dep::frontend"],
+      "groupName": "Frontend dependencies"
+    },
+    {
+      "description": "CI tool images extracted via custom regex managers — group with other CI deps.",
+      "matchManagers": ["custom.regex"],
+      "addLabels": ["dep::ci"],
+      "groupName": "CI tool images"
     },
     {
       "matchCategories": ["ci"],

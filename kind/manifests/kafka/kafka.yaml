@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: apache/kafka:3.9.0
+          image: docker.io/apache/kafka:3.9.0
           env:
             - name: CLUSTER_ID
               value: "5L6g3nShT-eMCtK--X86sw"
