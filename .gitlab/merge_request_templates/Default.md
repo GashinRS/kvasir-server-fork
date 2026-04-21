@@ -4,18 +4,18 @@
      Conventional Commits (feat:, fix:, refactor:, etc.) and will become
      the squash-commit message on main. -->
 
-
-
 <!-- BREAKING CHANGES
      If this MR introduces a breaking change:
 
      1. Use `!` in the MR title, e.g. `feat!: redesign auth API`
-     2. Uncomment the BREAKING CHANGE footer below (outside of this comment
-        block) so it ends up in the squash-commit body and changelog.
-     3. If the title already tells the full story, the footer is optional.
-
-BREAKING CHANGE: Explain what broke and how to migrate.
+     2. Add a BREAKING CHANGE: description in the body of the MR, e.g.
+        If the title already tells the full story, the footer is optional.
+     4. The MR description gets added to the squash commit message on main,
+        Releasaurus then picks up the BREAKING CHANGE: description and adds it to the release notes.
+        If you don't squash commit and descriptions are warranted, make sure to add
+        BREAKING CHANGE: descriptions to the individual commits as well.
 -->
+<!-- BREAKING CHANGE: Uncomment and edit in case a description is warranted -->
 
 ## Related Issues
 
