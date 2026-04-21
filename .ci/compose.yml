@@ -42,7 +42,10 @@ verify:compose:
   script:
     - set -xe
     - mise install && eval "$(mise env -s bash)"
-    - sed -i "s%kvasir/kvasir-server/monolith:.*%$QUARKUS_CONTAINER_IMAGE_GROUP/monolith:$IMAGE_TAG%g" compose/compose.kvasir.yml
+    - KVASIR_IMAGE="$CI_REGISTRY/$CI_PROJECT_PATH/monolith"
+    - KVASIR_TAG=$(./.ci/scripts/resolve-image-tag.sh "$KVASIR_IMAGE")
+    - echo "Using image $KVASIR_IMAGE:$KVASIR_TAG"
+    - sed -i "s%kvasir/kvasir-server/monolith:.*%${KVASIR_IMAGE#*/}:$KVASIR_TAG%g" compose/compose.kvasir.yml
     - docker compose -f compose/compose.yml up -d --wait --quiet-pull --no-color
     - hurl --variables-file api-tests/hurl.env.ci --variable ts=$(date +%s) --test --report-junit api-tests/junit-compose.xml api-tests/
   after_script:

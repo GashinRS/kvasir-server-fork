@@ -46,20 +46,11 @@ verify:kind:
   script:
     - set -xe
     - mise install && eval "$(mise env -s bash)"
-    # Resolve which image to use (built in this pipeline, or fallback)
-    - |
-      REGISTRY="$CI_REGISTRY/$CI_PROJECT_PATH"
-      for tag in "${IMAGE_TAG:-}" "${CI_COMMIT_REF_SLUG:-}" "latest"; do
-        [ -z "$tag" ] && continue
-        if docker manifest inspect "${REGISTRY}/monolith:${tag}" > /dev/null 2>&1; then
-          export KVASIR_IMAGE="${REGISTRY}/monolith"
-          export KVASIR_TAG="${tag}"
-          echo "Using image: ${KVASIR_IMAGE}:${KVASIR_TAG}"
-          break
-        fi
-      done
-      [ -z "${KVASIR_TAG:-}" ] && echo "ERROR: no usable image found in registry" >&2 && exit 1
-      export KVASIR_PULL_POLICY="IfNotPresent"
+    - export KVASIR_IMAGE="$CI_REGISTRY/$CI_PROJECT_PATH/monolith"
+    - KVASIR_TAG=$(./.ci/scripts/resolve-image-tag.sh "$KVASIR_IMAGE")
+    - export KVASIR_TAG
+    - export KVASIR_PULL_POLICY="IfNotPresent"
+    - echo "Using image $KVASIR_IMAGE:$KVASIR_TAG"
     - |
       yq ea '
         select(fi == 0) as $base | select(fi == 1) as $overlay
