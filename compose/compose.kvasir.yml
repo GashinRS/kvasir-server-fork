@@ -1,13 +1,15 @@
 services:
   kvasir:
     # The Kvasir monolith bundles all Kvasir microservices into a single image (handy for development and testing)
-    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:0.18.3
+    image: gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/monolith:next
     volumes:
       # Load Kvasir bootstrap config (auto-creating a demo pod 'alice')
       - "./kvasir-config:/home/jboss/config${SELINUX_SUFFIX:-}"
     environment:
       - KVASIR_KG_CLICKHOUSE_HOST=${COMPOSE_HOSTNAME:-localhost}
       - KVASIR_KG_CLICKHOUSE_PORT=${KVASIR_PORT_CLICKHOUSE:-8123}
+      - KVASIR_KG_CLICKHOUSE_USER=kvasir
+      - KVASIR_KG_CLICKHOUSE_PASSWORD=kvasirkvasir
       - KVASIR_MESSAGING_KAFKA_BOOTSTRAP_SERVERS=${COMPOSE_HOSTNAME:-localhost}:${KVASIR_PORT_KAFKA:-9092}
       - KVASIR_STORAGE_S3_ENDPOINT=http://${COMPOSE_HOSTNAME:-localhost}:${KVASIR_PORT_S3:-8333}
       - KVASIR_STORAGE_S3_REGION=us-east-1

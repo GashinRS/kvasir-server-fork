@@ -1,16 +1,16 @@
 services:
   clickhouse:
-    #    24.8 = lts version
-    image: docker.io/altinity/clickhouse-server:24.8.14.10459.altinitystable
+    image: docker.io/clickhouse/clickhouse-server:26.3.9-alpine
     environment:
       - CLICKHOUSE_LOG_TO_CONSOLE=1
+      - CLICKHOUSE_USER=kvasir
+      - CLICKHOUSE_PASSWORD=kvasirkvasir
     ports:
       - "${KVASIR_PORT_CLICKHOUSE:-8123}:8123"
       # tcp port for clickhouse (should not be required externally)
       #- "9000:9000"
     volumes:
       - "clickhouse_data:/var/lib/clickhouse"
-      - "../plugins/clickhouse-knowledge-graph/config:/etc/clickhouse-server/users.d${SELINUX_SUFFIX:-}"
     ulimits:
       nofile:
         soft: 262144
@@ -19,7 +19,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1",
+          "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1",
         ]
       interval: 30s
       timeout: 10s
@@ -49,7 +49,7 @@ services:
       start_period: 10s
 
   kafka:
-    image: docker.io/apache/kafka:3.9.0
+    image: docker.io/apache/kafka:4.2.0
     hostname: kafka
     environment:
       # Cluster ID for KRaft mode

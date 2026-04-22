@@ -1,25 +1,3 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: clickhouse-config
-  namespace: clickhouse
-data:
-  default-user.xml: |
-    <clickhouse>
-      <users>
-        <default>
-        </default>
-      </users>
-    </clickhouse>
-  kvasir.config.xml: |
-    <clickhouse>
-        <profiles>
-            <default>
-                <allow_experimental_dynamic_type>1</allow_experimental_dynamic_type>
-            </default>
-        </profiles>
-    </clickhouse>
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,29 +15,22 @@ spec:
     spec:
       containers:
         - name: clickhouse
-          image: docker.io/altinity/clickhouse-server:24.8.14.10459.altinitystable
+          image: docker.io/clickhouse/clickhouse-server:26.3.9-alpine
           env:
             - name: CLICKHOUSE_LOG_TO_CONSOLE
               value: "1"
+            - name: CLICKHOUSE_USER
+              value: kvasir
+            - name: CLICKHOUSE_PASSWORD
+              value: kvasirkvasir
           ports:
             - containerPort: 8123
-          volumeMounts:
-            - name: config
-              mountPath: /etc/clickhouse-server/users.d/default-user.xml
-              subPath: default-user.xml
-            - name: config
-              mountPath: /etc/clickhouse-server/users.d/kvasir.config.xml
-              subPath: kvasir.config.xml
           readinessProbe:
             httpGet:
               path: /ping
               port: 8123
             initialDelaySeconds: 10
             periodSeconds: 5
-      volumes:
-        - name: config
-          configMap:
-            name: clickhouse-config
 ---
 apiVersion: v1
 kind: Service
