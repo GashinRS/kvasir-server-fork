@@ -1,3 +1,19 @@
+## [0.19.0-beta.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.18.3...v0.19.0-beta.1) - 2026-04-07
+
+### Breaking
+
+- [**breaking**] Overhaul of the ingest flow and GraphQL query resolver ([f18b35c](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/f18b35cbc6ec2787638c0994eff0a9c7d3c09f60))
+
+### Features
+
+- add Timoni module and Kind quickstart for Kubernetes deployment ([05e96e2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/05e96e250905d879a6e731205e53c372d04ac80f))
+
+### Bug Fixes
+
+- Fixed StorageApi request has already been read error (fixes #45) ([8e4f93e](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/8e4f93e31847a6470f3e524659ea2b85c1789c54))
+
+- Fixed Clickhouse operations failing for generated pod db ids consisting only of numbers ([ef26745](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/ef267456856252c134f1bc06c3df16ed04418ee6))
+
 # Changelog
 
 ## [0.18.3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/compare/v0.18.2..v0.18.3) - 2026-03-16
