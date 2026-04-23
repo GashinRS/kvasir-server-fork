@@ -11,6 +11,7 @@
       - "libs/**/*"
       - "plugins/**/*"
       - "services/**/*"
+      - "compose/compose.devservices.yml"
 
 test:maven:
   extends:

@@ -83,7 +83,7 @@ services:
       start_period: 40s
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.3
+    image: quay.io/keycloak/keycloak:26.6
     depends_on:
       - postgresql
     ports:
@@ -130,7 +130,7 @@ services:
     depends_on:
       postgresql:
         condition: service_healthy
-    image: docker.io/openfga/openfga:v1.10.1
+    image: docker.io/openfga/openfga:v1.14.2
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
       - OPENFGA_DATASTORE_URI=postgres://postgres:password@postgresql:5432/postgres?sslmode=disable
@@ -140,7 +140,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    image: docker.io/openfga/openfga:v1.10.1
+    image: docker.io/openfga/openfga:v1.14.2
     command: run
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres

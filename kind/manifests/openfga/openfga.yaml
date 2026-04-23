@@ -15,10 +15,10 @@ spec:
     spec:
       initContainers:
         - name: wait-for-postgres
-          image: docker.io/library/busybox:1.36
+          image: docker.io/library/busybox:1.37
           command: ['sh', '-c', 'until nc -z postgresql 5432; do echo "Waiting for PostgreSQL..."; sleep 2; done']
         - name: migrate
-          image: docker.io/openfga/openfga:v1.10.1
+          image: docker.io/openfga/openfga:v1.14.2
           args: ["migrate"]
           env:
             - name: OPENFGA_DATASTORE_ENGINE
@@ -27,7 +27,7 @@ spec:
               value: postgres://postgres:password@postgresql:5432/postgres?sslmode=disable
       containers:
         - name: openfga
-          image: docker.io/openfga/openfga:v1.10.1
+          image: docker.io/openfga/openfga:v1.14.2
           args: ["run"]
           env:
             - name: OPENFGA_DATASTORE_ENGINE
