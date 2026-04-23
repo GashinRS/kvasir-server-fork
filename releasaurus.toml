@@ -14,7 +14,7 @@ breaking_always_increment_major = false
 # With strategy = "static",   every prerelease has the same suffix (e.g. v1.0.0-rc).
 # To graduate back to stable: comment out suffix field and push a chore: commit.
 [prerelease]
-# suffix = "rc"
+suffix = "beta"
 strategy = "versioned"
 
 [changelog]
@@ -55,6 +55,4 @@ tag_prefix = "v"
 additional_manifest_files = [
     { path = "pom.xml",                          version_regex = "<revision>(?<version>\\d+\\.\\d+\\.\\d+[^<]*)</revision>" },
     { path = "compose/compose.kvasir.yml",       version_regex = "image:.*:(?<version>\\d+\\.\\d+\\.\\d+\\S*)" },
-    { path = "kubernetes/kvasir/Chart.yaml",     version_regex = "\\n(?:app)?[Vv]ersion:\\s*\"?(?<version>\\d+\\.\\d+\\.\\d+\\S*)" },
-    { path = "kubernetes/kvasir/values.yaml",    version_regex = "tag:\\s*\"?(?<version>\\d+\\.\\d+\\.\\d+\\S*)" },
 ]

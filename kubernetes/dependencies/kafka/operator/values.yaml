@@ -1,5 +1,0 @@
-watchAnyNamespace: true
-dashboards:
-  enabled: false
-  namespace: ~
-  label: grafana_dashboard
