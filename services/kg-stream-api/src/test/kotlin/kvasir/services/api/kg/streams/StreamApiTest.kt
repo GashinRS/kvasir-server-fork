@@ -8,6 +8,7 @@ import jakarta.ws.rs.core.HttpHeaders
 import kvasir.definitions.kg.LifeCycleEvent
 import kvasir.definitions.kg.LifeCycleEventType
 import kvasir.definitions.kg.QueryRequestEvent
+import kvasir.definitions.kg.slices.EmbeddedSliceSchema
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.definitions.storage.StorageEvent
@@ -71,7 +72,7 @@ class StreamApiTest : AbstractPodTest() {
             val input = SliceInput(
                 name = "test-slice",
                 context = TestConstants.CONTEXT,
-                schema = sliceDefinition
+                schema = EmbeddedSliceSchema(sliceDefinition)
             )
 
             val sliceUri = given()

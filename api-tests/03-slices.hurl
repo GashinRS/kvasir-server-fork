@@ -99,7 +99,10 @@ Authorization: Bearer {{token}}
     "so": "http://schema.org/"
   },
   "kss:name": "persons-carol-{{ts}}",
-  "kss:schema": "type Query { persons: [ex_Person!]! } type ex_Person { id: ID! so_givenName: String! }"
+  "kss:schema": {
+    "@type": "kss:EmbeddedSliceSchema",
+    "kss:sdl": "type Query { persons: [ex_Person!]! } type ex_Person { id: ID! so_givenName: String! }"
+  }
 }
 ```
 

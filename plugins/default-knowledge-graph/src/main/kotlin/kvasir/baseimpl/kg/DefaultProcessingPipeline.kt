@@ -13,6 +13,7 @@ import kvasir.definitions.kg.exceptions.ChangeAssertionException
 import kvasir.definitions.kg.exceptions.InvalidChangeRequestException
 import kvasir.definitions.kg.exceptions.InvalidTemplateException
 import kvasir.definitions.kg.slices.Slice
+import kvasir.definitions.kg.slices.tryReadingEmbeddedSDL
 import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.*
 import kvasir.definitions.reactive.skipToLast
@@ -24,69 +25,81 @@ private const val ASSERTION_CHECKING_PARALLELISM = 4
 
 @ApplicationScoped
 class EvaluateAssertions(
-    private val parent: KnowledgeGraph
+    private val parent: KnowledgeGraph,
+    private val repositoryFactory: RepositoryFactory
 ) {
     fun process(request: ChangeRequest): Uni<Void> {
         val startTs = System.currentTimeMillis()
         Log.debug("Evaluating assertions for change request ${request.id}...")
-        return Multi.createFrom().iterable(request.assert)
-            .onItem()
-            .transformToUni { assertion ->
-                val q = QueryRequest(
-                    context = request.context,
-                    atChangeId = request.previousChangeId,
-                    requestingUser = request.requestingUser,
-                    podId = request.podId,
-                    sliceId = request.sliceId,
-                    query = assertion.query
-                )
-                parent.query(q).toUni()
-                    .onFailure().recoverWithItem { err ->
-                        QueryResult(
-                            data = emptyMap(),
-                            errors = listOf(mapOf("message" to (err.message ?: "")))
+        // For change requests on a Slice, load the Slice schema
+        return (request.sliceId?.let { sliceId ->
+            repositoryFactory.getVersionedRepository(Slice::class, request.podId)
+                .run { request.sliceTag?.let { this.findById(sliceId, it) }?:this.findDefaultForId(sliceId) }
+                .onItem().ifNull().failWith(IllegalArgumentException("Slice not found: $sliceId"))
+                .onItem().ifNotNull().transform { it!! }
+        } ?: Uni.createFrom().nullItem())
+            .chain { slice ->
+                Multi.createFrom().iterable(request.assert)
+                    .onItem()
+                    .transformToUni { assertion ->
+                        val q = QueryRequest(
+                            context = slice?.context ?: request.context,
+                            atChangeId = request.previousChangeId,
+                            requestingUser = request.requestingUser,
+                            podId = request.podId,
+                            sliceId = request.sliceId,
+                            sliceTag = request.sliceTag,
+                            predefinedSchema = slice?.schema?.tryReadingEmbeddedSDL(),
+                            query = assertion.query
                         )
-                    }
-                    .chain { result ->
-                        if (result.errors?.isNotEmpty() == true) {
-                            Uni.createFrom()
-                                .failure(ChangeAssertionException("Error executing assertion: ${result.errors}"))
-                        } else {
-                            when (assertion.type) {
-                                KvasirVocab.AssertEmptyResult -> {
-                                    when {
-                                        result.data == null -> Uni.createFrom()
-                                            .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
-
-                                        result.data!!.isNotEmpty() -> Uni.createFrom()
-                                            .failure(ChangeAssertionException("Assertion failed: results exists for '${assertion.query}'"))
-
-                                        else -> Uni.createFrom().voidItem()
-                                    }
-                                }
-
-                                KvasirVocab.AssertNonEmptyResult -> {
-                                    when {
-                                        result.data == null -> Uni.createFrom()
-                                            .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
-
-                                        result.data!!.isEmpty() -> Uni.createFrom()
-                                            .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.query}'"))
-
-                                        else -> Uni.createFrom().voidItem()
-                                    }
-                                }
-
-                                else -> Uni.createFrom()
-                                    .failure(IllegalArgumentException("Unsupported assertion type: ${assertion.type}"))
+                        parent.query(q).toUni()
+                            .onFailure().recoverWithItem { err ->
+                                QueryResult(
+                                    data = emptyMap(),
+                                    errors = listOf(mapOf("message" to (err.message ?: "")))
+                                )
                             }
-                        }
+                            .chain { result ->
+                                if (result.errors?.isNotEmpty() == true) {
+                                    Uni.createFrom()
+                                        .failure(ChangeAssertionException("Error executing assertion: ${result.errors}"))
+                                } else {
+                                    when (assertion.type) {
+                                        KvasirVocab.AssertEmptyResult -> {
+                                            when {
+                                                result.data == null -> Uni.createFrom()
+                                                    .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
+
+                                                result.data!!.isNotEmpty() -> Uni.createFrom()
+                                                    .failure(ChangeAssertionException("Assertion failed: results exists for '${assertion.query}'"))
+
+                                                else -> Uni.createFrom().voidItem()
+                                            }
+                                        }
+
+                                        KvasirVocab.AssertNonEmptyResult -> {
+                                            when {
+                                                result.data == null -> Uni.createFrom()
+                                                    .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
+
+                                                result.data!!.isEmpty() -> Uni.createFrom()
+                                                    .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.query}'"))
+
+                                                else -> Uni.createFrom().voidItem()
+                                            }
+                                        }
+
+                                        else -> Uni.createFrom()
+                                            .failure(IllegalArgumentException("Unsupported assertion type: ${assertion.type}"))
+                                    }
+                                }
+                            }
                     }
-            }
-            .merge(ASSERTION_CHECKING_PARALLELISM)
-            .skipToLast()
-            .invoke { _ ->
-                Log.debug("Finished evaluating assertions (${request.assert.size}) for change request ${request.id} in ${System.currentTimeMillis() - startTs} ms")
+                    .merge(ASSERTION_CHECKING_PARALLELISM)
+                    .skipToLast()
+                    .invoke { _ ->
+                        Log.debug("Finished evaluating assertions (${request.assert.size}) for change request ${request.id} in ${System.currentTimeMillis() - startTs} ms")
+                    }
             }
     }
 
@@ -203,7 +216,8 @@ class MaterializeRecords(
             Log.debug("Binding 'with' clauses for change request ${request.id}...")
             // For change requests on a Slice, load the Slice schema
             (request.sliceId?.let { sliceId ->
-                repositoryFactory.getRepository(Slice::class, request.podId).findById(sliceId)
+                repositoryFactory.getVersionedRepository(Slice::class, request.podId)
+                    .run { request.sliceTag?.let { this.findById(sliceId, it) }?:this.findDefaultForId(sliceId) }
                     .onItem().ifNull().failWith(IllegalArgumentException("Slice not found: $sliceId"))
                     .onItem().ifNotNull().transform { it!! }
             } ?: Uni.createFrom().nullItem())
@@ -214,8 +228,9 @@ class MaterializeRecords(
                         requestingUser = request.requestingUser,
                         podId = request.podId,
                         sliceId = request.sliceId,
+                        sliceTag = request.sliceTag,
                         query = request.with!!,
-                        predefinedSchema = slice?.schema
+                        predefinedSchema = slice?.schema?.tryReadingEmbeddedSDL()
                     )
                     kg.query(q).toUni()
                         .chain { result ->
@@ -286,11 +301,15 @@ class SliceGraphQLBasedValidator(private val repositoryFactory: RepositoryFactor
             val startTs = System.currentTimeMillis()
             Log.debug("Validating change request ${request.id} against Slice GraphQL schema...")
             // Load Slice schema
-            repositoryFactory.getRepository(Slice::class, request.podId).findById(sliceId)
+            repositoryFactory.getVersionedRepository(Slice::class, request.podId).findById(sliceId)
                 .chain { sliceSpec ->
                     if (sliceSpec != null) {
 
-                        val validator = ChangeRequestValidator(records, sliceSpec.schema, sliceSpec.context)
+                        val validator = ChangeRequestValidator(
+                            records,
+                            sliceSpec.schema.tryReadingEmbeddedSDL(),
+                            sliceSpec.context
+                        )
                         try {
                             validator.validate()
                             Uni.createFrom().voidItem()

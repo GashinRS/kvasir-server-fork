@@ -190,7 +190,9 @@ data class Resource(
     val name: String,
     @JsonProperty("resource_scopes")
     val resourceScopes: Set<Scope>
-) : PersistentEntity()
+) : PersistentEntity() {
+    override val createdBy: String = "system"
+}
 
 enum class Scope(
     @get:JsonValue
@@ -224,4 +226,6 @@ data class UmaClientConfig(
     var clientId: String?,
     var clientSecret: String?,
     var pat: String?,
-) : PersistentEntity() {}
+) : PersistentEntity() {
+    override val createdBy: String = "system"
+}

@@ -18,14 +18,15 @@ data class ProcessedChange(
      * Change id (represents a KG state, if the change was successfully applied).
      */
     override var id: String,
+    override var createdBy: String,
     /**
      * Allows matching the ProcessedChange to the original Change Request.
      */
     var origRequestId: String,
-    var requestingUser: String,
     var podId: String,
     var processingHistory: List<ChangeProcessingHistoryEntry>,
     var sliceId: String? = null,
+    var sliceTag: String? = null,
     var nrOfInserts: Long = 0,
     var nrOfDeletes: Long = 0,
     var associatedReferences: List<AssociatedReference> = emptyList()

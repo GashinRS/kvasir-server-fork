@@ -30,6 +30,10 @@ data class ChangeRequest(
      */
     val sliceId: String? = null,
     /**
+     * The specific tag of a Slice that was targeted (defaults to latest)
+     */
+    val sliceTag: String? = null,
+    /**
      * The Change Request will only be applied if all assertions resolve to true.
      */
     val assert: List<Assertion> = emptyList(),

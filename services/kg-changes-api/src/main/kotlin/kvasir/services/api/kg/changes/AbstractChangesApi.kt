@@ -35,7 +35,8 @@ abstract class AbstractChangesApi {
     protected fun fetchChange(
         fqPodId: String,
         changeId: String,
-        sliceId: String? = null
+        sliceId: String? = null,
+        sliceTag: String? = null
     ): Uni<ProcessedChange> {
         val isUUIDStateId = try {
             UUID.fromString(changeId)
@@ -62,9 +63,10 @@ abstract class AbstractChangesApi {
                         results.items.firstOrNull() ?: ProcessedChange(
                             id = changeRequestId.uuid.toString(), // Temp state id
                             origRequestId = changeId,
-                            requestingUser = changeRequestId.requestingUser,
+                            createdBy = changeRequestId.requestingUser,
                             podId = fqPodId,
                             sliceId = sliceId,
+                            sliceTag = sliceTag,
                             processingHistory = listOf(
                                 ChangeProcessingHistoryEntry(
                                     changeRequestId.timestamp(),
@@ -82,11 +84,13 @@ abstract class AbstractChangesApi {
         fqPodId: String,
         fqRequestId: String,
         requestId: String,
-        fqSliceId: String? = null
+        fqSliceId: String? = null,
+        sliceTag: String? = null,
     ): Uni<Response> {
         val filter = listOfNotNull(
             "origRequestId=='$requestId'",
-            fqSliceId?.let { "sliceId=='$fqSliceId'" }
+            fqSliceId?.let { "sliceId=='$fqSliceId'" },
+            sliceTag?.let { "sliceTag=='$sliceTag'" },
         ).joinToString(" and ")
         return repositoryFactory.getRepository(ProcessedChange::class, fqPodId)
             .find(filter, limit = 1)

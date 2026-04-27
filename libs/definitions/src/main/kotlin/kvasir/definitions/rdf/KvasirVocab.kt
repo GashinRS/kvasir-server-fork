@@ -14,6 +14,8 @@ object KvasirVocab {
     const val key = "${baseUri}key"
     const val versionId = "${baseUri}versionId"
     const val Pod = "${baseUri}Pod"
+    const val EmbeddedSliceSchema = "${baseUri}EmbeddedSliceSchema"
+    const val ExternalSliceSchema = "${baseUri}ExternalSliceSchema"
 }
 
 object KvasirNamedGraphs {

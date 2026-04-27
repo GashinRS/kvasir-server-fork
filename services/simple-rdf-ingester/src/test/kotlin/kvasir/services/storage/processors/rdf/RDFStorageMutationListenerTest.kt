@@ -1,5 +1,7 @@
 package kvasir.services.storage.processors.rdf
 
+import com.github.f4b6a3.uuid.UuidCreator
+import com.github.f4b6a3.uuid.util.UuidUtil
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
@@ -35,10 +37,11 @@ class RDFStorageMutationListenerTest : AbstractPodTest() {
 
     @Test
     fun testMutationListener() {
-        val numberOfTriples = RDFStorageMutationListenerTest::class.java.getResourceAsStream("/SWAPI-WD-data.ttl").use { inputStream ->
-            val model = Rio.parse(inputStream, RDFFormat.TURTLE)
-            model.size
-        }
+        val numberOfTriples =
+            RDFStorageMutationListenerTest::class.java.getResourceAsStream("/SWAPI-WD-data.ttl").use { inputStream ->
+                val model = Rio.parse(inputStream, RDFFormat.TURTLE)
+                model.size
+            }
 
         // Fetch the inserted records
         val records = insertFileViaS3("SWAPI-WD-data.ttl", RDFMediaTypes.TURTLE)
@@ -66,16 +69,18 @@ class RDFStorageMutationListenerTest : AbstractPodTest() {
         val records = insertFileViaS3("non-strict-booleans.nt", RDFMediaTypes.N_TRIPLES)
         assertTrue(
             records.find { it.statement.predicate == "http://example.org/boolProperty1" }?.statement?.`object`?.toBoolean()
-            ?: false)
+                ?: false
+        )
         assertFalse(
             records.find { it.statement.predicate == "http://example.org/boolProperty2" }?.statement?.`object`?.toBoolean()
-            ?: true)
+                ?: true
+        )
         // Delete the file
         deleteFileFromS3("non-strict-booleans.nt")
     }
 
     private fun insertFileViaS3(fileName: String, rdfType: String): List<ChangeRecord> {
-        val ts = Instant.now()
+        val ts = UuidUtil.getInstant(UuidCreator.getTimeOrderedEpoch())
         // Upload RDF file to S3
         given()
             .contentType(rdfType)
@@ -110,7 +115,8 @@ class RDFStorageMutationListenerTest : AbstractPodTest() {
     }
 
     private fun changeRequestMatch(report: ProcessedChange, fileName: String, afterTs: Instant): Boolean {
-        return afterTs.isBefore(report.writeTs) && report.associatedReferences.any { it.changeType == ChangeRecordType.INSERT && it.reference is S3Reference && (it.reference as S3Reference).key == fileName }
+        return report.getLastModifiedAt()!!
+            .toEpochMilli() >= afterTs.toEpochMilli() && report.associatedReferences.any { it.changeType == ChangeRecordType.INSERT && it.reference is S3Reference && (it.reference as S3Reference).key == fileName }
     }
 
 }

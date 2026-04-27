@@ -15,10 +15,11 @@ import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.kg.slices.Slice
+import kvasir.definitions.kg.slices.tryReadingEmbeddedSDL
 import kvasir.definitions.openapi.ApiDocConstants
 import kvasir.definitions.openapi.ApiDocTags
-import kvasir.definitions.persistence.Repository
 import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.persistence.VersionedRepository
 import kvasir.definitions.rdf.RDFMediaTypes
 import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLGetRelationExtractor
 import kvasir.plugins.http.common.extensions.openfga.extractors.GraphQLPostRelationExtractor
@@ -63,7 +64,7 @@ class GraphSlicesApi(
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return getSliceOrThrow404(
-            repositoryFactory.getRepository(Slice::class, fqPodId),
+            repositoryFactory.getVersionedRepository(Slice::class, fqPodId),
             fqPodId,
             fqSliceId
         ).chain { slice ->
@@ -85,7 +86,7 @@ class GraphSlicesApi(
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return getSliceOrThrow404(
-            repositoryFactory.getRepository(Slice::class, fqPodId),
+            repositoryFactory.getVersionedRepository(Slice::class, fqPodId),
             fqPodId,
             fqSliceId
         ).onItem()
@@ -119,7 +120,7 @@ class GraphSlicesApi(
                 operationName = operationName.getOrNull()
             )
         return getSliceOrThrow404(
-            repositoryFactory.getRepository(Slice::class, fqPodId),
+            repositoryFactory.getVersionedRepository(Slice::class, fqPodId),
             fqPodId,
             fqSliceId
         ).onItem()
@@ -147,7 +148,7 @@ class GraphSlicesApi(
         val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
         val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
         return getSliceOrThrow404(
-            repositoryFactory.getRepository(
+            repositoryFactory.getVersionedRepository(
                 Slice::class,
                 fqPodId
             ), fqPodId, fqSliceId
@@ -158,10 +159,131 @@ class GraphSlicesApi(
         }
     }
 
+    @Tag(name = ApiDocTags.KG_QUERYING_API)
+    @POST
+    @Path("{podId}/slices/{sliceId}/tags/{tag}/query")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+        summary = "Interact with a specific tagged version of a KG slice.",
+        description = "Execute a query on a predefined slice of the specified pod's Knowledge Graph at the version associated with the given tag."
+    )
+    @OpenFgaPolicyEnforcer(relation = GraphQLPostRelationExtractor::class, readBody = true)
+    fun queryVirtualTagged(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice.") sliceId: String,
+        @PathParam("tag") @Parameter(description = "Tag identifying the specific version of the slice to query.") tag: String,
+        input: QueryInputImpl,
+    ): Uni<QueryResult> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        return getSliceOrThrow404(
+            repositoryFactory.getVersionedRepository(Slice::class, fqPodId),
+            fqPodId,
+            fqSliceId,
+            tag
+        ).chain { slice ->
+            executeQuery(fqPodId, slice, input).toUni()
+        }
+    }
+
+    @POST
+    @Path("{podId}/slices/{sliceId}/tags/{tag}/query")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @OpenFgaPolicyEnforcer(relation = GraphQLPostRelationExtractor::class, readBody = true)
+    fun streamVirtualTagged(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") @Parameter(description = "Identifier of the Knowledge Graph slice.") sliceId: String,
+        @PathParam("tag") @Parameter(description = "Tag identifying the specific version of the slice to query.") tag: String,
+        input: QueryInputImpl,
+    ): Multi<OutboundSseEvent> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        return getSliceOrThrow404(
+            repositoryFactory.getVersionedRepository(Slice::class, fqPodId),
+            fqPodId,
+            fqSliceId,
+            tag
+        ).onItem()
+            .transformToMulti { slice ->
+                executeQuery(fqPodId, slice, input).map { sse.newEventBuilder().name("next").data(it).build() }
+            }
+    }
+
+    /**
+     * A GET variant of the tagged query endpoint for Subscriptions is provided for compatibility with SSE clients that
+     * only support GET requests.
+     */
+    @GET
+    @Path("{podId}/slices/{sliceId}/tags/{tag}/query")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestStreamElementType(MediaType.APPLICATION_JSON)
+    @OpenFgaPolicyEnforcer(relation = GraphQLGetRelationExtractor::class)
+    fun streamVirtualViaGetTagged(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") sliceId: String,
+        @PathParam("tag") tag: String,
+        @QueryParam("query") query: String,
+        @QueryParam("variables") variables: Optional<String>,
+        @QueryParam("operationName") operationName: Optional<String>,
+    ): Multi<OutboundSseEvent> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val queryInputImpl =
+            QueryInputImpl(
+                query = query,
+                variables = variables.getOrNull()?.let { JsonObject(it).map },
+                operationName = operationName.getOrNull()
+            )
+        return getSliceOrThrow404(
+            repositoryFactory.getVersionedRepository(Slice::class, fqPodId),
+            fqPodId,
+            fqSliceId,
+            tag
+        ).onItem()
+            .transformToMulti { slice ->
+                executeQuery(fqPodId, slice, queryInputImpl).map {
+                    sse.newEventBuilder().name("next").data(it).build()
+                }
+            }
+    }
+
+    @POST
+    @Path("{podId}/slices/{sliceId}/tags/{tag}/query")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(RDFMediaTypes.JSON_LD)
+    @APIResponse(
+        responseCode = "200",
+        content = [Content(example = ApiDocConstants.JSON_LD_RESPONSE_EXAMPLE)]
+    )
+    @OpenFgaPolicyEnforcer(relation = GraphQLPostRelationExtractor::class, readBody = true)
+    fun queryVirtualJsonLDTagged(
+        @PathParam("podId") podId: String,
+        @PathParam("sliceId") sliceId: String,
+        @PathParam("tag") tag: String,
+        input: QueryInputImpl,
+    ): Uni<Any> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        return getSliceOrThrow404(
+            repositoryFactory.getVersionedRepository(Slice::class, fqPodId),
+            fqPodId,
+            fqSliceId,
+            tag
+        ).chain { slice ->
+            executeQuery(fqPodId, slice, input).toUni().map {
+                it.toJsonLD(slice.context)
+            }
+        }
+    }
+
     private fun executeQuery(
         podId: String,
         slice: Slice,
-        input: QueryInputImpl
+        input: QueryInputImpl,
+        tag: String? = null
     ): Multi<QueryResult> {
         // Parse query document
         val queryDoc = Parser.parse(input.query)
@@ -169,24 +291,35 @@ class GraphSlicesApi(
         // Execute the query
         return knowledgeGraph.query(
             QueryRequest(
-                slice.context,
+                context = slice.context,
                 securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: anonymousUserName,
-                podId,
-                slice.id,
-                input.query,
-                input.variables,
-                input.operationName,
-                slice.schema,
-                input.atTimestamp,
+                podId = podId,
+                sliceId = slice.id,
+                sliceTag = tag,
+                query = input.query,
+                variables = input.variables,
+                operationName = input.operationName,
+                predefinedSchema = slice.schema.tryReadingEmbeddedSDL(),
+                atTimestamp = input.atTimestamp,
                 // Strip URI prefix from change ID if present
-                input.atChangeId?.substringAfterLast("/")
+                atChangeId = input.atChangeId?.substringAfterLast("/")
             )
         )
     }
 }
 
-internal fun getSliceOrThrow404(sliceStore: Repository<Slice>, podId: String, sliceId: String): Uni<Slice> {
-    return sliceStore.findById(sliceId)
-        .onItem().ifNull().failWith(NotFoundException("Slice not found: $sliceId"))
+internal fun getSliceOrThrow404(
+    sliceStore: VersionedRepository<Slice>,
+    podId: String,
+    sliceId: String,
+    tag: String? = null
+): Uni<Slice> {
+    return sliceStore.run {
+        // When a tag is specified, use the matching revision. Else: use the default tag (or the latest revision on main if no such tag exists).
+        tag?.let { this.findById(sliceId, it) } ?: this.findDefaultForId(sliceId)
+    }
+        .onItem().ifNull().failWith(
+            NotFoundException(if (tag != null) "Slice tag not found: $tag" else "Slice not found: $sliceId")
+        )
         .onItem().ifNotNull().transform { it!! }
 }

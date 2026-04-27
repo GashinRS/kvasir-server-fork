@@ -4,13 +4,12 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonInclude
 import io.vertx.core.json.JsonObject
-import kvasir.definitions.annotations.Persistent
 import kvasir.definitions.annotations.GenerateNoArgConstructor
+import kvasir.definitions.annotations.Persistent
 import kvasir.definitions.annotations.StorageLevel
 import kvasir.definitions.persistence.PersistentEntity
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.KvasirVocab
-import kvasir.definitions.rdf.getJsonObject
 import java.time.Instant
 import java.util.*
 
@@ -19,6 +18,7 @@ import java.util.*
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class Pod(
     override var id: String,
+    override val createdBy: String,
     var configuration: String
 ) : PersistentEntity() {
 

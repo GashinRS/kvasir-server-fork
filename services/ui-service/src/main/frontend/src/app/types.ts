@@ -142,11 +142,18 @@ export enum ChangeResultCode {
   INTERNAL_ERROR,
 }
 
+export interface EmbeddedSliceSchema {
+  '@type': 'kss:EmbeddedSliceSchema';
+  'kss:sdl': string;
+}
+
+export type SliceSchema = EmbeddedSliceSchema;
+
 export interface Slice {
   '@id': string;
   '@context': Record<string, any>;
   'kss:name': string;
-  'kss:schema': string;
+  'kss:schema': SliceSchema;
   'kss:description'?: string;
   'kss:targetGraphs'?: any[];
 }

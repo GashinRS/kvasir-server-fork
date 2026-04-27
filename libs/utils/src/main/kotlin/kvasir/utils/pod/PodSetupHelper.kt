@@ -41,7 +41,8 @@ class PodSetupHelper {
         podId: String,
         bootstrapPodConfig: BootstrapPodConfig,
         rawPodConfig: String,
-        errorWhenExists: Boolean = false
+        errorWhenExists: Boolean = false,
+        requestingUser: String
     ): Uni<Void> {
         val podStore = repositoryFactory.getRepository(Pod::class)
         return podStore.findById(podId)
@@ -57,7 +58,7 @@ class PodSetupHelper {
                 } else {
                     // Create storage entry for the new Pod
                     Log.debug("Adding storage entry for Pod '$podId'")
-                    val newPod = Pod(podId, rawPodConfig)
+                    val newPod = Pod(podId, requestingUser, rawPodConfig)
                     podStore.persist(newPod)
                         .chain { _ ->
                             // Initialize S3 bucket for the Pod

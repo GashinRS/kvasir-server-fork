@@ -5,7 +5,8 @@ package kvasir.definitions.annotations
 annotation class Persistent(
     val storageLevel: StorageLevel,
     val collectionName: String = NO_COLLECTION_SET,
-    val modelVersion: String = "0"
+    val modelVersion: String = "0",
+    val versioned: Boolean = false
 ) {
     companion object {
         const val NO_COLLECTION_SET = "##NO_COLLECTION_SET##"

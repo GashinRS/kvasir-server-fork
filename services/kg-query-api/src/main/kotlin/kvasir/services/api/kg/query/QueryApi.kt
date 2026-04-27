@@ -86,13 +86,12 @@ class QueryApi(
         input: QueryInputWithContext
     ): QueryRequest {
         return QueryRequest(
-            input.providedContext ?: podConfig.defaultContext(),
-            securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: AuthConstants.ANONYMOUS_USERNAME,
-            podId,
-            null,
-            input.query,
-            input.variables,
-            input.operationName,
+            context = input.providedContext ?: podConfig.defaultContext(),
+            requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name ?: AuthConstants.ANONYMOUS_USERNAME,
+            podId = podId,
+            query = input.query,
+            variables = input.variables,
+            operationName = input.operationName,
             atTimestamp = input.atTimestamp,
             atChangeId = input.atChangeId?.substringAfterLast("/")
         )

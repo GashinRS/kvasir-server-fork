@@ -26,7 +26,8 @@ abstract class AbstractPodTest(
     @BeforeAll
     fun setup() {
         podUri = testHelpers.getPodUri(podName)
-        podSetupHelper.createPod(podUri, config, Json.encode(config.configuration()), errorWhenExists = true).await()
+        podSetupHelper.createPod(podUri, config, Json.encode(config.configuration()), errorWhenExists = true, "system")
+            .await()
             .indefinitely()
     }
 

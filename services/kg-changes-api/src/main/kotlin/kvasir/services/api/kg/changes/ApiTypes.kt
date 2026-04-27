@@ -44,7 +44,8 @@ data class ChangeRequestInput(
     fun toChangeRequest(
         fqPodId: String,
         principal: String,
-        sliceId: String? = null
+        sliceId: String? = null,
+        sliceTag: String? = null
     ): ChangeRequest {
         // Validate
         require(insert.isNotEmpty() || delete.isNotEmpty()) {
@@ -63,6 +64,7 @@ data class ChangeRequestInput(
             requestingUser = principal,
             podId = fqPodId,
             sliceId = sliceId,
+            sliceTag = sliceTag,
             assert = assert,
             with = with,
             insert = insert,

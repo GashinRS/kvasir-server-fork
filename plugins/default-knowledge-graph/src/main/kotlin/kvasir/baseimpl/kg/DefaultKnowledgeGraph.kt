@@ -207,8 +207,9 @@ class DefaultKnowledgeGraph(
             id = request.changeId!!,
             origRequestId = request.id,
             podId = request.podId,
-            requestingUser = request.requestingUser,
+            createdBy = request.requestingUser,
             sliceId = request.sliceId,
+            sliceTag = request.sliceTag,
             nrOfInserts = stats.insertCounter.get(),
             nrOfDeletes = stats.deleteCounter.get(),
             processingHistory = listOf(

@@ -22,8 +22,8 @@ class QuteSchemaTemplateHelper(
         return applyTemplate(initPodDBTemplate, TemplateInput(databaseFromPodId(podId)))
     }
 
-    fun setupRepository(database: String, collectionName: String): Uni<Void> {
-        return applyTemplate(initRepositoryTemplate, TemplateInput(database, collectionName))
+    fun setupRepository(database: String, collectionName: String, versioned: Boolean = false): Uni<Void> {
+        return applyTemplate(initRepositoryTemplate, TemplateInput(database, collectionName, versioned))
     }
 
     private fun applyTemplate(template: Template, input: TemplateInput): Uni<Void> {
@@ -45,4 +45,4 @@ class QuteSchemaTemplateHelper(
 
 }
 
-data class TemplateInput(val database: String, val collectionName: String? = null)
+data class TemplateInput(val database: String, val collectionName: String? = null, val versioned: Boolean = false)

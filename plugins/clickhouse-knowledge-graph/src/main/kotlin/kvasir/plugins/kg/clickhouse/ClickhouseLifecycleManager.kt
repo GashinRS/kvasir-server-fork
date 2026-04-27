@@ -27,8 +27,8 @@ class ClickhouseLifecycleManager(
         Log.debug("Making sure a Clickhouse schema exists for detected system-level entities $detectedEntities...")
         return Multi.createFrom().iterable(detectedEntities)
             .onItem().transformToUniAndConcatenate { entityClass ->
-                val (_, collectionName) = parsePersistentAnnotation(entityClass)
-                templateHelper.setupRepository(SYSTEM_DB, collectionName)
+                val (_, collectionName, _, versioned) = parsePersistentAnnotation(entityClass)
+                templateHelper.setupRepository(SYSTEM_DB, collectionName, versioned)
             }
             .skipToLast()
     }
@@ -40,8 +40,8 @@ class ClickhouseLifecycleManager(
         Log.debug("Making sure a Clickhouse schema exists for detected pod-level (podId: $podId) entities $detectedEntities...")
         return Multi.createFrom().iterable(detectedEntities)
             .onItem().transformToUniAndConcatenate { entityClass ->
-                val (_, collectionName) = parsePersistentAnnotation(entityClass)
-                templateHelper.setupRepository(databaseFromPodId(podId), collectionName)
+                val (_, collectionName, _, versioned) = parsePersistentAnnotation(entityClass)
+                templateHelper.setupRepository(databaseFromPodId(podId), collectionName, versioned)
             }
             .skipToLast()
     }

@@ -34,8 +34,8 @@ import java.net.URI
 import java.util.*
 
 @Tag(name = ApiDocTags.KG_CHANGES_API)
-@Path("{podId}/slices/{sliceId}/changes")
-class SliceChangesApi(
+@Path("{podId}/slices/{sliceId}/tags/{tag}/changes")
+class TaggedSliceChangesApi(
     private val uriInfo: KvasirUriInfo,
     private val securityIdentity: Instance<SecurityIdentity>
 ) : AbstractChangesApi() {
@@ -43,36 +43,42 @@ class SliceChangesApi(
     @Channel(Channels.CHANGES_INCOMING_PUBLISH)
     private lateinit var changeEmitter: MutinyEmitter<ChangeRequest>
 
+    // URI layout: /{podId}/slices/{sliceId}/tags/{tag}/changes
+    //   fqPodId  = getParentUri(5)  → removes changes, {tag}, tags, {sliceId}, slices
+    //   fqSliceId = getParentUri(3) → removes changes, {tag}, tags
+
     @POST
     @Consumes(RDFMediaTypes.JSON_LD)
     @Operation(
-        summary = "Perform mutations on a specific slice of the KG.",
-        description = "Post a change request, containing the requested mutations, to a slice inbox of the specified pod.",
+        summary = "Perform mutations validated against a specific tagged version of a KG slice.",
+        description = "Post a change request to a slice inbox, validated against the schema at the specified tag."
     )
     @APIResponse(responseCode = "201", description = "Change request created.")
     @OpenFgaPolicyEnforcer
-    fun processSliceChangeRequest(
+    fun processTaggedSliceChangeRequest(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
+        @PathParam("tag") tag: String,
         input: ChangeRequestInput
     ): Uni<Response> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return repositoryFactory.getVersionedRepository(Slice::class, fqPodId).findDefaultForId(fqSliceId)
-            .onItem().ifNull().failWith(NotFoundException("Slice not found"))
+        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        return repositoryFactory.getVersionedRepository(Slice::class, fqPodId).findById(fqSliceId, tag)
+            .onItem().ifNull().failWith(NotFoundException("Slice tag not found: $tag"))
             .onItem().ifNotNull().transformToUni { slice ->
                 if (slice!!.supportsChanges) {
                     val changeCommand = input.toChangeRequest(
                         fqPodId,
                         securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
                             ?: AuthConstants.ANONYMOUS_USERNAME,
-                        fqSliceId
+                        fqSliceId,
+                        tag
                     )
-                    // Publish the change request
                     changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
                         .map { _ ->
-                            Response.created(URI.create("${uriInfo.getResourceUri()}/pending/${changeCommand.id}"))
-                                .build()
+                            Response.created(
+                                URI.create("${uriInfo.getResourceUri()}/pending/${changeCommand.id}")
+                            ).build()
                         }
                         .onFailure(RecordTooLargeException::class.java)
                         .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
@@ -82,66 +88,90 @@ class SliceChangesApi(
             }
     }
 
+    // URI layout: /{podId}/slices/{sliceId}/tags/{tag}/changes/pending/{requestId}
+    //   fqPodId  = getParentUri(7) → removes {requestId}, pending, changes, {tag}, tags, {sliceId}, slices
+    //   fqSliceId = getParentUri(5) → removes {requestId}, pending, changes, {tag}, tags
+
     @Path("/pending/{requestId}")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
-    fun getPendingChangeRequest(@PathParam("requestId") requestId: String): Uni<Response> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        return handlePendingChangeRequest(fqPodId, uriInfo.getResourceUri().toString(), requestId, fqSliceId)
+    fun getPendingTaggedChangeRequest(
+        @PathParam("tag") tag: String,
+        @PathParam("requestId") requestId: String
+    ): Uni<Response> {
+        val fqPodId = uriInfo.getResourceUri().getParentUri(7).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        return handlePendingChangeRequest(fqPodId, uriInfo.getResourceUri().toString(), requestId, fqSliceId, tag)
     }
+
+    // URI layout: /{podId}/slices/{sliceId}/tags/{tag}/changes  (same as POST)
 
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
     @APIResponseSchema(ChangeReportGraph::class)
     @OpenFgaPolicyEnforcer
-    fun listSliceChangeReports(
+    fun listTaggedSliceChangeReports(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
+        @PathParam("tag") tag: String,
         @QueryParam("pageSize") @Parameter(required = false) @DefaultValue("100") pageSize: Int,
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<List<ProcessedChange>>> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
-        val fqSliceId = uriInfo.getResourceUri().getParentUri().toASCIIString()
-        return repositoryFactory.getRepository(ProcessedChange::class, fqPodId).find(
-            filter = "sliceId==\"$fqSliceId\"",
-            cursor = cursor.orElse(null),
-            limit = pageSize,
-            sort = Sort.by("id", order = SortOrder.DESC)
-        )
-            .map { result ->
-                ResponseBuilder.ok(result.items.map { qualifyProcessedChangeId(uriInfo, it) })
-                    .links(*generateLinks(uriInfo, result))
-                    .build()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(3).toASCIIString()
+        val sliceStore = repositoryFactory.getVersionedRepository(Slice::class, fqPodId)
+        return sliceStore.findById(fqSliceId, tag)
+            .onItem().ifNull().failWith(NotFoundException("Slice tag not found: $tag"))
+            .onItem().ifNotNull().transformToUni { _ ->
+                repositoryFactory.getRepository(ProcessedChange::class, fqPodId).find(
+                    filter = "sliceId==\"$fqSliceId\" and sliceTag==\"$tag\"",
+                    cursor = cursor.orElse(null),
+                    limit = pageSize,
+                    sort = Sort.by("id", order = SortOrder.DESC)
+                ).map { result ->
+                    ResponseBuilder.ok(result.items.map { qualifyProcessedChangeId(uriInfo, it) })
+                        .links(*generateLinks(uriInfo, result))
+                        .build()
+                }
             }
     }
+
+    // URI layout: /{podId}/slices/{sliceId}/tags/{tag}/changes/{changeId}
+    //   fqSliceId = getParentUri(4) → removes {changeId}, changes, {tag}, tags
+    //   fqPodId   = getParentUri(6) → removes {changeId}, changes, {tag}, tags, {sliceId}, slices
 
     @Path("{changeId}")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
     @OpenFgaPolicyEnforcer
-    fun getSliceChangeReport(
+    fun getTaggedSliceChangeReport(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
+        @PathParam("tag") tag: String,
         @PathParam("changeId") changeId: String
     ): Uni<ProcessedChange> {
-        val fqSliceId = uriInfo.getResourceUri().getParentUri(2).toASCIIString()
-        val fqPodId = uriInfo.getResourceUri().getParentUri(4).toASCIIString()
-        return fetchChange(fqPodId, changeId, fqSliceId).map { qualifyProcessedChangeId(uriInfo, it) }
+        val fqSliceId = uriInfo.getResourceUri().getParentUri(4).toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(6).toASCIIString()
+        return fetchChange(fqPodId, changeId, fqSliceId, tag).map { qualifyProcessedChangeId(uriInfo, it) }
     }
+
+    // URI layout: /{podId}/slices/{sliceId}/tags/{tag}/changes/{changeId}/records
+    //   fqPodId = getParentUri(7) → removes records, {changeId}, changes, {tag}, tags, {sliceId}, slices
+    //   changeId (@PathParam) is passed directly – the stored change_id is the bare UUID, not a full URI
 
     @Path("{changeId}/records")
     @GET
     @Produces(RDFMediaTypes.JSON_LD)
     @OpenFgaPolicyEnforcer
-    fun getSliceChangeRecords(
+    fun getTaggedSliceChangeRecords(
         @PathParam("podId") podId: String,
         @PathParam("sliceId") sliceId: String,
+        @PathParam("tag") tag: String,
         @PathParam("changeId") changeId: String,
         @QueryParam("pageSize") @Parameter(required = false) @DefaultValue("2500") pageSize: Int,
         @QueryParam("cursor") @Parameter(required = false) cursor: Optional<String>
     ): Uni<RestResponse<ChangeRecords>> {
-        val fqPodId = uriInfo.getResourceUri().getParentUri(5).toASCIIString()
+        val fqPodId = uriInfo.getResourceUri().getParentUri(7).toASCIIString()
         return listChangeRecords(
             uriInfo,
             ChangeRecordRequest(
@@ -154,3 +184,4 @@ class SliceChangesApi(
     }
 
 }
+

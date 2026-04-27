@@ -102,7 +102,7 @@ class CHFilterVisitor<T : PersistentEntity>(private val entityClass: KClass<T>) 
 internal fun mapSelector(entityClass: KClass<*>, selector: String): String {
     return when (selector) {
         "id" -> "id"
-        "writeTs" -> "write_ts"
+        "revisionId" -> "revision_id"
         else -> {
             val property = entityClass.memberProperties.find { it.name == selector }
                 ?: throw RuntimeException("No backing property found for filter on '$selector' in entity '${entityClass.simpleName}'")

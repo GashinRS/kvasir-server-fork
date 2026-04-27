@@ -85,6 +85,7 @@ class Initializer(
                             podId,
                             podConfig,
                             customMapper.writeValueAsString(podConfig.configuration()),
+                            requestingUser = "init-service",
                         )
                     }.concatenate()
                     .onCompletion()

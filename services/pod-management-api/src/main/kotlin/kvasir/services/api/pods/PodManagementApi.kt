@@ -67,15 +67,20 @@ class PodManagementApi(
     fun register(input: RegisterPodInput): Uni<Response> {
         // This basic implementation check if the pod already exists in a non-atomic way.
         val fqPodId = uriInfo.getResourceUri().getChildUri(input.name).toASCIIString()
-        return podSetupHelper.createPod(fqPodId, input, input.configuration, errorWhenExists = true)
+        return podSetupHelper.createPod(
+            fqPodId,
+            input,
+            input.configuration,
+            errorWhenExists = true,
+            requestingUser = getPrincipal()
+        )
             .chain { _ ->
                 // Emit life-cycle event when the Pod was successfully created
                 lifecycleEventEmitter.send(
                     LifeCycleEvent(
                         eventType = LifeCycleEventType.POD_CREATED,
                         podId = fqPodId,
-                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
-                            ?: AuthConstants.ANONYMOUS_USERNAME,
+                        requestingUser = getPrincipal(),
                     )
                 )
             }
@@ -133,8 +138,6 @@ class PodManagementApi(
                 it
             }
     }
-
-
 
 
     @GET
@@ -197,7 +200,9 @@ class PodManagementApi(
             if (existingPod == null) {
                 Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build())
             } else {
-                podStore.persist(existingPod.copyAndKeepUmaCredentials(input.configuration))
+                val updatedPod =
+                    existingPod.copyAndKeepUmaCredentials(input.configuration).copy(createdBy = getPrincipal())
+                podStore.persist(updatedPod)
                     // When updating the podConfig, it is best to invalidate any cached UmaClients for this pod
                     .chain { _ ->
                         umaClientManager.invalidatePodConfigCache(fqPodId)
@@ -208,8 +213,7 @@ class PodManagementApi(
                             LifeCycleEvent(
                                 eventType = LifeCycleEventType.POD_UPDATED,
                                 podId = fqPodId,
-                                requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
-                                    ?: AuthConstants.ANONYMOUS_USERNAME
+                                requestingUser = getPrincipal()
                             )
                         )
                     }
@@ -237,8 +241,7 @@ class PodManagementApi(
                     LifeCycleEvent(
                         eventType = LifeCycleEventType.POD_DELETED,
                         podId = fqPodId,
-                        requestingUser = securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
-                            ?: AuthConstants.ANONYMOUS_USERNAME
+                        requestingUser = getPrincipal()
                     )
                 )
             }
@@ -251,7 +254,7 @@ class PodManagementApi(
             val keys = path.split(".")
             var idx = 0;
             var obj = json;
-            while (idx < keys.size-1) {
+            while (idx < keys.size - 1) {
                 obj = obj.getJsonObject(keys[idx], JsonObject())
                 idx++;
             }
@@ -261,6 +264,11 @@ class PodManagementApi(
             }
         }
         return json.encode();
+    }
+
+    private fun getPrincipal(): String {
+        return securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
+            ?: AuthConstants.ANONYMOUS_USERNAME
     }
 
 }

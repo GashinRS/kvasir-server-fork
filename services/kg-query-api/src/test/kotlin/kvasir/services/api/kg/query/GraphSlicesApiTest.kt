@@ -12,6 +12,7 @@ import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.kg.changes.ChangeRequest
 import kvasir.definitions.kg.changes.ChangeStatusCode
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
+import kvasir.definitions.kg.slices.EmbeddedSliceSchema
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.JsonLdKeywords
@@ -81,11 +82,11 @@ class GraphSlicesApiTest : AbstractPodTest() {
             id = sliceUri,
             name = sliceName,
             description = "",
-            author = "alice",
+            createdBy = "alice",
             context = TestConstants.CONTEXT,
-            schema = sliceDefinition
+            schema = EmbeddedSliceSchema(sliceDefinition)
         )
-        repositoryFactory.getRepository(Slice::class, podUri).persist(slice).await().indefinitely()
+        repositoryFactory.getVersionedRepository(Slice::class, podUri).persist(slice).await().indefinitely()
 
 
         // Populate some data
@@ -271,6 +272,59 @@ class GraphSlicesApiTest : AbstractPodTest() {
         val returnedPersonData = result.getDataField<Map<String, Any>>("person")!!
         assertEquals("John", returnedPersonData["so_givenName"])
         assertEquals("Doe", returnedPersonData["familyName"])
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
+    @Order(9)
+    fun testTaggedSliceQuery() {
+        // Tag the current (latest) version of the existing slice
+        val tagName = "stable"
+        val currentSlice = repositoryFactory.getVersionedRepository(Slice::class, podUri).findById(sliceUri).await()
+            .indefinitely()!!
+        repositoryFactory.getVersionedRepository(Slice::class, podUri).persist(currentSlice, setOf(tagName)).await()
+            .indefinitely()
+
+        // Query via the tagged endpoint – should return the same filtered persons as the regular query
+        val result = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .accept(MediaType.APPLICATION_JSON)
+            .body(QueryInputImpl(query = "{ persons { id so_givenName familyName } }"))
+            .post("{podId}/slices/{sliceId}/tags/{tag}/query", podName, sliceName, tagName)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+
+        // The slice has a @filter on so_email – only the 5 persons with the specific email domain should be returned
+        val persons = result.getDataField<List<Map<String, Any>>>("persons")!!
+        assertEquals(5, persons.size)
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
+    @Order(10)
+    fun testTaggedSliceQueryWithNonExistentTag() {
+        // A non-existent tag must produce a 404
+        given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .accept(MediaType.APPLICATION_JSON)
+            .body(QueryInputImpl(query = "{ persons { id } }"))
+            .post("{podId}/slices/{sliceId}/tags/{tag}/query", podName, sliceName, "nonexistent-tag")
+            .then()
+            .statusCode(404)
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
+    @Order(11)
+    fun testTaggedSliceQueryNonExistentSliceReturns404() {
+        given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .accept(MediaType.APPLICATION_JSON)
+            .body(QueryInputImpl(query = "{ persons { id } }"))
+            .post("{podId}/slices/{sliceId}/tags/{tag}/query", podName, "nonexistent-slice", "v1")
+            .then()
+            .statusCode(404)
     }
 
 }

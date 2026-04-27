@@ -58,7 +58,7 @@ class TestClickhouseChangeLog {
             ProcessedChange(
                 id = id,
                 origRequestId = id,
-                requestingUser = "alice",
+                createdBy = "alice",
                 podId = testRunId,
                 processingHistory = listOf(
                     ChangeProcessingHistoryEntry(
@@ -88,9 +88,9 @@ class TestClickhouseChangeLog {
         // Test filter and ordering
         val selectedSliceId = sliceRefs.filterNotNull().random()
         val filteredRecords =
-            changeHistory.find("sliceId=='$selectedSliceId'", sort = Sort.descending("writeTs")).await().indefinitely()
+            changeHistory.find("sliceId=='$selectedSliceId'", sort = Sort.descending("revisionId")).await().indefinitely()
         val expectedFilteredRecords = historyRecords.filter { it.sliceId == selectedSliceId }
-            .sortedByDescending { it.writeTs }
+            .sortedByDescending { it.revisionId }
         assertEquals(expectedFilteredRecords, filteredRecords.items)
 
         // Test ordering by POJO field

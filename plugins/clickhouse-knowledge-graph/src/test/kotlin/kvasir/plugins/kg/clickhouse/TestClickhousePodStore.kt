@@ -37,6 +37,7 @@ class TestClickhousePodStore {
         val pods = (1..10).map { i ->
             Pod(
                 "http://example.com/pod$i",
+                createdBy = "system",
                 Json.encode(mapOf(KvasirVocab.autoIngestRDF to true, "http://example.org/testRunId" to testRunId))
             )
         }

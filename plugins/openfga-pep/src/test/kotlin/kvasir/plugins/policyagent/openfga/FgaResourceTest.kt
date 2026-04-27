@@ -46,7 +46,7 @@ class FgaResourceTest {
     fun setup() {
         podId = "${config.baseUri()}${testRunId}"
         // Create a pod store for the test
-        val pod = Pod(podId, "{}")
+        val pod = Pod(podId, "system", "{}")
         repositoryFactory.getRepository(Pod::class).persist(pod).await().indefinitely()
         // Init openfga-policy-agent
         authLifecycleManager.initializeForPod(

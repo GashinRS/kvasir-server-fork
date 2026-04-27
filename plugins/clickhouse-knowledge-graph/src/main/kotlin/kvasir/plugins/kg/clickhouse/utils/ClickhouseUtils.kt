@@ -28,11 +28,15 @@ internal fun parsePersistentAnnotation(entityClass: Class<out PersistentEntity>)
     return ParsedPersistentAnnotation(
         persistent.storageLevel,
         persistent.collectionName.takeIf { it != Persistent.NO_COLLECTION_SET }
-            ?: "${entityClass.simpleName.lowercase()}s", persistent.modelVersion)
+            ?: "${entityClass.simpleName.lowercase()}s",
+        persistent.modelVersion,
+        persistent.versioned
+    )
 }
 
 data class ParsedPersistentAnnotation(
     val storageLevel: StorageLevel,
     val collectionName: String,
-    val modelVersion: String
+    val modelVersion: String,
+    val versioned: Boolean = false
 )

@@ -10,6 +10,7 @@ import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.changes.Assertion
 import kvasir.definitions.kg.changes.ChangeStatusCode
+import kvasir.definitions.kg.slices.EmbeddedSliceSchema
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.*
@@ -309,14 +310,14 @@ class InboxApiTest : AbstractPodTest() {
     fun testSliceInbox() {
         // Define Slice
         val sliceId = "$podUri/slices/test"
-        repositoryFactory.getRepository(Slice::class, podUri).persist(
+        repositoryFactory.getVersionedRepository(Slice::class, podUri).persist(
             Slice(
                 sliceId,
+                createdBy = "alice",
                 TestConstants.CONTEXT,
-                "alice",
                 "test",
                 "",
-                """
+                EmbeddedSliceSchema(sdl="""
                     type Mutation {
                         insert(input: PersonInput!): ID!
                         delete(input: PersonInput!): ID!
@@ -328,7 +329,7 @@ class InboxApiTest : AbstractPodTest() {
                       so_familyName: String! @shape(minLength: 2)
                       so_email: [String!]
                     }
-                """.trimIndent(),
+                """.trimIndent()),
                 supportsChanges = true
             )
         ).await().indefinitely()

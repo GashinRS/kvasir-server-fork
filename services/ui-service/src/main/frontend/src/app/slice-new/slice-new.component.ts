@@ -20,7 +20,7 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { SdlPreviewComponent } from '../modals/sdl-preview/sdl-preview.component';
 import { DevSettingsService } from '../services/dev-settings.service';
 import { KvasirService } from '../services/kvasir.service';
-import { SliceInput } from '../types';
+import { EmbeddedSliceSchema, SliceInput } from '../types';
 import { KSS_FQN, KSS_PREFIX } from '../util/constants';
 import { NzPopoverModule } from 'ng-zorro-antd/popover';
 
@@ -103,7 +103,7 @@ export class SliceNewComponent {
       let sliceInput = {
         '@context': context,
         'kss:name': name,
-        'kss:schema': schema,
+        'kss:schema': { '@type': 'kss:EmbeddedSliceSchema', 'kss:sdl': schema } as EmbeddedSliceSchema,
       } as SliceInput;
 
       if (description) {
@@ -140,7 +140,7 @@ export class SliceNewComponent {
       let sliceInput = {
         '@context': context,
         'kss:name': name,
-        'kss:schema': schema,
+        'kss:schema': { '@type': 'kss:EmbeddedSliceSchema', 'kss:sdl': schema } as EmbeddedSliceSchema,
       } as SliceInput;
 
       if (description) {

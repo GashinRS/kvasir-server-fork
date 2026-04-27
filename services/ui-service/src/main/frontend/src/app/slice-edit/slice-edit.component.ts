@@ -18,7 +18,7 @@ import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { map, tap } from 'rxjs';
 import { KvasirService } from '../services/kvasir.service';
-import { Slice, SliceInput } from '../types';
+import { EmbeddedSliceSchema, Slice, SliceInput } from '../types';
 import { NzCodeEditorModule } from 'ng-zorro-antd/code-editor';
 import { DevSettingsService } from '../services/dev-settings.service';
 import { KSS_FQN, KSS_PREFIX } from '../util/constants';
@@ -50,10 +50,12 @@ export class SliceEditComponent {
     stream: () =>
       this.route.data.pipe(
         map(({ slice }) => slice),
-        tap(
-          (slice: any) =>
-            (slice['@context'] = JSON.stringify(slice['@context'], null, 4)),
-        ),
+        tap((slice: any) => {
+          slice['@context'] = JSON.stringify(slice['@context'], null, 4);
+          if (slice['kss:schema']?.['kss:sdl'] !== undefined) {
+            slice['kss:schema'] = slice['kss:schema']['kss:sdl'];
+          }
+        }),
       ),
   });
 
@@ -97,7 +99,7 @@ export class SliceEditComponent {
       let sliceInput = {
         '@context': context,
         'kss:name': name,
-        'kss:schema': schema,
+        'kss:schema': { '@type': 'kss:EmbeddedSliceSchema', 'kss:sdl': schema } as EmbeddedSliceSchema,
       } as SliceInput;
 
       if (description) {

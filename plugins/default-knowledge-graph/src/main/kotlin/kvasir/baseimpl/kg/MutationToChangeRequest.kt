@@ -59,6 +59,7 @@ class MutationToChangeRequest(private val request: QueryRequest) {
             requestingUser = request.requestingUser,
             podId = request.podId,
             sliceId = request.sliceId,
+            sliceTag = request.sliceTag,
             insert = inserts,
             delete = deletes
         )

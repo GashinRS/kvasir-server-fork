@@ -395,9 +395,16 @@ To register the Slice, post the definition to the `/slices` endpoint of the Pod:
   },
   "kss:name": "PersonDemoSlice",
   "kss:description": "Demo Slice exposing Persons that have an '@example.org' email address",
-  "kss:schema": "type Query { persons: [schema_Person!]! } type schema_Person { id: ID! schema_givenName: String! schema_familyName: String! schema_email: [String!]! @shape(pattern: \".*@example\\\\.org$\") }"
+  "kss:schema": {
+    "@type": "kss:EmbeddedSliceSchema",
+    "kss:sdl": "type Query { persons: [schema_Person!]! } type schema_Person { id: ID! schema_givenName: String! schema_familyName: String! schema_email: [String!]! @shape(pattern: \".*@example\\\\.org$\") }"
+  }
 }
 ```
+
+The `kss:schema` property is an object rather than a plain string, allowing different schema representations to be
+supported in the future. Currently, only `kss:EmbeddedSliceSchema` is supported, which embeds the GraphQL SDL directly
+in the Slice definition via the `kss:sdl` property.
 
 If the Slice is registered successfully, the operation will return a `201 Created` status code and the response headers
 will include a `Location` header with the URL of the newly created Slice.
@@ -604,6 +611,101 @@ input InstrumentInput @class(iri: "ex:Instrument") {
     priceDecimal: Float @predicate(iri: "ex:price")
 }
 ```
+
+### Versioning Slices with tags
+
+A Slice evolves over time: the schema may grow, filters may be tightened, new mutation types may be added. **Tags** let
+you label specific versions of a Slice with a human-readable name (e.g. `v1`, `2.1.0`, `stable`) so that consumers
+can pin to a known-good schema while the Slice author continues to iterate. This is particularly useful when multiple
+clients are interfacing with the same Slice and need to be able to evolve at a different pace.
+
+#### Tagging a Slice
+
+Tags are applied by including a `kss:tags` property in the body of a **create** (`POST /{podId}/slices`) or
+**update** (`PUT /{podId}/slices/{sliceId}`) request. Each call stores the current schema as a new immutable version
+and associates that version with all supplied tags.
+
+**Example — create a Slice and immediately tag it `v1` and `default`:**
+
+```json
+{
+  "@context": {
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
+    "schema": "http://schema.org/"
+  },
+  "kss:name": "PersonDemoSlice",
+  "kss:schema": {
+    "@type": "kss:EmbeddedSliceSchema",
+    "kss:sdl": "..."
+  },
+  "kss:tags": [
+    "v1",
+    "default"
+  ]
+}
+```
+
+Later, when the schema is updated, the same approach applies — publish the new schema and give it a new tag while
+retaining the old ones:
+
+```json
+{
+  "@context": {
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
+    "schema": "http://schema.org/"
+  },
+  "kss:name": "PersonDemoSlice",
+  "kss:schema": {
+    "@type": "kss:EmbeddedSliceSchema",
+    "kss:sdl": "..."
+  },
+  "kss:tags": [
+    "v2"
+  ]
+}
+```
+
+#### The `default` tag
+
+The tag named **`default`** has a special meaning: whenever a client uses the standard (non-tagged) Slice endpoints, the
+version pinned to `default` is served. If no `default` tag is present, the newest persisted version is used instead.
+
+This means you can release breaking schema changes safely — clients that pin to a tag are unaffected until you
+deliberately advance the `default` tag to the new version.
+
+#### Tagged Slice endpoints
+
+All three Slice API surfaces have tagged variants. The tag is inserted after `.../tags/{tag}` in the URL:
+
+**Slice management**
+
+| Method   | Path                                                          | Accept                | Description                                                                                                                                                  |
+|----------|---------------------------------------------------------------|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `GET`    | `/{podId}/slices/{sliceId}/tags`                              | `application/ld+json` | List all tags and their associated revisions.                                                                                                                |
+| `GET`    | `/{podId}/slices/{sliceId}/tags/{tag}`                        | `application/ld+json` | Retrieve the Slice definition (JSON-LD) at the given tag.                                                                                                    |
+| `PUT`    | `/{podId}/slices/{sliceId}/tags/{tag}`                        |                       | Update the Slice definition at the given tag (when no tags are explicitly specified, otherwise a new revision is created  based on the content at this tag). |
+| `GET`    | `/{podId}/slices/{sliceId}/tags/{tag}`                        | `text/plain`          | Retrieve the schema SDL (plain text) at the given tag.                                                                                                       |
+| `DELETE` | `/{podId}/slices/{sliceId}/tags/{tag}`                        |                       | Remove a tag (the underlying version is not deleted).                                                                                                        |
+| `PUT`    | `/{podId}/slices/{sliceId}/tags/{sourceTag}/alias/{aliasTag}` |                       | Allows adding an additional tag to the revision tagged with the sourceTag.                                                                                   |
+
+**Querying**
+
+| Method         | Path                                         | Description                                                  |
+|----------------|----------------------------------------------|--------------------------------------------------------------|
+| `POST`         | `/{podId}/slices/{sliceId}/tags/{tag}/query` | Execute a GraphQL query against the schema at the given tag. |
+| `GET` / `POST` | `/{podId}/slices/{sliceId}/tags/{tag}/query` | Subscribe (SSE) using the schema at the given tag.           |
+
+**Changes**
+
+| Method | Path                                                              | Description                                                                                                                                            |
+|--------|-------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `POST` | `/{podId}/slices/{sliceId}/tags/{tag}/changes`                    | Submit a change request; validated against the schema at the given tag.                                                                                |
+| `GET`  | `/{podId}/slices/{sliceId}/tags/{tag}/changes`                    | List change reports for the slice. Behaves exactly the same as the non-tagged endpoint (as the tag is used only for validation of the Change Request). |
+| `GET`  | `/{podId}/slices/{sliceId}/tags/{tag}/changes/{changeId}`         | Retrieve a specific change report.                                                                                                                     |
+| `GET`  | `/{podId}/slices/{sliceId}/tags/{tag}/changes/{changeId}/records` | Retrieve the individual RDF change records for a specific change.                                                                                      |
+
+> A non-existent tag always results in a `404 Not Found` response.
+> {style="note"}
 
 <seealso>
     <category ref="related">
