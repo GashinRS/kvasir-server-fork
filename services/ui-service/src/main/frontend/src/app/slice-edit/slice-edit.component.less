@@ -1,15 +1,6 @@
-:host {
-    padding: 24px;
-}
-
 .ant-page-header {
-    padding-left: 16px;
+    padding-left: 0px;
     padding-right: 0px;
-}
-
-.ant-form {
-    padding-left: 16px;
-    padding-right: 16px;
 }
 
 nz-form-label {
@@ -33,4 +24,25 @@ nz-form-item {
 .field {
     height: 133px;
     border: 1px solid rgb(217, 217, 217);
+}
+
+.checking {
+    display: flex;
+    gap: 6px;
+    font-size: 13px;
+    color: #a9a9a9;
+    font-weight: normal;
+    margin-left: 10px;
+    align-items: center;
+
+    nz-spin {
+        margin-bottom: 1px;
+    }
+}
+
+.buttons {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    justify-items: start;
+    column-gap: 8px;
 }

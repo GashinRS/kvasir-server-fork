@@ -1,47 +1,90 @@
-:host {
-    padding: 24px;
-}
+app-slices {
 
-.ant-page-header {
-    padding-left: 16px;
-    padding-right: 0px;
-}
+    .ant-collapse-header {
+        height: 67px;
+    }
 
-.actions {
-    text-align: end;
-}
+    .ant-page-header {
+        padding-left: 0px;
+        padding-right: 0px;
+    }
 
-.name {
-    padding: 0 16px !important;
-}
+    .ant-collapse-extra {
+        align-self: center;
+    }
 
-.actions-td {
-    padding: 16px 0 16px 16px !important;
-}
+    .header {
+        margin-bottom: 10px;
+    }
 
-.id {
-    cursor: help;
-}
+    .details {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        justify-items: start;
+        align-items: center;
+        column-gap: 16px;
+    }
 
-.desc {
-    font-size: 13px;
-    font-style: italic;
-    color: #777;
-    margin: unset;
-}
+    .actions {
+        text-align: end;
+    }
 
-td {
-    padding: 0 !important;
-}
+    .actions-td {
+        padding: 16px 0 16px 16px !important;
+    }
 
-.click-to-copy {
-    margin-left: 8px;
-    color: #999;
-    font-weight: normal;
-}
+    .id {
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        width: 100%;
 
-.clicked {
-    margin-left: 8px;
-    font-weight: normal;
-    color: #143049;
+        .label {
+            font-weight: 500;
+            padding-right: 8px;
+            flex-shrink: 0;
+        }
+
+        .value {
+            user-select: all;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .value:hover {
+            text-decoration: underline dotted;
+        }
+    }
+
+    .desc {
+        font-size: 13px;
+        font-style: italic;
+        color: #777;
+        margin: unset;
+    }
+
+    .scroll-container {
+        position: relative;
+        height: calc(calc(8 * 68px) + 1px);
+        overflow-y: auto;
+    }
+
+    app-slice-lineage {
+        margin-left: 10px;
+    }
+
+    .tagLink {
+        font-size: 12px;
+        color: #a9a9a9;
+
+        &:hover {
+            text-decoration: underline;
+            color: #1890ff;
+        }
+    }
+
 }

@@ -1,7 +1,12 @@
 import { Routes } from '@angular/router';
 import { sessionActiveGuard } from './guards';
 import { podResolver } from './resolvers/pod.resolver';
-import { sliceResolver } from './resolvers/slice.resolver';
+import {
+  aliasTagsResolver,
+  sliceResolver,
+  taggedSliceResolver,
+} from './resolvers/slice.resolver';
+import { EditMode } from './slice-edit/slice-edit.component';
 
 export const routes: Routes = [
   {
@@ -34,6 +39,9 @@ export const routes: Routes = [
     canActivate: [sessionActiveGuard],
     resolve: {
       slice: sliceResolver,
+    },
+    data: {
+      editMode: EditMode.EDIT_SLICE,
     },
     loadComponent: () =>
       import('./slice-edit/slice-edit.component').then(
@@ -69,6 +77,45 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./slice-change-new/slice-change-new.component').then(
         (x) => x.SliceChangeNewComponent,
+      ),
+  },
+  {
+    path: 'slices/:sliceId/tags',
+    canActivate: [sessionActiveGuard],
+    resolve: { slice: sliceResolver },
+    loadComponent: () =>
+      import('./slice-tags/slice-tags.component').then(
+        (x) => x.SliceTagsComponent,
+      ),
+  },
+  {
+    path: 'slices/:sliceId/tags/:tag/fork',
+    canActivate: [sessionActiveGuard],
+    resolve: {
+      slice: taggedSliceResolver,
+      aliasTags: aliasTagsResolver,
+    },
+    data: {
+      editMode: EditMode.FORK_TAG,
+    },
+    loadComponent: () =>
+      import('./slice-edit/slice-edit.component').then(
+        (x) => x.SliceEditComponent,
+      ),
+  },
+  {
+    path: 'slices/:sliceId/tags/:tag/edit',
+    canActivate: [sessionActiveGuard],
+    resolve: {
+      slice: taggedSliceResolver,
+      aliasTags: aliasTagsResolver,
+    },
+    data: {
+      editMode: EditMode.EDIT_TAG,
+    },
+    loadComponent: () =>
+      import('./slice-edit/slice-edit.component').then(
+        (x) => x.SliceEditComponent,
       ),
   },
   {

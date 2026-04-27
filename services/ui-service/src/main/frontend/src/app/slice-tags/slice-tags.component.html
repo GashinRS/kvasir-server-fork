@@ -1,0 +1,112 @@
+<nz-page-header>
+  <nz-page-header-title>Tag management</nz-page-header-title>
+  <nz-page-header-subtitle
+    >List and edit tags of a slice</nz-page-header-subtitle
+  >
+</nz-page-header>
+
+@if (tags.hasValue()) {
+  <div class="header">
+    <nz-input-wrapper nzAddonBefore="Filter" nzAllowClear>
+      <input nz-input [(ngModel)]="filter" placeholder="Start typing..." />
+    </nz-input-wrapper>
+  </div>
+
+  <nz-list nzBordered>
+    <nz-list-header>
+      <div class="header-cont">
+        <span>{{ sliceName() }} tags</span>
+        <span class="help"
+          >Tags marked as default are in
+          <nz-tag nzColor="orange">orange</nz-tag>
+        </span>
+      </div>
+    </nz-list-header>
+    <div class="cont">
+      @for (tag of filteredTags(); track tag["@id"]) {
+        <nz-list-item nzNoFlex class="tag-item">
+          <div class="tag">
+            <nz-tag [nzColor]="colorForTag(tag)">{{ tag["kss:tag"] }}</nz-tag>
+          </div>
+          <div class="meta">
+            by {{ tag["kss:createdBy"] }} @
+            {{ tag["kss:createdAt"] | date: "d MMM, yyyy @ HH:mm:ss" }}
+          </div>
+          <div class="default">
+            <button
+              nz-button
+              nzType="dashed"
+              nzSize="small"
+              class="markDefaultBtn"
+              (click)="doTagAsDefault(tag)"
+            >
+              mark default
+              <app-help
+                text="Queries or changes to a slice, will be applied to the 'default' tag unless specified."
+                type="secondary"
+                [style.margin-left]="'6px'"
+              />
+            </button>
+          </div>
+          <div class="actions">
+            <ul nz-list-item-actions>
+              <nz-list-item-action>
+                <button
+                  (click)="doDelete(tag)"
+                  nz-button
+                  nzSize="small"
+                  nzType="link"
+                  nzDanger=""
+                  nzGhost
+                >
+                  delete
+                </button>
+              </nz-list-item-action>
+              <nz-list-item-action>
+                <button
+                  (click)="doEdit(tag)"
+                  nz-button
+                  nzSize="small"
+                  nzType="primary"
+                  nzGhost
+                  [nz-tooltip]="editTipTpl"
+                >
+                  <nz-icon nzType="edit"></nz-icon>
+                  edit
+                </button>
+              </nz-list-item-action>
+              <nz-list-item-action>
+                <button
+                  (click)="doFork(tag)"
+                  nz-button
+                  nzSize="small"
+                  nzType="primary"
+                  nzGhost
+                  [nz-tooltip]="forkTipTpl"
+                >
+                  <nz-icon nzType="fork"></nz-icon>
+                  fork
+                </button>
+              </nz-list-item-action>
+            </ul>
+          </div>
+        </nz-list-item>
+      } @empty {
+        <div class="empty">
+          <nz-empty
+            nzNotFoundImage="simple"
+            nzNotFoundContent="No tags found"
+          />
+        </div>
+      }
+    </div>
+  </nz-list>
+}
+
+<ng-template #editTipTpl>
+  Apply the <b>same tag</b> to a new revision
+</ng-template>
+
+<ng-template #forkTipTpl>
+  Apply a <b>new tag</b> to a new revision
+</ng-template>

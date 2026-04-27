@@ -1,0 +1,39 @@
+<div *nzModalTitle>Multiple tags reference the same revision</div>
+<div>
+  <p>
+    The slice revision tagged with
+    <nz-tag nzColor="purple" [style.margin-right]="'0'">{{ tag() }}</nz-tag> is
+    also referenced by:
+  </p>
+  <p class="tags">
+    @for (alias of aliases(); track alias) {
+      <nz-tag nzColor="blue">{{ alias }}</nz-tag>
+    }
+  </p>
+  <p>
+    Do you want to create a revision for
+    <span class="one">this tag only</span> or
+    <span class="all">all of these tags</span>?
+  </p>
+</div>
+<div *nzModalFooter class="btns">
+  <button
+    nz-button
+    type="button"
+    nzType="dashed"
+    nzDanger
+    nzGhost
+    (click)="destroyModal()"
+  >
+    Cancel</button
+  ><button
+    nz-button
+    type="button"
+    nzType="default"
+    (click)="confirmThisTagOnly()"
+  >
+    This tag only</button
+  ><button nz-button type="button" nzType="default" (click)="confirmAllTags()">
+    All tags
+  </button>
+</div>

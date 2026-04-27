@@ -3,19 +3,28 @@
   <nz-page-header-subtitle>Create a new Slice</nz-page-header-subtitle>
 </nz-page-header>
 
-<form
-  nz-form
-  [nzLayout]="'vertical'"
-  [formGroup]="inputForm"
-  [nzAutoTips]="autoTips"
-  (ngSubmit)="submitForm()"
->
-  <nz-row>
-    <nz-col nzSpan="24">
+<form nz-form [nzLayout]="'vertical'" [formRoot]="sliceInputForm">
+  <nz-row [nzGutter]="[20, 20]">
+    <nz-col [nzXs]="24" [nzLg]="14">
       <nz-form-item>
         <nz-form-label>name</nz-form-label>
         <nz-form-control>
-          <input type="text" nz-input formControlName="name" />
+          <input type="text" nz-input [formField]="sliceInputForm.name" #ctrl />
+          <app-form-errors [field]="sliceInputForm.name" />
+        </nz-form-control>
+      </nz-form-item>
+    </nz-col>
+    <nz-col [nzXs]="24" [nzLg]="10">
+      <nz-form-item>
+        <nz-form-label>Tags</nz-form-label>
+        <nz-form-control>
+          <nz-select
+            nzMode="tags"
+            nzPlaceHolder="Type and press enter or space to add tag..."
+            [nzTokenSeparators]="[' ', ',', ';']"
+            [formField]="sliceInputForm.tags"
+          >
+          </nz-select>
         </nz-form-control>
       </nz-form-item>
     </nz-col>
@@ -25,12 +34,16 @@
       <nz-form-item>
         <nz-form-label>&#64;context</nz-form-label>
         <a (click)="resetContext()">(reset)</a>
-        <nz-form-control [nzAutoTips]="autoTips">
+        <nz-form-control>
           <nz-code-editor
             class="field"
-            formControlName="context"
+            [formField]="sliceInputForm.context"
             [nzEditorOption]="settings.getCodeEditorSetting().json"
           ></nz-code-editor>
+          <app-form-errors
+            [field]="sliceInputForm.context"
+            [checkTouched]="false"
+          />
         </nz-form-control>
       </nz-form-item>
     </nz-col>
@@ -38,7 +51,11 @@
       <nz-form-item>
         <nz-form-label>description</nz-form-label>
         <nz-form-control>
-          <textarea nz-input formControlName="description" rows="6"></textarea>
+          <textarea
+            nz-input
+            [formField]="sliceInputForm.description"
+            rows="6"
+          ></textarea>
         </nz-form-control>
       </nz-form-item>
     </nz-col>
@@ -50,9 +67,13 @@
         <nz-form-control>
           <nz-code-editor
             class="editor"
-            formControlName="schema"
+            [formField]="sliceInputForm.schema"
             [nzEditorOption]="settings.getCodeEditorSetting().graphql"
           ></nz-code-editor>
+          <app-form-errors
+            [field]="sliceInputForm.schema"
+            [checkTouched]="false"
+          />
         </nz-form-control>
       </nz-form-item>
       <nz-form-item>
@@ -68,6 +89,7 @@
               nzPopoverTitle="Preview SDL schema"
               nzPopoverContent="Preview the schema like it will be exposed by Kvasir (including generated types and arguments)."
               nzPopoverPlacement="topLeft"
+              [disabled]="sliceInputForm().invalid()"
             >
               Preview
             </button>
@@ -78,7 +100,7 @@
               nz-button
               type="submit"
               nzType="primary"
-              [disabled]="inputForm.invalid"
+              [disabled]="sliceInputForm().invalid()"
             >
               Save
             </button>

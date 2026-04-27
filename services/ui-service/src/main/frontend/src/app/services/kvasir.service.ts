@@ -30,6 +30,8 @@ import {
   RegisterPodInput,
   Slice,
   SliceInput,
+  EntityTag,
+  SliceSummary,
 } from '../types';
 import { deserialize, parseLinkHeader, serialize } from '../util/utils';
 import { ConfigService } from './config.service';
@@ -210,11 +212,75 @@ export class KvasirService {
       .pipe(this.convertErrorToKvasirError());
   }
 
-  listSlices(): Observable<Slice[]> {
+  listSlices(): Observable<SliceSummary[]> {
     return this.http
       .get<GraphLD<Slice>>(`${this.host}/${this.session.podName()}/slices`)
       .pipe(this.convertErrorToKvasirError())
       .pipe(map((sliceLd) => sliceLd['@graph']));
+  }
+
+  listSliceTags(sliceId: string): Observable<GraphLD<EntityTag>> {
+    return this.http
+      .get<
+        GraphLD<EntityTag>
+      >(`${this.host}/${this.session.podName()}/slices/${sliceId}/tags`)
+      .pipe(this.convertErrorToKvasirError());
+  }
+
+  aliasTag(sliceId: string, tag: EntityTag, alias: string): Observable<void> {
+    return this.http
+      .put<void>(
+        `${this.host}/${this.session.podName()}/slices/${sliceId}/tags/${tag['kss:tag']}/alias/${alias}`,
+        null,
+      )
+      .pipe(this.convertErrorToKvasirError());
+  }
+
+  updateTaggedSlice(
+    sliceId: string,
+    tag: string,
+    slice: SliceInput,
+  ): Observable<void> {
+    return this.http
+      .put<void>(
+        `${this.host}/${this.session.podName()}/slices/${sliceId}/tags/${tag}`,
+        slice,
+        {
+          headers: new HttpHeaders().append(
+            'Content-Type',
+            'application/ld+json',
+          ),
+        },
+      )
+      .pipe(this.convertErrorToKvasirError());
+  }
+
+  getTaggedSlice(sliceId: string, tag: string): Observable<Slice> {
+    return this.http
+      .get<Slice>(
+        `${this.host}/${this.session.podName()}/slices/${sliceId}/tags/${tag}`,
+        { headers: new HttpHeaders().append('Accept', 'application/ld+json') },
+      )
+      .pipe(this.convertErrorToKvasirError());
+  }
+
+  deleteTag(sliceId: string, tag: string): Observable<void> {
+    return this.http
+      .delete<void>(
+        `${this.host}/${this.session.podName()}/slices/${sliceId}/tags/${tag}`,
+      )
+      .pipe(this.convertErrorToKvasirError());
+  }
+
+  getSameRevisionTags(
+    sliceId: string,
+    revisionId: string,
+  ): Observable<EntityTag[]> {
+    return this.listSliceTags(sliceId).pipe(
+      map((tagsLd) => tagsLd['@graph']),
+      map((tags) => tags.filter((t) => t['kss:revisionId'] === revisionId)),
+      this.convertErrorToKvasirError(),
+    );
   }
 
   listPods(): Observable<Pod[]> {

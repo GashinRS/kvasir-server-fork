@@ -1,4 +1,3 @@
-import { timeInterval } from 'rxjs';
 import { KSS_FGA_EXTERNAL_ACCESS } from './util/constants';
 
 export interface GraphLD<T> {
@@ -152,13 +151,43 @@ export type SliceSchema = EmbeddedSliceSchema;
 export interface Slice {
   '@id': string;
   '@context': Record<string, any>;
+  'kss:createdBy': string;
   'kss:name': string;
   'kss:schema': SliceSchema;
   'kss:description'?: string;
-  'kss:targetGraphs'?: any[];
+  'kss:supportChanges': boolean;
 }
 
-export type SliceInput = Omit<Slice, '@id'>;
+export interface SliceSummary {
+  '@id': string;
+  'kss:name': string;
+  'kss:description'?: string;
+  'kss:lineage'?: RevisionLineage;
+}
+
+export interface RevisionLineage {
+  'kss:entityId': string;
+  'kss:numberOfRevisionsAhead': number;
+  'kss:revisionId': string;
+  'kss:taggedRevisionId': string;
+  'kss:tags': string | string[];
+  'kss:previousRevision'?: RevisionLineage;
+}
+
+export interface SliceInput extends Omit<
+  Slice,
+  '@id' | 'kss:supportChanges' | 'kss:createdBy'
+> {
+  'kss:tags': string[];
+}
+
+export interface EntityTag extends Timestamped {
+  '@id': string;
+  'kss:createdBy': string;
+  'kss:createdAt': string;
+  'kss:tag': string;
+  'kss:revisionId': string;
+}
 
 export interface PodSerialized {
   '@context': Record<string, string>;

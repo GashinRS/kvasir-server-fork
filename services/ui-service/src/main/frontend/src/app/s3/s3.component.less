@@ -2,41 +2,39 @@
 @primary-color-hover: rgb(64 169 255);
 
 app-s3 {
-    padding: 24px;
-}
-
-.ant-page-header {
-    padding-left: 16px;
-    padding-right: 0px;
-}
-
-li[nz-menu-item] {
-    display: grid;
-    grid-template-columns: 1fr;
-    justify-content: stretch;
-}
-
-nz-input-wrapper {
-    .ant-input-group-addon {
-        font-family: monospace;
-        font-size: 13px;
-    }
-}
-
-td.file-type {
-    a svg {
-        fill: @primary-color;
-        transition: fill 0.3s;
+    .ant-page-header {
+        padding-left: 0px;
+        padding-right: 0px;
     }
 
-    a:hover {
-        svg {
-            fill: @primary-color-hover;
+    li[nz-menu-item] {
+        display: grid;
+        grid-template-columns: 1fr;
+        justify-content: stretch;
+    }
+
+    nz-input-wrapper {
+        .ant-input-group-addon {
+            font-family: monospace;
+            font-size: 13px;
+        }
+    }
+
+    td.file-type {
+        a svg {
+            fill: @primary-color;
+            transition: fill 0.3s;
         }
 
-        span {
-            text-decoration: underline dashed 1px;
-            text-underline-offset: 4px;
+        a:hover {
+            svg {
+                fill: @primary-color-hover;
+            }
+
+            span {
+                text-decoration: underline dashed 1px;
+                text-underline-offset: 4px;
+            }
         }
     }
 }

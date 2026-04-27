@@ -6,7 +6,7 @@ import { appConfig } from './app/app.config';
 const DEFAULT_CONFIG: AppConfig = {
   KVASIR_HOST: 'http://localhost:28080/',
   KVASIR_AUTH_HOST: 'http://localhost:28280',
-  KVASIR_AUTH_REALM: 'quarkus',
+  KVASIR_AUTH_REALM: 'kvasir',
 };
 
 fetch('./_cfg/config.json')

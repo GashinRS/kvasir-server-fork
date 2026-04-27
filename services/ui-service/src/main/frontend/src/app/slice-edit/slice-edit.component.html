@@ -1,44 +1,90 @@
 <nz-page-header>
-  <nz-page-header-title>Edit Slice</nz-page-header-title>
-  <nz-page-header-subtitle>Edit an existing Slice</nz-page-header-subtitle>
+  <nz-page-header-title>{{ pageTitle() }}</nz-page-header-title>
+  @if (tag()) {
+    <nz-page-header-tags>
+      @for (aliasTag of aliasTags(); track aliasTag) {
+        <nz-tag nzColor="blue">{{ aliasTag }}</nz-tag>
+      }
+    </nz-page-header-tags>
+  }
+  <nz-page-header-subtitle>{{ pageDescription() }}</nz-page-header-subtitle>
 </nz-page-header>
 
-<form
-  nz-form
-  [nzLayout]="'vertical'"
-  [formGroup]="editForm"
-  (ngSubmit)="saveForm()"
->
-  <nz-row>
-    <nz-col nzSpan="24">
+<form nz-form [nzLayout]="'vertical'" [formRoot]="sliceEditForm">
+  <nz-row [nzGutter]="[20, 20]">
+    <nz-col [nzXs]="24" [nzLg]="14">
       <nz-form-item>
         <nz-form-label>name</nz-form-label>
         <nz-form-control>
-          <input type="text" nz-input formControlName="kss:name" />
+          <input type="text" nz-input [formField]="sliceEditForm.name" />
+          <app-form-errors [field]="sliceEditForm.name" />
         </nz-form-control>
+      </nz-form-item>
+    </nz-col>
+    <nz-col [nzXs]="24" [nzLg]="10">
+      <nz-form-item>
+        <nz-form-label>
+          Tags
+          @if (sliceEditForm.tags().pending()) {
+            <div class="checking">
+              <nz-spin nzSimple nzSize="small" /> checking...
+            </div>
+          }
+          <app-form-errors
+            [field]="sliceEditForm.tags"
+            [checkTouched]="false"
+            [style.margin-left]="'10px'"
+          />
+        </nz-form-label>
+        @switch (editMode()) {
+          <!-- 0: EDIT_SLICE | 1: EDIT_TAG | 2: FORK_TAG -->
+          @case (0)
+          @case (2) {
+            <nz-form-control>
+              <nz-select
+                nzMode="tags"
+                nzPlaceHolder="Type and press enter or space to add tag..."
+                [nzTokenSeparators]="[' ', ',', ';']"
+                [formField]="sliceEditForm.tags"
+              >
+              </nz-select>
+            </nz-form-control>
+          }
+          @case (1) {
+            <nz-form-control>
+              @for (aliasTag of aliasTags(); track aliasTag) {
+                <nz-tag nzColor="blue">{{ aliasTag }}</nz-tag>
+              }
+            </nz-form-control>
+          }
+        }
       </nz-form-item>
     </nz-col>
   </nz-row>
   <nz-row [nzGutter]="[20, 20]">
-    <nz-col [nzXs]="24" [nzLg]="12">
+    <nz-col [nzXs]="24" [nzLg]="14">
       <nz-form-item>
         <nz-form-label>&#64;context</nz-form-label>
-        <nz-form-control [nzAutoTips]="autoTips">
+        <nz-form-control>
           <nz-code-editor
             class="field"
-            formControlName="@context"
+            [formField]="sliceEditForm.context"
             [nzEditorOption]="settings.getCodeEditorSetting().json"
           ></nz-code-editor>
+          <app-form-errors
+            [field]="sliceEditForm.context"
+            [checkTouched]="false"
+          />
         </nz-form-control>
       </nz-form-item>
     </nz-col>
-    <nz-col [nzXs]="24" [nzLg]="12">
+    <nz-col [nzXs]="24" [nzLg]="10">
       <nz-form-item>
         <nz-form-label>description</nz-form-label>
         <nz-form-control>
           <textarea
             nz-input
-            formControlName="kss:description"
+            [formField]="sliceEditForm.description"
             rows="6"
           ></textarea>
         </nz-form-control>
@@ -52,9 +98,13 @@
         <nz-form-control>
           <nz-code-editor
             class="editor"
-            formControlName="kss:schema"
+            [formField]="sliceEditForm.schema"
             [nzEditorOption]="settings.getCodeEditorSetting().graphql"
           ></nz-code-editor>
+          <app-form-errors
+            [field]="sliceEditForm.schema"
+            [checkTouched]="false"
+          />
         </nz-form-control>
       </nz-form-item>
     </nz-col>
@@ -63,27 +113,32 @@
     <nz-col nzSpan="24">
       <nz-form-item>
         <nz-form-control>
-          <div nz-flex nzJustify="flex-end">
-            <nz-space>
-              <button
-                type="button"
-                *nzSpaceItem
-                nz-button
-                nzType="link"
-                (click)="reset()"
-              >
-                Reset
-              </button>
-              <button
-                *nzSpaceItem
-                nz-button
-                type="submit"
-                nzType="primary"
-                [disabled]="editForm.invalid"
-              >
-                Save
-              </button>
-            </nz-space>
+          <div class="buttons">
+            <button
+              type="button"
+              nz-button
+              nzType="primary"
+              nzGhost
+              (click)="preview()"
+              nz-popover
+              nzPopoverTitle="Preview SDL schema"
+              nzPopoverContent="Preview the schema like it will be exposed by Kvasir (including generated types and arguments)."
+              nzPopoverPlacement="topLeft"
+              [disabled]="sliceEditForm().invalid()"
+            >
+              Preview
+            </button>
+            <button type="button" nz-button nzType="link" (click)="reset()">
+              Reset
+            </button>
+            <button
+              nz-button
+              type="submit"
+              nzType="primary"
+              [disabled]="sliceEditForm().invalid()"
+            >
+              Save
+            </button>
           </div>
         </nz-form-control>
       </nz-form-item>

@@ -19,7 +19,6 @@ import Keycloak from 'keycloak-js';
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { ErrorHandlerService } from '../../services/error-handler.service';
-import { KvasirError } from '../error/error.component';
 
 @Component({
   selector: 'app-graphiql-editor',

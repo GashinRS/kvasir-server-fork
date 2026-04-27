@@ -10,85 +10,124 @@
   </nz-page-header-extra>
 </nz-page-header>
 
+<ng-template #mainClusterTpl let-sliceName="dataName">
+  <nz-space>
+    <button
+      nz-button
+      nzType="dashed"
+      (click)="editSlice($event, sliceName)"
+      nz-tooltip
+      nzTooltipTitle="Edit last revision"
+      *nzSpaceItem
+    >
+      <nz-icon nzType="edit" /> Edit
+    </button>
+    <nz-space-compact nzSize="default" *nzSpaceItem>
+      <button
+        nz-button
+        nzType="default"
+        (click)="writeToSlice($event, sliceName)"
+        nz-tooltip
+        nzTooltipTitle="Changes"
+      >
+        <nz-icon nzType="history" />
+      </button>
+      <button
+        nz-button
+        nzType="default"
+        (click)="querySlice($event, sliceName)"
+      >
+        <nz-icon nzType="code" />
+        Query
+      </button>
+    </nz-space-compact>
+  </nz-space>
+</ng-template>
+
 @if (slices.hasValue()) {
-  <nz-table #basicTable [nzData]="slices.value()!" nzTableLayout="fixed">
-    <thead>
-      <tr>
-        <th nzWidth="auto">name</th>
-        <th class="actions" nzWidth="150px">action</th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (data of basicTable.data; track data) {
-        @let dataName = data["kss:name"];
-        <tr>
-          <td class="name">
-            <nz-space>
+  <div class="header">
+    <nz-input-wrapper nzAddonBefore="Filter" nzAllowClear>
+      <input
+        nz-input
+        [(ngModel)]="filter"
+        placeholder="Start typing..."
+        nzSize="default"
+      />
+    </nz-input-wrapper>
+  </div>
+  <div class="scroll-container">
+    <nz-collapse nzAccordion>
+      @for (slice of filteredSlices(); track slice["@id"]) {
+        @let dataName = slice["kss:name"];
+
+        <ng-template #headerTpl>
+          <div class="name">
+            <span
+              >{{ dataName }}
+              @if (slice["kss:lineage"]; as lineage) {
+                <app-slice-lineage [lineage]="lineage" />
+                <a (click)="manageTags($event, dataName)" class="tagLink"
+                  >(more ...)</a
+                >
+              }
+            </span>
+            <div nz-typography nzEllipsis class="desc">
+              {{ slice["kss:description"] ?? "-" }}
+            </div>
+          </div>
+        </ng-template>
+
+        <!-- Instantiate the mainCluster template with the sliceName -->
+        <ng-template #tpl>
+          <ng-container
+            *ngTemplateOutlet="mainClusterTpl; context: { dataName }"
+          >
+          </ng-container>
+        </ng-template>
+
+        <!-- <nz-list-item> -->
+        <nz-collapse-panel [nzHeader]="headerTpl" [nzExtra]="tpl">
+          <div class="details">
+            <div class="id" nzEllipsis>
+              <span class="label" nz-icon nzType="idcard"></span>
               <span
-                *nzSpaceItem
-                nz-popover
-                [nzPopoverTitle]="idTitleTpl"
-                [nzPopoverContent]="data['@id']"
-                nzPopoverPlacement="topLeft"
-                class="id"
-                (click)="copyText(data['@id'])"
-                ><nz-icon nzType="idcard"></nz-icon
-              ></span>
-              <ng-template #idTitleTpl>
-                <span>@id</span><span [class]="clickToCopyCss()"><small>(click to copy)</small></span>
-              </ng-template>
-              <span *nzSpaceItem>{{ dataName }}</span>
-            </nz-space>
-            <div nz-typography nzEllipsis class="desc">{{ data['kss:description'] ?? '-' }}</div>
-          </td>
-          <td class="actions-td" align="right">
+                class="value"
+                (click)="copyText($event, slice['@id'])"
+                nz-tooltip="copy id"
+                >{{ slice["@id"] }}</span
+              >
+            </div>
+
+            <button
+              nz-button
+              nzSize="small"
+              nzType="default"
+              nzDanger
+              (click)="deleteSlice(dataName)"
+            >
+              <nz-icon nzType="delete" /> Delete slice
+            </button>
             <nz-space>
-              <nz-space-compact *nzSpaceItem nzSize="default">
-                <button
-                  nz-button
-                  nzType="primary"
-                  (click)="querySlice(dataName)"
-                  nz-tooltip
-                  nzTooltipTitle="Query"
-                >
-                  <nz-icon nzType="code" />
-                </button>
-                <button
-                  nz-button
-                  nzType="primary"
-                  nzGhost
-                  (click)="writeToSlice(dataName)"
-                  nz-tooltip
-                  nzTooltipTitle="Changes"
-                >
-                  <nz-icon nzType="history" />
-                </button>
-                <button
-                  nz-button
-                  nzType="primary"
-                  nzGhost
-                  (click)="editSlice(dataName)"
-                  nz-tooltip
-                  nzTooltipTitle="Edit"
-                >
-                  <nz-icon nzType="edit" />
-                </button>
-              </nz-space-compact>
               <button
                 *nzSpaceItem
                 nz-button
-                nzType="primary"
-                nzDanger
-                (click)="deleteSlice(dataName)"
-                nz-tooltip
-                nzTooltipTitle="Delete"
+                nzType="default"
+                nzSize="default"
+                (click)="manageTags($event, dataName)"
               >
-                <nz-icon nzType="delete" />
+                <nz-icon nzType="tags"></nz-icon> Manage tags
               </button>
             </nz-space>
-          </td>
-        </tr>
+          </div>
+        </nz-collapse-panel>
+      } @empty {
+        <div class="empty">
+          <nz-empty
+            nzNotFoundImage="simple"
+            nzNotFoundContent="No slices found"
+          />
+        </div>
       }
-    </tbody>
-  </nz-table>
+    </nz-collapse>
+  </div>
 }
