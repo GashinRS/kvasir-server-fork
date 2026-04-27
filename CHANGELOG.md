@@ -1,3 +1,13 @@
+## [0.19.0-beta.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.1...v0.19.0-beta.2) - 2026-04-27
+
+### Breaking
+
+- [**breaking**] Added support for tagging Slice versions and implemented model changes required to support external Slice definitions ([9c64a6f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/9c64a6fd62b06dc2e5eff85eb397f11126d438ed))
+
+### Features
+
+- UI support for Slices version tags ([ac6e953](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/ac6e9535d0079fa5314137781d62712fb094639a))
+
 ## [0.19.0-beta.1](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.18.3...v0.19.0-beta.1) - 2026-04-07
 
 ### Breaking
