@@ -1,5 +1,6 @@
 package kvasir.plugins.kg.clickhouse.graphql.resolver
 
+import cz.jirutka.rsql.parser.ast.Node
 import graphql.language.BooleanValue
 import graphql.language.Field
 import graphql.schema.*
@@ -14,6 +15,7 @@ import kvasir.utils.graphql.*
 
 internal const val SUBJECT_MATCH = "sub_match"
 internal const val COUNT = "_count"
+internal const val HAS_NEXT = "_hasNext"
 
 internal fun getAvailableFieldDefinitions(type: GraphQLType): List<GraphQLFieldDefinition> {
     return when (type) {
@@ -27,7 +29,8 @@ data class RelationInfo(
     val field: Field,
     val fieldDefinition: GraphQLFieldDefinition,
     val parentType: GraphQLCompositeType,
-    val context: JSONObject
+    val context: JSONObject,
+    val relationFilter: Node? = null
 ) {
     // TODO: make reverse work when defined in context vs. in the graphql schema
     val reverse = fieldDefinition.getDirectiveArg<BooleanValue>(
@@ -40,10 +43,16 @@ data class RelationInfo(
 
 data class TypeInfo(
     val type: GraphQLCompositeType,
-    val fieldDefinitions: Set<GraphQLFieldDefinition>
+    val fieldDefinitions: Set<GraphQLFieldDefinition>,
+    val subjectConstraints: Set<SubjectConstraint> = emptySet()
 ) {
     val identifier = type.name
 }
+
+data class SubjectConstraint(
+    val relationInfo: RelationInfo,
+    val filter: Node
+)
 
 
 data class FieldInfo(

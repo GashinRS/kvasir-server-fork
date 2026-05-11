@@ -66,6 +66,13 @@ class ClickhouseClient(
             .addQueryParam("database", spec.database)
             .addQueryParam("date_time_input_format", "best_effort")
             .addQueryParam("date_time_output_format", "iso")
+            .addQueryParam("optimize_aggregation_in_order", clickhouseConfig.optimizeAggregationInOrder().toString())
+            .addQueryParam(
+                "max_bytes_before_external_group_by",
+                clickhouseConfig.maxBytesBeforeExternalGroupBy().toString()
+            )
+            .addQueryParam("max_bytes_before_external_sort", clickhouseConfig.maxBytesBeforeExternalSort().toString())
+            .addQueryParam("join_algorithm", clickhouseConfig.joinAlgorithm())
             .addQueryParam("query", sql).send()
             .chain { response ->
                 if (response.statusCode() in 200..399) {

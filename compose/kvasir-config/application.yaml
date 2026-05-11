@@ -2,8 +2,120 @@ kvasir:
   bootstrap:
     pods:
       - name: alice
+        generate-clients:
+          - client-id: demo-client
+            client-secret: demo-secret
+            enable-service-account: true
+            enable-force-pkce: false
+          - client-id: aggregator-server
+            client-secret: aggregator-secret
+            enable-service-account: true
+            enable-force-pkce: false
+          - client-id: pacsoi-dashboard
+            redirect-uris:
+              - "*"
+            enable-force-pkce: true
+          - client-id: pipeline
+            client-secret: pipeline-secret
+            enable-service-account: true
+            enable-force-pkce: false
         configuration:
           default-context:
             ex: http://example.org/
             so: http://schema.org/
+            saref: https://saref.etsi.org/core/,
+            void: http://rdfs.org/ns/void#,
+            protego: https://dahcc.idlab.ugent.be/Protego/data/,
+            wear: https://dahcc.idlab.ugent.be/Homelab/SensorsAndWearables/,
+            act: https://dahcc.idlab.ugent.be/Homelab/SensorsAndActuators/,
+            saw: https://dahcc.idlab.ugent.be/Ontology/SensorsAndWearables/,
+            saa: https://dahcc.idlab.ugent.be/Ontology/SensorsAndActuators/,
+            xsd: http://www.w3.org/2001/XMLSchema#,
+            kss: https://kvasir.discover.ilabt.imec.be/vocab#
           auto-ingest-rdf:  true
+          auth:
+            uma:
+              server-url: http://localhost:4000/uma
+              client-id: 3213295d-e476-4e65-b528-4362d53a8089
+              client-secret: efa188ccf6c405c2ad9485543922dde967930af7178f820bc4dc2fda191a8741c36530c6116878105307c3bed1fa5eeedab1ace0f7a5ceb78c538701482db5a1
+              principal-extractor:
+                class-name: kvasir.plugins.policyagent.openfga.extractors.SimpleJWTPrincipalExtractor
+                config:
+                  attribute-name: jti
+              jwt-allowed-clock-skew-seconds: 30
+      - name: bob
+        configuration:
+          default-context:
+            ex: http://example.org/
+            so: http://schema.org/
+            saref: https://saref.etsi.org/core/,
+            void: http://rdfs.org/ns/void#,
+            protego: https://dahcc.idlab.ugent.be/Protego/data/,
+            wear: https://dahcc.idlab.ugent.be/Homelab/SensorsAndWearables/,
+            act: https://dahcc.idlab.ugent.be/Homelab/SensorsAndActuators/,
+            saw: https://dahcc.idlab.ugent.be/Ontology/SensorsAndWearables/,
+            saa: https://dahcc.idlab.ugent.be/Ontology/SensorsAndActuators/,
+            xsd: http://www.w3.org/2001/XMLSchema#,
+            kss: https://kvasir.discover.ilabt.imec.be/vocab#
+          auto-ingest-rdf: true
+          auth:
+            uma:
+              server-url: http://localhost:4000/uma
+              client-id: 05fad2fc-8198-4300-ab45-66a95077e539
+              client-secret: bcb0d7977bb7324fb6d9d7ed8e0d143f60c399ac91f70c27f7f73eca4ef6e5e32e0f0a5d2814211f7da1aaabfd52fe266b7223077f51a91a9aa34ce1c2b01f42
+              principal-extractor:
+                class-name: kvasir.plugins.policyagent.openfga.extractors.SimpleJWTPrincipalExtractor
+                config:
+                  attribute-name: jti
+              jwt-allowed-clock-skew-seconds: 30
+      - name: patient1
+        configuration:
+          default-context:
+            ex: http://example.org/
+            so: http://schema.org/
+            saref: https://saref.etsi.org/core/,
+            void: http://rdfs.org/ns/void#,
+            protego: https://dahcc.idlab.ugent.be/Protego/data/,
+            wear: https://dahcc.idlab.ugent.be/Homelab/SensorsAndWearables/,
+            act: https://dahcc.idlab.ugent.be/Homelab/SensorsAndActuators/,
+            saw: https://dahcc.idlab.ugent.be/Ontology/SensorsAndWearables/,
+            saa: https://dahcc.idlab.ugent.be/Ontology/SensorsAndActuators/,
+            xsd: http://www.w3.org/2001/XMLSchema#,
+            kss: https://kvasir.discover.ilabt.imec.be/vocab#
+          auto-ingest-rdf: true
+          auth:
+            uma:
+              server-url: http://localhost:4000/uma
+              client-id: 05fad2fc-8198-4300-ab45-66a95077e539
+              client-secret: bcb0d7977bb7324fb6d9d7ed8e0d143f60c399ac91f70c27f7f73eca4ef6e5e32e0f0a5d2814211f7da1aaabfd52fe266b7223077f51a91a9aa34ce1c2b01f42
+              principal-extractor:
+                class-name: kvasir.plugins.policyagent.openfga.extractors.SimpleJWTPrincipalExtractor
+                config:
+                  attribute-name: jti
+              jwt-allowed-clock-skew-seconds: 30
+      - name: patient2
+        configuration:
+          default-context:
+            ex: http://example.org/
+            so: http://schema.org/
+            saref: https://saref.etsi.org/core/,
+            void: http://rdfs.org/ns/void#,
+            protego: https://dahcc.idlab.ugent.be/Protego/data/,
+            wear: https://dahcc.idlab.ugent.be/Homelab/SensorsAndWearables/,
+            act: https://dahcc.idlab.ugent.be/Homelab/SensorsAndActuators/,
+            saw: https://dahcc.idlab.ugent.be/Ontology/SensorsAndWearables/,
+            saa: https://dahcc.idlab.ugent.be/Ontology/SensorsAndActuators/,
+            xsd: http://www.w3.org/2001/XMLSchema#,
+            kss: https://kvasir.discover.ilabt.imec.be/vocab#
+          auto-ingest-rdf: true
+          auth:
+            uma:
+              server-url: http://localhost:4000/uma
+              client-id: 05fad2fc-8198-4300-ab45-66a95077e539
+              client-secret: bcb0d7977bb7324fb6d9d7ed8e0d143f60c399ac91f70c27f7f73eca4ef6e5e32e0f0a5d2814211f7da1aaabfd52fe266b7223077f51a91a9aa34ce1c2b01f42
+              principal-extractor:
+                class-name: kvasir.plugins.policyagent.openfga.extractors.SimpleJWTPrincipalExtractor
+                config:
+                  attribute-name: jti
+              jwt-allowed-clock-skew-seconds: 30
+          

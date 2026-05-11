@@ -5,6 +5,7 @@ import graphql.language.*
 import graphql.scalars.ExtendedScalars
 import graphql.schema.*
 import io.vertx.core.json.JsonObject
+import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
 import kvasir.definitions.kg.graphql.ARG_CURSOR_NAME
 import kvasir.definitions.kg.graphql.ARG_PAGE_SIZE_NAME
 import kvasir.definitions.kg.graphql.FIELD_ID_NAME
@@ -132,6 +133,16 @@ fun Field.getArrayArgumentAsString(name: String, variables: Map<String, Any>): L
 
 fun Field.getPaginationInfo(variables: Map<String, Any>): Pair<Int, Long>? {
     val pageSize = this.getIntArgument(ARG_PAGE_SIZE_NAME, variables)
+    val cursor =
+        this.getStringArgument(ARG_CURSOR_NAME, variables)?.let { OffsetBasedCursor.fromString(it)?.offset } ?: 0L
+    return pageSize?.let { it to cursor }
+}
+
+fun Field.getPaginationInfo(variables: Map<String, Any>, fieldDefinition: GraphQLFieldDefinition): Pair<Int, Long>? {
+    if (fieldDefinition.getArgument(ARG_PAGE_SIZE_NAME) == null) {
+        return null
+    }
+    val pageSize = this.getIntArgument(ARG_PAGE_SIZE_NAME, variables) ?: DEFAULT_PAGE_SIZE
     val cursor =
         this.getStringArgument(ARG_CURSOR_NAME, variables)?.let { OffsetBasedCursor.fromString(it)?.offset } ?: 0L
     return pageSize?.let { it to cursor }

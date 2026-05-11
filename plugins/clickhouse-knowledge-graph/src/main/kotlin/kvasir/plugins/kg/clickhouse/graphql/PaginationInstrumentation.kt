@@ -14,13 +14,18 @@ import graphql.execution.instrumentation.parameters.InstrumentationFieldComplete
 import graphql.execution.instrumentation.parameters.InstrumentationFieldFetchParameters
 import graphql.language.Field
 import graphql.schema.DataFetchingEnvironment
+import graphql.schema.GraphQLCompositeType
+import graphql.schema.GraphQLFieldDefinition
+import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
 import kvasir.definitions.rdf.JsonLdKeywords
 import kvasir.plugins.kg.clickhouse.graphql.resolver.COUNT
+import kvasir.plugins.kg.clickhouse.graphql.resolver.HAS_NEXT
 import kvasir.utils.cursors.OffsetBasedCursor
 import kvasir.utils.graphql.aliasOrName
 import kvasir.utils.graphql.getFQName
 import kvasir.utils.graphql.getFromSource
 import kvasir.utils.graphql.getPaginationInfo
+import kvasir.utils.graphql.innerType
 import java.util.concurrent.CompletableFuture
 
 class PaginationInstrumentation(
@@ -53,21 +58,37 @@ class PaginationInstrumentation(
         val env = state.environments[parameters.executionStepInfo.path]!!
         val selectionSet = parameters.executionStepInfo.field.singleField.selectionSet?.selections
         val fetchedValue = (parameters.fetchedValue as? FetchedValue)?.fetchedValue
-        if (env.executionStepInfo.path.parent.isRootPath && parameters.executionStepInfo.field.singleField.getPaginationInfo(
-                env.variables
-            ) != null
+        val rootPaginationInfo = parameters.executionStepInfo.field.singleField.getPaginationInfo(
+            env.variables,
+            env.fieldDefinition
+        ) ?: (DEFAULT_PAGE_SIZE to 0L).takeIf { env.executionStepInfo.path.parent.isRootPath }
+        if (env.executionStepInfo.path.parent.isRootPath && rootPaginationInfo != null
         ) {
             when (fetchedValue) {
                 is Iterable<*> -> fetchedValue.firstOrNull()?.let { instance ->
                     instance as Map<*, *>
-                    state.counts[parameters.executionStepInfo.path] = instance[COUNT].toString().toLong()
+                    instance[HAS_NEXT]?.let {
+                        state.hasNext[parameters.executionStepInfo.path] = it.toString().toBooleanStrict()
+                    } ?: run {
+                        state.counts[parameters.executionStepInfo.path] = instance[COUNT].toString().toLong()
+                    }
+                } ?: run {
+                    state.hasNext[parameters.executionStepInfo.path] = false
                 }
 
-                is Map<*, *> -> state.counts[parameters.executionStepInfo.path] =
-                    fetchedValue[COUNT].toString().toLong()
+                is Map<*, *> -> fetchedValue[HAS_NEXT]?.let {
+                    state.hasNext[parameters.executionStepInfo.path] = it.toString().toBooleanStrict()
+                } ?: run {
+                    state.counts[parameters.executionStepInfo.path] = fetchedValue[COUNT].toString().toLong()
+                }
             }
         }
-        selectionSet?.filterIsInstance<Field>()?.filter { it.getPaginationInfo(env.variables) != null }?.forEach { field ->
+        selectionSet?.filterIsInstance<Field>()?.filter { field ->
+            env.fieldDefinition.type.innerType<GraphQLCompositeType>().children
+                .filterIsInstance<GraphQLFieldDefinition>()
+                .find { it.name == field.name }
+                ?.let { field.getPaginationInfo(env.variables, it) } != null
+        }?.forEach { field ->
             when (fetchedValue) {
                 is Iterable<*> -> fetchedValue.forEachIndexed { index, instance ->
                     instance as Map<*, *>
@@ -89,10 +110,13 @@ class PaginationInstrumentation(
         state: InstrumentationState
     ): CompletableFuture<ExecutionResult> {
         state as PaginationInstrumentationState
-        val pageDate = state.counts
-            .map { (path, totalCount) ->
+        val pageDate = (state.counts.keys + state.hasNext.keys).toSet()
+            .map { path ->
+                val totalCount = state.counts[path]
+                val hasNext = state.hasNext[path]
                 val env = state.environments[path]!!
-                val pageInfo = env.field.getPaginationInfo(env.variables)
+                val pageInfo = env.field.getPaginationInfo(env.variables, env.fieldDefinition)
+                    ?: (DEFAULT_PAGE_SIZE to 0L).takeIf { env.executionStepInfo.path.parent.isRootPath }
                 mapOf(
                     JsonLdKeywords.id to "kvasir:qr-page-info:${
                         Hashing.farmHashFingerprint64()
@@ -110,7 +134,8 @@ class PaginationInstrumentation(
                     },
                     "totalCount" to totalCount,
                     "next" to pageInfo?.let { (pageSize, offset) ->
-                        if (offset + pageSize < totalCount) OffsetBasedCursor(
+                        val nextAvailable = hasNext ?: totalCount?.let { offset + pageSize < it } ?: false
+                        if (nextAvailable) OffsetBasedCursor(
                             offset + pageSize
                         ).encode() else null
                     },
@@ -132,5 +157,6 @@ class PaginationInstrumentation(
 
 class PaginationInstrumentationState(
     val counts: MutableMap<ResultPath, Long> = mutableMapOf(),
+    val hasNext: MutableMap<ResultPath, Boolean> = mutableMapOf(),
     val environments: MutableMap<ResultPath, DataFetchingEnvironment> = mutableMapOf()
 ) : InstrumentationState

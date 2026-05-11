@@ -65,9 +65,16 @@ FROM subject_definitions sd
          LEFT JOIN subject_properties sp ON sd.subject = sp.subject
          LEFT JOIN subject_definitions target_sd ON sp.object_value = target_sd.subject;
 
-CREATE VIEW IF NOT EXISTS `{cfg.database}`.collapsed_state_by_type AS SELECT subject, predicate, object, datatype, language, graph, max(change_id) as _change_id FROM `{cfg.database}`.data
+CREATE OR REPLACE VIEW `{cfg.database}`.collapsed_state_by_type AS SELECT subject, predicate, object, datatype, language, graph, max(change_id) as _change_id FROM `{cfg.database}`.data
     WHERE
         (\{at_change_id:String\} = '' OR change_id <= \{at_change_id:String\}) AND
+        (length(\{predicateIRIs:Array(String)\}) = 0 OR predicate IN (\{predicateIRIs:Array(String)\})) AND
+        (length(\{objectIRIs:Array(String)\}) = 0 OR object IN (\{objectIRIs:Array(String)\})) AND
+        (length(\{subjectConstraintPredicateIRIs:Array(String)\}) = 0 OR subject IN (
+            SELECT subject FROM `{cfg.database}`.data WHERE (\{at_change_id:String\} = '' OR change_id <= \{at_change_id:String\}) AND (predicate IN (\{subjectConstraintPredicateIRIs:Array(String)\})) AND (object IN (\{subjectConstraintObjects:Array(String)\}))
+            GROUP BY subject, predicate, object HAVING argMax(sign, change_id) > 0
+            LIMIT \{subjectConstraintLimit:UInt64\}
+        )) AND
         (length(\{domainClassIRIs:Array(String)\}) = 0 OR subject IN (
             SELECT subject FROM `{cfg.database}`.data WHERE (\{at_change_id:String\} = '' OR change_id <= \{at_change_id:String\}) AND (predicate = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type') AND (object IN (\{domainClassIRIs:Array(String)\}))
             GROUP BY subject, predicate, object HAVING argMax(sign, change_id) > 0

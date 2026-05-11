@@ -15,6 +15,7 @@ import kvasir.definitions.persistence.SortOrder
 import kvasir.definitions.rdf.JSONObject
 import kvasir.plugins.kg.clickhouse.graphql.SELF_REF_SELECTOR
 import kvasir.plugins.kg.clickhouse.graphql.SelectorReplacingFilterVisitor
+import kvasir.plugins.kg.clickhouse.graphql.ToSQLFilterVisitor
 import kvasir.plugins.kg.clickhouse.graphql.resolver.*
 import kvasir.utils.graphql.getPaginationInfo
 import kvasir.utils.graphql.getStringArgument
@@ -57,7 +58,7 @@ class ScalarCollectionNode(
     override val name: String = fieldDefinition.name
     override val nameInResult: String = field.alias ?: field.name
     override val joinIdentifier = getVariableNameForField(fieldDefinition, context) + "_col"
-    val paginationInfo = field.getPaginationInfo(parent.env.variables)
+    val paginationInfo = field.getPaginationInfo(parent.env.variables, fieldDefinition)
     val sortOrder = field.getStringArgument(ARG_SORT_NAME, parent.env.variables)?.let { SortOrder.valueOf(it) }
 
     override fun getJoinStatements(): List<String> {
@@ -80,8 +81,9 @@ class ScalarCollectionNode(
                 paginationInfo?.let { "count() OVER (PARTITION BY id) as $COUNT" }).joinToString()
         val limit = paginationInfo?.let { (pageSize, offset) -> " LIMIT $offset, $pageSize BY id" } ?: ""
         val orderBy = sortOrder?.let { "ORDER BY value $it " } ?: ""
+        val where = relationFilter("value")?.let { "WHERE ${ToSQLFilterVisitor(context).visitNode(it)} " } ?: ""
         return listOf(
-            "$joinType JOIN (SELECT $projection FROM $relTableId $orderBy$limit) AS $joinIdentifier ON ${parent.scope}.id = $joinIdentifier.id"
+            "$joinType JOIN (SELECT $projection FROM $relTableId $where$orderBy$limit) AS $joinIdentifier ON ${parent.scope}.id = $joinIdentifier.id"
         )
     }
 
@@ -107,7 +109,7 @@ class ScalarCollectionNode(
 
     override fun getRelationRefs(): List<RelationInfo> {
         // Signal the relation CTE that this node is referencing by returning the following RelationInfo.
-        return listOf(RelationInfo(field, fieldDefinition, parent.type, context))
+        return listOf(RelationInfo(field, fieldDefinition, parent.type, context, relationFilter("object")))
     }
 
     override fun isPaginated(): Boolean = paginationInfo != null
@@ -130,6 +132,16 @@ class ScalarCollectionNode(
     override fun isGroupingKey(): Boolean {
         // Collection fields should not be grouping keys, as they are aggregated with groupUniqArray
         return false
+    }
+
+    private fun relationFilter(targetSelector: String): Node? {
+        return getFilter(field, fieldDefinition, parent.env)?.let { rsql ->
+            SelectorReplacingFilterVisitor(
+                setOf(name, nameInResult, SELF_REF_SELECTOR),
+                targetSelector,
+                true
+            ).visitNode(RSQLParser().parse(rsql))
+        }
     }
 }
 

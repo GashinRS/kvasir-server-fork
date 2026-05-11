@@ -13,6 +13,7 @@ import graphql.schema.GraphQLCompositeType
 import graphql.schema.GraphQLFieldDefinition
 import graphql.schema.GraphQLNamedType
 import io.quarkus.logging.Log
+import kvasir.definitions.kg.DEFAULT_PAGE_SIZE
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JSONObject
 import kvasir.plugins.kg.clickhouse.graphql.SELF_REF_SELECTOR
@@ -39,7 +40,8 @@ open class CompositeNode(
         getVariableNameForField(fieldDefinition, context, fieldDefinition.name.takeIf { parent == null }) + "_rel"
     override val joinIdentifier =
         getVariableNameForField(fieldDefinition, context, fieldDefinition.name.takeIf { parent == null }) + "_nested"
-    val paginationInfo = field.getPaginationInfo(env.variables)
+    val paginationInfo = field.getPaginationInfo(env.variables, fieldDefinition)
+        ?: (DEFAULT_PAGE_SIZE to 0L).takeIf { parent == null }
     private var nodeFilter: Node? = null
     private val argFilter = run {
         // For all arguments that are not default relation arguments (e.g. related to pagination), but include the id argument if present.
@@ -211,7 +213,7 @@ open class CompositeNode(
                                 includeInResultMap = false
                             )
                         },
-                        paginationInfo?.let {
+                        paginationInfo?.takeIf { parent != null }?.let {
                             val overExpr = parent?.let { "PARTITION BY $SUBJECT_MATCH" } ?: ""
                             SyntheticScalarNode(
                                 COUNT, this, "count() OVER ($overExpr)",
@@ -231,7 +233,8 @@ open class CompositeNode(
 
     val typeInfo = TypeInfo(
         type,
-        children.filterIsInstance<ScalarValueNode>().map { it.fieldDefinition }.toSet()
+        children.filterIsInstance<ScalarValueNode>().map { it.fieldDefinition }.toSet(),
+        subjectConstraintsFromFilters()
     )
 
     // LEFT JOIN if the field is optional, otherwise (INNER) JOIN
@@ -245,7 +248,8 @@ open class CompositeNode(
             .mapValues { mapping ->
                 TypeInfo(
                     mapping.value.first().type,
-                    mapping.value.flatMap { it.fieldDefinitions }.toSet()
+                    mapping.value.flatMap { it.fieldDefinitions }.toSet(),
+                    mapping.value.flatMap { it.subjectConstraints }.toSet()
                 )
             }
             .toList().map { it.second }
@@ -316,7 +320,8 @@ open class CompositeNode(
         val joins = (listOfNotNull(joinRelation) + joinChildren).joinToString(separator = " ")
         val limit = paginationInfo?.let { (pageSize, offset) ->
             val byExpr = parent?.let { " BY $SUBJECT_MATCH" } ?: ""
-            " LIMIT $offset, $pageSize$byExpr"
+            val effectivePageSize = if (parent == null) pageSize + 1 else pageSize
+            " LIMIT $offset, $effectivePageSize$byExpr"
         }
             ?.takeIf { includeLimit } ?: ""
         // Generate the GROUP BY clause for scalar fields
@@ -341,6 +346,29 @@ open class CompositeNode(
                 ).visitNode(currentFilter)
             }
         return ToSQLFilterVisitor(context).visitNode(processedFilter)
+    }
+
+    private fun subjectConstraintsFromFilters(): Set<SubjectConstraint> {
+        val filterNodes = listOfNotNull(argFilter, nodeFilter).flatMap { filter ->
+            when (filter) {
+                is AndNode -> filter.children
+                is ComparisonNode -> listOf(filter)
+                else -> emptyList()
+            }
+        }
+        if (filterNodes.isEmpty()) return emptySet()
+
+        val scalarCollectionChildren = children.filterIsInstance<ScalarCollectionNode>()
+        return filterNodes.mapNotNull { filter ->
+            val comparison = filter as? ComparisonNode ?: return@mapNotNull null
+            val child = scalarCollectionChildren.find {
+                comparison.selector == it.name || comparison.selector == it.nameInResult
+            } ?: return@mapNotNull null
+            SubjectConstraint(
+                RelationInfo(child.field, child.fieldDefinition, type, context),
+                ComparisonNode(comparison.operator, "object", comparison.arguments)
+            )
+        }.toSet()
     }
 
 }

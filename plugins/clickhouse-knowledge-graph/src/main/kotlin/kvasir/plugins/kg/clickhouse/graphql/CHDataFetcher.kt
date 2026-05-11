@@ -4,6 +4,7 @@ import graphql.schema.DataFetchingEnvironment
 import io.smallrye.mutiny.Uni
 import io.vertx.core.json.JsonArray
 import jakarta.enterprise.context.ApplicationScoped
+import kvasir.plugins.kg.clickhouse.graphql.resolver.HAS_NEXT
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.graphql.resolver.QueryBuilder
 import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
@@ -29,9 +30,13 @@ class CHDataFetcher(
             val queryBuilder = QueryBuilder(context, atChangeId, env)
             val columns = queryBuilder.root.children.map { it.nameInResult }
             val sql = queryBuilder.build()
+            val paginationInfo = queryBuilder.root.paginationInfo
             clickhouseClient.query(GenericQuerySpec(databaseName, DATA_TABLE, columns), sql)
                 .map { result ->
-                    result
+                    paginationInfo?.let { (pageSize, _) ->
+                        val hasNext = result.size > pageSize
+                        result.take(pageSize).map { row -> row + (HAS_NEXT to hasNext) }
+                    } ?: result
                 }
         } else {
             val value = env.getFromSource<Any>(env.field.aliasOrName())
