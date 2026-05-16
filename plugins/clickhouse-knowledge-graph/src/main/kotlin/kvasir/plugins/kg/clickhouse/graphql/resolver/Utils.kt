@@ -30,7 +30,8 @@ data class RelationInfo(
     val fieldDefinition: GraphQLFieldDefinition,
     val parentType: GraphQLCompositeType,
     val context: JSONObject,
-    val relationFilter: Node? = null
+    val relationFilter: Node? = null,
+    val subjectConstraints: Set<SubjectConstraint> = emptySet()
 ) {
     // TODO: make reverse work when defined in context vs. in the graphql schema
     val reverse = fieldDefinition.getDirectiveArg<BooleanValue>(

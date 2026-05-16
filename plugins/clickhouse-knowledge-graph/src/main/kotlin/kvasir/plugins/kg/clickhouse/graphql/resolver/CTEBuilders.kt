@@ -56,6 +56,29 @@ abstract class AbstractCTEBuilder(
         return filter.arguments.map { JsonLdHelper.getFQName(it, context, ":") ?: it }.toSet()
     }
 
+    protected fun subjectConstraintValues(subjectConstraints: Set<SubjectConstraint>): List<Pair<String, Set<String>>> {
+        return subjectConstraints.mapNotNull { constraint ->
+            val predicateIRI = getFQName(constraint.relationInfo.fieldDefinition, context)
+            val values = objectFilterValues(constraint.filter as? ComparisonNode).takeIf { it.isNotEmpty() }
+                ?: return@mapNotNull null
+            predicateIRI to values
+        }
+    }
+
+    protected fun candidateLimit(): Long {
+        val (pageSize, offset) = env.field.getPaginationInfo(env.variables, env.fieldDefinition)
+            ?: (DEFAULT_PAGE_SIZE to 0L)
+        return offset + maxOf(pageSize + 1L, 1000L)
+    }
+
+    protected fun candidateSubjectFilter(subjectConstraints: Set<SubjectConstraint>): String? {
+        val values = subjectConstraintValues(subjectConstraints).takeIf { it.isNotEmpty() } ?: return null
+        val candidatePredicateIRIs = values.map { it.first }.toSet()
+        val candidateObjects = values.flatMap { it.second }.toSet()
+        val candidatesExpr = rawCurrentStateExpr(candidatePredicateIRIs, candidateObjects)
+        return "subject IN (SELECT subject FROM ($candidatesExpr) LIMIT ${candidateLimit()})"
+    }
+
     protected fun rawCurrentStateExpr(
         predicateIRIs: Iterable<String>,
         objectIRIs: Iterable<String> = emptyList(),
@@ -164,22 +187,9 @@ class TypeCTEBuilder(
                     }
                 }
             }
-        val subjectConstraintValues = typeInfo.subjectConstraints.mapNotNull { constraint ->
-            val predicateIRI = getFQName(constraint.relationInfo.fieldDefinition, context)
-            val values = objectFilterValues(constraint.filter as? ComparisonNode).takeIf { it.isNotEmpty() }
-                ?: return@mapNotNull null
-            predicateIRI to values
-        }
-        val (pageSize, offset) = env.field.getPaginationInfo(env.variables, env.fieldDefinition)
-            ?: (DEFAULT_PAGE_SIZE to 0L)
-        val sourceExpr = if (subjectConstraintValues.isNotEmpty()) {
-            val candidatePredicateIRIs = subjectConstraintValues.map { it.first }.toSet()
-            val candidateObjects = subjectConstraintValues.flatMap { it.second }.toSet()
-            val candidateLimit = offset + pageSize + 1
-            val candidatesExpr = rawCurrentStateExpr(candidatePredicateIRIs, candidateObjects)
-            val subjectFilter = "subject IN (SELECT subject FROM ($candidatesExpr) LIMIT $candidateLimit)"
+        val sourceExpr = candidateSubjectFilter(typeInfo.subjectConstraints)?.let { subjectFilter ->
             "(${rawCurrentStateExpr(predicateIRIs, subjectFilter = subjectFilter)})"
-        } else {
+        } ?: run {
             collapsedStateExpr(typeURIs, predicateIRIs = predicateIRIs)
         }
         val subjectConstraintConditions = typeInfo.subjectConstraints
@@ -263,8 +273,9 @@ class RelationCTEBuilder(
                     val objectIRIs = objectFilterValues(relationInfo.relationFilter as? ComparisonNode)
                     val relationFilter = relationInfo.relationFilter
                         ?.let { " AND ${ToSQLFilterVisitor(context).visitNode(it)}" } ?: ""
-                    val sourceExpr = if (objectIRIs.isNotEmpty()) {
-                        "(${rawCurrentStateExpr(listOf(fqFieldName), objectIRIs)})"
+                    val subjectFilter = candidateSubjectFilter(relationInfo.subjectConstraints)
+                    val sourceExpr = if (objectIRIs.isNotEmpty() || subjectFilter != null) {
+                        "(${rawCurrentStateExpr(listOf(fqFieldName), objectIRIs, subjectFilter)})"
                     } else {
                         collapsedStateExpr(
                             domainClassIRIs = getTypeURIsToMatch(relationInfo.parentType),

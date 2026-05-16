@@ -109,7 +109,16 @@ class ScalarCollectionNode(
 
     override fun getRelationRefs(): List<RelationInfo> {
         // Signal the relation CTE that this node is referencing by returning the following RelationInfo.
-        return listOf(RelationInfo(field, fieldDefinition, parent.type, context, relationFilter("object")))
+        return listOf(
+            RelationInfo(
+                field,
+                fieldDefinition,
+                parent.type,
+                context,
+                relationFilter("object"),
+                parent.typeInfo.subjectConstraints
+            )
+        )
     }
 
     override fun isPaginated(): Boolean = paginationInfo != null
