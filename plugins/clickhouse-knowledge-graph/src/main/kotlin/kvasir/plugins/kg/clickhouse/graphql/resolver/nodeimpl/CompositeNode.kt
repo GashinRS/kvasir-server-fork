@@ -5,13 +5,12 @@ import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
+import graphql.language.BooleanValue
 import graphql.language.Field
 import graphql.language.InlineFragment
 import graphql.language.SelectionSet
-import graphql.schema.DataFetchingEnvironment
-import graphql.schema.GraphQLCompositeType
-import graphql.schema.GraphQLFieldDefinition
-import graphql.schema.GraphQLNamedType
+import graphql.scalars.ExtendedScalars
+import graphql.schema.*
 import io.quarkus.logging.Log
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JSONObject
@@ -20,10 +19,12 @@ import kvasir.plugins.kg.clickhouse.graphql.SelectorExtractingVisitor
 import kvasir.plugins.kg.clickhouse.graphql.SelectorReplacingFilterVisitor
 import kvasir.plugins.kg.clickhouse.graphql.ToSQLFilterVisitor
 import kvasir.plugins.kg.clickhouse.graphql.resolver.*
+import kvasir.plugins.kg.clickhouse.specs.*
 import kvasir.utils.graphql.*
 
 open class CompositeNode(
     val context: JSONObject,
+    val atChangeId: String?,
     val field: Field,
     val fieldDefinition: GraphQLFieldDefinition,
     val scope: String,
@@ -31,7 +32,7 @@ open class CompositeNode(
     val parent: CompositeNode? = null,
     overrideType: GraphQLCompositeType? = null,
     val overrideJoinType: String? = null
-) : JoinableNode, NodeWithTypeRefs, NodeWithRelationRefs {
+) : JoinableNode {
 
     override val name: String = fieldDefinition.name
     override val nameInResult: String = field.alias ?: field.name
@@ -85,10 +86,10 @@ open class CompositeNode(
             val selectedChildren = processedSelectionSet.mapNotNull { fieldInfo ->
                 val (type, nestedField, nestedFieldDefinition, inFragment) = fieldInfo
                 when {
-                    // Exception for the _types & _rawRDF field, this is always included via synthetic nodes, so we can ignore it here.
-                    nestedField.name == FIELD_TYPES_NAME || nestedField.name == FIELD_RAW_RDF_NAME -> null
+                    // Exception for the id, _types & _rawRDF field, this is always included via synthetic nodes, so we can ignore it here.
+                    nestedField.name in setOf(FIELD_ID_NAME, FIELD_TYPES_NAME, FIELD_RAW_RDF_NAME) -> null
                     // Exception for the _predicates field, no joins (as with ScalarCollectionNode) needed as it can be included via the Type CTE (via ScalarValueNode).
-                    nestedField.name == FIELD_PREDICATES_NAME -> ScalarValueNode(
+                    nestedField.name == FIELD_PREDICATES_NAME -> ScalarCollectionNode(
                         nestedField,
                         nestedFieldDefinition,
                         this
@@ -193,15 +194,20 @@ open class CompositeNode(
                     listOfNotNull(
                         SyntheticScalarNode(
                             FIELD_ID_NAME,
-                            this
+                            this,
+                            "$scope.subject"
                         ).takeIf { selectedChildren.none { it.name == FIELD_ID_NAME } },
                         SyntheticScalarNode(
                             FIELD_TYPES_NAME,
-                            this
+                            this,
+                            "groupUniqArray($scope.type_uri)",
+                            groupingKey = false
                         ).takeIf { selectedChildren.none { it.name == FIELD_TYPES_NAME } },
                         SyntheticScalarNode(
                             FIELD_RAW_RDF_NAME,
-                            this
+                            this,
+                            "any(map('@id',$scope.subject))",
+                            groupingKey = false
                         ).takeIf { selectedChildren.none { it.name == FIELD_RAW_RDF_NAME } },
                         parent?.let {
                             SyntheticScalarNode(
@@ -229,38 +235,9 @@ open class CompositeNode(
         }
     }
 
-    val typeInfo = TypeInfo(
-        type,
-        children.filterIsInstance<ScalarValueNode>().map { it.fieldDefinition }.toSet()
-    )
-
     // LEFT JOIN if the field is optional, otherwise (INNER) JOIN
     val joinType =
         overrideJoinType ?: (if (isOptional(field, fieldDefinition)) "LEFT " else "")
-
-    override fun getTypeRefs(): List<TypeInfo> {
-        return children.filterIsInstance<NodeWithTypeRefs>().flatMap { it.getTypeRefs() }
-            .plus(typeInfo)
-            .groupBy { it.identifier }
-            .mapValues { mapping ->
-                TypeInfo(
-                    mapping.value.first().type,
-                    mapping.value.flatMap { it.fieldDefinitions }.toSet()
-                )
-            }
-            .toList().map { it.second }
-    }
-
-    override fun getRelationRefs(): List<RelationInfo> {
-        // Parent relation (if a parent exists, i.e. this is not the root node)
-        val parentRelation = parent?.let {
-            listOf(RelationInfo(field, fieldDefinition, parent.type, context))
-        } ?: emptyList()
-
-        // Get dependent relations from children
-        val childRelations = children.filterIsInstance<NodeWithRelationRefs>().flatMap { it.getRelationRefs() }
-        return (parentRelation + childRelations).distinctBy { it.identifier }
-    }
 
     /**
      * Generates the JOIN statement for this node, so that the parent node can use it to join with the parent table.
@@ -268,7 +245,7 @@ open class CompositeNode(
     override fun getJoinStatements(): List<String> {
         // Join collection scalars
         val joinRange =
-            "$joinType JOIN (${build()}) AS $joinIdentifier ON $joinIdentifier.${SUBJECT_MATCH} = ${parent!!.scope}.id"
+            "$joinType JOIN (${build()}) AS $joinIdentifier ON $joinIdentifier.${SUBJECT_MATCH} = ${parent!!.scope}.subject"
         return listOf(joinRange)
     }
 
@@ -287,33 +264,24 @@ open class CompositeNode(
         val rsqlToSQL = ToSQLFilterVisitor(context)
         // Where clause for the filters (explicit type generic to avoid adding additional filters that are not yet serialized to SQL)
         val where = listOfNotNull<String>(
+            // Add type filter
+            type.let {
+                getTypeURIsToMatch(type).takeIf { it.isNotEmpty() }
+                    ?.let { targetTypes -> "type_uri IN (${targetTypes.joinToString { "'$it'" }})" }
+            },
             nodeFilter?.let { transformFilterToSQL(it) },
             argFilter?.let { transformFilterToSQL(it) },
             // Add arg filters from children
             *children.filterIsInstance<NodeWithFilterForParent>()
-                .mapNotNull { child -> child.getArgFilter()?.let { transformFilterToSQL(it) } }.toTypedArray(),
-            // For ScalarValueNode children that are not optional, add null filter (ignore non-null fields, these are already enforced via the type CTE)
-            *children.filterIsInstance<ScalarValueNode>()
-                .filter { !isOptional(it.field, it.fieldDefinition) && it.fieldDefinition.type.isNullable() }
-                .map {
-                    "$scope.${it.nameInResult} IS NOT NULL"
-                }.toTypedArray()
+                .mapNotNull { child -> child.getArgFilter()?.let { transformFilterToSQL(it) } }.toTypedArray()
         ).takeIf { it.isNotEmpty() }
             ?.joinToString(" AND ", "WHERE ") ?: ""
 
         // Generate the JOINs
-        val joinRelation = parent?.let {
-            "$joinType JOIN ${
-                RelationInfo(
-                    field,
-                    fieldDefinition,
-                    it.type,
-                    context
-                ).identifier
-            } AS $relJoinIdentifier ON $relJoinIdentifier.value = ${scope}.id"
-        }
+
+        val parentJoin = parent?.let { getParentRelJoin() }
         val joinChildren = children.filterIsInstance<JoinableNode>().flatMap { it.getJoinStatements() }.distinct()
-        val joins = (listOfNotNull(joinRelation) + joinChildren).joinToString(separator = " ")
+        val joins = (listOfNotNull(parentJoin) + joinChildren).joinToString(separator = " ")
         val limit = paginationInfo?.let { (pageSize, offset) ->
             val byExpr = parent?.let { " BY $SUBJECT_MATCH" } ?: ""
             " LIMIT $offset, $pageSize$byExpr"
@@ -322,12 +290,31 @@ open class CompositeNode(
         // Generate the GROUP BY clause for scalar fields
         val groupBy = children.filter { it.isGroupingKey() }.joinToString { it.nameInResult }
         val orderBy = sortKeys?.let(SortKey.Companion::toSQL) ?: ""
-        return "SELECT $projection FROM ${typeInfo.identifier} AS $scope $joins $where GROUP BY $groupBy$orderBy$limit"
+        val source = atChangeId?.let {
+            // Time travel query: collapse state
+            "(SELECT subject, type_uri FROM $SUBJECT_TYPES WHERE change_id <= '$it' GROUP BY subject, type_uri, graph HAVING argMax(sign, change_id) > 0) AS $scope"
+        } ?: "$CURRENT_SUBJECT_TYPES AS $scope FINAL"
+        return "SELECT $projection FROM $source $joins $where GROUP BY $groupBy$orderBy$limit"
     }
 
     override fun isGroupingKey(): Boolean {
         // Composite nodes should not be grouping keys, as they are aggregated with groupUniqArray in the parent node
         return false
+    }
+
+    protected fun getTypeURIsToMatch(type: GraphQLCompositeType): Set<String> {
+        return when {
+            type.name in setOf(TYPE_RDF_NODE, TYPE_RESOURCE) -> emptyList()
+            type is GraphQLInterfaceType -> env.graphQLSchema.getImplementations(type)
+            type is GraphQLUnionType -> type.types
+            else -> listOf(type)
+        }.mapNotNull {
+            if (it is GraphQLNamedType && it.name in setOf(TYPE_BOXED_LITERAL, ExtendedScalars.Json.name)) {
+                null
+            } else {
+                getFQName(it as GraphQLDirectiveContainer, context)
+            }
+        }.toSet()
     }
 
     private fun transformFilterToSQL(filter: Node): String {
@@ -341,6 +328,31 @@ open class CompositeNode(
                 ).visitNode(currentFilter)
             }
         return ToSQLFilterVisitor(context).visitNode(processedFilter)
+    }
+
+    private fun getParentRelJoin(): String {
+        // Check if the relation is reversed based on the presence of the @predicate directive with reverse: true
+        // TODO: make reverse work when defined in context vs. in the graphql schema
+        val reverse = fieldDefinition.getDirectiveArg<BooleanValue>(
+            DIRECTIVE_PREDICATE_NAME,
+            ARG_REVERSE_NAME
+        )?.isValue ?: false
+        val fqParentRelName = getFQName(fieldDefinition, context)
+        val source = atChangeId?.let {
+            "$DATA_TABLE WHERE predicate = '$fqParentRelName' AND datatype = '' AND change_id <= '$it' $COLLAPSE_EXPR"
+        } ?: "$CURRENT_DATA_TABLE WHERE predicate = '$fqParentRelName' AND datatype = '' AND sign = 1"
+        val projection = if (!reverse) {
+            listOf(
+                "subject as id",
+                "object as value"
+            )
+        } else {
+            listOf(
+                "object as id",
+                "subject as value"
+            )
+        }.joinToString()
+        return "$joinType JOIN (SELECT $projection FROM $source) AS $relJoinIdentifier ON $relJoinIdentifier.value = ${scope}.subject"
     }
 
 }

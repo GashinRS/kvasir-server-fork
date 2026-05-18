@@ -11,10 +11,7 @@ import kvasir.definitions.rdf.RDFStatement
 import kvasir.plugins.kg.clickhouse.client.ClickhouseClient
 import kvasir.plugins.kg.clickhouse.graphql.CHDataFetcher
 import kvasir.plugins.kg.clickhouse.graphql.PaginationInstrumentation
-import kvasir.plugins.kg.clickhouse.specs.DATA_COLUMNS
-import kvasir.plugins.kg.clickhouse.specs.DATA_TABLE
-import kvasir.plugins.kg.clickhouse.specs.GenericQuerySpec
-import kvasir.plugins.kg.clickhouse.specs.RDFDatasetQuadInsertSpec
+import kvasir.plugins.kg.clickhouse.specs.*
 import kvasir.plugins.kg.clickhouse.utils.MAX_PAGE_SIZE_RECORDS
 import kvasir.plugins.kg.clickhouse.utils.databaseFromPodId
 import kvasir.utils.cursors.OffsetBasedCursor
@@ -79,6 +76,13 @@ class CHChangeRecordBackend(
             .whilst { it.nextCursor != null }
             .map { it.items }
             .onItem().disjoint()
+    }
+
+    override fun finalize(request: ChangeFinalizeRequest): Uni<Void> {
+        return clickhouseClient.execute(
+            "INSERT INTO $CURRENT_DATA_TABLE SELECT * FROM data WHERE change_id = '${request.changeId}'",
+            databaseFromPodId(request.podId)
+        )
     }
 
     override fun rollback(request: ChangeRollbackRequest): Uni<Void> {

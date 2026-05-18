@@ -21,6 +21,7 @@ class QueryBuilder(
 
     val root = CompositeNode(
         context,
+        atChangeId,
         env.field,
         env.fieldDefinition,
         "root",
@@ -28,21 +29,11 @@ class QueryBuilder(
     )
 
     fun build(): String {
-        // Get type selections from the query tree
-        val typeSelections = root.getTypeRefs()
-        // Get required relations
-        val relations = root.getRelationRefs()
-        // Build CTEs for all selected types
-        val ctes =
-            typeSelections.map { TypeCTEBuilder(context, atChangeId, env, it).build() }
-                .plus(relations.map { RelationCTEBuilder(atChangeId, env, it).build() })
-                .joinToString(",", prefix = "WITH ")
         val rootQuery = root.build(mode == SQLConvertorMode.GET_DATA)
-        val select = when (mode) {
+        return when (mode) {
             SQLConvertorMode.GET_DATA -> rootQuery
             SQLConvertorMode.COUNT -> "SELECT count(*) as totalCount FROM ($rootQuery)"
         }
-        return "$ctes $select"
     }
 
 }

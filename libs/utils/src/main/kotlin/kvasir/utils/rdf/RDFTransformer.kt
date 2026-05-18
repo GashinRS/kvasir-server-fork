@@ -1,5 +1,8 @@
 package kvasir.utils.rdf
 
+import com.github.jsonldjava.core.JsonLdOptions
+import com.github.jsonldjava.core.JsonLdProcessor
+import com.github.jsonldjava.core.RDFDataset
 import com.github.jsonldjava.utils.JsonUtils
 import io.smallrye.mutiny.Multi
 import jakarta.ws.rs.core.MediaType
@@ -15,7 +18,8 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory
 import org.eclipse.rdf4j.model.util.Values
 import org.eclipse.rdf4j.rio.RDFFormat
 import org.eclipse.rdf4j.rio.Rio
-import java.io.*
+import java.io.InputStream
+import java.io.StringWriter
 import java.net.URI
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
@@ -64,15 +68,27 @@ object RDFTransformer {
     }
 
     fun toStatements(graphDoc: Map<String, Any>, docBaseUri: String? = null): List<RDFStatement> {
-        // Convert the graphDoc JSON-LD object to an inputStream
-        val graphDocInputStream = ByteArrayOutputStream().use { os ->
-            JsonUtils.write(OutputStreamWriter(os), graphDoc)
-            os.flush()
-            ByteArrayInputStream(os.toByteArray())
+        // Use JsonLdProcessor.toRDF() directly on the already-parsed Map to avoid
+        // the expensive Map→JSON-bytes→Rio.parse(JSONLD) round-trip.
+        val options = JsonLdOptions().also { if (docBaseUri != null) it.base = docBaseUri }
+        @Suppress("UNCHECKED_CAST")
+        val dataset = JsonLdProcessor.toRDF(graphDoc, options) as RDFDataset
+        val bNodeIdMap = mutableMapOf<String, String>()
+        val results = dataset.graphNames().flatMap { graphName ->
+            val graphIri = if (graphName == "@default") ""
+            else resolveJsonLdNode(graphName, graphName.startsWith("_:"), docBaseUri, bNodeIdMap)
+            dataset.getQuads(graphName).map { quad ->
+                val subject = resolveJsonLdNode(quad.subject.value, quad.subject.isBlankNode, docBaseUri, bNodeIdMap)
+                val predicate = ensureValidAbsoluteIri(quad.predicate.value)
+                val obj = quad.`object`
+                if (obj.isLiteral) {
+                    RDFStatement(subject, predicate, obj.value, graphIri, obj.datatype, obj.language?.takeIf { it.isNotEmpty() })
+                } else {
+                    RDFStatement(subject, predicate, resolveJsonLdNode(obj.value, obj.isBlankNode, docBaseUri, bNodeIdMap), graphIri, null, null)
+                }
+            }
         }
-        val bNodeIdMap = mutableMapOf<BNode, String>()
-        return Rio.parse(graphDocInputStream, docBaseUri, RDFFormat.JSONLD)
-            .map { mapRioStatement(it, docBaseUri, bNodeIdMap) }
+        return results
     }
 
     fun toStatements(inputStream: InputStream, contentType: String, docBaseUri: String? = null): Multi<RDFStatement> {
@@ -111,6 +127,22 @@ object RDFTransformer {
             return iri
         } catch (e: Exception) {
             throw IllegalArgumentException("IRI is not a valid absolute IRI: '$iri'", e)
+        }
+    }
+
+    private fun resolveJsonLdNode(
+        value: String,
+        isBlankNode: Boolean,
+        docBaseUri: String?,
+        bNodeIdMap: MutableMap<String, String>
+    ): String {
+        return if (isBlankNode) {
+            bNodeIdMap.getOrPut(value) {
+                docBaseUri?.let { URI.create(it).getChildUri(UUID.randomUUID().toString(), "#").toString() }
+                    ?: "urn:uuid:${UUID.randomUUID()}"
+            }
+        } else {
+            ensureValidAbsoluteIri(value)
         }
     }
 

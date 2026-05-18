@@ -1,7 +1,5 @@
 package kvasir.utils.test.commons
 
-import java.time.Duration
-
 object SchemaVocab {
 
     const val baseUri = "http://schema.org/"
@@ -18,6 +16,8 @@ object ExampleVocab {
 
     const val Person = "${baseUri}Person"
     const val knows = "${baseUri}knows"
+    const val friendOf = "${baseUri}friendOf"
     const val parent = "${baseUri}parent"
+    const val email = "${baseUri}email"
 
 }

@@ -59,6 +59,10 @@ _openapi
 
 # API test local config and generated reports
 api-tests/hurl.env
+
+# Benchmark generated state files
+benchmarks/benchmark_state.json
+benchmarks/__pycache__/
 api-tests/report
 api-tests/junit-*.xml
 

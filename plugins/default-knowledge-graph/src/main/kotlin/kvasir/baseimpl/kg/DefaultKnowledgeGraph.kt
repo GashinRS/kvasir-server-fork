@@ -341,6 +341,10 @@ class DefaultKnowledgeGraph(
         return changeRecordBackend.stream(request)
     }
 
+    override fun finalize(request: ChangeFinalizeRequest): Uni<Void> {
+        return changeRecordBackend.finalize(request)
+    }
+
     override fun rollback(request: ChangeRollbackRequest): Uni<Void> {
         return changeRecordBackend.rollback(request)
     }

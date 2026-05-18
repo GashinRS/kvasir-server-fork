@@ -8,7 +8,7 @@ import graphql.schema.GraphQLFieldDefinition
 import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
-import kvasir.plugins.kg.clickhouse.graphql.resolver.*
+import kvasir.plugins.kg.clickhouse.graphql.resolver.JoinableNode
 import kvasir.utils.graphql.getStringArgument
 
 /**
@@ -22,7 +22,7 @@ class RDFNode(
     val context: JSONObject,
     val env: DataFetchingEnvironment,
     val parent: CompositeNode
-) : JoinableNode, NodeWithTypeRefs, NodeWithRelationRefs {
+) : JoinableNode {
 
     override val name: String = fieldDefinition.name
     override val nameInResult: String = field.alias ?: field.name
@@ -47,13 +47,14 @@ class RDFNode(
                 })
             .build()
     } ?: fieldDefinition
-    val rawRDFDelegate = ScalarCollectionNode(field, effectiveFieldDefinition, parent, context)
+    val rawRDFDelegate = ScalarCollectionNode(field, effectiveFieldDefinition, parent)
     val optionalResourceDelegate = run {
         if (field.selectionSet?.selections?.filterNot { it is Field && it.name == FIELD_RAW_RDF_NAME }
                 ?.isNotEmpty() == true) {
             // If there are selections on the _object field other than the rawRDF field, we construct a CompositeNode as a delegate to resolve these selections.
             CompositeNode(
                 context,
+                parent.atChangeId,
                 field,
                 effectiveFieldDefinition,
                 "${nameInResult}_scope",
@@ -88,15 +89,6 @@ class RDFNode(
             val literalExpr = "map('$rawRDFFieldName',map('@value',$joinId.value,'@type',$joinId.datatype))"
             "groupUniqArrayIf(if($joinId.datatype!='',$literalExpr,map($entries)), ${optionalResourceDelegate.joinIdentifier}.id != '' OR $joinId.datatype = '') AS $nameInResult"
         }
-    }
-
-    override fun getTypeRefs(): List<TypeInfo> {
-        return optionalResourceDelegate?.getTypeRefs() ?: emptyList()
-    }
-
-    override fun getRelationRefs(): List<RelationInfo> {
-        return rawRDFDelegate.getRelationRefs() + (optionalResourceDelegate?.getRelationRefs()
-            ?: emptyList())
     }
 
     override fun isGroupingKey(): Boolean {

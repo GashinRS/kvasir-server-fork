@@ -4,10 +4,7 @@ import graphql.execution.instrumentation.Instrumentation
 import graphql.schema.DataFetcher
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
-import kvasir.definitions.kg.ChangeRecord
-import kvasir.definitions.kg.ChangeRecordRequest
-import kvasir.definitions.kg.ChangeRollbackRequest
-import kvasir.definitions.kg.PagedResult
+import kvasir.definitions.kg.*
 
 /**
  * Interface defining a KG storage backend.
@@ -23,6 +20,8 @@ interface ChangeRecordBackend : ChangeRecordSink {
      * Stream the change records persisted to this storage backend for a specific change request.
      */
     fun stream(request: ChangeRecordRequest): Multi<ChangeRecord>
+
+    fun finalize(request: ChangeFinalizeRequest): Uni<Void>
 
     /**
      * Rollback the specified change request for this storage backend

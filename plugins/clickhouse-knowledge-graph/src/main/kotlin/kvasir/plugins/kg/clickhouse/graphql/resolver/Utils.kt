@@ -9,7 +9,6 @@ import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.plugins.kg.clickhouse.graphql.resolver.nodeimpl.CompositeNode
 import kvasir.plugins.kg.clickhouse.graphql.resolver.nodeimpl.ScalarCollectionNode
-import kvasir.plugins.kg.clickhouse.graphql.resolver.nodeimpl.ScalarValueNode
 import kvasir.utils.graphql.*
 
 internal const val SUBJECT_MATCH = "sub_match"
@@ -22,29 +21,6 @@ internal fun getAvailableFieldDefinitions(type: GraphQLType): List<GraphQLFieldD
         else -> emptyList()
     }
 }
-
-data class RelationInfo(
-    val field: Field,
-    val fieldDefinition: GraphQLFieldDefinition,
-    val parentType: GraphQLCompositeType,
-    val context: JSONObject
-) {
-    // TODO: make reverse work when defined in context vs. in the graphql schema
-    val reverse = fieldDefinition.getDirectiveArg<BooleanValue>(
-        DIRECTIVE_PREDICATE_NAME,
-        ARG_REVERSE_NAME
-    )?.isValue ?: false
-    val separator = if (reverse) "<-" else "->"
-    val identifier = "`${parentType.name}$separator${getVariableNameForField(fieldDefinition, context)}`"
-}
-
-data class TypeInfo(
-    val type: GraphQLCompositeType,
-    val fieldDefinitions: Set<GraphQLFieldDefinition>
-) {
-    val identifier = type.name
-}
-
 
 data class FieldInfo(
     val type: GraphQLCompositeType,
@@ -153,6 +129,7 @@ fun mapFieldToQueryTreeNode(
     return when {
         !isScalar -> CompositeNode(
             parent.context,
+            parent.atChangeId,
             field,
             fieldDefinition,
             "${field.alias ?: field.name}_scope",
@@ -165,11 +142,10 @@ fun mapFieldToQueryTreeNode(
             field,
             fieldDefinition,
             parent,
-            parent.context,
             overrideJoinType = overrideJoinType
         )
 
-        else -> ScalarValueNode(field, fieldDefinition, parent)
+        else -> ScalarCollectionNode(field, fieldDefinition, parent)
     }
 }
 

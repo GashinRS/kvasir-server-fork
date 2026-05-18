@@ -8,7 +8,11 @@ import kvasir.plugins.kg.clickhouse.client.QuerySpec
 
 const val SYSTEM_DB = "_kvasir"
 const val DATA_TABLE = "data"
-const val COLLAPSED_STATE_BY_TYPE_TABLE = "collapsed_state_by_type"
+const val CURRENT_DATA_TABLE = "current_data"
+const val SUBJECT_TYPES = "subject_types"
+const val CURRENT_SUBJECT_TYPES = "current_subject_types"
+const val COLLAPSE_EXPR =
+    "GROUP BY subject, predicate, object, datatype, language, graph HAVING argMax(sign, change_id) > 0"
 const val META_DATA_TABLE = "metadata"
 val DATA_COLUMNS =
     listOf("subject", "predicate", "object", "datatype", "language", "graph", "timestamp", "change_id", "sign")
@@ -54,7 +58,12 @@ class KGTypeQuerySpec(database: String) :
                         uri = property,
                         typeRefs = records.map { record ->
                             val kind = KGPropertyKind.valueOf(record.getString(1))
-                            val typeName = record.getString(2)
+                            // ClickHouse LEFT JOIN on non-Nullable String returns '' (not NULL) on miss,
+                            // so COALESCE in the MV may produce an empty property_ref. Fall back to
+                            // rdfs:Resource to keep schema generation safe for IRI properties.
+                            val typeName = record.getString(2).ifBlank {
+                                if (kind == KGPropertyKind.IRI) "http://www.w3.org/2000/01/rdf-schema#Resource" else ""
+                            }
                             KGTypeReference(kind, typeName)
                         }.toSet()
                     )

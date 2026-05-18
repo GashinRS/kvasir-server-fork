@@ -59,28 +59,6 @@ interface JoinableNode : QueryTreeNode {
 }
 
 /**
- * A node that references a specific Type table. These tables are not physical tables but are backed by CTEs.
- * By exposing the referenced types, we can determine which CTEs need to be included in the query.
- */
-interface NodeWithTypeRefs : QueryTreeNode {
-    /**
-     * Returns a list of TypeInfo objects representing the types that this node references.
-     */
-    fun getTypeRefs(): List<TypeInfo>
-}
-
-/**
- * A node that references specific Relation tables. These tables are not physical tables but are backed by CTEs.
- * By exposing the referenced relations, we can determine which CTEs need to be included in the query.
- */
-interface NodeWithRelationRefs : QueryTreeNode {
-    /**
-     * Returns a list of RelationInfo objects representing the relations that this node references.
-     */
-    fun getRelationRefs(): List<RelationInfo>
-}
-
-/**
  * A node that can have an RSQL filter applied to it, but the filter should be applied in the context of the parent node.
  * E.g. for filter directives on scalar fields.
  */

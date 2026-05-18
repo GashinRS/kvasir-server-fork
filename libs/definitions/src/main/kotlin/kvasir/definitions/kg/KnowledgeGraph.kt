@@ -64,6 +64,8 @@ interface KnowledgeGraph {
 
     fun streamChangeRecords(request: ChangeRecordRequest): Multi<ChangeRecord>
 
+    fun finalize(request: ChangeFinalizeRequest): Uni<Void>
+
     fun rollback(request: ChangeRollbackRequest): Uni<Void>
 }
 
@@ -73,6 +75,11 @@ interface ReferenceLoader {
 
     fun loadReference(podOrSliceId: String, reference: Reference): Multi<RDFStatement>
 }
+
+data class ChangeFinalizeRequest(
+    val podId: String,
+    val changeId: String
+)
 
 data class ChangeRollbackRequest(
     val podId: String,

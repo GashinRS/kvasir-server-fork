@@ -7,6 +7,7 @@ import io.quarkus.test.security.TestSecurity
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
 import jakarta.ws.rs.core.MediaType
+import kvasir.definitions.kg.ChangeFinalizeRequest
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryResult
 import kvasir.definitions.kg.changes.ChangeRequest
@@ -43,7 +44,11 @@ class QueryApiTest : AbstractPodTest() {
                 podId = podUri,
                 insert = personData
             )
-        ).await().indefinitely()
+        ).chain { processedChange ->
+            // Manually finalize the request
+            kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+        }.await().indefinitely()
+
     }
 
     @Test
@@ -209,6 +214,278 @@ class QueryApiTest : AbstractPodTest() {
 
     @Test
     @TestSecurity(user = "alice")
+    fun testFilterAtDifferentLevels() {
+        val startLetter = personData.random().let { it[SchemaVocab.givenName].toString().first() }
+        // Subset of persons whose given name starts with the selected letter
+        val expectedPersonIds = personData
+            .filter { it[SchemaVocab.givenName].toString().startsWith(startLetter) }
+            .map { it[JsonLdKeywords.id]!! }
+            .toSet()
+
+        // 1. Filter at type level using fully-qualified field name in the expression
+        val typeLevel = QueryInputWithContext(
+            query = """
+                {
+                  ex_Person @filter(if: "so_givenName==$startLetter*") {
+                    id
+                    so_givenName
+                  }
+                }
+            """.trimIndent(),
+            providedContext = TestConstants.CONTEXT
+        )
+        val typeLevelResult = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(typeLevel)
+            .post("{podId}$QUERY_API_PATH", podName)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        assertEquals(
+            expectedPersonIds,
+            typeLevelResult.getDataField<List<Map<String, Any>>>("ex_Person")?.map { it[FIELD_ID_NAME] }?.toSet()
+        )
+
+        // 2. Filter at field level referencing the field name explicitly
+        val fieldLevelFieldName = QueryInputWithContext(
+            query = """
+                {
+                  ex_Person {
+                    id
+                    so_givenName @filter(if: "so_givenName==$startLetter*")
+                  }
+                }
+            """.trimIndent(),
+            providedContext = TestConstants.CONTEXT
+        )
+        val fieldLevelFieldNameResult = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(fieldLevelFieldName)
+            .post("{podId}$QUERY_API_PATH", podName)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        assertEquals(
+            expectedPersonIds,
+            fieldLevelFieldNameResult.getDataField<List<Map<String, Any>>>("ex_Person")?.map { it[FIELD_ID_NAME] }?.toSet()
+        )
+
+        // 3. Filter at field level using 'it' shorthand
+        val fieldLevelIt = QueryInputWithContext(
+            query = """
+                {
+                  ex_Person {
+                    id
+                    so_givenName @filter(if: "it==$startLetter*")
+                  }
+                }
+            """.trimIndent(),
+            providedContext = TestConstants.CONTEXT
+        )
+        val fieldLevelItResult = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(fieldLevelIt)
+            .post("{podId}$QUERY_API_PATH", podName)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        assertEquals(
+            expectedPersonIds,
+            fieldLevelItResult.getDataField<List<Map<String, Any>>>("ex_Person")?.map { it[FIELD_ID_NAME] }?.toSet()
+        )
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
+    fun testOptionalScalarField() {
+        // Case 1: optional on a scalar (String) field — ex:email set only for a subset of persons.
+        val personsWithEmail = personData.shuffled().take(personData.size / 2)
+        val personsWithEmailIds = personsWithEmail.map { it[JsonLdKeywords.id]!! }.toSet()
+        val personsWithoutEmailIds = personData.map { it[JsonLdKeywords.id]!! }.toSet() - personsWithEmailIds
+
+        // Insert ex:email only for the selected subset
+        kg.process(
+            ChangeRequest(
+                id = ChangeRequestId.generate("$podUri/changes").encode(),
+                changeId = StateId.generate(),
+                context = emptyMap(),
+                requestingUser = "alice",
+                podId = podUri,
+                insert = personsWithEmail.map {
+                    mapOf(
+                        JsonLdKeywords.id to it[JsonLdKeywords.id],
+                        JsonLdKeywords.type to ExampleVocab.Person,
+                        ExampleVocab.email to "contact@example.org"
+                    )
+                }
+            )
+        ).chain { processedChange ->
+            kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+        }.await().indefinitely()
+
+        // Without @optional: only persons WITH ex:email are returned (inner-join semantics)
+        val withoutOptional = QueryInputWithContext(
+            query = """
+                {
+                  ex_Person {
+                    id
+                    ex_email
+                  }
+                }
+            """.trimIndent(),
+            providedContext = TestConstants.CONTEXT
+        )
+        val withoutOptionalResult = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(withoutOptional)
+            .post("{podId}$QUERY_API_PATH", podName)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        val returnedWithout = withoutOptionalResult.getDataField<List<Map<String, Any>>>("ex_Person")!!
+        assertEquals(
+            personsWithEmailIds,
+            returnedWithout.map { it[FIELD_ID_NAME]!! }.toSet(),
+            "Without @optional only persons with ex_email should be returned"
+        )
+
+        // With @optional: ALL persons are returned; those without ex:email have a null/empty value (left-join semantics)
+        val withOptional = QueryInputWithContext(
+            query = """
+                {
+                  ex_Person {
+                    id
+                    ex_email @optional
+                  }
+                }
+            """.trimIndent(),
+            providedContext = TestConstants.CONTEXT
+        )
+        val withOptionalResult = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(withOptional)
+            .post("{podId}$QUERY_API_PATH", podName)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        val returnedWith = withOptionalResult.getDataField<List<Map<String, Any>>>("ex_Person")!!
+        assertEquals(
+            personData.map { it[JsonLdKeywords.id]!! }.toSet(),
+            returnedWith.map { it[FIELD_ID_NAME]!! }.toSet(),
+            "With @optional all persons should be returned"
+        )
+        val personsWithoutInResult = returnedWith.filter { it[FIELD_ID_NAME]!! in personsWithoutEmailIds }
+        assertTrue(
+            personsWithoutInResult.all { it["ex_email"] == null || (it["ex_email"] as? List<*>)?.all { item -> item == "" } == true },
+            "Persons without ex_email should have a null or empty value when @optional is used"
+        )
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
+    fun testOptionalRelationField() {
+        // Case 2: optional on a non-scalar relation field — ex:friendOf pointing to another Person,
+        // set only for a subset of persons.
+        val personsWithFriendOf = personData.shuffled().take(personData.size / 2)
+        val personsWithFriendOfIds = personsWithFriendOf.map { it[JsonLdKeywords.id]!! }.toSet()
+        val personsWithoutFriendOfIds = personData.map { it[JsonLdKeywords.id]!! }.toSet() - personsWithFriendOfIds
+        val targetPerson = personData.first { it[JsonLdKeywords.id] !in personsWithFriendOfIds }
+
+        kg.process(
+            ChangeRequest(
+                id = ChangeRequestId.generate("$podUri/changes").encode(),
+                changeId = StateId.generate(),
+                context = emptyMap(),
+                requestingUser = "alice",
+                podId = podUri,
+                insert = personsWithFriendOf.map {
+                    mapOf(
+                        JsonLdKeywords.id to it[JsonLdKeywords.id],
+                        JsonLdKeywords.type to ExampleVocab.Person,
+                        ExampleVocab.friendOf to mapOf(
+                            JsonLdKeywords.id to targetPerson[JsonLdKeywords.id],
+                            JsonLdKeywords.type to ExampleVocab.Person
+                        )
+                    )
+                }
+            )
+        ).chain { processedChange ->
+            kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+        }.await().indefinitely()
+
+        // Without @optional: only persons WITH ex:friendOf are returned
+        val withoutOptional = QueryInputWithContext(
+            query = """
+                {
+                  ex_Person {
+                    id
+                    ex_friendOf {
+                      id
+                    }
+                  }
+                }
+            """.trimIndent(),
+            providedContext = TestConstants.CONTEXT
+        )
+        val withoutOptionalResult = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(withoutOptional)
+            .post("{podId}$QUERY_API_PATH", podName)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        val returnedWithout = withoutOptionalResult.getDataField<List<Map<String, Any>>>("ex_Person")!!
+        assertEquals(
+            personsWithFriendOfIds,
+            returnedWithout.map { it[FIELD_ID_NAME]!! }.toSet(),
+            "Without @optional only persons with ex_friendOf should be returned"
+        )
+
+        // With @optional: ALL persons are returned; those without ex:friendOf have a null/empty relation
+        val withOptional = QueryInputWithContext(
+            query = """
+                {
+                  ex_Person {
+                    id
+                    ex_friendOf @optional {
+                      id
+                    }
+                  }
+                }
+            """.trimIndent(),
+            providedContext = TestConstants.CONTEXT
+        )
+        val withOptionalResult = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(withOptional)
+            .post("{podId}$QUERY_API_PATH", podName)
+            .then()
+            .statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+        val returnedWith = withOptionalResult.getDataField<List<Map<String, Any>>>("ex_Person")!!
+        assertEquals(
+            personData.map { it[JsonLdKeywords.id]!! }.toSet(),
+            returnedWith.map { it[FIELD_ID_NAME]!! }.toSet(),
+            "With @optional all persons should be returned"
+        )
+        val personsWithoutInResult = returnedWith.filter { it[FIELD_ID_NAME]!! in personsWithoutFriendOfIds }
+        assertTrue(
+            personsWithoutInResult.all { it["ex_friendOf"] == null || (it["ex_friendOf"] as? List<*>)?.isEmpty() == true },
+            "Persons without ex_friendOf should have a null or empty relation when @optional is used"
+        )
+        // Persons WITH ex:friendOf should point to the target person
+        val personsWithInResult = returnedWith.filter { it[FIELD_ID_NAME]!! in personsWithFriendOfIds }
+        assertTrue(
+            personsWithInResult.all {
+                @Suppress("UNCHECKED_CAST")
+                (it["ex_friendOf"] as? List<Map<String, Any>>)?.any { rel -> rel[FIELD_ID_NAME] == targetPerson[JsonLdKeywords.id] } == true
+            },
+            "Persons with ex_friendOf should point to the target person"
+        )
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
     fun testPaginationAndSorting() {
         // Expect persons ordered by familyName and then by id
         val expectedResults =
@@ -274,7 +551,10 @@ class QueryApiTest : AbstractPodTest() {
                         )
                     )
                 }
-            )).await().indefinitely()
+            )).chain { processedChange ->
+            // Manually finalize the request
+            kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+        }.await().indefinitely()
 
         // Query a specific child and travel non-inverse to the parent
         val selectedChild = children.random()
@@ -496,7 +776,12 @@ class QueryApiTest : AbstractPodTest() {
                 )
             )
         )
-        kg.process(changeRequest).await().indefinitely()
+        kg.process(changeRequest)
+            .chain { processedChange ->
+                // Manually finalize the request
+                kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+            }
+            .await().indefinitely()
 
         val q = QueryInputWithContext(
             """
@@ -540,7 +825,10 @@ class QueryApiTest : AbstractPodTest() {
                 )
             )
         )
-        kg.process(changeRequest2).await().indefinitely()
+        kg.process(changeRequest2).chain { processedChange ->
+            // Manually finalize the request
+            kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+        }.await().indefinitely()
 
         // Perform the query again, rawRDF should contain both Person ids and the literal values.
         result = testHelpers.queryKGViaHTTP(q, podUri)
@@ -571,7 +859,10 @@ class QueryApiTest : AbstractPodTest() {
                 )
             )
         )
-        kg.process(reverseChanges).await().indefinitely()
+        kg.process(reverseChanges).chain { processedChange ->
+            // Manually finalize the request
+            kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+        }.await().indefinitely()
 
         // Perform the query again, there should be no results
         result = testHelpers.queryKGViaHTTP(q, podUri)

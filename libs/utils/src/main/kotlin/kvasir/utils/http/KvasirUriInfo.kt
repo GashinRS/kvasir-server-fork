@@ -42,7 +42,7 @@ class KvasirUriInfo {
      * @param overrideQueryParams Override the specified query parameters, with the associated values.
      */
     fun getAbsoluteUri(vararg overrideQueryParams: Pair<String, String>): URI {
-        val builder = UriBuilder.fromUri(URI.create(getBaseUri()))
+        val builder = UriBuilder.fromUri(getResourceUri())
         delegate.queryParameters.forEach { (name, values) -> builder.queryParam(name, *values.toTypedArray()) }
         overrideQueryParams.forEach { (queryParamName, queryParamValue) ->
             builder.replaceQueryParam(

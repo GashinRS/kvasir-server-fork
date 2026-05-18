@@ -6,6 +6,7 @@ import io.quarkus.test.security.TestSecurity
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
 import jakarta.ws.rs.core.MediaType
+import kvasir.definitions.kg.ChangeFinalizeRequest
 import kvasir.definitions.kg.ChangeRecordRequest
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryResult
@@ -108,7 +109,10 @@ class GraphSlicesApiTest : AbstractPodTest() {
                 podId = podUri,
                 insert = allPersonData
             )
-        ).await().indefinitely()
+        ).chain { processedChange ->
+            // Manually finalize the request
+            kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+        }.await().indefinitely()
 
         // Query via Slice
         var result = given()
