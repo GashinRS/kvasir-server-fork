@@ -11,6 +11,9 @@ import graphql.schema.GraphQLObjectType
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.converters.multi.MultiRx3Converters
+import io.vertx.core.json.Json
+import io.vertx.mutiny.core.Vertx
+import io.vertx.mutiny.kafka.client.consumer.KafkaConsumer
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.ChangeRecord
 import kvasir.definitions.kg.ChangeRecordRequest
@@ -22,17 +25,19 @@ import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.persistence.Sort
 import kvasir.definitions.rdf.RDFVocab
 import kvasir.plugins.messaging.kafka.Channels
+import kvasir.plugins.messaging.kafka.KafkaMessagingConfig
 import kvasir.utils.graphql.getDirectiveArg
 import kvasir.utils.graphql.getFQName
 import kvasir.utils.graphql.innerType
-import org.eclipse.microprofile.reactive.messaging.Channel
+import org.eclipse.microprofile.reactive.messaging.Message
 import org.reactivestreams.Publisher
+import java.util.UUID
 import java.util.concurrent.CompletionStage
 
 @ApplicationScoped
 class StreamingDatafetcherFactory(
-    @Channel(Channels.CHANGES_OUTGOING_SUBSCRIBE)
-    private val outbox: Multi<ProcessedChange>,
+    private val vertx: Vertx,
+    private val kafkaConfig: KafkaMessagingConfig,
     private val knowledgeGraph: DefaultKnowledgeGraph,
     private val repositoryFactory: RepositoryFactory
 ) {
@@ -153,14 +158,15 @@ class StreamingDatafetcherFactory(
         predicatesIn: Set<String>? = null,
         objectsIn: Set<String>? = null,
     ): Multi<List<ChangeRecord>> {
-        return outbox.filter { msg -> msg.podId == request.podId }
+        return streamFrom(Channels.CHANGES_OUTGOING_TOPIC, ProcessedChange::class.java)
+            .filter { msg -> msg.payload.podId == request.podId }
             .onItem()
             .transformToUniAndConcatenate { msg ->
-                print("Received change report: $msg")
+                print("Received change report: ${msg.payload}")
                 knowledgeGraph.getChangeRecords(
                     ChangeRecordRequest(
-                        podId = msg.podId,
-                        changeId = msg.id,
+                        podId = msg.payload.podId,
+                        changeId = msg.payload.id,
                         subjectIn = subjectsIn,
                         predicateIn = predicatesIn,
                         objectIn = objectsIn,
@@ -168,6 +174,30 @@ class StreamingDatafetcherFactory(
                     )
                 ).map {
                     it.items
+                }
+            }
+    }
+
+    private fun <T> streamFrom(
+        targetTopic: String,
+        payloadType: Class<T>,
+        receiveBacklog: Boolean = true,
+    ): Multi<Message<T>> {
+        val consumerName = "graphql-subscription-${UUID.randomUUID()}"
+        val config = mutableMapOf(
+            "bootstrap.servers" to kafkaConfig.bootstrapServers(),
+            "key.deserializer" to "org.apache.kafka.common.serialization.StringDeserializer",
+            "value.deserializer" to "org.apache.kafka.common.serialization.StringDeserializer",
+            "group.id" to consumerName,
+            "auto.offset.reset" to if (receiveBacklog) "earliest" else "latest",
+            "enable.auto.commit" to "true",
+        )
+        val consumer = KafkaConsumer.create<String, String>(vertx, config)
+        return consumer.subscribe(targetTopic)
+            .onItem().transformToMulti {
+                consumer.toMulti().map { record ->
+                    Message.of(Json.decodeValue(record.value(), payloadType))
+                        .withAck { consumer.commit().subscribeAsCompletionStage() }
                 }
             }
     }
