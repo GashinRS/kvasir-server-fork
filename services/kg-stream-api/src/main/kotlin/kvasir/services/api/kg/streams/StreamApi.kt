@@ -32,6 +32,7 @@ import java.util.*
 private const val STREAMING_BUFFER_SIZE = 500
 private const val STREAMING_BUFFERING_MAX_DELAY_MS = 1000L
 private const val RESUME_TOKEN_HTTP_HEADER_NAME = "X-Kvasir-Resume-Token"
+private const val STREAM_CHANGE_RECORD_PAGE_SIZE = 25_000
 
 @Path("")
 class StreamApi(
@@ -80,7 +81,8 @@ class StreamApi(
                 knowledgeGraph.streamChangeRecords(
                     ChangeRecordRequest(
                         podId = msg.payload.podId,
-                        changeId = msg.payload.id
+                        changeId = msg.payload.id,
+                        pageSize = STREAM_CHANGE_RECORD_PAGE_SIZE
                     )
                 )
             }

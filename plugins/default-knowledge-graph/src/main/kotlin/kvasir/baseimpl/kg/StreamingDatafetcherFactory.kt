@@ -34,6 +34,8 @@ import org.reactivestreams.Publisher
 import java.util.UUID
 import java.util.concurrent.CompletionStage
 
+private const val SUBSCRIPTION_CHANGE_RECORD_PAGE_SIZE = 25_000
+
 @ApplicationScoped
 class StreamingDatafetcherFactory(
     private val vertx: Vertx,
@@ -163,18 +165,17 @@ class StreamingDatafetcherFactory(
             .onItem()
             .transformToUniAndConcatenate { msg ->
                 print("Received change report: ${msg.payload}")
-                knowledgeGraph.getChangeRecords(
+                knowledgeGraph.streamChangeRecords(
                     ChangeRecordRequest(
                         podId = msg.payload.podId,
                         changeId = msg.payload.id,
+                        pageSize = SUBSCRIPTION_CHANGE_RECORD_PAGE_SIZE,
                         subjectIn = subjectsIn,
                         predicateIn = predicatesIn,
                         objectIn = objectsIn,
                         recordType = recordType
                     )
-                ).map {
-                    it.items
-                }
+                ).collect().asList()
             }
     }
 
