@@ -4,6 +4,7 @@ import graphql.execution.MergedField
 import graphql.language.Argument
 import graphql.language.ArrayValue
 import graphql.language.EnumValue
+import graphql.language.IntValue
 import graphql.language.StringValue
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironmentImpl
@@ -11,6 +12,7 @@ import graphql.schema.GraphQLObjectType
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.converters.multi.MultiRx3Converters
+import io.quarkus.logging.Log
 import io.vertx.core.json.Json
 import io.vertx.mutiny.core.Vertx
 import io.vertx.mutiny.kafka.client.consumer.KafkaConsumer
@@ -31,10 +33,19 @@ import kvasir.utils.graphql.getFQName
 import kvasir.utils.graphql.innerType
 import org.eclipse.microprofile.reactive.messaging.Message
 import org.reactivestreams.Publisher
+import java.math.BigInteger
+import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.CompletionStage
 
 private const val SUBSCRIPTION_CHANGE_RECORD_PAGE_SIZE = 25_000
+private const val SUBSCRIPTION_CHANGE_REPORT_BATCH_SIZE = 10
+private const val SUBSCRIPTION_CHANGE_REPORT_BATCH_MAX_DELAY_MS = 1000L
+
+private data class SubscriptionChangeBatch(
+    val changeId: String,
+    val records: List<ChangeRecord>
+)
 
 @ApplicationScoped
 class StreamingDatafetcherFactory(
@@ -94,8 +105,10 @@ class StreamingDatafetcherFactory(
                     ?: setOf(subscriptionType) // Fallback to the subscription return type
 
             streamChangeRecords(request, triggerType, triggerSubjectIn, triggerPredicateIn, triggerObjectIn).onItem()
-                .transformToMulti { changes ->
+                .transformToMulti { batch ->
+                    val changes = batch.records
                     if (changes.isNotEmpty()) {
+                        val changedSubjects = changes.map { it.statement.subject }.distinct()
                         val mergedField = env.mergedField
                         val fields = mergedField.fields
                         val newFields = fields.map { field ->
@@ -106,8 +119,14 @@ class StreamingDatafetcherFactory(
                                             ARG_ID_NAME
                                         ).value(
                                             ArrayValue.newArrayValue()
-                                                .values(changes.map { StringValue(it.statement.subject) }.distinct())
+                                                .values(changedSubjects.map { StringValue(it) })
                                                 .build()
+                                        ).build()
+                                    ).plus(
+                                        Argument.newArgument().name(
+                                            ARG_PAGE_SIZE_NAME
+                                        ).value(
+                                            IntValue(BigInteger.valueOf(changedSubjects.size.toLong()))
                                         ).build()
                                     )
                                 )
@@ -120,12 +139,12 @@ class StreamingDatafetcherFactory(
 
                         // Fetch request changeId
                         when (triggerType) {
-                            ChangeRecordType.INSERT, null -> Uni.createFrom().item(changes.first().changeId)
+                            ChangeRecordType.INSERT, null -> Uni.createFrom().item(batch.changeId)
                             ChangeRecordType.DELETE -> {
                                 // For deletions, we need to find the preceding changeId
                                 repositoryFactory.getRepository(ProcessedChange::class, request.podId)
                                     .find(
-                                        filter = "id < '${changes.first().changeId}'",
+                                        filter = "id < '${batch.changeId}'",
                                         sort = Sort.descending(),
                                         limit = 1
                                     )
@@ -159,24 +178,46 @@ class StreamingDatafetcherFactory(
         subjectsIn: Set<String>? = null,
         predicatesIn: Set<String>? = null,
         objectsIn: Set<String>? = null,
-    ): Multi<List<ChangeRecord>> {
+    ): Multi<SubscriptionChangeBatch> {
+        val batchSize = if (recordType == ChangeRecordType.INSERT) {
+            SUBSCRIPTION_CHANGE_REPORT_BATCH_SIZE
+        } else {
+            1
+        }
         return streamFrom(Channels.CHANGES_OUTGOING_TOPIC, ProcessedChange::class.java)
             .filter { msg -> msg.payload.podId == request.podId }
+            .group().intoLists().of(batchSize, Duration.ofMillis(SUBSCRIPTION_CHANGE_REPORT_BATCH_MAX_DELAY_MS))
+            .filter { messages -> messages.isNotEmpty() }
             .onItem()
-            .transformToUniAndConcatenate { msg ->
-                print("Received change report: ${msg.payload}")
-                knowledgeGraph.streamChangeRecords(
-                    ChangeRecordRequest(
-                        podId = msg.payload.podId,
-                        changeId = msg.payload.id,
-                        pageSize = SUBSCRIPTION_CHANGE_RECORD_PAGE_SIZE,
-                        subjectIn = subjectsIn,
-                        predicateIn = predicatesIn,
-                        objectIn = objectsIn,
-                        recordType = recordType
-                    )
-                ).collect().asList()
+            .transformToUniAndConcatenate { messages ->
+                Multi.createFrom().iterable(messages)
+                    .onItem().transformToUniAndConcatenate { msg ->
+                        knowledgeGraph.streamChangeRecords(
+                            ChangeRecordRequest(
+                                podId = msg.payload.podId,
+                                changeId = msg.payload.id,
+                                pageSize = SUBSCRIPTION_CHANGE_RECORD_PAGE_SIZE,
+                                subjectIn = subjectsIn,
+                                predicateIn = predicatesIn,
+                                objectIn = objectsIn,
+                                recordType = recordType
+                            )
+                        ).collect().asList()
+                    }
+                    .collect().asList()
+                    .map { recordLists ->
+                        val records = recordLists.flatten()
+                        Log.debug(
+                            "Subscription change batch for pod ${request.podId}: " +
+                                    "${messages.size} changes, ${records.size} records"
+                        )
+                        SubscriptionChangeBatch(
+                            changeId = messages.last().payload.id,
+                            records = records
+                        )
+                    }
             }
+            .filter { batch -> batch.records.isNotEmpty() }
     }
 
     private fun <T> streamFrom(
