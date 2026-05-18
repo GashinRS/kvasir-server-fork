@@ -38,9 +38,12 @@ import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.CompletionStage
 
-private const val SUBSCRIPTION_CHANGE_RECORD_PAGE_SIZE = 25_000
-private const val SUBSCRIPTION_CHANGE_REPORT_BATCH_SIZE = 10
-private const val SUBSCRIPTION_CHANGE_REPORT_BATCH_MAX_DELAY_MS = 1000L
+private val SUBSCRIPTION_CHANGE_RECORD_PAGE_SIZE =
+    System.getenv("KVASIR_SUBSCRIPTION_CHANGE_RECORD_PAGE_SIZE")?.toIntOrNull() ?: 25_000
+private val SUBSCRIPTION_CHANGE_REPORT_BATCH_SIZE =
+    System.getenv("KVASIR_SUBSCRIPTION_CHANGE_REPORT_BATCH_SIZE")?.toIntOrNull() ?: 5000
+private val SUBSCRIPTION_CHANGE_REPORT_BATCH_MAX_DELAY_MS =
+    System.getenv("KVASIR_SUBSCRIPTION_CHANGE_REPORT_BATCH_MAX_DELAY_MS")?.toLongOrNull() ?: 1000L
 
 private data class SubscriptionChangeBatch(
     val changeId: String,
@@ -114,7 +117,9 @@ class StreamingDatafetcherFactory(
                         val newFields = fields.map { field ->
                             field.transform { builder ->
                                 builder.arguments(
-                                    field.arguments.plus(
+                                    field.arguments.filterNot { argument ->
+                                        argument.name == ARG_ID_NAME || argument.name == ARG_PAGE_SIZE_NAME
+                                    }.plus(
                                         Argument.newArgument().name(
                                             ARG_ID_NAME
                                         ).value(
@@ -191,7 +196,7 @@ class StreamingDatafetcherFactory(
             .onItem()
             .transformToUniAndConcatenate { messages ->
                 Multi.createFrom().iterable(messages)
-                    .onItem().transformToUniAndConcatenate { msg ->
+                    .onItem().transformToUniAndMerge { msg ->
                         knowledgeGraph.streamChangeRecords(
                             ChangeRecordRequest(
                                 podId = msg.payload.podId,
