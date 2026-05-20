@@ -280,6 +280,26 @@ openapi:
       --theme.openapi.pathInMiddlePanel=true
     npx --yes http-server ./target/_openapi -p 8765 -o
 
+openapi-watch:
+    npx --yes @redocly/cli build-docs \
+      -o ./target/_openapi/index.html \
+      ./services/monolith/target/openapi/openapi.yaml \
+      --theme.openapi.hideHostname=true \
+      --theme.openapi.pathInMiddlePanel=true && \
+    npx --yes browser-sync start \
+      --server ./target/_openapi \
+      --port 8765 \
+      --files "./target/_openapi/index.html" \
+      --no-notify & \
+    while inotifywait -e close_write ./services/monolith/target/openapi/openapi.yaml; do \
+      npx --yes @redocly/cli build-docs \
+        -o ./target/_openapi/index.html \
+        ./services/monolith/target/openapi/openapi.yaml \
+        --theme.openapi.hideHostname=true \
+        --theme.openapi.pathInMiddlePanel=true; \
+    done
+
+
 
 # ── Release ───────────────────────────────────────────────────────────────────
 
