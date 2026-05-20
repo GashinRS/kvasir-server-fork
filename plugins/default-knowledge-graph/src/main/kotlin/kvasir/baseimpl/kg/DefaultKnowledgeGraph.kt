@@ -29,6 +29,7 @@ import kvasir.definitions.reactive.conditionalUni
 import kvasir.definitions.reactive.skipToLast
 import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.cursors.OffsetBasedCursor
+import kvasir.utils.graphql.HiddenFieldVisibility
 import kvasir.utils.graphql.RDFClassTypeResolver
 import kvasir.utils.graphql.SliceGraphQLSchema
 import kvasir.utils.idgen.ChangeRequestId
@@ -242,6 +243,7 @@ class DefaultKnowledgeGraph(
                     val codeRegistry =
                         GraphQLCodeRegistry.newCodeRegistry()
                             .defaultDataFetcher { _ -> buildDatafetcher(request, atChangeId) }
+                            .fieldVisibility(HiddenFieldVisibility())
                     codeRegistry.typeResolver(KvasirTypes.Resource, RDFClassTypeResolver(request.context))
                     codeRegistry.typeResolver(KvasirTypes.RDFNode, RDFClassTypeResolver(request.context))
                     VersionedGraphQLSchema(
@@ -408,7 +410,12 @@ class DefaultKnowledgeGraph(
                         .build()
                 val executableSchema =
                     graphql.schema.idl.SchemaGenerator().makeExecutableSchema(typeDefinitionRegistry, runtimeWiring)
-                VersionedGraphQLSchema(executableSchema, atChangeId)
+                val schemaWithVisibility = executableSchema.transform { builder ->
+                    builder.codeRegistry(executableSchema.codeRegistry.transform { cr ->
+                        cr.fieldVisibility(HiddenFieldVisibility())
+                    })
+                }
+                VersionedGraphQLSchema(schemaWithVisibility, atChangeId)
             }
     }
 

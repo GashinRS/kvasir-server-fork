@@ -20,8 +20,7 @@ import kvasir.definitions.rdf.XSDVocab
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.idgen.StateId
 import kvasir.utils.test.commons.*
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -41,6 +40,21 @@ class GraphSlicesAdvancedApiTest : AbstractPodTest() {
 
     @Inject
     lateinit var repositoryFactory: RepositoryFactory
+
+    // -----------------------------------------------------------------------
+    // @hidden directive test data
+    // -----------------------------------------------------------------------
+
+    private val hiddenSliceName = "hidden-test"
+    private lateinit var hiddenSliceUri: String
+
+    private val hiddenQualifyingDomain = "@hidden-test.org"
+
+    /** Persons whose email qualifies — visible through the Slice. */
+    private lateinit var personsVisibleInHiddenSlice: List<Map<String, Any>>
+
+    /** Persons with no qualifying email — invisible through the Slice. */
+    private lateinit var personsHiddenInHiddenSlice: List<Map<String, Any>>
 
     // -----------------------------------------------------------------------
     // @mustExist test data
@@ -75,8 +89,59 @@ class GraphSlicesAdvancedApiTest : AbstractPodTest() {
 
     @BeforeAll
     fun setupSlicesAndData() {
+        setupHiddenSlice()
         setupMustExistSlice()
         setupRdfNodeSlice()
+    }
+
+    private fun setupHiddenSlice() {
+        hiddenSliceUri = "$podUri/slices/$hiddenSliceName"
+
+        // so_email is @hidden: it restricts the visible persons via @filter but is never
+        // exposed to clients — neither via introspection nor as a selectable field.
+        val schema = """
+            type Query {
+                persons: [ex_Person!]!
+            }
+
+            type ex_Person {
+                id: ID!
+                so_givenName: String!
+                so_email: [String!] @hidden @filter(if: "it==*$hiddenQualifyingDomain")
+            }
+        """.trimIndent()
+
+        repositoryFactory.getVersionedRepository(Slice::class, podUri).persist(
+            Slice(
+                id = hiddenSliceUri,
+                name = hiddenSliceName,
+                description = "",
+                createdBy = "alice",
+                context = TestConstants.CONTEXT,
+                schema = EmbeddedSliceSchema(schema)
+            )
+        ).await().indefinitely()
+
+        personsVisibleInHiddenSlice = TestDataGenerator.generatePersonData(5).map { person ->
+            person.apply {
+                val firstName = person[SchemaVocab.givenName] as String
+                this[SchemaVocab.email] = listOf("$firstName$hiddenQualifyingDomain")
+            }
+        }
+        personsHiddenInHiddenSlice = TestDataGenerator.generatePersonData(8)
+
+        kg.process(
+            ChangeRequest(
+                id = ChangeRequestId.generate("$podUri/changes").encode(),
+                changeId = StateId.generate(),
+                context = emptyMap(),
+                requestingUser = "alice",
+                podId = podUri,
+                insert = personsVisibleInHiddenSlice + personsHiddenInHiddenSlice
+            )
+        ).chain { processedChange ->
+            kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
+        }.await().indefinitely()
     }
 
     private fun setupMustExistSlice() {
@@ -182,6 +247,106 @@ class GraphSlicesAdvancedApiTest : AbstractPodTest() {
         ).chain { processedChange ->
             kg.finalize(ChangeFinalizeRequest(podUri, processedChange.id))
         }.await().indefinitely()
+    }
+
+    // -----------------------------------------------------------------------
+    // @hidden directive tests
+    // -----------------------------------------------------------------------
+
+    /**
+     * A @hidden field with @filter still restricts the result set — only persons whose
+     * email matches the filter are returned, even though so_email is not requested and
+     * will not appear in the response.
+     */
+    @Test
+    @TestSecurity(user = "alice")
+    fun testHiddenFieldFiltersData() {
+        val result = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(QueryInputImpl(query = "{ persons { id so_givenName } }"))
+            .post("{podId}/slices/{sliceId}/query", podName, hiddenSliceName)
+            .then().statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+
+        val returned = result.getDataField<List<Map<String, Any>>>("persons")!!
+        assertEquals(
+            personsVisibleInHiddenSlice.map { it[JsonLdKeywords.id] }.toSet(),
+            returned.map { it[FIELD_ID_NAME] }.toSet(),
+            "Only persons whose hidden email matches the filter should be returned"
+        )
+        // The hidden field must not leak into the response
+        assertTrue(
+            returned.none { it.containsKey("so_email") },
+            "The @hidden field so_email must not appear in the response"
+        )
+    }
+
+    /**
+     * Attempting to select a @hidden field in a query must be rejected with a
+     * validation error — the field should not be selectable by clients.
+     */
+    @Test
+    @TestSecurity(user = "alice")
+    fun testHiddenFieldCannotBeQueried() {
+        val result = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(QueryInputImpl(query = "{ persons { id so_givenName so_email } }"))
+            .post("{podId}/slices/{sliceId}/query", podName, hiddenSliceName)
+            .then().statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+
+        assertNotNull(result.errors, "Querying a @hidden field should produce errors")
+        assertTrue(
+            result.errors!!.isNotEmpty(),
+            "There should be at least one validation error when selecting a @hidden field"
+        )
+        assertTrue(
+            result.errors!!.any { error ->
+                error.toString().contains("so_email", ignoreCase = true)
+            },
+            "The error message should mention the offending field name 'so_email'"
+        )
+    }
+
+    /**
+     * Introspection of the Slice type must not expose the @hidden field — it should be
+     * absent from the list of fields returned by __type.
+     */
+    @Test
+    @TestSecurity(user = "alice")
+    fun testHiddenFieldNotVisibleInIntrospection() {
+        val introspectionQuery = """
+            {
+              __type(name: "ex_Person") {
+                fields {
+                  name
+                }
+              }
+            }
+        """.trimIndent()
+
+        val result = given()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(QueryInputImpl(query = introspectionQuery))
+            .post("{podId}/slices/{sliceId}/query", podName, hiddenSliceName)
+            .then().statusCode(200)
+            .extract().body().`as`(QueryResult::class.java)
+
+        @Suppress("UNCHECKED_CAST")
+        val typeInfo = result.getDataField<Map<String, Any>>("__type")
+        @Suppress("UNCHECKED_CAST")
+        val fieldNames = (typeInfo?.get("fields") as? List<Map<String, Any>>)
+            ?.map { it["name"] as String }
+            ?: emptyList()
+
+        assertFalse(
+            fieldNames.contains("so_email"),
+            "The @hidden field so_email must not appear in introspection results"
+        )
+        assertTrue(
+            fieldNames.contains("so_givenName"),
+            "Non-hidden field so_givenName should still appear in introspection"
+        )
     }
 
     // -----------------------------------------------------------------------

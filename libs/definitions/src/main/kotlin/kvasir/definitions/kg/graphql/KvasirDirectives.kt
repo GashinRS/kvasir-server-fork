@@ -81,6 +81,14 @@ object KvasirDirectives {
             .build()
 
     /**
+     * When defining a schema: express that a field should not be exposed to clients. This allows the schema author to define certain filter conditions or add a mustExist directive without making this data available to the outside world.
+     */
+    val hiddenDirective =
+        GraphQLDirective.newDirective().name(DIRECTIVE_HIDDEN_NAME)
+            .validLocation(Introspection.DirectiveLocation.FIELD_DEFINITION)
+            .build()
+
+    /**
      * When defining a schema: indicate that a field must have a value (i.e. cannot be null or empty) for its encapsulating object to be considered a valid instance of the parent type.
      */
     val mustExistDirective =
@@ -154,6 +162,7 @@ object KvasirDirectives {
         graphDirective,
         triggerDirective,
         generateMutationsDirective,
-        mustExistDirective
+        mustExistDirective,
+        hiddenDirective
     )
 }

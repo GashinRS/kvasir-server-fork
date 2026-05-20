@@ -10,7 +10,6 @@ import io.smallrye.mutiny.Uni
 import io.vertx.core.http.HttpServerRequest
 import jakarta.enterprise.inject.spi.CDI
 import jakarta.ws.rs.ClientErrorException
-import jakarta.ws.rs.core.HttpHeaders
 import kvasir.plugins.policyagent.openfga.OpenFgaConstants
 import kvasir.plugins.policyagent.openfga.utils.addWwwAuthenticateValue
 import kvasir.utils.pod.PodConfigProvider
