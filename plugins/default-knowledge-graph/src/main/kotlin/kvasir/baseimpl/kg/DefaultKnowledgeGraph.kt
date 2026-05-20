@@ -6,7 +6,10 @@ import graphql.GraphQL
 import graphql.GraphqlErrorBuilder
 import graphql.execution.*
 import graphql.scalars.ExtendedScalars
-import graphql.schema.*
+import graphql.schema.DataFetcher
+import graphql.schema.GraphQLCodeRegistry
+import graphql.schema.GraphQLNamedType
+import graphql.schema.GraphQLSchema
 import graphql.schema.idl.*
 import io.quarkus.logging.Log
 import io.smallrye.mutiny.Multi
@@ -272,6 +275,9 @@ class DefaultKnowledgeGraph(
                             if (request.variables != null) {
                                 this.variables(request.variables)
                             }
+                            if (request.operationName != null) {
+                                this.operationName(request.operationName)
+                            }
                         }
                         .query(request.query)
                         .build()
@@ -377,28 +383,14 @@ class DefaultKnowledgeGraph(
             .map { atChangeId ->
                 val typeDefinitionRegistry =
                     SliceGraphQLSchema(request.predefinedSchema!!, request.context).getTypeDefinitionRegistry()
+                val dataFetcher = buildDatafetcher(request, atChangeId)
+                val typeResolver = RDFClassTypeResolver(request.context)
                 val dynamicWiringFactory = object : WiringFactory {
-
-                    override fun getDefaultDataFetcher(environment: FieldWiringEnvironment): DataFetcher<*> {
-                        return buildDatafetcher(request, atChangeId)
-                    }
-
-                    override fun providesTypeResolver(environment: InterfaceWiringEnvironment): Boolean {
-                        return true
-                    }
-
-                    override fun getTypeResolver(environment: InterfaceWiringEnvironment): TypeResolver {
-                        return RDFClassTypeResolver(request.context)
-                    }
-
-                    override fun providesTypeResolver(environment: UnionWiringEnvironment): Boolean {
-                        return true
-                    }
-
-                    override fun getTypeResolver(environment: UnionWiringEnvironment): TypeResolver {
-                        return RDFClassTypeResolver(request.context)
-                    }
-
+                    override fun getDefaultDataFetcher(environment: FieldWiringEnvironment) = dataFetcher
+                    override fun providesTypeResolver(environment: InterfaceWiringEnvironment) = true
+                    override fun getTypeResolver(environment: InterfaceWiringEnvironment) = typeResolver
+                    override fun providesTypeResolver(environment: UnionWiringEnvironment) = true
+                    override fun getTypeResolver(environment: UnionWiringEnvironment) = typeResolver
                 }
                 val runtimeWiring =
                     RuntimeWiring.newRuntimeWiring()

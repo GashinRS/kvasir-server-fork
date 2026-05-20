@@ -47,8 +47,16 @@ class MutationToChangeRequest(private val request: QueryRequest) {
     }
 
     fun isComplete(env: DataFetchingEnvironment): Boolean {
-        val totalOps = env.document.definitions.filterIsInstance<OperationDefinition>()
-            .firstOrNull { it.operation == OperationDefinition.Operation.MUTATION }?.selectionSet?.selections?.size
+        val mutationDefs = env.document.definitions.filterIsInstance<OperationDefinition>()
+            .filter { it.operation == OperationDefinition.Operation.MUTATION }
+        // When an operationName is specified, match the correct definition; otherwise fall back to the single/first one
+        val operationName = env.operationDefinition?.name
+        val activeMutation = if (operationName != null) {
+            mutationDefs.firstOrNull { it.name == operationName }
+        } else {
+            mutationDefs.firstOrNull()
+        }
+        val totalOps = activeMutation?.selectionSet?.selections?.size
         return totalOps == mutationFields.size
     }
 
