@@ -10,6 +10,7 @@ import org.eclipse.microprofile.openapi.models.media.Schema
 import org.jboss.logging.Logger
 
 const val JSONLD_MIME_TYPE = "application/ld+json"
+const val TEXT_EVENT_STREAM_MIME_TYPE = "text/event-stream"
 
 @OpenApiFilter(OpenApiFilter.RunStage.BUILD)
 class OpenApiJsonLDFilter : OASFilter {
@@ -36,11 +37,19 @@ class OpenApiJsonLDFilter : OASFilter {
         val requestRefs = emptySet<String>().toMutableSet();
         val requestArraySchemas = emptySet<Schema>().toMutableSet();
         openAPI.paths.pathItems.forEach {
+
+            // TODO: Add support for text/event-stream
+
             it.value.operations.forEach { op ->
                 // Get all refs in the return type that are object references
                 val respRefs = op.value.responses?.apiResponses
-                    ?.map { resp -> resp.value.content?.getMediaType(JSONLD_MIME_TYPE)?.schema?.ref }
-                    ?.filterNotNull()
+                    ?.flatMap { resp ->
+                        val content = resp.value.content ?: return@flatMap emptyList()
+                        listOfNotNull(
+                            content.getMediaType(JSONLD_MIME_TYPE)?.schema?.ref,
+                            content.getMediaType(TEXT_EVENT_STREAM_MIME_TYPE)?.schema?.ref,
+                        )
+                    }
                     ?: emptyList()
                 responseRefs.addAll(respRefs);
 
