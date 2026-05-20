@@ -1,3 +1,13 @@
+## [0.19.0-beta.3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.2...v0.19.0-beta.3) - 2026-05-18
+
+### Breaking
+
+- [**breaking**] Fixed new query resolver performance issues ([5908066](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/5908066bd9e02681b5ee9cb2d476ee9f00509c71))
+
+### Features
+
+- Introduced @hidden GraphQL directive to hide specific fields from schema. ([a297b47](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/a297b47516d6d416ac511396d0426af65fe12a81))
+
 ## [0.19.0-beta.2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.1...v0.19.0-beta.2) - 2026-04-27
 
 ### Breaking
