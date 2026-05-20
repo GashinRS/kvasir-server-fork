@@ -9,6 +9,8 @@ import org.eclipse.microprofile.openapi.models.OpenAPI
 import org.eclipse.microprofile.openapi.models.media.Schema
 import org.jboss.logging.Logger
 
+const val JSONLD_MIME_TYPE = "application/ld+json"
+
 @OpenApiFilter(OpenApiFilter.RunStage.BUILD)
 class OpenApiJsonLDFilter : OASFilter {
     private val log = Logger.getLogger(OpenApiJsonLDFilter::class.java)
@@ -16,8 +18,9 @@ class OpenApiJsonLDFilter : OASFilter {
     private val KVASIR_VOCAB_PREFIX = "kss"
     private val AT_CONTEX_KEY = "@context"
     private val AT_GRAPH_KEY = "@graph"
+    private val AT_TYPE_KEY = "@type"
     private val AT_ID_KEY = "@id"
-    private val JSONLD_RESERVED_KEYS = listOf(AT_CONTEX_KEY, AT_GRAPH_KEY, AT_ID_KEY);
+    private val JSONLD_RESERVED_KEYS = listOf(AT_CONTEX_KEY, AT_GRAPH_KEY, AT_ID_KEY, AT_TYPE_KEY);
     private val GRAPH_ITEM_TYPE_SUFFIX = "__GraphItem"
     private val replacerMap = mapOf(
         Pair(KVASIR_VOCAB_FQN, KVASIR_VOCAB_PREFIX)
@@ -27,19 +30,38 @@ class OpenApiJsonLDFilter : OASFilter {
         .apply { replacerMap.entries.forEach { entry -> this.put(entry.value, entry.key) } }
 
     override fun filterOpenAPI(openAPI: OpenAPI) {
-
         // 1. Gather all toplevel Return refs and Request refs
         val responseRefs = emptySet<String>().toMutableSet();
+        val responseArraySchemas = emptySet<Schema>().toMutableSet();
         val requestRefs = emptySet<String>().toMutableSet();
+        val requestArraySchemas = emptySet<Schema>().toMutableSet();
         openAPI.paths.pathItems.forEach {
             it.value.operations.forEach { op ->
+                // Get all refs in the return type that are object references
                 val respRefs = op.value.responses?.apiResponses
-                    ?.map { resp -> resp.value.content?.getMediaType("application/ld+json")?.schema?.ref }
+                    ?.map { resp -> resp.value.content?.getMediaType(JSONLD_MIME_TYPE)?.schema?.ref }
                     ?.filterNotNull()
                     ?: emptyList()
                 responseRefs.addAll(respRefs);
-                op.value.requestBody?.content?.getMediaType("application/ld+json")?.schema?.ref?.let { reqRef ->
+
+                // Get all schemas in the return type that are of type array
+                val arraySchemas = op.value.responses?.apiResponses
+                    ?.map { resp -> resp.value.content?.getMediaType(JSONLD_MIME_TYPE)?.schema }
+                    ?.filterNotNull()
+                    ?.filter { schema -> schema.type?.contains(Schema.SchemaType.ARRAY) ?: false }
+                    ?: emptyList()
+                responseArraySchemas.addAll(arraySchemas);
+
+                // Get the request body ref that are object references
+                op.value.requestBody?.content?.getMediaType(JSONLD_MIME_TYPE)?.schema?.ref?.let { reqRef ->
                     requestRefs.add(reqRef)
+                }
+
+                // Get the request body schemas that are array types
+                op.value.requestBody?.content?.getMediaType(JSONLD_MIME_TYPE)?.schema?.let { reqSchema ->
+                    if (reqSchema.type?.contains(Schema.SchemaType.ARRAY) ?: false) {
+                        requestArraySchemas.add(reqSchema)
+                    }
                 }
             }
         }
@@ -48,15 +70,23 @@ class OpenApiJsonLDFilter : OASFilter {
         log.tracef("Response entrypoints: \n%s", responseRefs.joinToString(",\n "))
         log.tracef("Request entrypoints: \n%s", requestRefs.joinToString(",\n"))
 
-        // 2. Fix the return type refs
+        // 2. Fix the return array schemas by wrapping them in an object with @graph property and adding @context property
+        fixArraySchemas(openAPI, responseArraySchemas);
+
+        // 3. Fix the request body array schemas by wrapping them in an object with @graph property and adding @context property
+        fixArraySchemas(openAPI, requestArraySchemas);
+
+        // 4. Fix the return type refs
         fixReferences(openAPI, responseRefs)
 
-        // 3. Fix the request body refs
+        // 5. Fix the request body refs
         fixReferences(openAPI, requestRefs)
 
     }
 
-
+    /**
+     * Deep copy the given schema.
+     */
     private fun deepCopySchema(schema: Schema): Schema {
         return OASFactory.createSchema()
             .type(schema.type)
@@ -89,7 +119,7 @@ class OpenApiJsonLDFilter : OASFilter {
     /**
      * Add prefixes to all keys and properties in the given schema (recursively)
      */
-    private fun fixSchemaPrefixes(schema: Schema, logName: String): Schema {
+    private fun fixSchemaPrefixes(openApi: OpenAPI, schema: Schema, logName: String): Schema {
         log.trace("fixSchemaPrefixes: $logName")
         if (schema.required != null) {
             schema.required = schema.required.map(::fixPrefixes)
@@ -100,9 +130,22 @@ class OpenApiJsonLDFilter : OASFilter {
         if (schema.properties != null) {
             schema.properties =
                 schema.properties.map { prop ->
-                    Pair(fixPrefixes(prop.key), fixSchemaPrefixes(prop.value, prop.key)) }
+                    Pair(fixPrefixes(prop.key), fixSchemaPrefixes(openApi, prop.value, prop.key))
+                }
                     .toMap().toMutableMap()
         }
+
+        // Also check for any arrays and recursively check their item ref
+        if (schema.items != null) {
+            // Also fix prefixes of the @graph item
+            val ref = schema.items.ref
+            if (ref != null) {
+                val refSchemaKey = ref.substringAfter("#/components/schemas/")
+                val refSchema = openApi.components?.schemas?.get(refSchemaKey)!!
+                fixSchemaPrefixes(openApi, refSchema, refSchemaKey);
+            }
+        }
+
         return schema;
     }
 
@@ -130,6 +173,35 @@ class OpenApiJsonLDFilter : OASFilter {
     }
 
     /**
+     * Fix the given array schemas by wrapping them in an object with @graph property and adding @context property
+     * The array items will also have their properties prefixed
+     */
+    private fun fixArraySchemas(openApi: OpenAPI, arraySchemas: Set<Schema>) {
+        arraySchemas.forEach { schema ->
+            log.debugf("Fixing array schema for %s", schema.items.ref + "[]")
+            val ref = schema.items.ref
+            if (ref != null) {
+                val atGraphSchema = newAtGraphSchema(ref);
+
+                // Fix the schema of the @graph item as well, in case it has properties that need to be prefixed
+                fixSchemaPrefixes(openApi, atGraphSchema, "$ref[]")
+
+                // Set the type to object
+                schema.type(listOf(Schema.SchemaType.OBJECT));
+                schema.items = null;
+                // Add the @graph property
+
+                schema.addProperty(AT_GRAPH_KEY, atGraphSchema)
+                // Add the @context property
+                schema.addProperty(
+                    AT_CONTEX_KEY,
+                    newAtContextSchema()
+                );
+            }
+        }
+    }
+
+    /**
      * Fix the given refs by adding @context and removing @context if it is an @graph array
      */
     private fun fixReferences(openApi: OpenAPI, refs: Set<String>) {
@@ -141,11 +213,11 @@ class OpenApiJsonLDFilter : OASFilter {
             if (schema != null) {
                 // 1. Every property must be prefixed with KVASIR_VOCAB_PREFIX, unless the key matches one of JSONLD_RESERVED_KEYS
                 // Overwrite the original schema with the fixed one
-                fixSchemaPrefixes(schema, refSchemaKey)
+                fixSchemaPrefixes(openApi, schema, refSchemaKey)
 
                 // 2. If they are of type object, add an @context property
                 if (schema.type?.contains(Schema.SchemaType.OBJECT) ?: false) {
-                    // If the schema has a property kss:context, remove it first
+                    // If the schema has a property kss:context, remove it first (it was wrongly processed before)
                     if (schema.properties?.containsKey("kss:context") ?: false) {
                         schema.removeProperty("kss:context");
                     }
@@ -203,6 +275,13 @@ class OpenApiJsonLDFilter : OASFilter {
             .addType(Schema.SchemaType.OBJECT)
             .description("The JSON-LD context for this response/request")
             .addExample(atContextObj.map)
+    }
 
+    /**
+     * Create a new @graph schema for the given graph item ref
+     */
+    private fun newAtGraphSchema(graphItemRef: String): Schema {
+        return OASFactory.createSchema().addType(Schema.SchemaType.ARRAY)
+            .items(OASFactory.createSchema().ref(graphItemRef))
     }
 }
