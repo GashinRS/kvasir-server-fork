@@ -172,7 +172,7 @@ data class QueryResult(
                         if (key == FIELD_TYPENAME_NAME) {
                             JsonLdHelper.getFQName(value as String, context, "_")
                         } else {
-                            transform(value!!, context)
+                            transform(value, context)
                         }
                     }
                     .mapKeys { e ->
