@@ -1,3 +1,25 @@
+## [0.19.0-beta.4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.3...v0.19.0-beta.4) - 2026-05-20
+
+### Breaking
+
+- [**breaking**] Add support for post-assertions ([666c051](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/666c051bd024baf3d50839724f7e6e20d115b757))
+
+### Features
+
+- return or request array are now properly wrapped in an object with @graph and @context in the openapi output ([450ac91](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/450ac919536e651d779d8ea41dbb0248ae5fc3ac))
+
+- rewrote the OpenApiJsonLDFilter processor to be simpler and easier to follow ([b246e44](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/b246e4400f1af029e1c50fd58e857039b94b3a77))
+
+### Bug Fixes
+
+- Fixed NPE when performing an introspection query via the JSON-LD query variant ([8f6f4a3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/8f6f4a31664f6f0579875911025c8614393ba4aa))
+
+- Fixed GraphQL mutation request with multiple operations not resulting in a change request ([16aff2b](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/16aff2bd98a964ced8e933135969899bd5da0136))
+
+- wrong carriage return in schema.json removed ([d12245d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/d12245ddd36443dd29c453bfd8d8f5aed65252ba))
+
+- text/event-stream mimetypes are also processed for kss: prefixing now. ([d5772b7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/d5772b7ad50d0038aba768803a488324896993ff))
+
 ## [0.19.0-beta.3](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.2...v0.19.0-beta.3) - 2026-05-18
 
 ### Breaking
