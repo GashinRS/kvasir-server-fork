@@ -7,6 +7,8 @@ import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.*
+import kvasir.definitions.kg.changes.Assertion
+import kvasir.definitions.kg.changes.AssertionPhase
 import kvasir.definitions.kg.changes.ChangeRequest
 import kvasir.definitions.kg.changes.Reference
 import kvasir.definitions.kg.exceptions.ChangeAssertionException
@@ -28,9 +30,11 @@ class EvaluateAssertions(
     private val parent: KnowledgeGraph,
     private val repositoryFactory: RepositoryFactory
 ) {
-    fun process(request: ChangeRequest): Uni<Void> {
+    fun process(request: ChangeRequest, phase: AssertionPhase = AssertionPhase.PRE): Uni<Void> {
+        val assertions = request.assert.filter { it.phase == phase }
+        if (assertions.isEmpty()) return Uni.createFrom().voidItem()
         val startTs = System.currentTimeMillis()
-        Log.debug("Evaluating assertions for change request ${request.id}...")
+        Log.debug("Evaluating ${phase.name} assertions for change request ${request.id}...")
         // For change requests on a Slice, load the Slice schema
         return (request.sliceId?.let { sliceId ->
             repositoryFactory.getVersionedRepository(Slice::class, request.podId)
@@ -39,12 +43,14 @@ class EvaluateAssertions(
                 .onItem().ifNotNull().transform { it!! }
         } ?: Uni.createFrom().nullItem())
             .chain { slice ->
-                Multi.createFrom().iterable(request.assert)
+                // PRE assertions query before the change; POST assertions query at the current changeId (includes just-written data)
+                val atChangeId = if (phase == AssertionPhase.PRE) request.previousChangeId else request.id
+                Multi.createFrom().iterable(assertions)
                     .onItem()
                     .transformToUni { assertion ->
                         val q = QueryRequest(
                             context = slice?.context ?: request.context,
-                            atChangeId = request.previousChangeId,
+                            atChangeId = atChangeId,
                             requestingUser = request.requestingUser,
                             podId = request.podId,
                             sliceId = request.sliceId,
@@ -59,48 +65,49 @@ class EvaluateAssertions(
                                     errors = listOf(mapOf("message" to (err.message ?: "")))
                                 )
                             }
-                            .chain { result ->
-                                if (result.errors?.isNotEmpty() == true) {
-                                    Uni.createFrom()
-                                        .failure(ChangeAssertionException("Error executing assertion: ${result.errors}"))
-                                } else {
-                                    when (assertion.type) {
-                                        KvasirVocab.AssertEmptyResult -> {
-                                            when {
-                                                result.data == null -> Uni.createFrom()
-                                                    .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
-
-                                                result.data!!.isNotEmpty() -> Uni.createFrom()
-                                                    .failure(ChangeAssertionException("Assertion failed: results exists for '${assertion.query}'"))
-
-                                                else -> Uni.createFrom().voidItem()
-                                            }
-                                        }
-
-                                        KvasirVocab.AssertNonEmptyResult -> {
-                                            when {
-                                                result.data == null -> Uni.createFrom()
-                                                    .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
-
-                                                result.data!!.isEmpty() -> Uni.createFrom()
-                                                    .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.query}'"))
-
-                                                else -> Uni.createFrom().voidItem()
-                                            }
-                                        }
-
-                                        else -> Uni.createFrom()
-                                            .failure(IllegalArgumentException("Unsupported assertion type: ${assertion.type}"))
-                                    }
-                                }
-                            }
+                            .chain { result -> evaluateAssertion(assertion, result) }
                     }
                     .merge(ASSERTION_CHECKING_PARALLELISM)
                     .skipToLast()
                     .invoke { _ ->
-                        Log.debug("Finished evaluating assertions (${request.assert.size}) for change request ${request.id} in ${System.currentTimeMillis() - startTs} ms")
+                        Log.debug("Finished evaluating ${phase.name} assertions (${assertions.size}) for change request ${request.id} in ${System.currentTimeMillis() - startTs} ms")
                     }
             }
+    }
+
+    private fun evaluateAssertion(assertion: Assertion, result: QueryResult): Uni<Void> {
+        if (result.errors?.isNotEmpty() == true) {
+            return Uni.createFrom()
+                .failure(ChangeAssertionException("Error executing assertion: ${result.errors}"))
+        }
+        return when (assertion.type) {
+            KvasirVocab.AssertEmptyResult -> {
+                when {
+                    result.data == null -> Uni.createFrom()
+                        .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
+
+                    result.data!!.isNotEmpty() -> Uni.createFrom()
+                        .failure(ChangeAssertionException("Assertion failed: results exists for '${assertion.query}'"))
+
+                    else -> Uni.createFrom().voidItem()
+                }
+            }
+
+            KvasirVocab.AssertNonEmptyResult -> {
+                when {
+                    result.data == null -> Uni.createFrom()
+                        .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
+
+                    result.data!!.isEmpty() -> Uni.createFrom()
+                        .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.query}'"))
+
+                    else -> Uni.createFrom().voidItem()
+                }
+            }
+
+            else -> Uni.createFrom()
+                .failure(IllegalArgumentException("Unsupported assertion type: ${assertion.type}"))
+        }
     }
 
 }

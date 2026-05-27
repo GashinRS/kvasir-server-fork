@@ -130,6 +130,44 @@ discarded.
 Use the URL returned via the `Location` header to check the status of the change request. When the change resource
 is available on the server (remember: eventual consistency), you should see a `resultCode` of `ASSERTION_FAILED`.
 
+#### Pre and post assertions
+
+By default, assertions are evaluated **before** the change is applied (pre-assertions). You can also define assertions
+that are evaluated **after** the change has been applied but **before** it is committed. This is useful for checking
+post-conditions, such as verifying that the resulting state of the knowledge graph meets certain constraints. If a
+post-assertion fails, the entire transaction is rolled back.
+
+To specify a post-assertion, add the `kss:phase` property with value `POST`:
+
+```json
+{
+  "@context": {
+    "kss": "https://kvasir.discover.ilabt.imec.be/vocab#",
+    "so": "http://schema.org/",
+    "ex": "http://example.org/"
+  },
+  "kss:assert": [
+    {
+      "@type": "kss:AssertNonEmptyResult",
+      "kss:query": "{ ex_Person(id:\"ex:alice\") { so_email } }",
+      "kss:phase": "POST"
+    }
+  ],
+  "kss:insert": [
+    {
+      "@id": "ex:alice",
+      "so:email": "alice@example.org"
+    }
+  ]
+}
+```
+
+In this example, the post-assertion verifies that Alice has an email address after the insert has been applied. If the
+assertion fails, the insert is rolled back and the change request will have a `resultCode` of `ASSERTION_FAILED`.
+
+You can combine pre and post assertions in the same change request. Pre-assertions (the default, or explicitly
+`"kss:phase": "PRE"`) are evaluated first. If they pass, the change is applied, and then post-assertions are evaluated.
+
 ### With clause
 
 The `kss:with` keyword can be used to bind a set of variables that can be used in the insert and delete operations. For

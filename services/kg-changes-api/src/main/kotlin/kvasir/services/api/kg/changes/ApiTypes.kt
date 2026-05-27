@@ -18,7 +18,7 @@ data class ChangeRequestInput(
     )
     val context: Map<String, Any> = emptyMap(),
     @get:Schema(
-        description = "List of assertions to be checked before applying the change request."
+        description = "List of assertions to be checked before (PRE) or after (POST) applying the change request. POST assertions trigger a rollback on failure."
     )
     @get:JsonFormat(with = [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
     val assert: List<Assertion> = emptyList(),

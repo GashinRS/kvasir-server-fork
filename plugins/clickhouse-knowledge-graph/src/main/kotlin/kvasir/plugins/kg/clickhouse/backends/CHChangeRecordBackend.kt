@@ -86,10 +86,14 @@ class CHChangeRecordBackend(
     }
 
     override fun rollback(request: ChangeRollbackRequest): Uni<Void> {
+        // Rollback should be executed synchronously!
         return clickhouseClient.execute(
-            "ALTER TABLE $DATA_TABLE DELETE WHERE change_id = '${request.changeId}'",
+            "ALTER TABLE $DATA_TABLE DELETE WHERE change_id = '${request.changeId}'  SETTINGS mutations_sync = 1",
             databaseFromPodId(request.podId)
-        )
+        ).chain { _ ->
+            // Rollback subject_types entries as well
+            clickhouseClient.execute("ALTER TABLE $SUBJECT_TYPES DELETE WHERE change_id = '${request.changeId}'  SETTINGS mutations_sync = 1")
+        }
     }
 
     override fun datafetcher(podId: String, context: Map<String, Any>, atChangeId: String?): DataFetcher<Any> {

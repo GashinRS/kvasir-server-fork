@@ -131,5 +131,5 @@ SELECT
     graph,
     change_id,
     sign
-FROM `{cfg.database}`.data
+FROM `{cfg.database}`.current_data
 WHERE predicate = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';

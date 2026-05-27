@@ -9,6 +9,7 @@ import kvasir.definitions.kg.ChangeRecordType
 import kvasir.definitions.kg.KnowledgeGraph
 import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.changes.Assertion
+import kvasir.definitions.kg.changes.AssertionPhase
 import kvasir.definitions.kg.changes.ChangeStatusCode
 import kvasir.definitions.kg.slices.EmbeddedSliceSchema
 import kvasir.definitions.kg.slices.Slice
@@ -209,6 +210,83 @@ class InboxApiTest : AbstractPodTest() {
         assertTrue(persons.isEmpty())
     }
 
+
+    @Test
+    @TestSecurity(user = "alice")
+    fun testPostAssertions() {
+        // === Successful POST assertion ===
+        // Insert a person with a POST assertion that checks the person now exists
+        val personData = TestDataGenerator.generatePersonData(1)
+        val personId = personData.first()[JsonLdKeywords.id]!!
+
+        val insertWithPostAssert = ChangeRequestInput(
+            context = TestConstants.CONTEXT,
+            assert = listOf(
+                Assertion(
+                    KvasirVocab.AssertNonEmptyResult,
+                    "{ ex_Person(id: \"$personId\") { id } }",
+                    phase = AssertionPhase.POST
+                )
+            ),
+            insert = personData
+        )
+
+        // This should succeed: after inserting, the person exists
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(insertWithPostAssert), podUri)
+
+        // Verify the person is present
+        var result = knowledgeGraph.query(
+            QueryRequest(
+                TestConstants.CONTEXT,
+                "alice",
+                podUri,
+                query = "{ ex_Person(id: \"$personId\") { id } }"
+            )
+        ).toUni().await().indefinitely()
+        var persons = result.data?.get("ex_Person") as List<Map<String, Any>>
+        assertTrue(persons.isNotEmpty())
+
+        // === Failing POST assertion (should rollback) ===
+        // Try to insert another person, but assert that no person with the first ID exists (POST)
+        // Since we just inserted it, the assertion should fail and the change should be rolled back
+        val personData2 = TestDataGenerator.generatePersonData(1)
+
+        val insertWithFailingPostAssert = ChangeRequestInput(
+            context = TestConstants.CONTEXT,
+            assert = listOf(
+                Assertion(
+                    KvasirVocab.AssertEmptyResult,
+                    "{ ex_Person(id: \"$personId\") { id } }",
+                    phase = AssertionPhase.POST
+                )
+            ),
+            insert = personData2
+        )
+
+        // This should fail: after inserting, the first person still exists so AssertEmptyResult fails
+        testHelpers.requestChangeViaHTTPSync(
+            JsonLdHelper.encode(insertWithFailingPostAssert),
+            podUri,
+            expectedResult = ChangeStatusCode.ASSERTION_FAILED
+        )
+
+        // Verify the second person was rolled back (not present)
+        val personId2 = personData2.first()[JsonLdKeywords.id]!!
+        result = knowledgeGraph.query(
+            QueryRequest(
+                TestConstants.CONTEXT,
+                "alice",
+                podUri,
+                query = "{ ex_Person(id: \"$personId2\") { id } }"
+            )
+        ).toUni().await().indefinitely()
+        persons = result.data?.get("ex_Person") as List<Map<String, Any>>
+        assertTrue(persons.isEmpty(), "Second person should have been rolled back")
+
+        // Clean up: delete the first person
+        val delete = ChangeRequestInput(context = TestConstants.CONTEXT, delete = personData)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(delete), podUri)
+    }
 
     @Test
     @TestSecurity(user = "alice")

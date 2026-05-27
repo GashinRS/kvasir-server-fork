@@ -5,8 +5,10 @@ import io.smallrye.mutiny.Uni
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.ChangeFinalizeRequest
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.changes.ChangeStatusCode
 import kvasir.definitions.kg.changes.ProcessedChange
 import kvasir.definitions.persistence.RepositoryFactory
+import kvasir.definitions.reactive.conditionalUni
 import kvasir.definitions.reactive.toUni
 import kvasir.plugins.messaging.kafka.Channels
 import org.eclipse.microprofile.config.inject.ConfigProperty
@@ -28,8 +30,12 @@ class ChangeLogWriter(
     @Incoming(Channels.CHANGES_OUTGOING_SUBSCRIBE)
     fun process(message: Message<ProcessedChange>): CompletionStage<Void> {
         val processedChange = message.payload
-        // Make sure the "current state" is updated first
-        return knowledgeGraph.finalize(ChangeFinalizeRequest(processedChange.podId, processedChange.id))
+        // Make sure the "current state" is updated first ( !! Only for committed changes !! )
+        return conditionalUni(processedChange.getStatusCode() == ChangeStatusCode.COMMITTED) {
+            knowledgeGraph.finalize(
+                ChangeFinalizeRequest(processedChange.podId, processedChange.id)
+            )
+        }
             .chain { _ ->
                 repositoryFactory.getRepository(ProcessedChange::class, processedChange.podId).persist(processedChange)
             }

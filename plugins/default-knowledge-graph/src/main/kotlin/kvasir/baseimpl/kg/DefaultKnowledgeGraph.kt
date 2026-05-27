@@ -129,8 +129,9 @@ class DefaultKnowledgeGraph(
 
     override fun processStateDependent(request: ChangeRequest): Uni<ProcessedChange> {
         val stats = ChangeRequestStats()
-        // Evaluate assertions
-        return evaluateAssertions.process(request)
+        val hasPostAssertions = request.assert.any { it.phase == AssertionPhase.POST }
+        // Evaluate PRE assertions
+        return evaluateAssertions.process(request, AssertionPhase.PRE)
             .chain { _ ->
                 // Convert the JSON-LD insert/delete to change records and bind with-clauses
                 materializeRecords.process(request)
@@ -151,7 +152,11 @@ class DefaultKnowledgeGraph(
                     }
                 }
             }
-            .wrapExceptionsAndCreateReport(request, stats)
+            .chain { _ ->
+                // Evaluate POST assertions (after write); failure triggers rollback
+                evaluateAssertions.process(request, AssertionPhase.POST)
+            }
+            .wrapExceptionsAndCreateReport(request, stats, hasPostAssertions)
     }
 
     override fun processReferenced(request: ChangeRequest): Uni<ProcessedChange> {
