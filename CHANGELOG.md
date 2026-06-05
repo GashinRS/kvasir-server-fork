@@ -1,3 +1,11 @@
+## [0.19.0-beta.5](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.4...v0.19.0-beta.5) - 2026-06-05
+
+### Features
+
+- **(ui)** add new controls on tags management page for tag query and tag changes ([d3e0904](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/d3e0904372a21b7debad42875477f9f283674222))
+
+- Support for dedicated GraphQL update-mutations ([e867a56](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/e867a563a8681a249c99a2f3ed313567e99ba2f7))
+
 ## [0.19.0-beta.4](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.3...v0.19.0-beta.4) - 2026-05-20
 
 ### Breaking
