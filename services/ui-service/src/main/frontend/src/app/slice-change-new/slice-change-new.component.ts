@@ -1,6 +1,6 @@
+import { KeyValue, KeyValuePipe } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
-import { KvasirService } from '../services/kvasir.service';
-import { ActivatedRoute, Router } from '@angular/router';
+import { rxResource } from '@angular/core/rxjs-interop';
 import {
   AbstractControl,
   FormBuilder,
@@ -9,6 +9,7 @@ import {
   ValidatorFn,
   Validators,
 } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzFlexModule } from 'ng-zorro-antd/flex';
 import { NzFormModule } from 'ng-zorro-antd/form';
@@ -16,10 +17,10 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
-import { KeyValue, KeyValuePipe } from '@angular/common';
-import { rxResource } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
+import { KvasirService } from '../services/kvasir.service';
 import { Slice } from '../types';
+import { NzTagModule } from 'ng-zorro-antd/tag';
 
 const DEFAULT_VALUE = `{
   "@context": {
@@ -48,6 +49,7 @@ const WARNINGS = [ERR_KEY_UNDEFINED_PREFIXES];
     NzPageHeaderModule,
     NzSpaceModule,
     NzTypographyModule,
+    NzTagModule,
     KeyValuePipe,
   ],
   templateUrl: './slice-change-new.component.html',
@@ -65,6 +67,10 @@ export class SliceChangeNewComponent {
   });
   readonly sliceName = computed(() => this.slice.value()!['kss:name']);
 
+  tag = computed<string | null>(
+    () => this.route.snapshot.queryParamMap.get('tag') ?? null,
+  );
+
   constructor(fb: FormBuilder) {
     const validators = [
       Validators.required,
@@ -80,13 +86,17 @@ export class SliceChangeNewComponent {
     if (!this.isInputInvalid()) {
       let changeRequest = this.inputForm.get('request')!.value;
       this.kvasir
-        .createSliceChangeRequest(this.sliceName(), changeRequest)
+        .createSliceChangeRequest(
+          this.sliceName(),
+          changeRequest,
+          this.tag() ?? undefined,
+        )
         .subscribe((location) =>
           location
-            ? this.router.navigate([
-                `/slices/${this.sliceName()}/changes/view`,
-                encodeURIComponent(location),
-              ])
+            ? this.router.navigate(
+                [`/changes/view`, encodeURIComponent(location)],
+                { queryParams: {} },
+              )
             : this.router.navigate([`/slices/${this.sliceName()}/changes`]),
         );
     }

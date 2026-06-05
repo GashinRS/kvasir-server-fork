@@ -33,6 +33,7 @@ import {
   SignedN3Quad,
   sortStatusEntries,
 } from '../util/utils';
+import { NzTagModule } from 'ng-zorro-antd/tag';
 
 @Component({
   selector: 'app-change',
@@ -45,6 +46,7 @@ import {
     NzRadioModule,
     NzTypographyModule,
     NzTooltipModule,
+    NzTagModule,
     FormsModule,
     NzGridModule,
     ServerPagedDirective,
@@ -106,7 +108,10 @@ export class ChangeComponent {
 
   constructor() {
     effect(() => {
-      if (this.processedChange() != null) {
+      if (
+        this.processedChange() != null &&
+        !this.isError(this.processedChange()!['kss:statusCode'])
+      ) {
         this.fetchPage();
       }
     });
@@ -125,9 +130,9 @@ export class ChangeComponent {
       case ChangeResultCode.ASSERTION_FAILED:
       case ChangeResultCode.VALIDATION_ERROR:
       case ChangeResultCode.INTERNAL_ERROR:
-        return false;
-      default:
         return true;
+      default:
+        return false;
     }
   }
 

@@ -4,21 +4,11 @@ import {
   HttpHeaders,
 } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import {
-  catchError,
-  map,
-  Observable,
-  of,
-  onErrorResumeNext,
-  onErrorResumeNextWith,
-  throwError,
-} from 'rxjs';
-import { switchMap, tap } from 'rxjs/operators';
-import { KvasirError } from '../components/error/error.component';
+import { catchError, map, Observable, of, throwError } from 'rxjs';
 import {
   ChangeRecords,
-  ProcessedChange,
   ChangeRequest,
+  EntityTag,
   GraphLD,
   LD,
   Paged,
@@ -27,13 +17,13 @@ import {
   PodConfiguration,
   PodDetails,
   PodSerialized,
+  ProcessedChange,
   RegisterPodInput,
   Slice,
   SliceInput,
-  EntityTag,
   SliceSummary,
 } from '../types';
-import { deserialize, parseLinkHeader, serialize } from '../util/utils';
+import { deserialize, parseLinkHeader } from '../util/utils';
 import { ConfigService } from './config.service';
 import { ErrorHandlerService } from './error-handler.service';
 import { SessionService } from './session.service';
@@ -60,6 +50,27 @@ export class KvasirService {
         ),
         observe: 'response',
       })
+      .pipe(this.convertErrorToKvasirError())
+      .pipe(map((response) => response.headers.get('Location')));
+  }
+
+  createChangeRequestForTaggedSlice(
+    input: ChangeRequest,
+    sliceId: string,
+    tag: string,
+  ): Observable<string | null> {
+    return this.http
+      .post<void>(
+        `${this.host}/${this.session.podName()}/slices/${sliceId}/tags/${tag}/changes`,
+        input,
+        {
+          headers: new HttpHeaders().append(
+            'Content-Type',
+            'application/ld+json',
+          ),
+          observe: 'response',
+        },
+      )
       .pipe(this.convertErrorToKvasirError())
       .pipe(map((response) => response.headers.get('Location')));
   }
@@ -113,6 +124,7 @@ export class KvasirService {
     if (cursor) {
       url += `&cursor=${encodeURIComponent(cursor)}`;
     }
+    console.log(`Fetching change records from ${url}...`);
     return this.http
       .get<ChangeRecords>(url, { observe: 'response' })
       .pipe(this.convertErrorToKvasirError())
@@ -131,27 +143,32 @@ export class KvasirService {
   createSliceChangeRequest(
     sliceName: string,
     input: ChangeRequest,
+    tag?: string,
   ): Observable<string | null> {
+    const url = tag
+      ? `${this.host}/${this.session.podName()}/slices/${sliceName}/tags/${tag}/changes`
+      : `${this.host}/${this.session.podName()}/slices/${sliceName}/changes`;
     return this.http
-      .post<void>(
-        `${this.host}/${this.session.podName()}/slices/${sliceName}/changes`,
-        input,
-        {
-          headers: new HttpHeaders().append(
-            'Content-Type',
-            'application/ld+json',
-          ),
-          observe: 'response',
-        },
-      )
+      .post<void>(url, input, {
+        headers: new HttpHeaders().append(
+          'Content-Type',
+          'application/ld+json',
+        ),
+        observe: 'response',
+      })
       .pipe(this.convertErrorToKvasirError())
       .pipe(map((response) => response.headers.get('Location')));
   }
 
-  listSliceChangeReports(sliceName: string): Observable<ProcessedChange[]> {
+  listSliceChangeReports(
+    sliceName: string,
+    tag: string | null,
+  ): Observable<ProcessedChange[]> {
     return this.http
       .get<GraphLD<ProcessedChange>>(
-        `${this.host}/${this.session.podName()}/slices/${sliceName}/changes`,
+        tag
+          ? `${this.host}/${this.session.podName()}/slices/${sliceName}/tags/${tag}/changes`
+          : `${this.host}/${this.session.podName()}/slices/${sliceName}/changes`,
       )
       .pipe(this.convertErrorToKvasirError())
       .pipe(map((changeLd) => changeLd['@graph']));

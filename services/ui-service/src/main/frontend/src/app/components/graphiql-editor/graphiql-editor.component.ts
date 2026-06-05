@@ -99,7 +99,10 @@ export class GraphiqlEditorComponent implements AfterViewInit, OnDestroy {
    */
   private authedFetch() {
     const myFetch = (input: string | URL | Request, init?: RequestInit) => {
-      const headers = { Authorization: `Bearer ${this.token()}` };
+      const headers = {
+        Authorization: `Bearer ${this.token()}`,
+        Accept: 'application/json',
+      };
       if (init) {
         init.headers = {
           ...init.headers,

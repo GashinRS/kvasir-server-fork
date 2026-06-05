@@ -5,18 +5,19 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
 import { NzTableModule } from 'ng-zorro-antd/table';
+import { NzTagModule } from 'ng-zorro-antd/tag';
 import { EMPTY, map } from 'rxjs';
 import { KvasirService } from '../services/kvasir.service';
-import { ProcessedChange, ChangeStatusEntry, Slice } from '../types';
+import { ChangeStatusEntry, ProcessedChange, Slice } from '../types';
 import { sortByTimestamp } from '../util/utils';
 
 @Component({
   selector: 'app-slice-changes',
   imports: [
     NzPageHeaderModule,
-    RouterLink,
     NzButtonModule,
     NzTableModule,
+    NzTagModule,
     DecimalPipe,
     DatePipe,
   ],
@@ -28,6 +29,10 @@ export class SliceChangesComponent {
   private kvasir = inject(KvasirService);
   private router = inject(Router);
 
+  tag = computed<string | null>(
+    () => this.route.snapshot.queryParamMap.get('tag') ?? null,
+  );
+
   slice = rxResource({
     stream: () => this.route.data.pipe(map(({ slice }) => slice as Slice)),
   });
@@ -35,7 +40,7 @@ export class SliceChangesComponent {
     params: (): string | undefined =>
       this.slice.hasValue() ? this.slice.value()!['kss:name'] : undefined,
     stream: ({ params }) =>
-      params ? this.kvasir.listSliceChangeReports(params) : EMPTY,
+      params ? this.kvasir.listSliceChangeReports(params, this.tag()) : EMPTY,
   });
 
   lastStatus = (report: ProcessedChange): ChangeStatusEntry | undefined =>
@@ -46,5 +51,12 @@ export class SliceChangesComponent {
       `/changes/view/`,
       encodeURIComponent(changeReportId),
     ]);
+  }
+
+  goToCreateChange(): void {
+    this.router.navigate(['./new'], {
+      relativeTo: this.route,
+      queryParams: { tag: this.tag() ?? undefined },
+    });
   }
 }

@@ -32,21 +32,26 @@
             by {{ tag["kss:createdBy"] }} @
             {{ tag["kss:createdAt"] | date: "d MMM, yyyy @ HH:mm:ss" }}
           </div>
-          <div class="default">
-            <button
-              nz-button
-              nzType="dashed"
-              nzSize="small"
-              class="markDefaultBtn"
-              (click)="doTagAsDefault(tag)"
-            >
-              mark default
-              <app-help
-                text="Queries or changes to a slice, will be applied to the 'default' tag unless specified."
-                type="secondary"
-                [style.margin-left]="'6px'"
-              />
-            </button>
+          <div class="buttons">
+            <nz-space-compact nzSize="small">
+              <button
+                nz-button
+                nzType="default"
+                (click)="writeToSlice(sliceName(), tag)"
+                nz-tooltip
+                nzTooltipTitle="Changes"
+              >
+                <nz-icon nzType="history" />
+              </button>
+              <button
+                nz-button
+                nzType="default"
+                (click)="querySlice(sliceName(), tag)"
+              >
+                <nz-icon nzType="code" />
+                Query
+              </button>
+            </nz-space-compact>
           </div>
           <div class="actions">
             <ul nz-list-item-actions>
@@ -60,6 +65,22 @@
                   nzGhost
                 >
                   delete
+                </button>
+              </nz-list-item-action>
+              <nz-list-item-action class="default">
+                <button
+                  nz-button
+                  nzType="dashed"
+                  nzSize="small"
+                  class="markDefaultBtn"
+                  (click)="doTagAsDefault(tag)"
+                >
+                  mark default
+                  <app-help
+                    text="Queries or changes to a slice, will be applied to the 'default' tag unless specified."
+                    type="secondary"
+                    [style.margin-left]="'6px'"
+                  />
                 </button>
               </nz-list-item-action>
               <nz-list-item-action>

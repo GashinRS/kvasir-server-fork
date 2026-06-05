@@ -1,13 +1,19 @@
 <nz-page-header>
   <nz-page-header-title
     >Change history
-    <small>({{ slice.value()?.["kss:name"] }})</small></nz-page-header-title
-  >
+    <small>({{ slice.value()?.["kss:name"] }})</small>
+
+    @if (tag() != null) {
+      <nz-tag [nzColor]="tag() == 'default' ? 'orange' : 'blue'">{{
+        tag()
+      }}</nz-tag>
+    }
+  </nz-page-header-title>
   <nz-page-header-subtitle
     >Overview of changes to this slice</nz-page-header-subtitle
   >
   <nz-page-header-extra>
-    <button nz-button nzType="primary" [routerLink]="['./new']">
+    <button nz-button nzType="primary" (click)="goToCreateChange()">
       Create Change
     </button>
   </nz-page-header-extra>

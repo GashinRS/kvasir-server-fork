@@ -112,7 +112,7 @@ abstract class AbstractChangesApi {
                         .build()
                 } else {
                     val changeId = results.items[0].id
-                    val fqChangeId = fqSliceId?.let { "$it/changes/$changeId" } ?: "$fqPodId/changes/$changeId"
+                    val fqChangeId = fqSliceId?.let { sliceTag?.let { tagId -> "$it/tags/$tagId/changes/$changeId"} ?: "$it/changes/$changeId" } ?: "$fqPodId/changes/$changeId"
                     // Change was processed, permanently redirect to changes API
                     Response.seeOther(URI.create(fqChangeId)).build()
                 }

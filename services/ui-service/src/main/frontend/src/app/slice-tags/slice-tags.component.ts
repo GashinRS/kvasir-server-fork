@@ -31,6 +31,7 @@ import { EntityTag } from '../types';
 import { HelpComponent } from '../components/help/help.component';
 import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { NzSpaceModule } from 'ng-zorro-antd/space';
 
 @Component({
   selector: 'app-slice-tags',
@@ -49,6 +50,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
     DatePipe,
     NzIconModule,
     HelpComponent,
+    NzSpaceModule,
   ],
   templateUrl: './slice-tags.component.html',
   styleUrl: './slice-tags.component.less',
@@ -64,7 +66,7 @@ export class SliceTagsComponent {
 
   filter = signal<string>('');
 
-  sliceName = input.required({ alias: 'sliceId' });
+  sliceName = input.required<string>({ alias: 'sliceId' });
 
   tags = rxResource({
     stream: () =>
@@ -190,6 +192,18 @@ export class SliceTagsComponent {
       nzOkText: 'Delete tag',
       nzOnOk: deleteFn,
       nzOkDanger: true,
+    });
+  }
+
+  writeToSlice(sliceName: string, tag: EntityTag) {
+    this.router.navigate(['/slices', sliceName, 'changes'], {
+      queryParams: { tag: tag['kss:tag'] },
+    });
+  }
+
+  querySlice(sliceName: string, tag: EntityTag) {
+    this.router.navigate(['/slices', sliceName, 'query'], {
+      queryParams: { tag: tag['kss:tag'] },
     });
   }
 }

@@ -1,8 +1,14 @@
 <nz-page-header>
   <nz-page-header-title
     >New Change Request
-    <small>({{ slice.value()?.["kss:name"] }})</small></nz-page-header-title
-  >
+    <small>({{ slice.value()?.["kss:name"] }})</small>
+
+    @if (tag() != null) {
+      <nz-tag [nzColor]="tag() == 'default' ? 'orange' : 'blue'">
+        {{ tag() }}
+      </nz-tag>
+    }
+  </nz-page-header-title>
   <nz-page-header-subtitle
     >Compose a new change request for this slice</nz-page-header-subtitle
   >

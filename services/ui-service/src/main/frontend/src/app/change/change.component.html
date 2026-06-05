@@ -54,6 +54,13 @@
         @if (ch["kss:sliceId"]; as sliceId) {
           <nz-descriptions-item nzTitle="Slice ID">
             {{ sliceId }}
+            @if (ch["kss:sliceTag"]; as sliceTag) {
+              <nz-tag
+                [nzColor]="sliceTag == 'default' ? 'orange' : 'blue'"
+                [style.margin-left]="'8px'"
+                >{{ sliceTag }}</nz-tag
+              >
+            }
           </nz-descriptions-item>
         }
         <nz-descriptions-item nzTitle="Inserts">

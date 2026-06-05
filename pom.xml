@@ -23,7 +23,7 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.32.1</quarkus.platform.version>
-        <idlab.extension.openfga.version>3.0.0</idlab.extension.openfga.version>
+        <idlab.extension.openfga.version>3.0.2</idlab.extension.openfga.version>
         <openfga.docker.model-tx.image>gitlab.ilabt.imec.be:4567/discover/ci-tools/fga-model-tx:latest
         </openfga.docker.model-tx.image>
         <jackson.version>2.17.1</jackson.version>

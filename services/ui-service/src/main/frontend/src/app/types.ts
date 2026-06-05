@@ -10,9 +10,10 @@ export interface ProcessedChange {
   'kss:podId': string;
   'kss:origRequestId': string;
   'kss:requestingUser': string;
-  'kss:statusCode': ChangeStatusEntry;
+  'kss:statusCode': ChangeResultCode;
   'kss:processingHistory': ChangeStatusEntry[];
   'kss:sliceId'?: string;
+  'kss:sliceTag'?: string;
   'kss:nrOfInserts'?: number;
   'kss:nrOfDeletes'?: number;
   'kss:errorMessage'?: string;
