@@ -65,7 +65,7 @@ data class ChangeRequestInput(
             podId = fqPodId,
             sliceId = sliceId,
             sliceTag = sliceTag,
-            assert = assert,
+            assert = assert.toMutableList(),
             with = with,
             insert = insert,
             delete = delete

@@ -235,7 +235,8 @@ response path.
 ```
 
 > `@optional` is a query-time directive. In Slice schemas, if a field is marked with `@mustExist`, that field cannot be
-> queried with `@optional`.
+> queried with `@optional`. See [Field presence and visibility](Slice-Field-Presence-and-Visibility.md) for the
+> Slice-specific visibility directives.
 > {style="note"}
 
 ### Sorting
@@ -482,6 +483,8 @@ Response:
 
 Represents a boxed literal. Useful in combination with `RDFNode` to support fields that can hold either resources or
 literals.
+
+For Slice authoring patterns that use these types explicitly, see [Fields with multiple types](Slice-Multi-Type-Fields.md).
 
 ```graphql
 { ex_Musician { id ex_plays { _rawRDF } } }

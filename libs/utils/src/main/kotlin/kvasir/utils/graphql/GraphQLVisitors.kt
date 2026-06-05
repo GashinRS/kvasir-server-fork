@@ -3,39 +3,17 @@ package kvasir.utils.graphql
 import graphql.language.*
 import graphql.util.TraversalControl
 import graphql.util.TraverserContext
-import kvasir.definitions.kg.graphql.*
+import kvasir.definitions.kg.graphql.isBuiltInFieldName
+import kvasir.definitions.kg.graphql.isBuiltInTypeName
 import kvasir.definitions.rdf.JsonLdHelper
 
 class CheckContextVisitor(private val providedContext: Map<String, Any>) : NodeVisitorStub() {
-
-    companion object {
-        val IGNORE_TYPES = setOf(
-            TYPE_QUERY,
-            TYPE_MUTATION,
-            TYPE_SUBSCRIPTION,
-            ENUM_TRIGGER_TYPE_NAME,
-            TYPE_RDF_NODE,
-            TYPE_RESOURCE,
-            TYPE_BOXED_LITERAL,
-            TYPE_UNTYPED_RESOURCE
-        )
-
-        val IGNORE_FIELDS = setOf(
-            FIELD_ID_NAME,
-            FIELD_RAW_RDF_NAME,
-            FIELD_OBJECT_NAME,
-            FIELD_RELATIONS_NAME,
-            FIELD_PREDICATES_NAME,
-            FIELD_TYPES_NAME,
-            FIELD_TYPENAME_NAME
-        )
-    }
 
     override fun visitTypeDefinition(
         node: TypeDefinition<*>,
         context: TraverserContext<Node<*>>
     ): TraversalControl {
-        if (node is NamedNode<*> && node.name !in IGNORE_TYPES) {
+        if (node is NamedNode<*> && !isBuiltInTypeName(node.name)) {
             val iri = JsonLdHelper.getFQName(node.name, providedContext, "_")
             if (iri == null && !node.hasDirective("class")) {
                 // Check if a type predicate is provided, otherwise throw exception
@@ -48,7 +26,7 @@ class CheckContextVisitor(private val providedContext: Map<String, Any>) : NodeV
     override fun visitFieldDefinition(node: FieldDefinition, context: TraverserContext<Node<*>>): TraversalControl? {
         val parent = context.parentNode
         // Naming of the field does not matter when at root level
-        if (node.name !in IGNORE_FIELDS && parent is NamedNode && parent.name !in IGNORE_TYPES) {
+        if (!isBuiltInFieldName(node.name) && parent is NamedNode && !isBuiltInTypeName(parent.name)) {
             val iri = JsonLdHelper.getFQName(node.name, providedContext, "_")
             if (iri == null && !node.hasDirective("predicate")) {
                 // Check if a predicate is provided, otherwise throw exception

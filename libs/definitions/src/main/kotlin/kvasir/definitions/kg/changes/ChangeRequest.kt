@@ -35,8 +35,9 @@ data class ChangeRequest(
     val sliceTag: String? = null,
     /**
      * The Change Request will only be applied if all assertions resolve to true.
+     * (Mutable list: change processing components are allowed to append assertions to enforce conditions/constraints)
      */
-    val assert: List<Assertion> = emptyList(),
+    val assert: MutableList<Assertion> = mutableListOf(),
     /**
      * The with-clause value is a GraphQL query expression.
      * The results of this query can be referenced in the insert and delete operations using JSONata template strings.

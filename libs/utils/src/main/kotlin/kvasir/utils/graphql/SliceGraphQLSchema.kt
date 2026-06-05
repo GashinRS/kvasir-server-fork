@@ -81,10 +81,22 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
                     DEFAULT_OPS_ARG
                 ).values.filterIsInstance<StringValue>().map { it.value }
                 // If the type is annotated with @generateMutations, generate mutations for it
-                if (isGenerateMutations) {
-                    generatedInputTypes.add(generateInputType(type) to generateMutationsOperations)
+                val operations = if (isGenerateMutations) {
+                    generateMutationsOperations
                 } else if (isGenerateMutationsGlobal) {
-                    generatedInputTypes.add(generateInputType(type) to generateMutationsOperationsGlobal)
+                    generateMutationsOperationsGlobal
+                } else {
+                    emptyList()
+                }
+                if (operations.isNotEmpty()) {
+                    val insertDeleteOps = operations.filter { !it.startsWith(MUTATION_UPDATE_PREFIX) && !it.startsWith(MUTATION_SET_PREFIX) }
+                    val updateOps = operations.filter { it.startsWith(MUTATION_UPDATE_PREFIX) || it.startsWith(MUTATION_SET_PREFIX) }
+                    if (insertDeleteOps.isNotEmpty()) {
+                        generatedInputTypes.add(generateInputType(type) to insertDeleteOps)
+                    }
+                    if (updateOps.isNotEmpty()) {
+                        generatedInputTypes.add(generateUpdateInputType(type) to updateOps)
+                    }
                 }
             }
 
@@ -154,6 +166,124 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
         processedTypeDefinitionRegistry.types().forEach { (_, type) ->
             AstTransformer().transform(type, checkContextVisitor)
         }
+        // Validate that update/set mutations have a matching Query path
+        validateUpdateMutationsHaveQueryPaths()
+    }
+
+    /**
+     * Validates that every update/set mutation argument type has a corresponding field in the Query type
+     * that returns the matching output type. This is required because update mutations generate with-clauses
+     * that resolve against the Query type. Matching is done by fully qualified IRI, not by GraphQL type name.
+     */
+    private fun validateUpdateMutationsHaveQueryPaths() {
+        val mutationType = processedTypeDefinitionRegistry.getType(TYPE_MUTATION, ObjectTypeDefinition::class.java).orElse(null) ?: return
+        val queryTypeDef = processedTypeDefinitionRegistry.getType(TYPE_QUERY, ObjectTypeDefinition::class.java).orElse(null) ?: return
+
+        // Resolve the FQ IRIs of all query field return types
+        val queryFieldReturnTypeIris = queryTypeDef.fieldDefinitions.mapNotNull { fieldDef ->
+            val returnTypeName = TypeUtil.unwrapAll(fieldDef.type).name
+            val returnTypeDef = processedTypeDefinitionRegistry.getType(returnTypeName).orElse(null)
+            if (returnTypeDef is DirectivesContainer<*>) {
+                try {
+                    getFQName(returnTypeName, returnTypeDef as DirectivesContainer<*>, context)
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
+            } else null
+        }.toSet()
+
+        mutationType.fieldDefinitions
+            .filter { it.name.startsWith(MUTATION_UPDATE_PREFIX) || it.name.startsWith(MUTATION_SET_PREFIX) }
+            .forEach { mutationField ->
+                mutationField.inputValueDefinitions.forEach { inputValueDef ->
+                    val inputTypeName = TypeUtil.unwrapAll(inputValueDef.type).name
+                    val inputTypeDef = processedTypeDefinitionRegistry.getType(inputTypeName).orElse(null)
+                    // Resolve the FQ IRI of the input type (via @class directive or prefix)
+                    val inputTypeIri = if (inputTypeDef is DirectivesContainer<*>) {
+                        try {
+                            getFQName(inputTypeName, inputTypeDef as DirectivesContainer<*>, context)
+                        } catch (_: IllegalArgumentException) {
+                            null
+                        }
+                    } else null
+
+                    if (inputTypeIri == null || inputTypeIri !in queryFieldReturnTypeIris) {
+                        throw RuntimeException(
+                            "Update/set mutation '${mutationField.name}' references input type '$inputTypeName' " +
+                                "(IRI: ${inputTypeIri ?: "unresolvable"}) which has no matching field in the Query type. " +
+                                "Update mutations require a corresponding query path for with-clause resolution."
+                        )
+                    }
+                }
+            }
+    }
+
+    /**
+     * Generates an update input type for the specified object type.
+     * All fields except `id` are made nullable to support partial updates.
+     */
+    private fun generateUpdateInputType(type: ObjectTypeDefinition): InputObjectTypeDefinition {
+        val fqTypeName = getFQName(type.name, type, context)
+        val inputType = InputObjectTypeDefinition.newInputObjectDefinition()
+            .name("${type.name}UpdateInput")
+            .directive(
+                Directive.newDirective().name(DIRECTIVE_CLASS_NAME).argument(
+                    Argument.newArgument().name(
+                        ARG_IRI_NAME
+                    ).value(StringValue.of(fqTypeName)).build()
+                ).build()
+            )
+            .inputValueDefinitions(
+                type.fieldDefinitions
+                    .filterNot { INPUT_FIELD_IGNORE_LIST.contains(it.name) }
+                    .mapNotNull { field ->
+                        val referredType = typeDefinitionRegistry.getType(TypeUtil.unwrapAll(field.type)).get()
+                        when (referredType) {
+                            is ScalarTypeDefinition -> TypeName.newTypeName().name(referredType.name).build()
+                            is ObjectTypeDefinition -> {
+                                if (isGenerateMutationsGlobal || referredType.directives.any { it.name == DIRECTIVE_GENERATE_MUTATIONS_NAME }) {
+                                    TypeName.newTypeName("${referredType.name}UpdateInput").build()
+                                } else {
+                                    ID_TYPE
+                                }
+                            }
+                            is InterfaceTypeDefinition, is UnionTypeDefinition -> ID_TYPE
+                            else -> null
+                        }?.let { valueType ->
+                            val isIdField = field.name == FIELD_ID_NAME
+                            InputValueDefinition.newInputValueDefinition()
+                                .name(field.name)
+                                .directives(field.directives.filter { it.name == DIRECTIVE_SHAPE_NAME || it.name == DIRECTIVE_PREDICATE_NAME })
+                                .type(
+                                    if (isIdField) {
+                                        // id field remains required (non-null)
+                                        NonNullType.newNonNullType().type(ID_TYPE).build()
+                                    } else if (TypeUtil.isList(field.type) || (TypeUtil.isNonNull(field.type) && TypeUtil.isList(TypeUtil.unwrapOne(field.type)))) {
+                                        // List fields: make nullable list (e.g. [String!] — no outer NonNull)
+                                        val innerType = if (TypeUtil.isWrapped(field.type)) {
+                                            replaceInnerType(field.type, valueType)
+                                        } else {
+                                            valueType
+                                        }
+                                        stripOuterNonNull(innerType)
+                                    } else {
+                                        // Scalar/single fields: make nullable (strip NonNull wrapper if present)
+                                        valueType
+                                    }
+                                )
+                                .build()
+                        }
+                    })
+            .build()
+        typeDefinitionRegistry.add(inputType)
+        return inputType
+    }
+
+    /**
+     * Strips the outermost NonNull wrapper from a type, if present.
+     */
+    private fun stripOuterNonNull(type: Type<*>): Type<*> {
+        return if (TypeUtil.isNonNull(type)) TypeUtil.unwrapOne(type) else type
     }
 
     /**
@@ -348,6 +478,10 @@ class SliceGraphQLSchema(private val sliceSchema: String, private val context: J
     }
 
     private fun addKvasirBuiltins() {
+        // Register _Updatable* built-in input types
+        SchemaParser().parse(UPDATABLE_TYPES_SDL).types().values.forEach { type ->
+            typeDefinitionRegistry.add(type)
+        }
         typeDefinitionRegistry.addAll(KvasirTypes.all.map { type ->
             // Do not generate dynamic introspection fields for GraphQL built-in types, as these break Slice data isolation (by supplying these field names as ignoreFields).
             when (type) {

@@ -24,6 +24,7 @@ import kvasir.utils.idgen.getTimestamp
 import kvasir.utils.rdf.RDFTransformer
 
 private const val ASSERTION_CHECKING_PARALLELISM = 4
+private const val PAGINATION_EXTENSION_ID = "pagination"
 
 @ApplicationScoped
 class EvaluateAssertions(
@@ -38,7 +39,7 @@ class EvaluateAssertions(
         // For change requests on a Slice, load the Slice schema
         return (request.sliceId?.let { sliceId ->
             repositoryFactory.getVersionedRepository(Slice::class, request.podId)
-                .run { request.sliceTag?.let { this.findById(sliceId, it) }?:this.findDefaultForId(sliceId) }
+                .run { request.sliceTag?.let { this.findById(sliceId, it) } ?: this.findDefaultForId(sliceId) }
                 .onItem().ifNull().failWith(IllegalArgumentException("Slice not found: $sliceId"))
                 .onItem().ifNotNull().transform { it!! }
         } ?: Uni.createFrom().nullItem())
@@ -60,6 +61,7 @@ class EvaluateAssertions(
                         )
                         parent.query(q).toUni()
                             .onFailure().recoverWithItem { err ->
+                                Log.warn("Unexpected exception while evaluating assertion for change request ${request.id}: ${err.message}", err)
                                 QueryResult(
                                     data = emptyMap(),
                                     errors = listOf(mapOf("message" to (err.message ?: "")))
@@ -78,7 +80,7 @@ class EvaluateAssertions(
     private fun evaluateAssertion(assertion: Assertion, result: QueryResult): Uni<Void> {
         if (result.errors?.isNotEmpty() == true) {
             return Uni.createFrom()
-                .failure(ChangeAssertionException("Error executing assertion: ${result.errors}"))
+                .failure(RuntimeException("Error executing assertion: ${result.errors}"))
         }
         return when (assertion.type) {
             KvasirVocab.AssertEmptyResult -> {
@@ -86,7 +88,11 @@ class EvaluateAssertions(
                     result.data == null -> Uni.createFrom()
                         .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
 
-                    result.data!!.isNotEmpty() -> Uni.createFrom()
+                    // The assertion should fail if any top-level field returns a result or a non-empty collection.
+                    result.data!!.any { (_, value) ->
+                        // Not sure if the GraphQL resolver always returns non-null results (e.g. in case of fragments), so I'm doing a null-check here anyway.
+                        value != null && (value !is Iterable<*> || value.count() > 0)
+                    } -> Uni.createFrom()
                         .failure(ChangeAssertionException("Assertion failed: results exists for '${assertion.query}'"))
 
                     else -> Uni.createFrom().voidItem()
@@ -98,15 +104,91 @@ class EvaluateAssertions(
                     result.data == null -> Uni.createFrom()
                         .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
 
-                    result.data!!.isEmpty() -> Uni.createFrom()
+                    // The assertion should fail if any top-level field returns null or an empty collection.
+                    result.data!!.any { (_, value) ->
+                        // Not sure if the GraphQL resolver always returns non-null results (e.g. in case of fragments), so I'm doing a null-check here anyway.
+                        value == null || (value is Iterable<*> && value.count() == 0)
+                    } -> Uni.createFrom()
                         .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.query}'"))
 
                     else -> Uni.createFrom().voidItem()
                 }
             }
 
+            KvasirVocab.AssertCountBounds -> {
+                when {
+                    result.data == null -> Uni.createFrom()
+                        .failure(IllegalArgumentException("Invalid assertion query: ${assertion.query}"))
+
+                    else -> {
+                        val fieldName = assertion.fieldName
+                            ?: return Uni.createFrom()
+                                .failure(IllegalArgumentException("Invalid count-bounds assertion: missing fieldName"))
+                        val minCount = assertion.minCount
+                        val maxCount = assertion.maxCount
+                        val counts = extractPaginationCounts(result, fieldName).ifEmpty {
+                            result.data!!.values
+                                .flatMap { flattenToRowMaps(it) }
+                                .map { row -> countFieldValues(row[fieldName]).toLong() }
+                        }
+                        if (counts.isEmpty()) {
+                            Uni.createFrom()
+                                .failure(ChangeAssertionException("Assertion failed: no results for '${assertion.query}'"))
+                        } else {
+                            val violation = counts.map { count ->
+                                when {
+                                    minCount != null && count < minCount ->
+                                        "field '$fieldName' has $count value(s), expected at least $minCount"
+                                    maxCount != null && count > maxCount ->
+                                        "field '$fieldName' has $count value(s), expected at most $maxCount"
+                                    else -> null
+                                }
+                            }.firstOrNull { it != null }
+
+                            if (violation != null) {
+                                Uni.createFrom()
+                                    .failure(ChangeAssertionException("Assertion failed: $violation for '${assertion.query}'"))
+                            } else {
+                                Uni.createFrom().voidItem()
+                            }
+                        }
+                    }
+                }
+            }
+
             else -> Uni.createFrom()
                 .failure(IllegalArgumentException("Unsupported assertion type: ${assertion.type}"))
+        }
+    }
+
+    private fun extractPaginationCounts(result: QueryResult, fieldName: String): List<Long> {
+        val paginationEntries = (result.extensions?.get(PAGINATION_EXTENSION_ID) as? Iterable<*>)
+            ?.mapNotNull { it as? Map<*, *> }
+            ?: return emptyList()
+        return paginationEntries
+            .filter { entry -> entry["path"]?.toString()?.endsWith("/$fieldName") == true }
+            .mapNotNull { entry ->
+                when (val totalCount = entry["totalCount"]) {
+                    is Number -> totalCount.toLong()
+                    is String -> totalCount.toLongOrNull()
+                    else -> null
+                }
+            }
+    }
+
+    private fun flattenToRowMaps(value: Any?): List<Map<String, Any?>> {
+        return when (value) {
+            is Map<*, *> -> listOf(value.entries.associate { it.key.toString() to it.value })
+            is Iterable<*> -> value.flatMap { flattenToRowMaps(it) }
+            else -> emptyList()
+        }
+    }
+
+    private fun countFieldValues(value: Any?): Int {
+        return when (value) {
+            null -> 0
+            is Iterable<*> -> value.count()
+            else -> 1
         }
     }
 
@@ -224,7 +306,7 @@ class MaterializeRecords(
             // For change requests on a Slice, load the Slice schema
             (request.sliceId?.let { sliceId ->
                 repositoryFactory.getVersionedRepository(Slice::class, request.podId)
-                    .run { request.sliceTag?.let { this.findById(sliceId, it) }?:this.findDefaultForId(sliceId) }
+                    .run { request.sliceTag?.let { this.findById(sliceId, it) } ?: this.findDefaultForId(sliceId) }
                     .onItem().ifNull().failWith(IllegalArgumentException("Slice not found: $sliceId"))
                     .onItem().ifNotNull().transform { it!! }
             } ?: Uni.createFrom().nullItem())
@@ -303,7 +385,7 @@ class MaterializeRecords(
  */
 @ApplicationScoped
 class SliceGraphQLBasedValidator(private val repositoryFactory: RepositoryFactory) {
-    fun process(request: ChangeRequest, records: Collection<ChangeRecord>): Uni<Void> {
+    fun process(request: ChangeRequest, records: Collection<ChangeRecord>): Uni<Collection<ChangeRecord>> {
         return request.sliceId?.let { sliceId ->
             val startTs = System.currentTimeMillis()
             Log.debug("Validating change request ${request.id} against Slice GraphQL schema...")
@@ -315,11 +397,12 @@ class SliceGraphQLBasedValidator(private val repositoryFactory: RepositoryFactor
                         val validator = ChangeRequestValidator(
                             records,
                             sliceSpec.schema.tryReadingEmbeddedSDL(),
-                            sliceSpec.context
+                            sliceSpec.context,
+                            request
                         )
                         try {
                             validator.validate()
-                            Uni.createFrom().voidItem()
+                            Uni.createFrom().item(filterRedundantPairs(records))
                         } catch (t: Throwable) {
                             Uni.createFrom().failure(t)
                         }
@@ -331,7 +414,22 @@ class SliceGraphQLBasedValidator(private val repositoryFactory: RepositoryFactor
                 .invoke { _ ->
                     Log.debug("Finished validating change request ${request.id} against Slice GraphQL schema in ${System.currentTimeMillis() - startTs} ms")
                 }
-        } ?: Uni.createFrom().nullItem()
+        } ?: Uni.createFrom().item(records)
+    }
+
+    /**
+     * Filters out change records where the exact same RDF statement appears in both
+     * INSERT and DELETE records within the same change request. Such pairs are no-ops
+     * in terms of net state and should not be persisted.
+     *
+     * This handles the `rdf:type` INSERT+DELETE pairs emitted by [UpdateMutationCompiler]
+     * (needed for update detection by the validator) as well as any other accidental no-op pairs.
+     */
+    private fun filterRedundantPairs(records: Collection<ChangeRecord>): Collection<ChangeRecord> {
+        val insertStatements = records.filter { it.type == ChangeRecordType.INSERT }.map { it.statement }.toSet()
+        val deleteStatements = records.filter { it.type == ChangeRecordType.DELETE }.map { it.statement }.toSet()
+        val redundant = insertStatements intersect deleteStatements
+        return if (redundant.isEmpty()) records else records.filterNot { it.statement in redundant }
     }
 
 }

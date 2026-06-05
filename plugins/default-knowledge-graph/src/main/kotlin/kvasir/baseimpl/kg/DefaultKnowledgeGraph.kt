@@ -79,7 +79,7 @@ class DefaultKnowledgeGraph(
                     // Convert the JSON-LD insert/delete to change records
                     materializeRecords.process(request)
                         // Validate the records (only applies if the change is applied to a Slice)
-                        .chain { records -> sliceGraphQLBasedValidator.process(request, records).map { records } }
+                        .chain { records -> sliceGraphQLBasedValidator.process(request, records) }
                         .onFailure().recoverWithUni { err ->
                             mappedFailures[request.id] = err
                             Uni.createFrom().item(emptyList())
@@ -138,7 +138,7 @@ class DefaultKnowledgeGraph(
             }
             .chain { records ->
                 // Validate the records (only applies if the change is applied to a Slice)
-                sliceGraphQLBasedValidator.process(request, records).map { records }
+                sliceGraphQLBasedValidator.process(request, records)
             }
             .chain { records ->
                 // Write the records to the storage backend

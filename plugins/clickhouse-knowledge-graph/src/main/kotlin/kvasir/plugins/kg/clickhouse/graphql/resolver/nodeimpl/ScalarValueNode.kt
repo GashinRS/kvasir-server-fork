@@ -1,6 +1,5 @@
 package kvasir.plugins.kg.clickhouse.graphql.resolver.nodeimpl
 
-import cz.jirutka.rsql.parser.RSQLParser
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
 import cz.jirutka.rsql.parser.ast.RSQLOperators
@@ -13,6 +12,7 @@ import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.persistence.SortOrder
 import kvasir.plugins.kg.clickhouse.graphql.SELF_REF_SELECTOR
 import kvasir.plugins.kg.clickhouse.graphql.SelectorReplacingFilterVisitor
+import kvasir.plugins.kg.clickhouse.graphql.newFilterParser
 import kvasir.plugins.kg.clickhouse.graphql.resolver.*
 import kvasir.plugins.kg.clickhouse.specs.COLLAPSE_EXPR
 import kvasir.plugins.kg.clickhouse.specs.CURRENT_DATA_TABLE
@@ -113,7 +113,11 @@ class ScalarCollectionNode(
                 nameInResult,
                 true
             ).visitNode(
-                RSQLParser().parse(rsql)
+                try {
+                    newFilterParser().parse(rsql)
+                } catch (e: Exception) {
+                    throw IllegalArgumentException("Failed to parse RSQL filter for field '$name': $rsql", e)
+                }
             )
         }
     }
@@ -131,7 +135,7 @@ class ScalarCollectionNode(
             // Special handling for fields that return IDs: empty strings caused by the LEFT JOIN for optional fields should be filtered out, as they do not represent actual values but just the absence of a relation.
             "groupUniqArrayIf($joinIdentifier.value, $joinIdentifier.value != '') AS $nameInResult"
         } else {
-            "groupUniqArray($joinIdentifier.value) AS $nameInResult"
+            "groupUniqArrayIf($joinIdentifier.value, $joinIdentifier.id != '') AS $nameInResult"
         }
         return sortOrder?.let {
             when (it) {

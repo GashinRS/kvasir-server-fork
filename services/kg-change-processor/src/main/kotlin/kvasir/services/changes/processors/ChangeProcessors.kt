@@ -8,7 +8,9 @@ import io.smallrye.reactive.messaging.kafka.KafkaRecord
 import io.smallrye.reactive.messaging.kafka.KafkaRecordBatch
 import jakarta.enterprise.context.ApplicationScoped
 import kvasir.definitions.kg.KnowledgeGraph
+import kvasir.definitions.kg.changes.ChangeProcessingHistoryEntry
 import kvasir.definitions.kg.changes.ChangeRequest
+import kvasir.definitions.kg.changes.ChangeStatusCode
 import kvasir.definitions.kg.changes.ProcessedChange
 import kvasir.definitions.reactive.skipToLast
 import kvasir.definitions.reactive.toUni
@@ -21,6 +23,40 @@ import java.util.concurrent.CompletionStage
 import kotlin.system.exitProcess
 
 const val SEND_REPORT_PARALLELISM = 8
+
+/**
+ * Builds a failure [ProcessedChange] for a skipped change request (e.g. pod does not exist).
+ * Sending this report back through the completion topic ensures the Kafka Streams ordering
+ * pipeline does not stall on orphan pending entries.
+ */
+fun buildSkippedReport(request: ChangeRequest, reason: String): ProcessedChange {
+    return ProcessedChange(
+        id = request.changeId ?: request.id,
+        createdBy = request.requestingUser,
+        origRequestId = request.id,
+        podId = request.podId,
+        processingHistory = listOf(
+            ChangeProcessingHistoryEntry(
+                statusCode = ChangeStatusCode.INTERNAL_ERROR,
+                message = reason
+            )
+        )
+    )
+}
+
+fun sendSkippedReports(
+    requests: List<ChangeRequest>,
+    reason: String,
+    emitter: MutinyEmitter<ProcessedChange>
+): Uni<Void> {
+    return Multi.createFrom().iterable(requests)
+        .onItem().transformToUni { request ->
+            val report = buildSkippedReport(request, reason)
+            emitter.sendMessage(KafkaRecord.of(report.podId, report))
+        }
+        .merge(SEND_REPORT_PARALLELISM)
+        .skipToLast()
+}
 
 @ApplicationScoped
 class PlainChangeRequestProcessor(
@@ -50,7 +86,7 @@ class PlainChangeRequestProcessor(
                     .onFailure { err -> ignoreNonExistingPod && err.message?.contains("does not exist") == true }
                     .recoverWithUni { err ->
                         Log.warn("Encountered change request for non-existing Pod, ignoring as configured: ${err.message}")
-                        Uni.createFrom().voidItem()
+                        sendSkippedReports(requests, err.message ?: "Pod does not exist", completedChangeRequestsEmitter)
                     }
 
             }
@@ -85,7 +121,8 @@ class StatefulChangeRequestProcessor(
             .onFailure { err -> ignoreNonExistingPod && err.message?.contains("does not exist") == true }
             .recoverWithUni { err ->
                 Log.warn("Encountered change request for non-existing Pod ('${message.payload.podId}'), ignoring as configured: ${err.message}")
-                Uni.createFrom().voidItem()
+                val report = buildSkippedReport(message.payload, err.message ?: "Pod does not exist")
+                completedChangeRequestsEmitter.sendMessage(KafkaRecord.of(report.podId, report))
             }
             .chain { _ -> message.ack().toUni() }
             .onFailure().invoke { err ->
@@ -116,7 +153,8 @@ class RefBasedChangeRequestProcessor(
             .onFailure { err -> ignoreNonExistingPod && err.message?.contains("does not exist") == true }
             .recoverWithUni { err ->
                 Log.warn("Encountered change request for non-existing Pod ('${message.payload.podId}'), ignoring as configured: ${err.message}")
-                Uni.createFrom().voidItem()
+                val report = buildSkippedReport(message.payload, err.message ?: "Pod does not exist")
+                completedChangeRequestsEmitter.sendMessage(KafkaRecord.of(report.podId, report))
             }
             .chain { _ -> message.ack().toUni() }
             .onFailure().invoke { err ->

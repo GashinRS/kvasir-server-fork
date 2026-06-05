@@ -1,4 +1,4 @@
-# Slice walkthrough
+# Walkthrough
 
 <show-structure depth="2"/>
 
@@ -144,6 +144,7 @@ In this scenario, `eve` should not be visible (for example because she has no em
 ## 3. Enforce visibility with `@mustExist`
 
 To make the Slice boundary robust even when `schema_email` is not selected, mark the field with `@mustExist`.
+See also [Field presence and visibility](Slice-Field-Presence-and-Visibility.md).
 
 ```graphql
 type Query {
@@ -179,6 +180,7 @@ returns only valid Slice members:
 ## 4. Add mutations with email validation
 
 Extend the schema with `add` and `remove` mutations and enforce that inserted emails end with `@example.org`.
+For more on mutation validation semantics, see [Update mutations](Slice-Update-Mutations.md).
 
 ```graphql
 type Query {
@@ -344,6 +346,8 @@ When a matching insert occurs, the client receives an SSE event whose payload co
 ## Where to go next
 
 - For full Slice semantics and directive reference, see [Slices](Slices.md).
+- For field-level Slice visibility rules, see [Field presence and visibility](Slice-Field-Presence-and-Visibility.md).
+- For richer mutation flows, see [Update mutations](Slice-Update-Mutations.md).
 - For query capabilities (pagination, sorting, language selection), see [Query API](Querying.md).
 - For asynchronous processing and change status tracking, see [Changes API](Changes.md).
 

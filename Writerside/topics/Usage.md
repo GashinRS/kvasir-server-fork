@@ -28,7 +28,7 @@ In real integrations, applications typically do not access the full Pod Knowledg
 - **Understand the graph model first**: start with [Knowledge Graph](Knowledge-Graph.md).
 - **Read/query data**: use [Query API](Querying.md).
 - **Write RDF changes**: use [Changes API](Changes.md).
-- **Define application-facing graph APIs**: use [Slices](Slices.md) and the [Slice walkthrough](Slice-Walkthrough.md).
+- **Define application-facing graph APIs**: use [Slices](Slices.md) and the [Walkthrough](Walkthrough.md).
 - **Store and retrieve files**: use [Storage](Storage.md).
 - **Configure Pod behavior**: use [Pod Management](Pod-Management.md) and [Configuration Reference](Configuration-Reference.md).
 - **Secure and control access**: read [Identity & Security](Identity-and-Security.md), [Authentication](Authentication.md), and [Access Control](Access-Control.md).

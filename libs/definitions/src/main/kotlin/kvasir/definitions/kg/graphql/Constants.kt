@@ -63,6 +63,20 @@ const val MUTATION_ADD_PREFIX = "add"
 const val MUTATION_REMOVE_PREFIX = "remove"
 const val MUTATION_INSERT_PREFIX = "insert"
 const val MUTATION_DELETE_PREFIX = "delete"
+const val MUTATION_UPDATE_PREFIX = "update"
+const val MUTATION_SET_PREFIX = "set"
+
+// _Updatable* built-in input type support
+const val UPDATABLE_TYPE_PREFIX = "_Updatable"
+const val UPDATABLE_FIELD_SET = "_set"
+const val UPDATABLE_FIELD_INCREMENT = "_increment"
+const val UPDATABLE_FIELD_DECREMENT = "_decrement"
+const val UPDATABLE_FIELD_MULTIPLY = "_multiply"
+const val UPDATABLE_FIELD_APPEND = "_append"
+const val UPDATABLE_FIELD_PREPEND = "_prepend"
+const val UPDATABLE_FIELD_TEMPLATE = "_template"
+const val UPDATABLE_FIELD_ADD = "_add"
+const val UPDATABLE_FIELD_REMOVE = "_remove"
 
 val KVASIR_BUILT_IN_FIELDS = setOf(
     FIELD_ID_NAME,
@@ -72,3 +86,27 @@ val KVASIR_BUILT_IN_FIELDS = setOf(
     FIELD_RAW_RDF_NAME,
     FIELD_OBJECT_NAME
 )
+
+/**
+ * Type names that are Kvasir built-ins and must be excluded from semantic context validation.
+ * Note: types whose names start with `_` are also automatically excluded (see [isBuiltInTypeName]).
+ */
+val KVASIR_BUILT_IN_TYPES = setOf(
+    TYPE_QUERY, TYPE_MUTATION, TYPE_SUBSCRIPTION,
+    TYPE_RDF_NODE, TYPE_RESOURCE, TYPE_UNTYPED_RESOURCE, TYPE_BOXED_LITERAL,
+    ENUM_TRIGGER_TYPE_NAME, ENUM_SORT_ORDER_NAME
+)
+
+/**
+ * Returns `true` if [name] is a Kvasir built-in type that should be excluded from semantic context validation.
+ * This covers explicitly listed structural types as well as any type using the reserved `_` prefix
+ * (e.g. `_UpdatableInt`, `_UpdatableString`, etc.).
+ */
+fun isBuiltInTypeName(name: String): Boolean = name in KVASIR_BUILT_IN_TYPES || name.startsWith("_")
+
+/**
+ * Returns `true` if [name] is a Kvasir built-in field that should be excluded from semantic context validation.
+ * This covers explicitly listed fields as well as any field using the reserved `_` prefix
+ * (e.g. `_set`, `_increment`, `__typename`, etc.).
+ */
+fun isBuiltInFieldName(name: String): Boolean = name in KVASIR_BUILT_IN_FIELDS || name.startsWith("_")

@@ -8,6 +8,7 @@ object KvasirVocab {
 
     const val AssertEmptyResult = "${baseUri}AssertEmptyResult"
     const val AssertNonEmptyResult = "${baseUri}AssertNonEmptyResult"
+    const val AssertCountBounds = "${baseUri}AssertCountBounds"
     const val S3Reference = "${baseUri}S3Reference"
 
     const val autoIngestRDF = "${baseUri}autoIngestRDF"

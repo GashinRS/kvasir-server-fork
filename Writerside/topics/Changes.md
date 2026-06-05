@@ -86,6 +86,10 @@ Request body:
 
 <warning>
 When a change request includes both insert and delete statements, the delete statements are always executed first. As such, update mutations (i.e. delete followed by insert) can be implemented in a single change request.
+
+When using the raw Changes API directly, a delete-only payload is treated as a delete operation. For update semantics, include at least one insert statement for the same resource (typically `rdf:type`).
+
+For Slice-scoped GraphQL update semantics, raw ChangeRequest guidance, and built-in `_Updatable*` operations, see [Update mutations](Slice-Update-Mutations.md).
 </warning>
 
 ### Assertions
@@ -122,10 +126,11 @@ Request body:
 ```
 
 Note the `kss:assert` keyword, which is followed by an array of assertions. Each assertion must specify the type of
-assertion and a GraphQL query [(see Querying)](Querying.md) that should return an empty result (in case of
-type `kss:AssertEmptyResult`) or a
-non-empty result (in case of type `kss:AssertNonEmptyResult`). If one of the assertions fails, the entire transaction is
-discarded.
+assertion and a GraphQL query [(see Querying)](Querying.md). Kvasir supports:
+- `kss:AssertEmptyResult` (query must return no results),
+- `kss:AssertNonEmptyResult` (query must return results),
+- `kss:AssertCountBounds` (a target field must stay within optional `kss:minCount` / `kss:maxCount` bounds).
+If one of the assertions fails, the entire transaction is discarded.
 
 Use the URL returned via the `Location` header to check the status of the change request. When the change resource
 is available on the server (remember: eventual consistency), you should see a `resultCode` of `ASSERTION_FAILED`.
@@ -373,5 +378,10 @@ data:{"@context":{"kss":"http://localhost:8080/"},"@id":"http://localhost:8080/a
 <seealso>
     <category ref="api-ref">
             <a href="API-Reference.md">API Reference</a>
+    </category>
+    <category ref="related">
+            <a href="Slices.md">Slices</a>
+            <a href="Slice-Update-Mutations.md">Update mutations</a>
+            <a href="Slice-Versioning-and-Tags.md">Slice versioning with tags</a>
     </category>
 </seealso>

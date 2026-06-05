@@ -13,8 +13,13 @@
         <toc-element topic="Knowledge-Graph.md">
             <toc-element topic="Changes.md"/>
             <toc-element topic="Querying.md"/>
-            <toc-element topic="Slices.md"/>
-            <toc-element topic="Slice-Walkthrough.md"/>
+            <toc-element topic="Slices.md">
+                <toc-element topic="Walkthrough.md"/>
+                <toc-element topic="Slice-Update-Mutations.md"/>
+                <toc-element topic="Slice-Field-Presence-and-Visibility.md"/>
+                <toc-element topic="Slice-Multi-Type-Fields.md"/>
+                <toc-element topic="Slice-Versioning-and-Tags.md"/>
+            </toc-element>
         </toc-element>
         <toc-element topic="Storage.md"/>
         <toc-element topic="Pod-Management.md"/>

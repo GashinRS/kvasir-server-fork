@@ -40,12 +40,12 @@ but considerably more powerful.
 > owner or trusted administrator tooling.
 > {style="note"}
 
-For a hands-on introduction, see [Slices](Slices.md) and the guided [Slice walkthrough](Slice-Walkthrough.md).
+For a hands-on introduction, see [Slices](Slices.md) and the guided [Walkthrough](Walkthrough.md).
 
 <seealso>
     <category ref="related">
         <a href="Slices.md">Slices</a>
-        <a href="Slice-Walkthrough.md">Slice walkthrough</a>
+        <a href="Walkthrough.md">Walkthrough</a>
         <a href="Changes.md">Changes API</a>
         <a href="Querying.md">Query API</a>
     </category>

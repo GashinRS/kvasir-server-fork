@@ -41,6 +41,10 @@ fun GraphQLScalarType.rdfDatatype(): Set<String> {
     }
 }
 
+fun GraphQLScalarType.isNumericScalar(): Boolean {
+    return this.name == Scalars.GraphQLInt.name || this.name == Scalars.GraphQLFloat.name
+}
+
 /**
  * Returns true if the type is an interface or union type, otherwise false.
  */

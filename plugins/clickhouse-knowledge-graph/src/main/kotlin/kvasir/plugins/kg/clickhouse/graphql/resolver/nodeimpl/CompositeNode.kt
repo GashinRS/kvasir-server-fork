@@ -1,6 +1,5 @@
 package kvasir.plugins.kg.clickhouse.graphql.resolver.nodeimpl
 
-import cz.jirutka.rsql.parser.RSQLParser
 import cz.jirutka.rsql.parser.ast.AndNode
 import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
@@ -18,6 +17,7 @@ import kvasir.plugins.kg.clickhouse.graphql.SELF_REF_SELECTOR
 import kvasir.plugins.kg.clickhouse.graphql.SelectorExtractingVisitor
 import kvasir.plugins.kg.clickhouse.graphql.SelectorReplacingFilterVisitor
 import kvasir.plugins.kg.clickhouse.graphql.ToSQLFilterVisitor
+import kvasir.plugins.kg.clickhouse.graphql.newFilterParser
 import kvasir.plugins.kg.clickhouse.graphql.resolver.*
 import kvasir.plugins.kg.clickhouse.specs.*
 import kvasir.utils.graphql.*
@@ -142,7 +142,7 @@ open class CompositeNode(
                     SelectorReplacingFilterVisitor(
                         SELF_REF_SELECTOR,
                         FIELD_ID_NAME
-                    ).visitNode(RSQLParser().parse(it))
+                    ).visitNode(newFilterParser().parse(it))
                 })
                 .filterNotNull()
                 .takeIf { it.isNotEmpty() }?.let { AndNode(it) }
