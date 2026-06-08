@@ -1,8 +1,11 @@
 "%test":
   quarkus:
     http:
+      test-port: 0
       access-log:
         enabled: true
+    management:
+      test-port: 0
     # management:
     #   port: 9101
     #   test-port: 9002
@@ -16,4 +19,4 @@
 
   kvasir:
     http:
-      base-uri: http://localhost:${quarkus.http.test-port}/
+      base-uri: http://localhost:0/

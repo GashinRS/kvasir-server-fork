@@ -1,5 +1,4 @@
 package kvasir.utils.test.commons
-
 import io.vertx.core.json.Json
 import jakarta.inject.Inject
 import kvasir.utils.pod.PodSetupHelper

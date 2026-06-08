@@ -2,6 +2,7 @@ package kvasir.services.api.storage
 
 import io.quarkus.logging.Log
 import io.quarkus.test.junit.QuarkusTest
+import io.restassured.RestAssured
 import io.restassured.RestAssured.given
 import io.restassured.RestAssured.`when`
 import io.restassured.http.ContentType
@@ -23,10 +24,10 @@ import kotlin.random.Random
 class StorageApiTest : AbstractPodTest() {
 
     @Inject
-    lateinit var kvasirConfig: HttpConfig
+    lateinit var vertx: Vertx
 
     @Inject
-    lateinit var vertx: Vertx
+    lateinit var httpConfig: HttpConfig
 
     @Test
     fun testPutAndGetResource() {
@@ -88,7 +89,7 @@ class StorageApiTest : AbstractPodTest() {
         // Try to upload a 60 MB file, which should exceed the default limit (50 MB)
         val content = Random.nextBytes(60 * 1024 * 1024)
 
-        val targetUrl = "${kvasirConfig.baseUri().removeSuffix("/")}/$podName/s3/too-large-binary.bin"
+        val targetUrl = "${httpConfig.baseUri().removeSuffix("/")}/$podName/s3/too-large-binary.bin"
         Log.debug("Trying to upload a too large file to URL: $targetUrl")
         val respStatus =
             WebClient

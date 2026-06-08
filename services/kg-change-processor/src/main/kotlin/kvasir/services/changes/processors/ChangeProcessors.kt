@@ -106,7 +106,7 @@ class PlainChangeRequestProcessor(
 @ApplicationScoped
 class StatefulChangeRequestProcessor(
     private val knowledgeGraph: KnowledgeGraph,
-    @Channel(Channels.CHANGES_PROCESSING_COMPLETED_TOPIC)
+    @Channel(Channels.CHANGES_PROCESSING_COMPLETED_PUBLISH)
     private val completedChangeRequestsEmitter: MutinyEmitter<ProcessedChange>,
     @ConfigProperty(name = "kvasir-ext.change-processor.ignore-non-existing-pod", defaultValue = "false")
     private val ignoreNonExistingPod: Boolean,
@@ -139,14 +139,14 @@ class StatefulChangeRequestProcessor(
 @ApplicationScoped
 class RefBasedChangeRequestProcessor(
     private val knowledgeGraph: KnowledgeGraph,
-    @Channel(Channels.CHANGES_PROCESSING_COMPLETED_TOPIC)
+    @Channel(Channels.CHANGES_PROCESSING_COMPLETED_PUBLISH)
     private val completedChangeRequestsEmitter: MutinyEmitter<ProcessedChange>,
     @ConfigProperty(name = "kvasir-ext.change-processor.ignore-non-existing-pod", defaultValue = "false")
     private val ignoreNonExistingPod: Boolean,
     @ConfigProperty(name = "kvasir-ext.change-processor.shutdown-on-error", defaultValue = "true")
     private val shutdownOnError: Boolean
 ) {
-    @Incoming(Channels.CHANGES_REF_PROCESSING_QUEUE_TOPIC)
+    @Incoming(Channels.CHANGES_REF_PROCESSING_QUEUE_SUBSCRIBE)
     fun process(message: Message<ChangeRequest>): CompletionStage<Void> {
         return knowledgeGraph.processReferenced(message.payload)
             .chain { report -> completedChangeRequestsEmitter.sendMessage(KafkaRecord.of(report.podId, report)) }

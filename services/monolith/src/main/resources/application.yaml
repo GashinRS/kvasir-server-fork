@@ -27,6 +27,12 @@ quarkus:
     application-id: change-processor
     topics: changes.incoming,changes.processing-completed
 
+"%test":
+  quarkus:
+    kafka-streams:
+      application-id: ${quarkus.uuid}
+      topics: ${quarkus.uuid}.test.changes.incoming,${quarkus.uuid}.test.changes.processing-completed
+
 "%dev":
   quarkus:
     http:

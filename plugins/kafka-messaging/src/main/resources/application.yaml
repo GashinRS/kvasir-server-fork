@@ -1,57 +1,79 @@
 kvasir:
+  topics:
+    changes-incoming: changes.incoming
+    changes-plain-processing-queue: changes.plain-processing-queue
+    changes-stateful-processing-queue: changes.stateful-processing-queue
+    changes-ref-processing-queue: changes.ref-processing-queue
+    changes-processing-completed: changes.processing-completed
+    changes-outgoing: changes.outgoing
+    storage-events: storage.events
+    query-requests: query.requests
+    lifecycle-events: lifecycle.events
   messaging:
     kafka:
       auto-create-topics:
-        - topic-name: changes.incoming
+        - topic-name: ${kvasir.topics.changes-incoming}
           partitions: 4
           replication-factor: 1
-        - topic-name: changes.processing-completed
+        - topic-name: ${kvasir.topics.changes-processing-completed}
           partitions: 4
           replication-factor: 1
-        - topic-name: changes.outgoing
+        - topic-name: ${kvasir.topics.changes-outgoing}
           partitions: 4
           replication-factor: 1
-        - topic-name: changes.plain-processing-queue
+        - topic-name: ${kvasir.topics.changes-plain-processing-queue}
           partitions: 4
           replication-factor: 1
-        - topic-name: changes.stateful-processing-queue
+        - topic-name: ${kvasir.topics.changes-stateful-processing-queue}
           partitions: 4
           replication-factor: 1
-        - topic-name: changes.ref-processing-queue
+        - topic-name: ${kvasir.topics.changes-ref-processing-queue}
           partitions: 4
           replication-factor: 1
+"%test":
+  kvasir:
+    topics:
+      changes-incoming: ${quarkus.uuid}.test.changes.incoming
+      changes-plain-processing-queue: ${quarkus.uuid}.test.changes.plain-processing-queue
+      changes-stateful-processing-queue: ${quarkus.uuid}.test.changes.stateful-processing-queue
+      changes-ref-processing-queue: ${quarkus.uuid}.test.changes.ref-processing-queue
+      changes-processing-completed: ${quarkus.uuid}.test.changes.processing-completed
+      changes-outgoing: ${quarkus.uuid}.test.changes.outgoing
+      storage-events: ${quarkus.uuid}.test.storage.events
+      query-requests: ${quarkus.uuid}.test.query.requests
+      lifecycle-events: ${quarkus.uuid}.test.lifecycle.events
 mp:
   messaging:
     outgoing:
       changes_incoming_publish:
         connector: smallrye-kafka
-        topic: changes.incoming
+        topic: ${kvasir.topics.changes-incoming}
         merge: true
         waitForWriteCompletion: false
       changes_processing_completed_publish:
         connector: smallrye-kafka
-        topic: changes.processing-completed
+        topic: ${kvasir.topics.changes-processing-completed}
         merge: true
         waitForWriteCompletion: false
       storage_events_publish:
         connector: smallrye-kafka
-        topic: storage.events
+        topic: ${kvasir.topics.storage-events}
         merge: true
         waitForWriteCompletion: false
       query_requests_publish:
         connector: smallrye-kafka
-        topic: query.requests
+        topic: ${kvasir.topics.query-requests}
         merge: true
         waitForWriteCompletion: false
       lifecycle_events_publish:
         connector: smallrye-kafka
-        topic: lifecycle.events
+        topic: ${kvasir.topics.lifecycle-events}
         merge: true
         waitForWriteCompletion: false
     incoming:
       changes_plain_processing_queue_subscribe:
         connector: smallrye-kafka
-        topic: changes.plain-processing-queue
+        topic: ${kvasir.topics.changes-plain-processing-queue}
         batch: true
         broadcast: true
         commit-strategy: throttled
@@ -66,7 +88,7 @@ mp:
             reset: earliest
       changes_stateful_processing_queue_subscribe:
         connector: smallrye-kafka
-        topic: changes.stateful-processing-queue
+        topic: ${kvasir.topics.changes-stateful-processing-queue}
         broadcast: true
         commit-strategy: throttled
         throttled:
@@ -80,7 +102,7 @@ mp:
             reset: earliest
       changes_ref_processing_queue_subscribe:
         connector: smallrye-kafka
-        topic: changes.ref-processing-queue
+        topic: ${kvasir.topics.changes-ref-processing-queue}
         broadcast: true
         commit-strategy: throttled
         throttled:
@@ -94,14 +116,14 @@ mp:
             reset: earliest
       changes_outgoing_subscribe:
         connector: smallrye-kafka
-        topic: changes.outgoing
+        topic: ${kvasir.topics.changes-outgoing}
         broadcast: true
         auto:
           offset:
             reset: earliest
       storage_events_subscribe:
         connector: smallrye-kafka
-        topic: storage.events
+        topic: ${kvasir.topics.storage-events}
         broadcast: true
         auto:
           offset:

@@ -14,8 +14,8 @@ import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.storage.StorageEvent
-import kvasir.plugins.messaging.kafka.Channels
 import kvasir.plugins.messaging.kafka.KafkaMessagingConfig
+import kvasir.plugins.messaging.kafka.TopicsConfig
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
 import kvasir.utils.rdf.RDFTransformer
@@ -38,6 +38,7 @@ class StreamApi(
     private val vertx: Vertx,
     private val knowledgeGraph: KnowledgeGraph,
     private val kafkaConfig: KafkaMessagingConfig,
+    private val topicsConfig: TopicsConfig,
     private val uriInfo: KvasirUriInfo,
     private val requestContext: ServerRequestContext
 ) {
@@ -70,7 +71,7 @@ class StreamApi(
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
-            Channels.CHANGES_OUTGOING_TOPIC, ProcessedChange::class.java, "sse-consumer-$streamId",
+            topicsConfig.changesOutgoing(), ProcessedChange::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
             true
         )
@@ -132,7 +133,7 @@ class StreamApi(
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
-            Channels.QUERY_REQUESTS_TOPIC, QueryRequestEvent::class.java, "sse-consumer-$streamId",
+            topicsConfig.queryRequests(), QueryRequestEvent::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
             true
         )
@@ -168,7 +169,7 @@ class StreamApi(
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
-            Channels.LIFECYCLE_EVENTS_TOPIC, LifeCycleEvent::class.java, "sse-consumer-$streamId",
+            topicsConfig.lifecycleEvents(), LifeCycleEvent::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
             true
         )
@@ -204,7 +205,7 @@ class StreamApi(
         val streamId = resumeToken.orElse(UUID.randomUUID().toString())
         requestContext.serverResponse().setResponseHeader(RESUME_TOKEN_HTTP_HEADER_NAME, streamId)
         return streamFrom(
-            Channels.STORAGE_EVENTS_TOPIC, StorageEvent::class.java, "sse-consumer-$streamId",
+            topicsConfig.storageEvents(), StorageEvent::class.java, "sse-consumer-$streamId",
             receiveBacklog.orElse(false),
             true
         )

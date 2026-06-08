@@ -39,7 +39,7 @@ test:maven:
     - set -xe
     - mise install && eval "$(mise env -s bash)"
     - docker compose -f compose/compose.devservices.yml --env-file compose/.env.devservices up --wait --quiet-pull --no-color
-    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true
+    - ./mvnw $MAVEN_CLI_OPTS test -Pservices -Dcompose.skip=true -Dmodel-tx.skip=true -T2
   interruptible: true
   after_script:
     - ./.ci/scripts/collect-compose-diagnostics.sh compose-diagnostics --file compose/compose.devservices.yml

@@ -7,7 +7,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Produces
 import kvasir.definitions.kg.changes.ChangeRequest
 import kvasir.definitions.kg.changes.ProcessedChange
-import kvasir.plugins.messaging.kafka.Channels
+import kvasir.plugins.messaging.kafka.TopicsConfig
 import org.apache.kafka.common.serialization.Serdes
 import org.apache.kafka.common.utils.Bytes
 import org.apache.kafka.streams.StreamsBuilder
@@ -32,7 +32,9 @@ data class ChangeStatus(
 )
 
 @ApplicationScoped
-class ChangeTopologyProducer {
+class ChangeTopologyProducer(
+    private val topicsConfig: TopicsConfig
+) {
 
     @Produces
     fun buildTopology(): Topology {
@@ -80,7 +82,7 @@ class ChangeTopologyProducer {
 
         // Take incoming changes
         builder
-            .stream(Channels.CHANGES_INCOMING_TOPIC, Consumed.with(Serdes.String(), incomingChangeSerde))
+            .stream(topicsConfig.changesIncoming(), Consumed.with(Serdes.String(), incomingChangeSerde))
             // Assign change IDs and register changes that have a state dependency
             .process(
                 { PendingChangeProcessor() },
@@ -92,7 +94,7 @@ class ChangeTopologyProducer {
             .branch(
                 { _, request -> request.insertFromRefs.isNotEmpty() || request.deleteFromRefs.isNotEmpty() },
                 Branched.withConsumer {
-                    it.to(Channels.CHANGES_REF_PROCESSING_QUEUE_TOPIC, incomingChangeProducer)
+                    it.to(topicsConfig.changesRefProcessingQueue(), incomingChangeProducer)
                 }
             )
             // This is a special case: a state dependent change request was queued, but there is no previous state for the pod, so it is added to the stateful processing queue directly
@@ -100,7 +102,7 @@ class ChangeTopologyProducer {
                 { _, request -> request.isStateDependent() },
                 Branched.withConsumer {
                     it.to(
-                        Channels.CHANGES_STATEFUL_PROCESSING_QUEUE_TOPIC,
+                        topicsConfig.changesStatefulProcessingQueue(),
                         incomingChangeProducer
                     )
                 }
@@ -108,14 +110,14 @@ class ChangeTopologyProducer {
             // Default case: change only contains plain inserts/deletes
             .defaultBranch(Branched.withConsumer {
                 it.to(
-                    Channels.CHANGES_PLAIN_PROCESSING_QUEUE_TOPIC,
+                    topicsConfig.changesPlainProcessingQueue(),
                     incomingChangeProducer
                 )
             })
 
         // Take changes for which processing is completed (both successful and failed requests)
         val orderedOutgoingJobs = builder
-            .stream(Channels.CHANGES_PROCESSING_COMPLETED_TOPIC, Consumed.with(Serdes.String(), outgoingChangeSerde))
+            .stream(topicsConfig.changesProcessingCompleted(), Consumed.with(Serdes.String(), outgoingChangeSerde))
             // Process completed changes, so outgoing order matches the incoming order
             .process(
                 { EmitCompletedChangesProcessor() },
@@ -124,7 +126,7 @@ class ChangeTopologyProducer {
             )
 
         // Publish to outgoing channel
-        orderedOutgoingJobs.to(Channels.CHANGES_OUTGOING_TOPIC, Produced.with(Serdes.String(), outgoingChangeSerde))
+        orderedOutgoingJobs.to(topicsConfig.changesOutgoing(), Produced.with(Serdes.String(), outgoingChangeSerde))
 
         orderedOutgoingJobs.mapValues { _, value -> value.id }
             .toTable(
@@ -143,7 +145,7 @@ class ChangeTopologyProducer {
                 LAST_PROCESSED_CHANGE_PER_POD_STORE
             )
             // Emit to processing queue if a match is found
-            .to(Channels.CHANGES_STATEFUL_PROCESSING_QUEUE_TOPIC, incomingChangeProducer)
+            .to(topicsConfig.changesStatefulProcessingQueue(), incomingChangeProducer)
 
         return builder.build()
     }
