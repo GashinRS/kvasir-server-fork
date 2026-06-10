@@ -47,7 +47,7 @@ class PodConfigProvider(
                 .addDiscoveredSecretKeysHandlers()
                 .addDiscoveredValidator()
                 .addDiscoveredConverters()
-                .withSources(YamlConfigSource("podConfig", Yaml().dump(overrideMap)))
+                .withSources(YamlConfigSource("podConfig", Yaml().dump(overrideMap), Int.MAX_VALUE))
                 .withMapping(PodConfig::class.java)
                 .build()
             return configInstance.getConfigMapping(PodConfig::class.java)

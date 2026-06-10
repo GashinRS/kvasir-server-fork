@@ -7,6 +7,7 @@ import io.vertx.core.json.JsonObject
 import kvasir.definitions.annotations.GenerateNoArgConstructor
 import kvasir.definitions.annotations.Persistent
 import kvasir.definitions.annotations.StorageLevel
+import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.persistence.PersistentEntity
 import kvasir.definitions.rdf.JSONObject
 import kvasir.definitions.rdf.KvasirVocab
@@ -27,42 +28,65 @@ data class Pod(
         return JsonObject(configuration).map
     }
 
+    /**
+     * Applies a new configuration to this pod using a deep-merge strategy:
+     * - Keys absent from [newConfiguration] fall back to the current configuration.
+     * - Nested objects are merged recursively.
+     * - String values equal to [AuthConstants.REDACTED_CREDENTIAL] are replaced with the
+     *   current value, so clients that receive a redacted GET response can safely PUT it back
+     *   without corrupting stored credentials.
+     * - An explicit `null` in [newConfiguration] clears the corresponding field.
+     */
     @JsonIgnore
-    fun copyAndKeepUmaCredentials(newConfiguration: String): Pod {
-        val newCfg = JsonObject(newConfiguration);
-        // If not uma config, or uma config but no client_id
-        val copyAuth = !newCfg.containsKey("auth")
-        val copyUma = !copyAuth && !newCfg.getJsonObject("auth").containsKey("uma")
-        val copyClientId = !copyUma && !newCfg.getJsonObject("auth").getJsonObject("uma").containsKey("client-id")
-        val copyClientSecret = !copyUma && !newCfg.getJsonObject("auth").getJsonObject("uma").containsKey("client-secret")
+    fun applyConfigurationUpdate(newConfiguration: String): Pod {
+        val origCfg = JsonObject(configuration)
+        val newCfg = JsonObject(newConfiguration)
+        return this.copy(configuration = deepMerge(origCfg, newCfg).encode())
+    }
 
-        // Get uma section of original config
-        val origCfg = JsonObject(configuration);
-        val auth = origCfg.getJsonObject("auth") ?: JsonObject();
-        if (copyAuth) {
-            newCfg.put("auth", auth);
-        }
-
-        val uma = auth.getJsonObject("uma") ?: JsonObject();
-        if (copyUma) {
-            newCfg.put("uma", uma);
-        }
-        // Copy original clientId if needed
-        if (copyClientId) {
-            val clientId = uma.getString("client-id")
-            if (clientId != null) {
-                newCfg.getJsonObject("auth").getJsonObject("uma").put("client-id", clientId)
+    private fun deepMerge(base: JsonObject, update: JsonObject, path: List<String> = emptyList()): JsonObject {
+        val result = update.copy()
+        for (key in base.fieldNames()) {
+            val baseValue = base.getValue(key)
+            val updateValue = result.getValue(key)
+            val currentPath = path + key
+            when {
+                updateValue == null ->
+                    // Explicit null in update: intentional clear, keep as-is.
+                    Unit
+                currentPath !in ATOMIC_MAP_CONFIG_PATHS && baseValue is JsonObject && updateValue is JsonObject ->
+                    // Both sides are structured config objects: merge recursively.
+                    // Fully-qualified paths of Map<String, String> config properties
+                    // (listed in ATOMIC_MAP_CONFIG_PATHS) are excluded so that their values are
+                    // replaced wholesale instead.
+                    result.put(key, deepMerge(base.getJsonObject(key), result.getJsonObject(key), currentPath))
+                updateValue is String && updateValue == AuthConstants.REDACTED_CREDENTIAL ->
+                    // Redacted sentinel: restore the original value so round-trips don't corrupt credentials.
+                    result.put(key, baseValue)
             }
         }
-        // Copy original clientSecret if needed
-        if (copyClientSecret) {
-            val clientSecret = uma.getString("client-secret")
-            if (clientSecret != null) {
-                newCfg.getJsonObject("auth").getJsonObject("uma").put("client-secret", clientSecret)
-            }
-        }
-        // Parse newCfg back to string
-        return this.copy(configuration = newCfg.encode())
+        return result
+    }
+
+    companion object {
+        /**
+         * Fully-qualified JSON paths (from the config root) of properties that correspond to
+         * [Map]<[String], [String]> in the KvasirConfig interfaces. These are treated as atomic
+         * values during configuration merging: when present in the update they completely replace
+         * the original rather than being deep-merged key-by-key.
+         *
+         * Using full paths (rather than bare key names) prevents false matches if a future
+         * structured config object happens to share a key name.
+         *
+         * - `["default-context"]`: [kvasir.definitions.config.PodConfig.defaultContext]
+         * - `["auth", "oidc", "principal-extractor", "config"]`: [kvasir.definitions.config.JWTPrincipalExtractorConfig.config] (via OIDC)
+         * - `["auth", "uma", "principal-extractor", "config"]`: [kvasir.definitions.config.JWTPrincipalExtractorConfig.config] (via UMA)
+         */
+        private val ATOMIC_MAP_CONFIG_PATHS = setOf(
+            listOf("default-context"),
+            listOf("auth", "oidc", "principal-extractor", "config"),
+            listOf("auth", "uma", "principal-extractor", "config"),
+        )
     }
 
 }

@@ -477,64 +477,82 @@ export class SettingsComponent {
     const skipDpopAthCheck =
       cfg.auth?.['skip-dpop-ath-check'] ??
       defaults.auth?.['skip-dpop-ath-check'];
-    const enableOidc = (cfg.auth?.oidc ?? defaults.auth?.oidc) ? true : false;
-    const oidcServerUrl = enableOidc
-      ? (cfg.auth?.oidc?.['server-url'] ?? defaults.auth?.oidc?.['server-url'])
-      : '';
-    const oidcPrincipalExtractor = enableOidc
-      ? (cfg.auth?.oidc?.['principal-extractor']?.['class-name'] ??
-        defaults.auth?.oidc?.['principal-extractor']?.['class-name'])
-      : null;
-    const oidcExtractorConfig = enableOidc
-      ? JSON.stringify(
-          cfg.auth?.oidc?.['principal-extractor']?.config ??
-            defaults.auth?.oidc?.['principal-extractor']?.config,
-          null,
-          4,
-        )
-      : '{}';
-    const oidcAllowedSkew = enableOidc
-      ? (cfg.auth?.oidc?.['jwt-allowed-clock-skew-seconds'] ??
-        defaults.auth?.oidc?.['jwt-allowed-clock-skew-seconds'])
-      : 30;
-    const enableUma = (cfg.auth?.uma ?? defaults.auth?.uma) ? true : false;
-    const umaServerUrl = enableUma
-      ? (cfg.auth?.uma?.['server-url'] ?? defaults.auth?.uma?.['server-url'])
-      : '';
-    const umaClientId = enableUma
-      ? (cfg.auth?.uma?.['client-id'] ?? defaults.auth?.uma?.['client-id'])
-      : '';
-    const umaClientSecret = enableUma
-      ? (cfg.auth?.uma?.['client-secret'] ??
-        defaults.auth?.uma?.['client-secret'])
-      : '';
-    const umaPrincipalExtractor = enableUma
-      ? (cfg.auth?.uma?.['principal-extractor']?.['class-name'] ??
-        defaults.auth?.uma?.['principal-extractor']?.['class-name'])
-      : null;
-    const umaExtractorConfig = enableUma
-      ? JSON.stringify(
-          cfg.auth?.uma?.['principal-extractor']?.config ??
-            defaults.auth?.uma?.['principal-extractor']?.config,
-          null,
-          4,
-        )
-      : '{}';
-    const umaAllowedSkew = enableUma
-      ? (cfg.auth?.uma?.['jwt-allowed-clock-skew-seconds'] ??
-        defaults.auth?.uma?.['jwt-allowed-clock-skew-seconds'])
-      : 30;
-    const enableHttpPep =
-      (cfg.auth?.['http-endpoint-policy-enforcer'] ??
-      defaults.auth?.['http-endpoint-policy-enforcer'])
-        ? true
-        : false;
-    const httpPepUrl = enableHttpPep
-      ? (cfg.auth?.['http-endpoint-policy-enforcer']?.url ??
-        defaults.auth?.['http-endpoint-policy-enforcer']?.url)
-      : '';
+    const enableOidc = cfg.auth?.oidc ? true : false;
+    const enableOidcDefault = defaults.auth?.oidc ? true : false;
+    const oidcServerUrl =
+      enableOidc || enableOidcDefault
+        ? (cfg.auth?.oidc?.['server-url'] ??
+          defaults.auth?.oidc?.['server-url'])
+        : '';
+    const oidcPrincipalExtractor =
+      enableOidc || enableOidcDefault
+        ? (cfg.auth?.oidc?.['principal-extractor']?.['class-name'] ??
+          defaults.auth?.oidc?.['principal-extractor']?.['class-name'])
+        : null;
+    const oidcExtractorConfig =
+      enableOidc || enableOidcDefault
+        ? JSON.stringify(
+            cfg.auth?.oidc?.['principal-extractor']?.config ??
+              defaults.auth?.oidc?.['principal-extractor']?.config,
+            null,
+            4,
+          )
+        : '{}';
+    const oidcAllowedSkew =
+      enableOidc || enableOidcDefault
+        ? (cfg.auth?.oidc?.['jwt-allowed-clock-skew-seconds'] ??
+          defaults.auth?.oidc?.['jwt-allowed-clock-skew-seconds'])
+        : 30;
+
+    const enableUma = cfg.auth?.uma ? true : false;
+    const enableUmaDefault = defaults.auth?.uma ? true : false;
+    const umaServerUrl =
+      enableUma || enableUmaDefault
+        ? (cfg.auth?.uma?.['server-url'] ?? defaults.auth?.uma?.['server-url'])
+        : '';
+    const umaClientId =
+      enableUma || enableUmaDefault
+        ? (cfg.auth?.uma?.['client-id'] ?? defaults.auth?.uma?.['client-id'])
+        : '';
+    const umaClientSecret =
+      enableUma || enableUmaDefault
+        ? (cfg.auth?.uma?.['client-secret'] ??
+          defaults.auth?.uma?.['client-secret'])
+        : '';
+    const umaPrincipalExtractor =
+      enableUma || enableUmaDefault
+        ? (cfg.auth?.uma?.['principal-extractor']?.['class-name'] ??
+          defaults.auth?.uma?.['principal-extractor']?.['class-name'])
+        : null;
+    const umaExtractorConfig =
+      enableUma || enableUmaDefault
+        ? JSON.stringify(
+            cfg.auth?.uma?.['principal-extractor']?.config ??
+              defaults.auth?.uma?.['principal-extractor']?.config,
+            null,
+            4,
+          )
+        : '{}';
+    const umaAllowedSkew =
+      enableUma || enableUmaDefault
+        ? (cfg.auth?.uma?.['jwt-allowed-clock-skew-seconds'] ??
+          defaults.auth?.uma?.['jwt-allowed-clock-skew-seconds'])
+        : 30;
+    const enableHttpPep = cfg.auth?.['http-endpoint-policy-enforcer']
+      ? true
+      : false;
+    const enableHttpPepDefault = defaults.auth?.[
+      'http-endpoint-policy-enforcer'
+    ]
+      ? true
+      : false;
+    const httpPepUrl =
+      enableHttpPep || enableHttpPepDefault
+        ? (cfg.auth?.['http-endpoint-policy-enforcer']?.url ??
+          defaults.auth?.['http-endpoint-policy-enforcer']?.url)
+        : '';
     const enableHttpPepBasicAuth =
-      enableHttpPep &&
+      (enableHttpPep || enableHttpPepDefault) &&
       (cfg.auth?.['http-endpoint-policy-enforcer']?.['basic-auth'] ??
         defaults.auth?.['http-endpoint-policy-enforcer']?.['basic-auth'])
         ? true
@@ -551,7 +569,7 @@ export class SettingsComponent {
           ?.password)
       : null;
     const enableHttpPepApiKey =
-      enableHttpPep &&
+      (enableHttpPep || enableHttpPepDefault) &&
       (cfg.auth?.['http-endpoint-policy-enforcer']?.['api-key'] ??
         defaults.auth?.['http-endpoint-policy-enforcer']?.['api-key'])
         ? true

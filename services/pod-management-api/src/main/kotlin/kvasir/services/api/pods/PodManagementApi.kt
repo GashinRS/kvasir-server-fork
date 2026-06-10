@@ -201,7 +201,7 @@ class PodManagementApi(
                 Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build())
             } else {
                 val updatedPod =
-                    existingPod.copyAndKeepUmaCredentials(input.configuration).copy(createdBy = getPrincipal())
+                    existingPod.applyConfigurationUpdate(input.configuration).copy(createdBy = getPrincipal())
                 podStore.persist(updatedPod)
                     // When updating the podConfig, it is best to invalidate any cached UmaClients for this pod
                     .chain { _ ->
@@ -255,7 +255,7 @@ class PodManagementApi(
             var idx = 0;
             var obj = json;
             while (idx < keys.size - 1) {
-                obj = obj.getJsonObject(keys[idx], JsonObject())
+                obj = obj.getJsonObject(keys[idx], JsonObject()) ?: JsonObject();
                 idx++;
             }
             val finalKey = keys[keys.size - 1]
