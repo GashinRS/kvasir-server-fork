@@ -2,11 +2,11 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
   DeleteObjectCommandOutput,
-  ListObjectsCommandOutput,
+  ListObjectsV2CommandOutput,
   PutObjectCommandOutput,
 } from '@aws-sdk/client-s3';
 import { XMLParser } from 'fast-xml-parser';
-import { firstValueFrom, map } from 'rxjs';
+import { EMPTY, expand, firstValueFrom, map } from 'rxjs';
 import { ConfigService } from './config.service';
 import { SessionService } from './session.service';
 
@@ -25,10 +25,16 @@ export class S3wrapperService {
     this.url = `${this.host}/${this.session.podName()!}/s3`;
   }
 
-  async listObjects(prefix?: string): Promise<ListObjectsCommandOutput> {
-    var url = `${this.url}/?list-type=2`;
+  async listObjects(
+    prefix?: string,
+    continuationToken?: string,
+  ): Promise<ListObjectsV2CommandOutput> {
+    var url = `${this.url}/?list-type=2&encoding-type=url&delimiter=/`;
     if (prefix) {
-      url += `&prefix=${prefix}`;
+      url += `&prefix=${encodeURIComponent(prefix)}`;
+    }
+    if (continuationToken) {
+      url += `&continuation-token=${encodeURIComponent(continuationToken)}`;
     }
     return firstValueFrom(
       this.http
@@ -37,8 +43,15 @@ export class S3wrapperService {
         })
         .pipe(
           map((str) =>
-            s3toJson<ListObjectsCommandOutput>(str, 'ListBucketResult'),
+            s3toJson<ListObjectsV2CommandOutput>(str, 'ListBucketResult'),
           ),
+          expand((result) => {
+            if (result.IsTruncated && result.NextContinuationToken) {
+              return this.listObjects(prefix, result.NextContinuationToken!);
+            } else {
+              return EMPTY;
+            }
+          }),
         ),
     );
   }

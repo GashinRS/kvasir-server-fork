@@ -112,8 +112,8 @@
                 </nz-space>
               </a>
             </td>
-            <td>{{ data.LastModified | date }}</td>
-            <td>{{ data.Size | number }} kB</td>
+            <td>{{ data?.LastModified | date }}</td>
+            <td>{{ data?.Size | number }} kB</td>
             <td nz-flex nzGap="8px">
               <button nz-button nzType="primary" nzGhost nzSize="small">
                 <nz-icon
@@ -154,7 +154,7 @@
                 <nz-icon
                   nzType="control"
                   nzTheme="outline"
-                  (click)="createPolicyRule(name)"
+                  (click)="createPolicyRule(data.Key!)"
                   nz-tooltip="create policy rule..."
                 />
               </button>

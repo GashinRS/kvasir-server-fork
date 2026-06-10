@@ -123,21 +123,24 @@ export class S3Component implements OnInit {
   dataList = resource({
     params: () => ({ prefix: this.prefix() }),
     loader: async ({ params }) => {
-      const distinctFolders = new Set();
       const result = await this.s3w.listObjects(params.prefix);
-      return ensureArray(result.Contents)
-        .map((obj: any) => this.mapToFileAndFolder(obj))
-        .filter((obj: FileOrFolder) => {
-          if (obj.type === 'folder') {
-            const name = this.unPrefix(obj.Key!);
-            if (distinctFolders.has(name)) {
-              return false;
-            } else {
-              distinctFolders.add(name);
-            }
-          }
-          return true;
-        });
+      return ensureArray(result.CommonPrefixes)
+        .map(
+          (folder) =>
+            ({
+              Key: folder?.Prefix!,
+              type: 'folder',
+            }) as FileOrFolder,
+        )
+        .concat(
+          ensureArray(result.Contents ?? []).map(
+            (obj: _Object) =>
+              ({
+                ...obj,
+                type: 'file',
+              }) as FileOrFolder,
+          ),
+        );
     },
   });
 
@@ -267,19 +270,6 @@ export class S3Component implements OnInit {
     const idx = tmp.indexOf('/');
     const end = idx === -1 ? tmp.length : idx;
     return tmp.slice(0, end);
-  }
-
-  private mapToFileAndFolder(obj: any): FileOrFolder {
-    let name = obj.Key as string;
-    if (this.prefix()) {
-      name = name.slice(this.prefix()!.length);
-    }
-    const idx = name.indexOf('/') ?? -1;
-    if (idx === -1) {
-      return { ...obj, type: 'file' } as FileOrFolder;
-    } else {
-      return { ...obj, Name: name.substring(0, idx), type: 'folder' };
-    }
   }
 
   private mapToMimeType(key: string): string {
@@ -412,6 +402,16 @@ export class S3Component implements OnInit {
   }
 }
 
-interface FileOrFolder extends _Object {
-  type: 'file' | 'folder';
+interface _File {
+  Key: string;
+  LastModified: Date;
+  Size: number;
+  type: 'file';
 }
+
+interface _Folder {
+  Key: string;
+  type: 'folder';
+}
+
+type FileOrFolder = _File | _Folder;
