@@ -1,9 +1,11 @@
 package templates
 
 import (
+	"list"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	timoniv1 "timoni.sh/core/v1alpha1"
-	"strings"
 )
 
 // Config defines the schema and defaults for the Instance values.
@@ -130,7 +132,7 @@ import (
 			"\(integration)": {
 				for field, meta in fields
 				let _parts = strings.Split(meta.property, ".")
-				let _val = (#Lookup & {in: applicationConfig, path: _parts[1:]}).out
+				let _val = (#Lookup & {in: applicationConfig, path: list.Drop(_parts, 1)}).out
 				if _val != null {
 					"\(field)": _val
 				}
@@ -208,10 +210,10 @@ import (
 		let _hasManaged = _binding.manage
 		if _inline != null && !_hasRef && !_hasExisting && !_hasManaged {
 			"\(integration)_\(field)_unsourced": error(
-				"applicationConfig sets sensitive field \(_resolvedSecretSource[integration][field].property) inline; " +
+								"applicationConfig sets sensitive field \(_resolvedSecretSource[integration][field].property) inline; " +
 				"set secrets.\(integration).manage: true, secrets.\(integration).existingSecret, " +
 				"or secrets.\(integration).fields.\(field).ref to source it from a Kubernetes Secret",
-			)
+				)
 		}
 	}
 
@@ -219,15 +221,15 @@ import (
 		for integration, binding in secrets {
 			if binding.manage && binding.existingSecret != _|_ {
 				"\(integration)_manage_and_existing": error(
-					"secrets.\(integration): `manage: true` cannot be combined with `existingSecret`. " +
+									"secrets.\(integration): `manage: true` cannot be combined with `existingSecret`. " +
 					"Use one. For mixed sourcing, set `manage: true` and override individual fields with `fields.<field>.ref`.",
-				)
+					)
 			}
 			if binding.manage && len(_inlineValues[integration]) == 0 {
 				"\(integration)_manage_empty": error(
-					"secrets.\(integration).manage: true requires at least one inline value in applicationConfig " +
+								"secrets.\(integration).manage: true requires at least one inline value in applicationConfig " +
 					"for one of this integration's registered fields. Either provide inline values or unset `manage`.",
-				)
+					)
 			}
 		}
 	}

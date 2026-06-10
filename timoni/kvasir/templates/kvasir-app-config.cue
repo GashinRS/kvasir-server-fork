@@ -87,9 +87,9 @@ import (
 	// Bootstrap Configuration - omit entirely if no bootstrap pods needed.
 	bootstrap?: {
 		pods?: [...{
-			name:                                          string
-			"owner-user-id"?:                              string
-			"auto-register-uma"?:                          bool
+			name:                                           string
+			"owner-user-id"?:                               string
+			"auto-register-uma"?:                           bool
 			"auto-register-http-endpoint-policy-enforcer"?: bool
 			"generate-clients"?: [...{
 				"client-id":               string
@@ -131,8 +131,8 @@ import (
 	// `access-key` and `secret-key` are SENSITIVE — see #SecretFieldRegistry.
 	// Inline values require `secrets.s3.manage: true` (or use existingSecret).
 	storage: s3: {
-		endpoint:     *"http://seaweedfs-s3.seaweedfs:8333" | string
-		region:       *"eu-west-1" | string
+		endpoint:      *"http://seaweedfs-s3.seaweedfs:8333" | string
+		region:        *"eu-west-1" | string
 		"access-key"?: string
 		"secret-key"?: string
 	}
@@ -144,13 +144,13 @@ import (
 		url:   *"http://keycloak.keycloak:8280" | string
 		realm: *"kvasir" | string
 		"admin-client": {
-			"grant-type":     *"password" | "client_credentials"
+			"grant-type":     *"client_credentials" | "password"
 			username?:        string
 			password?:        string
 			"client-id"?:     string
 			"client-secret"?: string
 			"server-url":     *url | string
-			"realm":          *"master" | string
+			"realm":          *realm | string
 		}
 	}
 
@@ -258,9 +258,9 @@ import (
 #Secrets: {
 	keycloak: #SecretBinding & {
 		fields: {
-			adminUsername:     {key: *"admin-username" | string}
-			adminPassword:     {key: *"admin-password" | string}
-			adminClientId:     {key: *"admin-client-id" | string}
+			adminUsername: {key: *"admin-username" | string}
+			adminPassword: {key: *"admin-password" | string}
+			adminClientId: {key: *"admin-client-id" | string}
 			adminClientSecret: {key: *"admin-client-secret" | string}
 		}
 	}
@@ -272,14 +272,14 @@ import (
 	}
 	clickhouse: #SecretBinding & {
 		fields: {
-			user:     {key: *"user" | string}
+			user: {key: *"user" | string}
 			password: {key: *"password" | string}
 		}
 	}
 	policyEnforcer: #SecretBinding & {
 		fields: {
 			basicAuthPassword: {key: *"basic-auth-password" | string}
-			apiKeyValue:       {key: *"api-key-value" | string}
+			apiKeyValue: {key: *"api-key-value" | string}
 		}
 	}
 }
@@ -303,9 +303,9 @@ import (
 	}
 
 	keycloak: {
-		adminUsername:     {property: "kvasir.auth.keycloak.admin-client.username"}
-		adminPassword:     {property: "kvasir.auth.keycloak.admin-client.password"}
-		adminClientId:     {property: "kvasir.auth.keycloak.admin-client.client-id"}
+		adminUsername: {property: "kvasir.auth.keycloak.admin-client.username"}
+		adminPassword: {property: "kvasir.auth.keycloak.admin-client.password"}
+		adminClientId: {property: "kvasir.auth.keycloak.admin-client.client-id"}
 		adminClientSecret: {property: "kvasir.auth.keycloak.admin-client.client-secret"}
 	}
 	s3: {
@@ -313,12 +313,12 @@ import (
 		secretKey: {property: "kvasir.storage.s3.secret-key"}
 	}
 	clickhouse: {
-		user:     {property: "kvasir.kg.clickhouse.user"}
+		user: {property: "kvasir.kg.clickhouse.user"}
 		password: {property: "kvasir.kg.clickhouse.password"}
 	}
 	policyEnforcer: {
 		basicAuthPassword: {property: "kvasir.pod.auth.http-endpoint-policy-enforcer.basic-auth.password"}
-		apiKeyValue:       {property: "kvasir.pod.auth.http-endpoint-policy-enforcer.api-key.key-value"}
+		apiKeyValue: {property: "kvasir.pod.auth.http-endpoint-policy-enforcer.api-key.key-value"}
 	}
 }
 
@@ -338,7 +338,7 @@ import (
 // when present, otherwise derived from `property`.
 #ResolvedEnvName: {
 	meta: {property: string, env?: string}
-	out:  *meta.env | (#EnvName & {property: meta.property}).out
+	out: *meta.env | (#EnvName & {property: meta.property}).out
 }
 
 // Bounded struct lookup by string-list path. Returns `null` for missing

@@ -50,6 +50,7 @@ values: {
 				url: "http://keycloak.localhost"
 				"admin-client": {
 					"server-url": "http://keycloak.keycloak:8280"
+					realm:        "master"
 				}
 			}
 		}

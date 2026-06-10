@@ -9,6 +9,7 @@ import io.quarkus.logging.Log
 import io.quarkus.runtime.LaunchMode
 import io.quarkus.vertx.VertxContextSupport
 import io.smallrye.mutiny.Uni
+import org.jboss.resteasy.reactive.ClientWebApplicationException
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.core.Response
@@ -56,29 +57,69 @@ class OpenFgaLifecycleManager(
         if (keycloakInstance.isResolvable) {
             Log.debug("Found Keycloak admin client, initializing OIDC server...")
             val keycloak = keycloakInstance.get()
-            // Set global realm settings
-            val realmExists = keycloak.realms().findAll().any { kvasirRealm == it.realm }
-            if (!realmExists) {
-                // Create realm
-                Log.debug("Default kvasir realm not present, creating it...")
-                keycloak.realms().create(RealmRepresentation().apply {
-                    this.realm = kvasirRealm
-                    this.isEnabled = true
-                    this.users = emptyList()
-                    this.clients = emptyList()
-                    this.refreshTokenMaxReuse = 10
-                    this.accessTokenLifespan = ACCESS_TOKEN_LIFESPAN
-                    this.ssoSessionMaxLifespan = SSO_MAX_LIFESPAN
-                    this.ssoSessionIdleTimeout = SSO_IDLE_LIFESPAN
-                })
-            } else {
+
+            // Try to access the realm directly instead of listing all realms
+            // This allows the admin client to work with only kvasir-realm permissions
+            val realmAccessible = try {
+                keycloak.realm(kvasirRealm).toRepresentation()
+                Log.debug("Kvasir realm '$kvasirRealm' exists and is accessible.")
+                true
+            } catch (e: ClientWebApplicationException) {
+                when (e.response.status) {
+                    404 -> {
+                        Log.info("Kvasir realm '$kvasirRealm' does not exist, attempting to create it...")
+                        try {
+                            keycloak.realms().create(RealmRepresentation().apply {
+                                this.realm = kvasirRealm
+                                this.isEnabled = true
+                                this.users = emptyList()
+                                this.clients = emptyList()
+                                this.refreshTokenMaxReuse = 10
+                                this.accessTokenLifespan = ACCESS_TOKEN_LIFESPAN
+                                this.ssoSessionMaxLifespan = SSO_MAX_LIFESPAN
+                                this.ssoSessionIdleTimeout = SSO_IDLE_LIFESPAN
+                            })
+                            Log.info("Successfully created Kvasir realm '$kvasirRealm'.")
+                            true
+                        } catch (createEx: Exception) {
+                            throw IllegalStateException(
+                                "Kvasir realm '$kvasirRealm' does not exist and the admin client does not have " +
+                                    "sufficient permissions to create it. Please create the realm manually or grant " +
+                                    "the admin client master-realm:manage-realm permission.",
+                                createEx
+                            )
+                        }
+                    }
+                    403 -> {
+                        throw IllegalStateException(
+                            "Admin client does not have access to Kvasir realm '$kvasirRealm'. " +
+                                "Please ensure the client has realm-admin role for the '$kvasirRealm' realm.",
+                            e
+                        )
+                    }
+                    else -> {
+                        Log.errorf(e, "Unexpected HTTP error while checking Kvasir realm '$kvasirRealm'")
+                        throw e
+                    }
+                }
+            } catch (e: Exception) {
+                Log.errorf(e, "Unexpected error while checking Kvasir realm '$kvasirRealm'")
+                throw e
+            }
+
+            if (realmAccessible) {
                 // Update realm sso session and token timeout settings
-                val realm = keycloak.realm(kvasirRealm)
-                realm.update(realm.toRepresentation().apply {
-                    this.ssoSessionIdleTimeout = SSO_IDLE_LIFESPAN
-                    this.ssoSessionMaxLifespan = SSO_MAX_LIFESPAN
-                    this.accessTokenLifespan = ACCESS_TOKEN_LIFESPAN
-                })
+                try {
+                    val realm = keycloak.realm(kvasirRealm)
+                    realm.update(realm.toRepresentation().apply {
+                        this.ssoSessionIdleTimeout = SSO_IDLE_LIFESPAN
+                        this.ssoSessionMaxLifespan = SSO_MAX_LIFESPAN
+                        this.accessTokenLifespan = ACCESS_TOKEN_LIFESPAN
+                    })
+                    Log.debug("Updated Kvasir realm settings (token lifetimes, SSO session).")
+                } catch (e: Exception) {
+                    Log.warnf(e, "Could not update Kvasir realm settings. Continuing anyway...")
+                }
             }
 
             // Create public UI client for the pod

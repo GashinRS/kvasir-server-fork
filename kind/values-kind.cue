@@ -55,8 +55,29 @@ values: {
 				url: "http://keycloak.localhost"
 				"admin-client": {
 					"server-url": "http://keycloak.keycloak:8280"
+					"grant-type": "password"
+					"username":   "admin"
+					"password":   "admin"
+					realm:        "master"
 				}
 			}
+		}
+
+		storage: {
+			s3: {
+				endpoint:     "http://seaweedfs-s3.seaweedfs:8333"
+				"access-key": "kvasir"
+				"secret-key": "kvasirkvasir"
+			}
+		}
+	}
+
+	secrets: {
+		keycloak: {
+			manage: true
+		}
+		s3: {
+			manage: true
 		}
 	}
 }
