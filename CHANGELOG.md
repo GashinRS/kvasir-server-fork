@@ -1,3 +1,17 @@
+## [0.19.0-beta.6](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.5...v0.19.0-beta.6) - 2026-06-10
+
+### Features
+
+- **(auth)** support realm-scoped Keycloak admin client without master-realm access ([2cab06a](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/2cab06ad16ca4aa47159ecbacb8afae50af4d8c9))
+
+### Bug Fixes
+
+- Fixed multi-type fields (validation and query resolving) & added test coverage ([fa219b2](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/fa219b2f685dd06ffbe4a8657f319c4f804c7eba))
+
+- **(ui)** Fixed config issue #58 ([b30321d](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/b30321d489c073b0a2e575a92f70717330e6fe8d))
+
+- Fixed config issue #57 ([0b6d4c7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/0b6d4c74fabb207271eb70048b45667f297834c6))
+
 ## [0.19.0-beta.5](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.4...v0.19.0-beta.5) - 2026-06-05
 
 ### Features
