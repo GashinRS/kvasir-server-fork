@@ -94,8 +94,8 @@ open class CompositeNode(
                         nestedFieldDefinition,
                         this
                     )
-                    // Exception for fields returning an RDFNode (which can be both scalar and composite)
-                    nestedFieldDefinition.type.innerType<GraphQLNamedType>().name == KvasirTypes.RDFNode.name -> RDFNode(
+                    // Exception for fields returning an RDFNode (which can be both scalar and composite) or BoxedLiteral
+                    nestedFieldDefinition.type.innerType<GraphQLNamedType>().name in setOf(TYPE_RDF_NODE, TYPE_BOXED_LITERAL) -> RDFNode(
                         nestedField,
                         nestedFieldDefinition,
                         context,
