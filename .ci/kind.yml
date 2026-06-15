@@ -19,7 +19,7 @@
       - "mise.toml"
       - "api-tests/**/*"
 
-verify:kind:
+verify:kind:monolith:
   extends:
     - .mise-cache-ro
     - .docker-in-docker
@@ -67,12 +67,11 @@ verify:kind:
     # Install Traefik, apply IngressRoutes, and patch CoreDNS via just recipe
     - just kind-deploy-traefik
     - kubectl port-forward -n traefik svc/traefik 80:80 &
-    # Deploy Kvasir with resolved image via just recipe
+    # Deploy Kvasir with resolved image via just recipe (includes rollout wait)
     - just kind-deploy-kvasir
-    - kubectl rollout status deployment/kvasir -n kvasir --timeout=180s
     - kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=kvasir -n kvasir --timeout=120s
     - export KIND_RESOLVE_ARGS="--resolve kvasir.localhost:80:127.0.0.1 --resolve keycloak.localhost:80:127.0.0.1"
-    - just kind-test
+    - just api-test kind
     # Secret-management cluster regression: validates rendered manifests from
     # kind/values-kind-secrets-test.cue against the live apiserver and asserts
     # the Deployment env contains the expected secretKeyRef shapes.
@@ -86,6 +85,72 @@ verify:kind:
   artifacts:
     paths:
       - kind-diagnostics/
+    reports:
+      junit: api-tests/junit-kind.xml
+    when: always
+    expire_in: 1 week
+
+verify:kind:microservices:
+  extends:
+    - .mise-cache-ro
+    - .docker-in-docker
+  tags: ["docker"]
+  image: $CI_TOOLS_IMAGE-docker
+  stage: verify
+  variables:
+    KIND_CLUSTER_NAME: "kvasir-ms"
+    KUBECONFIG: "/tmp/kube-config-ms"
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      <<: *kind-changes
+  needs:
+    - job: package:maven
+      optional: true
+  interruptible: true
+  before_script:
+    - set -xe
+    - ./.ci/scripts/wait-for-docker.sh
+    - echo "$DOCKER_TOKEN" | docker login -u $DOCKER_USER --password-stdin
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
+  script:
+    - set -xe
+    - mise install && eval "$(mise env -s bash)"
+    - export KVASIR_IMAGE="$CI_REGISTRY/$CI_PROJECT_PATH/monolith"
+    - KVASIR_TAG=$(./.ci/scripts/resolve-image-tag.sh "$KVASIR_IMAGE")
+    - export KVASIR_TAG
+    - export KVASIR_PULL_POLICY="IfNotPresent"
+    - echo "Using image $KVASIR_IMAGE:$KVASIR_TAG (microservices mode)"
+    - |
+      yq ea '
+        select(fi == 0) as $base | select(fi == 1) as $overlay
+        | $base
+        | .networking = $overlay.networking
+        | .nodes[0].kubeadmConfigPatches += [$overlay.controlPlanePatch]
+      ' kind/cluster-config.yaml kind/cluster-config-ci.overlay.yaml > /tmp/kind-cluster-config.yaml
+    - kind create cluster --config /tmp/kind-cluster-config.yaml --name $KIND_CLUSTER_NAME --kubeconfig "$KUBECONFIG" --wait 60s
+    - sed -i 's/0\.0\.0\.0/docker/g' "$KUBECONFIG"
+    - kubectl config use-context kind-${KIND_CLUSTER_NAME}
+    - kubectl cluster-info
+    - just kind-deploy-deps
+    - just kind-deploy-traefik
+    - kubectl port-forward -n traefik svc/traefik 80:80 &
+    - just kind-deploy-kvasir ms
+    - kubectl get pods -n kvasir
+    - kubectl get svc -n kvasir
+    - kubectl get ingressroute -n kvasir -o yaml || true
+    - export KIND_RESOLVE_ARGS="--resolve kvasir.localhost:80:127.0.0.1 --resolve keycloak.localhost:80:127.0.0.1"
+    - just api-test kind
+  after_script:
+    - mkdir -p kind-diagnostics-ms
+    - mise x -- kubectl get pods -A -o wide > kind-diagnostics-ms/pods.txt 2>&1
+    - mise x -- kubectl get events -A --sort-by='.lastTimestamp' > kind-diagnostics-ms/events.txt 2>&1
+    - mise x -- kubectl logs -n kvasir -l app.kubernetes.io/name=kvasir --tail=100 > kind-diagnostics-ms/kvasir.txt 2>&1
+    - mise x -- kubectl logs -n kube-system -l k8s-app=kube-dns --tail=50 > kind-diagnostics-ms/coredns.txt 2>&1
+  artifacts:
+    paths:
+      - kind-diagnostics-ms/
     reports:
       junit: api-tests/junit-kind.xml
     when: always

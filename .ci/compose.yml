@@ -47,7 +47,7 @@ verify:compose:
     - echo "Using image $KVASIR_IMAGE:$KVASIR_TAG"
     - sed -i "s%kvasir/kvasir-server/monolith:.*%${KVASIR_IMAGE#*/}:$KVASIR_TAG%g" compose/compose.kvasir.yml
     - docker compose -f compose/compose.yml up -d --wait --quiet-pull --no-color
-    - hurl --variables-file api-tests/hurl.env.ci --variable ts=$(date +%s) --test --report-junit api-tests/junit-compose.xml api-tests/
+    - just api-test ci
   after_script:
     - cd compose || exit 0
     - ../.ci/scripts/collect-compose-diagnostics.sh diagnostics

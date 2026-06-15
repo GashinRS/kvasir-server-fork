@@ -17,10 +17,10 @@ For example, create a file `my-values.cue` with the following content:
 
 ```cue
 values: {
-	resources: requests: {
-		cpu:    "100m"
-		memory: "128Mi"
-	}
+ resources: requests: {
+  cpu:    "100m"
+  memory: "128Mi"
+ }
 }
 ```
 
@@ -43,25 +43,25 @@ timoni -n default delete kvasir
 
 ### General values
 
-| Key                          | Type                                    | Default                    | Description                                                                                                                                  |
-|------------------------------|-----------------------------------------|----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| `image: tag:`                | `string`                                | `<latest version>`         | Container image tag                                                                                                                          |
-| `image: digest:`             | `string`                                | `<latest digest>`          | Container image digest, takes precedence over `tag` when specified                                                                           |
-| `image: repository:`         | `string`                                | `gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/<serviceName>` | Container image repository                                                                                                 |
-| `image: pullPolicy:`         | `string`                                | `IfNotPresent`             | [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)                                     |
-| `metadata: labels:`          | `{[ string]: string}`                   | `{}`                       | Common labels for all resources                                                                                                              |
-| `metadata: annotations:`     | `{[ string]: string}`                   | `{}`                       | Common annotations for all resources                                                                                                         |
-| `podAnnotations:`            | `{[ string]: string}`                   | `{}`                       | Annotations applied to pods                                                                                                                  |
-| `imagePullSecrets:`          | `[...timoniv1.ObjectReference]`         | `[]`                       | [Kubernetes image pull secrets](https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod)                 |
-| `tolerations:`               | `[ ...corev1.#Toleration]`              | `[]`                       | [Kubernetes toleration](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration)                                        |
-| `affinity:`                  | `corev1.#Affinity`                      | `{}`                       | [Kubernetes affinity and anti-affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity) |
-| `resources:`                 | `timoniv1.#ResourceRequirements`        | `cpu: 10m, memory: 32Mi`  | [Kubernetes resource requests and limits](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers)                     |
-| `topologySpreadConstraints:` | `[...corev1.#TopologySpreadConstraint]` | `[]`                       | [Kubernetes pod topology spread constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints)            |
-| `podSecurityContext:`        | `corev1.#PodSecurityContext`            | `{}`                       | [Kubernetes pod security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context)                                 |
-| `securityContext:`           | `corev1.#SecurityContext`               | `see below`                | [Kubernetes container security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context)                           |
-| `service: annotations:`      | `{[ string]: string}`                   | `{}`                       | Annotations applied to the Kubernetes Service                                                                                                |
-| `service: port:`             | `int`                                   | `80`                       | Kubernetes Service HTTP port                                                                                                                 |
-| `test: enabled:`             | `bool`                                  | `false`                    | Run end-to-end tests at install and upgrades                                                                                                 |
+| Key                          | Type                                    | Default                                                        | Description                                                                                                                                  |
+| ---------------------------- | --------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image: tag:`                | `string`                                | `<latest version>`                                             | Container image tag                                                                                                                          |
+| `image: digest:`             | `string`                                | `<latest digest>`                                              | Container image digest, takes precedence over `tag` when specified                                                                           |
+| `image: repository:`         | `string`                                | `gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/<serviceName>` | Container image repository                                                                                                                   |
+| `image: pullPolicy:`         | `string`                                | `IfNotPresent`                                                 | [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)                                     |
+| `metadata: labels:`          | `{[ string]: string}`                   | `{}`                                                           | Common labels for all resources                                                                                                              |
+| `metadata: annotations:`     | `{[ string]: string}`                   | `{}`                                                           | Common annotations for all resources                                                                                                         |
+| `podAnnotations:`            | `{[ string]: string}`                   | `{}`                                                           | Annotations applied to pods                                                                                                                  |
+| `imagePullSecrets:`          | `[...timoniv1.ObjectReference]`         | `[]`                                                           | [Kubernetes image pull secrets](https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod)                 |
+| `tolerations:`               | `[ ...corev1.#Toleration]`              | `[]`                                                           | [Kubernetes toleration](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration)                                        |
+| `affinity:`                  | `corev1.#Affinity`                      | `{}`                                                           | [Kubernetes affinity and anti-affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity) |
+| `resources:`                 | `timoniv1.#ResourceRequirements`        | `cpu: 10m, memory: 32Mi`                                       | [Kubernetes resource requests and limits](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers)                     |
+| `topologySpreadConstraints:` | `[...corev1.#TopologySpreadConstraint]` | `[]`                                                           | [Kubernetes pod topology spread constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints)            |
+| `podSecurityContext:`        | `corev1.#PodSecurityContext`            | `{}`                                                           | [Kubernetes pod security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context)                                 |
+| `securityContext:`           | `corev1.#SecurityContext`               | `see below`                                                    | [Kubernetes container security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context)                           |
+| `service: annotations:`      | `{[ string]: string}`                   | `{}`                                                           | Annotations applied to the Kubernetes Service                                                                                                |
+| `service: port:`             | `int`                                   | `80`                                                           | Kubernetes Service HTTP port                                                                                                                 |
+| `test: enabled:`             | `bool`                                  | `false`                                                        | Run end-to-end tests at install and upgrades                                                                                                 |
 
 #### Default security context
 
@@ -69,9 +69,9 @@ The module ships with a hardened container security context that complies with t
 
 ```cue
 securityContext: {
-	allowPrivilegeEscalation: false
-	privileged:               false
-	capabilities: drop: ["ALL"]
+ allowPrivilegeEscalation: false
+ privileged:               false
+ capabilities: drop: ["ALL"]
 }
 ```
 
@@ -79,14 +79,14 @@ For full compliance with the restricted profile, also set the pod-level context 
 
 ```cue
 values: {
-	podSecurityContext: {
-		runAsUser:  65532
-		runAsGroup: 65532
-		fsGroup:    65532
-	}
-	securityContext: {
-		seccompProfile: type: "RuntimeDefault"
-	}
+ podSecurityContext: {
+  runAsUser:  65532
+  runAsGroup: 65532
+  fsGroup:    65532
+ }
+ securityContext: {
+  seccompProfile: type: "RuntimeDefault"
+ }
 }
 ```
 
@@ -101,16 +101,16 @@ For the full schema (every key, type, default, and meaning), refer to the
 [Configuration Reference](https://kvasir.docs.solid.imec-int.com/configuration-reference.html).
 The summary below is a fast lookup of the top-level groups.
 
-| Group                       | Required | Description                                                                                                                  |
-|-----------------------------|----------|------------------------------------------------------------------------------------------------------------------------------|
-| `http`                      | yes      | Public base URI (`base-uri`) and web client URI. Defaults derive from `<name>.<namespace>.svc.cluster.local` — override for ingress. |
-| `pod`                       | no       | Pod-scoped defaults: default context, RDF auto-ingest, OIDC/UMA, DPoP, HTTP endpoint policy enforcer.                        |
-| `bootstrap`                 | no       | Pods to create at startup, generated OIDC clients, optional `exit-after-setup` for one-shot bootstrap jobs.                  |
-| `kg.clickhouse`             | yes      | ClickHouse host/port and optional credentials for the knowledge graph backend.                                               |
-| `messaging.kafka`           | yes      | Kafka `bootstrap-servers`. Combine with [Kafka TLS](#kafka-tls) for TLS-enabled brokers.                                     |
-| `storage.s3`                | yes      | S3-compatible blob store endpoint, region, and credentials. Move credentials to a [Secret](#secret-management).              |
-| `auth.keycloak`             | yes      | Keycloak server URL, realm, and admin client. Move admin credentials to a [Secret](#secret-management).                      |
-| `pep.openfga`               | yes      | OpenFGA URL for policy enforcement.                                                                                          |
+| Group             | Required | Description                                                                                                                          |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `http`            | yes      | Public base URI (`base-uri`) and web client URI. Defaults derive from `<name>.<namespace>.svc.cluster.local` — override for ingress. |
+| `pod`             | no       | Pod-scoped defaults: default context, RDF auto-ingest, OIDC/UMA, DPoP, HTTP endpoint policy enforcer.                                |
+| `bootstrap`       | no       | Pods to create at startup, generated OIDC clients, optional `exit-after-setup` for one-shot bootstrap jobs.                          |
+| `kg.clickhouse`   | yes      | ClickHouse host/port and optional credentials for the knowledge graph backend.                                                       |
+| `messaging.kafka` | yes      | Kafka `bootstrap-servers`. Combine with [Kafka TLS](#kafka-tls) for TLS-enabled brokers.                                             |
+| `storage.s3`      | yes      | S3-compatible blob store endpoint, region, and credentials. Move credentials to a [Secret](#secret-management).                      |
+| `auth.keycloak`   | yes      | Keycloak server URL, realm, and admin client. Move admin credentials to a [Secret](#secret-management).                              |
+| `pep.openfga`     | yes      | OpenFGA URL for policy enforcement.                                                                                                  |
 
 #### Realistic example
 
@@ -119,47 +119,47 @@ credentials to a Kubernetes Secret, and pointing Kvasir at an external Keycloak:
 
 ```cue
 values: {
-	applicationConfig: {
-		http: {
-			"base-uri":      "https://kvasir.example.com/"
-			"webclient-uri": "https://kvasir.example.com/_ui/"
-		}
+ applicationConfig: {
+  http: {
+   "base-uri":      "https://kvasir.example.com/"
+   "webclient-uri": "https://kvasir.example.com/_ui/"
+  }
 
-		kg: clickhouse: {
-			host:     "clickhouse.data.svc.cluster.local"
-			port:     8123
-			user:     "kvasir"
-			password: "${CLICKHOUSE_PASSWORD}"
-		}
+  kg: clickhouse: {
+   host:     "clickhouse.data.svc.cluster.local"
+   port:     8123
+   user:     "kvasir"
+   password: "${CLICKHOUSE_PASSWORD}"
+  }
 
-		messaging: kafka: "bootstrap-servers": "kafka-bootstrap.kafka:9093"
+  messaging: kafka: "bootstrap-servers": "kafka-bootstrap.kafka:9093"
 
-		storage: s3: {
-			endpoint:     "https://s3.eu-west-1.amazonaws.com"
-			region:       "eu-west-1"
-			"access-key": "AKIA..."
-		}
+  storage: s3: {
+   endpoint:     "https://s3.eu-west-1.amazonaws.com"
+   region:       "eu-west-1"
+   "access-key": "AKIA..."
+  }
 
-		auth: keycloak: {
-			url:   "https://auth.example.com"
-			realm: "kvasir-prod"
-			"admin-client": {
-				"grant-type": "client_credentials"
-				"client-id":  "kvasir-admin"
-				"server-url": "https://auth.example.com"
-				"realm":      "master"
-			}
-		}
+  auth: keycloak: {
+   url:   "https://auth.example.com"
+   realm: "kvasir-prod"
+   "admin-client": {
+    "grant-type": "client_credentials"
+    "client-id":  "kvasir-admin"
+    "server-url": "https://auth.example.com"
+    "realm":      "master"
+   }
+  }
 
-		pep: openfga: url: "http://openfga.openfga:8380"
-	}
+  pep: openfga: url: "http://openfga.openfga:8380"
+ }
 
-	// sensitive admin-client + s3 credentials sourced from Secrets — see "Secret management"
-	secrets: {
-		keycloak:   existingSecret: "kvasir-keycloak"
-		s3:         existingSecret: "kvasir-s3"
-		clickhouse: existingSecret: "kvasir-clickhouse"
-	}
+ // sensitive admin-client + s3 credentials sourced from Secrets — see "Secret management"
+ secrets: {
+  keycloak:   existingSecret: "kvasir-keycloak"
+  s3:         existingSecret: "kvasir-s3"
+  clickhouse: existingSecret: "kvasir-clickhouse"
+ }
 }
 ```
 
@@ -182,18 +182,18 @@ For local/dev usage with managed placeholder secrets, see
 
 #### Supported integrations and fields
 
-| Integration  | Field               | Default Secret key         | Quarkus property                                        | Container env var                                    |
-|--------------|---------------------|----------------------------|---------------------------------------------------------|------------------------------------------------------|
-| `keycloak`   | `adminUsername`     | `admin-username`           | `kvasir.auth.keycloak.admin-client.username`            | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_USERNAME`         |
-| `keycloak`   | `adminPassword`     | `admin-password`           | `kvasir.auth.keycloak.admin-client.password`            | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_PASSWORD`         |
-| `keycloak`   | `adminClientId`     | `admin-client-id`          | `kvasir.auth.keycloak.admin-client.client-id`           | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_CLIENT_ID`        |
-| `keycloak`   | `adminClientSecret` | `admin-client-secret`      | `kvasir.auth.keycloak.admin-client.client-secret`       | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET`    |
-| `s3`         | `accessKey`         | `access-key`               | `kvasir.storage.s3.access-key`                          | `KVASIR_STORAGE_S3_ACCESS_KEY`                       |
-| `s3`         | `secretKey`         | `secret-key`               | `kvasir.storage.s3.secret-key`                          | `KVASIR_STORAGE_S3_SECRET_KEY`                       |
-| `clickhouse` | `user`              | `user`                     | `kvasir.kg.clickhouse.user`                             | `KVASIR_KG_CLICKHOUSE_USER`                          |
-| `clickhouse` | `password`          | `password`                 | `kvasir.kg.clickhouse.password`                         | `KVASIR_KG_CLICKHOUSE_PASSWORD`                      |
-| `policyEnforcer` | `basicAuthPassword` | `basic-auth-password`  | `kvasir.pod.auth.http-endpoint-policy-enforcer.basic-auth.password` | `KVASIR_POD_AUTH_HTTP_ENDPOINT_POLICY_ENFORCER_BASIC_AUTH_PASSWORD` |
-| `policyEnforcer` | `apiKeyValue`       | `api-key-value`        | `kvasir.pod.auth.http-endpoint-policy-enforcer.api-key.key-value`   | `KVASIR_POD_AUTH_HTTP_ENDPOINT_POLICY_ENFORCER_API_KEY_KEY_VALUE`   |
+| Integration      | Field               | Default Secret key    | Quarkus property                                                    | Container env var                                                   |
+| ---------------- | ------------------- | --------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `keycloak`       | `adminUsername`     | `admin-username`      | `kvasir.auth.keycloak.admin-client.username`                        | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_USERNAME`                        |
+| `keycloak`       | `adminPassword`     | `admin-password`      | `kvasir.auth.keycloak.admin-client.password`                        | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_PASSWORD`                        |
+| `keycloak`       | `adminClientId`     | `admin-client-id`     | `kvasir.auth.keycloak.admin-client.client-id`                       | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_CLIENT_ID`                       |
+| `keycloak`       | `adminClientSecret` | `admin-client-secret` | `kvasir.auth.keycloak.admin-client.client-secret`                   | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET`                   |
+| `s3`             | `accessKey`         | `access-key`          | `kvasir.storage.s3.access-key`                                      | `KVASIR_STORAGE_S3_ACCESS_KEY`                                      |
+| `s3`             | `secretKey`         | `secret-key`          | `kvasir.storage.s3.secret-key`                                      | `KVASIR_STORAGE_S3_SECRET_KEY`                                      |
+| `clickhouse`     | `user`              | `user`                | `kvasir.kg.clickhouse.user`                                         | `KVASIR_KG_CLICKHOUSE_USER`                                         |
+| `clickhouse`     | `password`          | `password`            | `kvasir.kg.clickhouse.password`                                     | `KVASIR_KG_CLICKHOUSE_PASSWORD`                                     |
+| `policyEnforcer` | `basicAuthPassword` | `basic-auth-password` | `kvasir.pod.auth.http-endpoint-policy-enforcer.basic-auth.password` | `KVASIR_POD_AUTH_HTTP_ENDPOINT_POLICY_ENFORCER_BASIC_AUTH_PASSWORD` |
+| `policyEnforcer` | `apiKeyValue`       | `api-key-value`       | `kvasir.pod.auth.http-endpoint-policy-enforcer.api-key.key-value`   | `KVASIR_POD_AUTH_HTTP_ENDPOINT_POLICY_ENFORCER_API_KEY_KEY_VALUE`   |
 
 #### Resolution order
 
@@ -215,13 +215,13 @@ Per (integration, field), the highest-priority source wins:
 
 #### Schema
 
-| Key                                                        | Type     | Default   | Description                                                                                                    |
-|------------------------------------------------------------|----------|-----------|----------------------------------------------------------------------------------------------------------------|
-| `secrets.<integration>: existingSecret:`                   | `string` | *unset*   | Name of an existing Secret for this integration. Mutually exclusive with `manage`.                             |
-| `secrets.<integration>: manage:`                           | `bool`   | `false`   | Materialize a module-managed Secret from inline values. Mutually exclusive with `existingSecret`.              |
-| `secrets.<integration>: fields.<field>: key:`              | `string` | see table | Key within `existingSecret` (or the managed Secret) for this field. Defaults are listed in the table above.    |
-| `secrets.<integration>: fields.<field>: ref: name:`        | `string` | *unset*   | Per-field override: name of a different Secret to source this field from.                                      |
-| `secrets.<integration>: fields.<field>: ref: key:`         | `string` | *unset*   | Per-field override: key within the referenced Secret.                                                          |
+| Key                                                 | Type     | Default   | Description                                                                                                 |
+| --------------------------------------------------- | -------- | --------- | ----------------------------------------------------------------------------------------------------------- |
+| `secrets.<integration>: existingSecret:`            | `string` | _unset_   | Name of an existing Secret for this integration. Mutually exclusive with `manage`.                          |
+| `secrets.<integration>: manage:`                    | `bool`   | `false`   | Materialize a module-managed Secret from inline values. Mutually exclusive with `existingSecret`.           |
+| `secrets.<integration>: fields.<field>: key:`       | `string` | see table | Key within `existingSecret` (or the managed Secret) for this field. Defaults are listed in the table above. |
+| `secrets.<integration>: fields.<field>: ref: name:` | `string` | _unset_   | Per-field override: name of a different Secret to source this field from.                                   |
+| `secrets.<integration>: fields.<field>: ref: key:`  | `string` | _unset_   | Per-field override: key within the referenced Secret.                                                       |
 
 Integrations: `keycloak`, `s3`, `clickhouse`, `policyEnforcer`.
 
@@ -231,9 +231,9 @@ Integrations: `keycloak`, `s3`, `clickhouse`, `policyEnforcer`.
 
 ```cue
 values: secrets: {
-	keycloak:   existingSecret: "kvasir-keycloak"
-	s3:         existingSecret: "kvasir-s3"
-	clickhouse: existingSecret: "kvasir-clickhouse"
+ keycloak:   existingSecret: "kvasir-keycloak"
+ s3:         existingSecret: "kvasir-s3"
+ clickhouse: existingSecret: "kvasir-clickhouse"
 }
 ```
 
@@ -247,9 +247,9 @@ metadata:
   namespace: kvasir
 type: Opaque
 stringData:
-  admin-username:      "admin"
-  admin-password:      "..."
-  admin-client-id:     "kvasir-admin"
+  admin-username: "admin"
+  admin-password: "..."
+  admin-client-id: "kvasir-admin"
   admin-client-secret: "..."
 ```
 
@@ -259,13 +259,13 @@ When the upstream secret store dictates the key names, override `fields.<field>.
 
 ```cue
 values: secrets: keycloak: {
-	existingSecret: "kvasir-keycloak-from-vault"
-	fields: {
-		adminUsername:     key: "KC_ADMIN_USERNAME"
-		adminPassword:     key: "KC_ADMIN_PASSWORD"
-		adminClientId:     key: "KC_ADMIN_CLIENT_ID"
-		adminClientSecret: key: "KC_ADMIN_CLIENT_SECRET"
-	}
+ existingSecret: "kvasir-keycloak-from-vault"
+ fields: {
+  adminUsername:     key: "KC_ADMIN_USERNAME"
+  adminPassword:     key: "KC_ADMIN_PASSWORD"
+  adminClientId:     key: "KC_ADMIN_CLIENT_ID"
+  adminClientSecret: key: "KC_ADMIN_CLIENT_SECRET"
+ }
 }
 ```
 
@@ -273,15 +273,15 @@ values: secrets: keycloak: {
 
 ```cue
 values: secrets: {
-	keycloak: {
-		existingSecret: "kvasir-keycloak"
-		fields: {
-			adminPassword:     ref: {name: "platform-keycloak-admin", key: "password"}
-			adminClientSecret: ref: {name: "platform-keycloak-admin", key: "client-secret"}
-		}
-	}
-	s3:         existingSecret: "kvasir-s3"
-	clickhouse: existingSecret: "kvasir-clickhouse"
+ keycloak: {
+  existingSecret: "kvasir-keycloak"
+  fields: {
+   adminPassword:     ref: {name: "platform-keycloak-admin", key: "password"}
+   adminClientSecret: ref: {name: "platform-keycloak-admin", key: "client-secret"}
+  }
+ }
+ s3:         existingSecret: "kvasir-s3"
+ clickhouse: existingSecret: "kvasir-clickhouse"
 }
 ```
 
@@ -289,15 +289,15 @@ values: secrets: {
 
 ```cue
 values: {
-	applicationConfig: {
-		storage: s3: {
-			endpoint:     "http://seaweedfs:8333"
-			region:       "us-east-1"
-			"access-key": "dev-ak"
-			"secret-key": "dev-sk"
-		}
-	}
-	secrets: s3: manage: true
+ applicationConfig: {
+  storage: s3: {
+   endpoint:     "http://seaweedfs:8333"
+   region:       "us-east-1"
+   "access-key": "dev-ak"
+   "secret-key": "dev-sk"
+  }
+ }
+ secrets: s3: manage: true
 }
 ```
 
@@ -387,11 +387,11 @@ up at vet/edit time.
 Liveness and readiness probes hit the [SmallRye Health](https://quarkus.io/guides/smallrye-health)
 endpoints exposed on the management port (`9100`):
 
-| Probe         | Path               | Notes                                                                                                                                             |
-|---------------|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| `livenessProbe`  | `/q/health/live`  | Process alive check. Fixed schedule (10s initial delay, 30s period).                                                                              |
-| `readinessProbe` | `/q/health/ready` | Application readiness. Reports UP only after Kvasir's `Initializer` finishes (Keycloak realm, OpenFGA model sync, Kafka topics, pod bootstrap).  |
-| `startupProbe`   | `/q/health/live`  | Bootstrap budget — mirrors liveness endpoint per k8s guidance.                                                                                    |
+| Probe            | Path              | Notes                                                                                                                                           |
+| ---------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `livenessProbe`  | `/q/health/live`  | Process alive check. Fixed schedule (10s initial delay, 30s period).                                                                            |
+| `readinessProbe` | `/q/health/ready` | Application readiness. Reports UP only after Kvasir's `Initializer` finishes (Keycloak realm, OpenFGA model sync, Kafka topics, pod bootstrap). |
+| `startupProbe`   | `/q/health/live`  | Bootstrap budget — mirrors liveness endpoint per k8s guidance.                                                                                  |
 
 #### Startup probe
 
@@ -410,22 +410,22 @@ Kvasir's `Initializer` finishes (Keycloak realm, OpenFGA model, Kafka topics, po
 bootstrap). Trade-off: the pod won't accept traffic at all until fully bootstrapped,
 giving a clean "Kvasir is fully up" signal at the cost of slower rollout signaling.
 
-| Key                                       | Type     | Default             | Description                                                                                  |
-|-------------------------------------------|----------|---------------------|----------------------------------------------------------------------------------------------|
-| `startupProbe: enabled:`                  | `bool`   | `true`              | Disable to fall back to liveness/readiness only (not recommended).                            |
-| `startupProbe: path:`                     | `string` | `"/q/health/live"`  | Health endpoint path on the management port.                                                  |
-| `startupProbe: periodSeconds:`            | `int`    | `10`                | Seconds between attempts.                                                                     |
-| `startupProbe: failureThreshold:`         | `int`    | `30`                | Consecutive failures tolerated. Default budget: `30 × 10s = 5 min`.                           |
-| `startupProbe: timeoutSeconds:`           | `int`    | `1`                 | Per-attempt HTTP timeout.                                                                     |
-| `startupProbe: initialDelaySeconds:`      | `int`    | `0`                 | Delay before the first probe attempt.                                                         |
+| Key                                  | Type     | Default            | Description                                                         |
+| ------------------------------------ | -------- | ------------------ | ------------------------------------------------------------------- |
+| `startupProbe: enabled:`             | `bool`   | `true`             | Disable to fall back to liveness/readiness only (not recommended).  |
+| `startupProbe: path:`                | `string` | `"/q/health/live"` | Health endpoint path on the management port.                        |
+| `startupProbe: periodSeconds:`       | `int`    | `10`               | Seconds between attempts.                                           |
+| `startupProbe: failureThreshold:`    | `int`    | `30`               | Consecutive failures tolerated. Default budget: `30 × 10s = 5 min`. |
+| `startupProbe: timeoutSeconds:`      | `int`    | `1`                | Per-attempt HTTP timeout.                                           |
+| `startupProbe: initialDelaySeconds:` | `int`    | `0`                | Delay before the first probe attempt.                               |
 
 Tighten in fast environments, loosen in environments with slow image pulls or slow
 external dependencies (Keycloak/OpenFGA cold starts):
 
 ```cue
 values: startupProbe: {
-	periodSeconds:    5
-	failureThreshold: 24
+ periodSeconds:    5
+ failureThreshold: 24
 }
 ```
 
@@ -435,14 +435,14 @@ Configures server-only TLS (not mTLS) for Kafka connections. Kvasir will verify 
 
 Disabled by default. When enabled, the module mounts a CA certificate from a Kubernetes Secret into the container and configures the [Quarkus TLS Registry](https://quarkus.io/guides/tls-registry-reference) so the Kafka client trusts the broker.
 
-| Key                              | Type     | Default                  | Description                                          |
-|----------------------------------|----------|--------------------------|------------------------------------------------------|
-| `kafkaTLS: enabled:`             | `bool`   | `false`                  | Enable TLS for Kafka connections                     |
-| `kafkaTLS: "config-name":`       | `string` | `"kafka"`                | Quarkus TLS Registry configuration name              |
-| `kafkaTLS: "security-protocol":` | `string` | `"SSL"`                  | Kafka security protocol                              |
-| `kafkaTLS: "mount-path":`        | `string` | `"/home/jboss/tls/kafka"`| Container path where the CA cert is mounted          |
-| `kafkaTLS: "trust-secret": name:`| `string` | *(required when enabled)*| Kubernetes Secret containing the CA certificate      |
-| `kafkaTLS: "trust-secret": key:` | `string` | `"ca.crt"`               | Key within the Secret that holds the CA certificate  |
+| Key                               | Type     | Default                   | Description                                         |
+| --------------------------------- | -------- | ------------------------- | --------------------------------------------------- |
+| `kafkaTLS: enabled:`              | `bool`   | `false`                   | Enable TLS for Kafka connections                    |
+| `kafkaTLS: "config-name":`        | `string` | `"kafka"`                 | Quarkus TLS Registry configuration name             |
+| `kafkaTLS: "security-protocol":`  | `string` | `"SSL"`                   | Kafka security protocol                             |
+| `kafkaTLS: "mount-path":`         | `string` | `"/home/jboss/tls/kafka"` | Container path where the CA cert is mounted         |
+| `kafkaTLS: "trust-secret": name:` | `string` | _(required when enabled)_ | Kubernetes Secret containing the CA certificate     |
+| `kafkaTLS: "trust-secret": key:`  | `string` | `"ca.crt"`                | Key within the Secret that holds the CA certificate |
 
 #### Setting up with cert-manager
 
@@ -496,8 +496,8 @@ Use this issuer to create the Kafka broker's serving certificate (not covered he
 
 ```cue
 values: kafkaTLS: {
-	enabled: true
-	"trust-secret": name: "kafka-ca-cert"
+ enabled: true
+ "trust-secret": name: "kafka-ca-cert"
 }
 ```
 

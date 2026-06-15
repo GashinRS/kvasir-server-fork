@@ -4,7 +4,6 @@
 # Run `just` or `just --list` to see all recipes.
 #
 #  Global variables ───────────────────────────────────────────────────────────────
-dt := datetime("%Y-%m-%d_%H-%M-%S")
 ts := datetime("%s")
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -241,27 +240,38 @@ test-method method:
 
 # ── API Tests (hurl) ──────────────────────────────────────────────────────────
 
-# Run API tests against local full compose stack (copy api-tests/hurl.env.example → api-tests/hurl.env first)
+# Run API tests. Env: compose (default), dev, kind, or ci.
 # Pass --report to generate an HTML report; use -- to forward hurl flags: just api-test -- --verbose
+# For kind in CI, set KIND_RESOLVE_ARGS="--resolve kvasir.localhost:80:<ip> --resolve keycloak.localhost:80:<ip>".
 [group('api-tests')]
+[doc("Run API tests with hurl. Env: compose (default), dev, kind, or ci. Pass --report to generate an HTML report.")]
 [arg("report", long="report", value="true")]
-api-test report="false" *args:
-    hurl --variables-file api-tests/hurl.env \
+api-test env="compose" report="false" *args:
+    #!/usr/bin/env sh
+    set -e
+    case "{{env}}" in
+      compose) ENV_FILE="api-tests/hurl.env" ;;
+      dev)     ENV_FILE="api-tests/hurl.env.devservices" ;;
+      kind)    ENV_FILE="api-tests/hurl.env.kind" ;;
+      ci)      ENV_FILE="api-tests/hurl.env.ci" ;;
+      *) echo "Unknown env: {{env}}. Use compose, dev, kind, or ci."; exit 1 ;;
+    esac
+    REPORT_ARGS=""
+    if [ "{{report}}" = "true" ]; then
+      REPORT_ARGS="--report-html api-tests/report"
+    fi
+    # CI envs always produce JUnit for artifact collection
+    case "{{env}}" in
+      kind) REPORT_ARGS="$REPORT_ARGS --report-junit api-tests/junit-kind.xml" ;;
+      ci)   REPORT_ARGS="$REPORT_ARGS --report-junit api-tests/junit-compose.xml" ;;
+    esac
+    hurl --variables-file "$ENV_FILE" \
          --variable ts={{ts}} \
          --test \
-         {{ if report == "true" { "--report-html api-tests/report" } else { "" } }} \
-         api-tests/ {{args}}
-
-# Run API tests against local dev setup (just dev-services-up + ./mvnw compile quarkus:dev)
-# Pass --report to generate an HTML report; use -- to forward hurl flags: just api-test-dev -- --verbose
-[group('api-tests')]
-[arg("report", long="report", value="true")]
-api-test-dev report="false" *args:
-    hurl --variables-file api-tests/hurl.env.devservices \
-         --variable ts={{ts}} \
-         --test \
-         {{ if report == "true" { "--report-html api-tests/report" } else { "" } }} \
-         api-tests/ {{args}}
+         $REPORT_ARGS \
+         ${KIND_RESOLVE_ARGS:-} \
+         {{args}} \
+         api-tests/
 
 # Serve the latest hurl HTML report at http://localhost:8765
 [group('api-tests')]
@@ -270,36 +280,117 @@ serve-api-report:
 
 # ── Docs ──────────────────────────────────────────────────────────────────────
 
-# Build and serve OpenAPI docs locally (requires monolith to be packaged first: just build-fast)
-[group('docs')]
-openapi:
+# Build OpenAPI docs (internal helper)
+[private]
+_openapi-build:
     npx --yes @redocly/cli build-docs \
       -o ./target/_openapi/index.html \
       ./services/monolith/target/openapi/openapi.yaml \
       --theme.openapi.hideHostname=true \
       --theme.openapi.pathInMiddlePanel=true
+
+# Build and serve OpenAPI docs locally (requires monolith to be packaged first: just build-fast)
+[group('docs')]
+openapi:
+    just _openapi-build
     npx --yes http-server ./target/_openapi -p 8765 -o
 
+# Build and watch OpenAPI docs with live reload
+[group('docs')]
 openapi-watch:
-    npx --yes @redocly/cli build-docs \
-      -o ./target/_openapi/index.html \
-      ./services/monolith/target/openapi/openapi.yaml \
-      --theme.openapi.hideHostname=true \
-      --theme.openapi.pathInMiddlePanel=true && \
+    just _openapi-build && \
     npx --yes browser-sync start \
       --server ./target/_openapi \
       --port 8765 \
       --files "./target/_openapi/index.html" \
       --no-notify & \
     while inotifywait -e close_write ./services/monolith/target/openapi/openapi.yaml; do \
-      npx --yes @redocly/cli build-docs \
-        -o ./target/_openapi/index.html \
-        ./services/monolith/target/openapi/openapi.yaml \
-        --theme.openapi.hideHostname=true \
-        --theme.openapi.pathInMiddlePanel=true; \
+      just _openapi-build; \
     done
 
 
+# Writerside builder image — kept in sync with WRITERSIDE_IMAGE in .gitlab-ci.yml
+writerside_image := "gitlab.ilabt.imec.be:4567/discover/ci-tools/writerside-builder:2025.04.8412"
+writerside_instance := "Writerside/kd"
+writerside_artifact := "webHelpKD2-all.zip"
+
+# Build the Writerside docs into ./public (mirrors the docs:writerside CI job)
+[group('docs')]
+docs-build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p public
+    docker run --rm \
+      -u "$(id -u):$(id -g)" \
+      -v "{{justfile_directory()}}":/srv \
+      -w /srv \
+      -e HOME=/tmp \
+      --entrypoint /bin/bash \
+      {{writerside_image}} \
+      -c '
+        set -eu
+        export DISPLAY=:99
+        Xvfb :99 &
+        XVFB_PID=$!
+        trap "kill $XVFB_PID 2>/dev/null || true" EXIT
+        if ! command -v d2 >/dev/null 2>&1; then
+          curl -fsSL https://d2lang.com/install.sh | sh -s -- -d /tmp
+          export PATH=/tmp:$PATH
+        fi
+        /opt/builder/bin/idea.sh helpbuilderinspect \
+          -source-dir . \
+          -product {{writerside_instance}} \
+          --runner other \
+          -output-dir public/ || true
+        test -f public/{{writerside_artifact}}
+      '
+    echo "✓ Built public/{{writerside_artifact}}"
+
+[group('docs')]
+_dev_rebuild:
+  #!/usr/bin/env bash
+  just docs-build
+  rm -rf public/site
+  unzip -q -o "public/{{writerside_artifact}}" -d public/site
+  echo "✓ Rebuilt docs at $(date +%H:%M:%S)"
+
+
+# Build, unzip, and serve docs at http://localhost:8765, rebuilding on change (requires watchexec via `mise install`)
+[group('docs')]
+docs-dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v watchexec >/dev/null 2>&1; then
+      echo "✗ watchexec not found — run 'mise install' (see mise.toml)" >&2
+      exit 1
+    fi
+
+    npx --yes http-server public/site -p 8765 -c-1 -s &
+    SERVER_PID=$!
+    trap "kill $SERVER_PID 2>/dev/null || true" EXIT
+
+    echo ""
+    echo "📚 Docs serving at http://localhost:8765"
+    echo "👀 Watching Writerside/ — refresh browser after each rebuild"
+    echo ""
+
+    watchexec \
+      --watch Writerside \
+      --exts md,xml,d2,tree,list,cfg,svg,png \
+      --debounce 500ms \
+      --restart \
+      -- just _dev_rebuild
+
+# Remove built docs artifacts (uses Docker to handle root-owned files from older builds)
+[group('docs')]
+docs-clean:
+    #!/usr/bin/env bash
+    if [ -d public ]; then
+      rm -rf public 2>/dev/null || \
+        docker run --rm -v "{{justfile_directory()}}":/srv -w /srv alpine rm -rf public
+    fi
+    echo "✓ Cleaned public/"
 
 # ── Release ───────────────────────────────────────────────────────────────────
 
@@ -307,6 +398,7 @@ openapi-watch:
 # Uses --forge local so no remote forge is contacted and no PR is created.
 # Releasaurus requires the URL path to match the local filesystem path, so we
 # construct the repo URL from justfile_directory() rather than hardcoding it.
+[doc("Dry-run the Releasaurus release-pr locally.")]
 [group('release')]
 release-dry-run:
     releasaurus release-pr \
@@ -353,9 +445,11 @@ timoni-pull version:
 
 # ── Kind (local Kubernetes quickstart) ──────────────────────────────────────
 
-# Create Kind cluster, deploy all dependencies and Kvasir, wait for ready
+# Create Kind cluster, deploy all dependencies and Kvasir, wait for ready.
+# Mode: mono[lith] (default) or ms/micro[services].
+[doc("Create Kind cluster, deploy all dependencies and Kvasir, wait for ready. Mode: mono[lith] (default) or ms/micro[services].")]
 [group('kind')]
-kind-up:
+kind-up mode="mono":
     #!/usr/bin/env sh
     set -e
     echo "==> Creating Kind cluster..."
@@ -363,7 +457,7 @@ kind-up:
     kubectl config use-context kind-kvasir
     just kind-deploy-deps
     just kind-deploy-traefik
-    just kind-deploy-kvasir
+    just kind-deploy-kvasir {{mode}}
     echo ""
     echo "Kvasir is running!"
     echo "  Kvasir:     http://kvasir.localhost"
@@ -411,11 +505,28 @@ kind-deploy-traefik:
     kubectl rollout status deployment/coredns -n kube-system --timeout=60s
 
 # Deploy Kvasir via Timoni (cluster and deps must already be running).
+# Mode: mono[lith] (default) or ms/micro[services].
 # Override image with KVASIR_IMAGE / KVASIR_TAG / KVASIR_PULL_POLICY env vars.
+[doc("Deploy Kvasir via Timoni (cluster and deps must already be running). Mode: mono[lith] (default) or ms/micro[services]. Override image with KVASIR_IMAGE / KVASIR_TAG / KVASIR_PULL_POLICY env vars.")]
 [group('kind')]
-kind-deploy-kvasir:
+kind-deploy-kvasir mode="mono":
     #!/usr/bin/env sh
     set -e
+    # Normalize mode abbreviations
+    case "{{mode}}" in
+      mono|monolith|m)       MODE="monolith" ;;
+      ms|micro|microservices) MODE="microservices" ;;
+      *) echo "Unknown mode: {{mode}}. Use mono[lith] or ms/micro[services]."; exit 1 ;;
+    esac
+
+    # Select values file based on mode
+    if [ "$MODE" = "microservices" ]; then
+      VALUES_FILE="kind/values-kind-microservices.cue"
+    else
+      VALUES_FILE="kind/values-kind.cue"
+    fi
+
+    # Build image override file if env vars are set
     OVERRIDE_FILE=""
     if [ -n "${KVASIR_IMAGE:-}" ] || [ -n "${KVASIR_TAG:-}" ] || [ -n "${KVASIR_PULL_POLICY:-}" ]; then
       OVERRIDE_FILE="$(mktemp /tmp/kind-image-override.XXXXXX.cue)"
@@ -425,26 +536,29 @@ kind-deploy-kvasir:
       [ -n "${KVASIR_PULL_POLICY:-}" ] && printf '  pullPolicy: "%s"\n' "${KVASIR_PULL_POLICY}" >> "$OVERRIDE_FILE"
       printf '}\n' >> "$OVERRIDE_FILE"
     fi
+
+    # Apply Timoni module
     if [ -n "$OVERRIDE_FILE" ]; then
-      timoni apply -n kvasir kvasir timoni/kvasir --values kind/values-kind.cue --values "$OVERRIDE_FILE"
+      timoni apply -n kvasir kvasir timoni/kvasir --values "$VALUES_FILE" --values "$OVERRIDE_FILE"
       rm -f "$OVERRIDE_FILE"
     else
-      timoni apply -n kvasir kvasir timoni/kvasir --values kind/values-kind.cue
+      timoni apply -n kvasir kvasir timoni/kvasir --values "$VALUES_FILE"
     fi
 
-# Run hurl API tests against the Kind cluster.
-# In CI set KIND_RESOLVE_ARGS="--resolve kvasir.localhost:80:<ip> --resolve keycloak.localhost:80:<ip>".
-# Locally defaults to empty (resolved via /etc/hosts).
+    # Wait for init job (microservices only)
+    if [ "$MODE" = "microservices" ]; then
+      kubectl wait --for=condition=Complete job/kvasir-init -n kvasir --timeout=180s || true
+    fi
+
+    # Wait for all deployments
+    for deploy in $(kubectl get deploy -n kvasir -o name); do
+      kubectl rollout status "$deploy" -n kvasir --timeout=180s
+    done
+
+# Alias for `api-test kind` (backwards compatibility)
 [group('kind')]
-kind-test:
-    #!/usr/bin/env sh
-    set -e
-    hurl --variables-file api-tests/hurl.env.kind \
-         --variable ts={{ts}} \
-         --test \
-         --report-junit api-tests/junit-kind.xml \
-         ${KIND_RESOLVE_ARGS:-} \
-         api-tests/
+kind-test *args:
+    just api-test kind {{args}}
 
 # Load a locally built Docker image into the Kind cluster: just kind-load-image my-image:tag
 [group('kind')]

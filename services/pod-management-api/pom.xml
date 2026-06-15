@@ -30,6 +30,11 @@
         </dependency>
         <dependency>
             <groupId>kvasir-plugins</groupId>
+            <artifactId>s3-storage</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>kvasir-plugins</groupId>
             <artifactId>kafka-messaging</artifactId>
             <version>${revision}</version>
         </dependency>

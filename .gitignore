@@ -69,3 +69,4 @@ api-tests/junit-*.xml
 # worktrees
 .worktrees
 .mise
+/public

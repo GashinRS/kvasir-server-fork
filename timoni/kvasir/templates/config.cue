@@ -253,6 +253,110 @@ import (
 		timeoutSeconds:      *1 | int & >0
 		initialDelaySeconds: *0 | int & >=0
 	}
+
+	// Deployment mode: "monolith" (default) or "microservices".
+	// - monolith: Single deployment running all service code (current behavior)
+	// - microservices: Separate deployment per service, shared ConfigMap/Secrets
+	deploymentMode: *"monolith" | "microservices"
+
+	// Per-service configuration overrides. Only applicable when deploymentMode is "microservices".
+	// Services not listed here use defaults from #ServiceCatalog.
+	// Set `enabled: false` to skip deploying a service.
+	services: #ServicesConfig
+
+	// Init service configuration. Runs as a Kubernetes Job before deployments.
+	// Only applicable when deploymentMode is "microservices".
+	init: #InitConfig
+
+	// Traefik IngressRoute configuration. Disabled by default.
+	ingress: #IngressConfig
+}
+
+#IngressConfig: {
+	enabled:    *false | bool
+	entryPoint: *"web" | string
+	host?:      string
+}
+
+// Per-service configuration schema
+#ServiceConfig: {
+	// Enable/disable this service. Defaults from catalog.
+	enabled?: bool
+
+	// Number of replicas. Defaults to 1.
+	replicas?: int & >0
+
+	// Resource requirements override.
+	resources?: timoniv1.#ResourceRequirements
+
+	// Image override (tag/digest). Repository derived from serviceName.
+	image?: {
+		tag?:        string
+		digest?:     string
+		pullPolicy?: string
+	}
+
+	// HPA configuration. Disabled by default.
+	autoscaling?: {
+		enabled:     *false | bool
+		minReplicas: *1 | int & >0
+		maxReplicas: *10 | int & >0
+		// CPU threshold as percentage (e.g., 80 = 80%)
+		targetCPUUtilizationPercentage: *80 | int & >0 & <=100
+	}
+
+	// Pod annotations override.
+	podAnnotations?: {[string]: string}
+
+	// Affinity override.
+	affinity?: corev1.#Affinity
+
+	// Tolerations override.
+	tolerations?: [...corev1.#Toleration]
+}
+
+// Services configuration map. Keys must match service names from #ServiceCatalog.
+#ServicesConfig: {
+	// HTTP services (require Ingress routing)
+	"ui-service"?:         #ServiceConfig
+	"solid-api"?:          #ServiceConfig
+	"storage-api"?:        #ServiceConfig
+	"kg-stream-api"?:      #ServiceConfig
+	"kg-query-api"?:       #ServiceConfig
+	"kg-changes-api"?:     #ServiceConfig
+	"pod-management-api"?: #ServiceConfig
+
+	// Backend services (Kafka consumers, no HTTP)
+	"kg-change-processor"?: #ServiceConfig
+	"simple-rdf-ingester"?: #ServiceConfig
+}
+
+// Init service (bootstrap job) configuration
+#InitConfig: {
+	// Enable the init job. Required for fresh cluster setup.
+	enabled: *true | bool
+
+	// Run bootstrap and exit. Set to true for one-shot initialization.
+	exitAfterSetup: *true | bool
+
+	// Job restart policy.
+	restartPolicy: *"OnFailure" | "Never"
+
+	// Backoff limit for failed job attempts.
+	backoffLimit: *3 | int & >=0
+
+	// TTL for completed jobs (seconds). 0 = never delete.
+	ttlSecondsAfterFinished?: int & >=0
+
+	// Resource requirements for init container.
+	resources?: timoniv1.#ResourceRequirements
+
+	// Image override.
+	image?: {
+		tag?:        string
+		digest?:     string
+		pullPolicy?: string
+	}
 }
 
 // Instance takes the config values and outputs the Kubernetes objects.
@@ -261,16 +365,41 @@ import (
 
 	objects: {
 		sa: #ServiceAccount & {#config: config}
-		svc: #Service & {#config: config}
 		cm: #ConfigMap & {#config: config}
-		deploy: #Deployment & {
-			#config: config
-			#cmName: cm.metadata.name
+
+		if config.deploymentMode == "monolith" {
+			svc: #Service & {#config: config}
+			deploy: #Deployment & {
+				#config: config
+				#cmName: cm.metadata.name
+			}
 		}
-		// One Secret per integration where `manage: true` and at least one
-		// inline value is present. Keyed `secret-<integration>` so the field
-		// name stays unique across the apply list (timoni.cue iterates objects
-		// and applies them as a flat list).
+
+		if config.deploymentMode == "microservices" {
+			for _svcName, _meta in #ServiceCatalog
+			if _svcName != "init-service" && _svcName != "monolith" && _meta.kind != "job" {
+				"deploy-\(_svcName)": (#ServiceDeployment & {
+					#config:      config
+					#serviceName: _svcName
+					#cmName:      cm.metadata.name
+				}).out
+
+				if _meta.kind == "http" {
+					"svc-\(_svcName)": (#ServiceService & {
+						#config:      config
+						#serviceName: _svcName
+					}).out
+				}
+			}
+
+			if config.init.enabled {
+				"job-init": (#InitJob & {
+					#config: config
+					#cmName: cm.metadata.name
+				}).out
+			}
+		}
+
 		for integration, binding in config.secrets
 		if binding.manage && len(config._inlineValues[integration]) > 0 {
 			"secret-\(integration)": (#ManagedSecret & {
@@ -278,6 +407,19 @@ import (
 				#integration: integration
 				#fields:      config._inlineValues[integration]
 			}).out
+		}
+
+		if config.ingress.enabled {
+			ingress: #IngressRoute & {
+				#config:     config
+				#entryPoint: config.ingress.entryPoint
+				if config.ingress.host != _|_ {
+					#host: config.ingress.host
+				}
+			}
+			if config.deploymentMode == "microservices" {
+				"ui-trailing-slash-middleware": #UiTrailingSlashMiddleware & {#config: config}
+			}
 		}
 	}
 
