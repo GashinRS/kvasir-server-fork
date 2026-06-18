@@ -1,3 +1,11 @@
+## [0.19.0-beta.7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.6...v0.19.0-beta.7) - 2026-06-15
+
+### Features
+
+- Support sync mode for change request API ([c18ea41](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/c18ea41742946b719d881cbdac8ee87e89dadaff))
+
+- **(kubernetes)** add microservice deployment mode to Timoni chart ([b90fc78](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/b90fc78e72d4a29f2b1daba5277b8e0407342350))
+
 ## [0.19.0-beta.6](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.5...v0.19.0-beta.6) - 2026-06-10
 
 ### Features
