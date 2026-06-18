@@ -2,75 +2,65 @@ package kvasir.services.api.kg.changes
 
 import idlab.quarkus.ext.pep.openfga.model.annotations.OpenFgaPolicyEnforcer
 import io.quarkus.logging.Log
-import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
-import io.smallrye.reactive.messaging.MutinyEmitter
-import io.smallrye.reactive.messaging.kafka.KafkaRecord
-import jakarta.enterprise.inject.Instance
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.auth.AuthConstants
 import kvasir.definitions.kg.ChangeRecordRequest
 import kvasir.definitions.kg.ChangeRecords
 import kvasir.definitions.kg.Pod
-import kvasir.definitions.kg.changes.ChangeRequest
 import kvasir.definitions.kg.changes.ProcessedChange
 import kvasir.definitions.openapi.ApiDocTags
 import kvasir.definitions.persistence.Sort
 import kvasir.definitions.persistence.SortOrder
 import kvasir.definitions.rdf.RDFMediaTypes
-import kvasir.plugins.messaging.kafka.Channels
-import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getParentUri
-import org.apache.kafka.common.errors.RecordTooLargeException
 import org.eclipse.microprofile.openapi.annotations.Operation
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema
 import org.eclipse.microprofile.openapi.annotations.tags.Tag
-import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestResponse
 import org.jboss.resteasy.reactive.RestResponse.ResponseBuilder
-import java.net.URI
 import java.util.*
 
 @Tag(name = ApiDocTags.KG_CHANGES_API)
 @Path("{podId}/changes")
-class InboxApi(
-    private val uriInfo: KvasirUriInfo,
-    private val securityIdentity: Instance<SecurityIdentity>
-) : AbstractChangesApi() {
-
-    @Channel(Channels.CHANGES_INCOMING_PUBLISH)
-    private lateinit var changeEmitter: MutinyEmitter<ChangeRequest>
+class InboxApi : AbstractChangesApi() {
 
     @POST
     @Consumes(RDFMediaTypes.JSON_LD)
+    @Produces(RDFMediaTypes.JSON_LD)
     @Operation(
         summary = "Perform mutations on the KG.",
-        description = "Post a change request, containing the requested mutations, to the inbox of the specified pod.",
+        description = "Post a change request, containing the requested mutations, to the inbox of the specified pod. " +
+                "When `sync=true` the request blocks until the change has been processed and returns the resulting " +
+                "change report (HTTP 200). The default async behaviour (HTTP 201 + Location header) is preserved " +
+                "when `sync` is omitted or set to `false`.",
     )
-    @APIResponse(responseCode = "201", description = "Change request created.")
+    @APIResponse(responseCode = "201", description = "Change request accepted (async mode).")
+    @APIResponse(responseCode = "200", description = "Change request processed (sync mode).")
+    @APIResponse(responseCode = "408", description = "Timed out waiting for the change result (sync mode).")
     @OpenFgaPolicyEnforcer
     fun processChangeRequest(
         @PathParam("podId") podId: String,
+        @QueryParam("sync") @Parameter(
+            description = "When `true`, block until the change has been fully processed and return the resulting " +
+                    "ProcessedChange report (HTTP 200). Defaults to `false` (async, HTTP 201 + Location).",
+            required = false
+        ) @DefaultValue("false") sync: Boolean,
         input: ChangeRequestInput
     ): Uni<Response> {
         val fqPodId = uriInfo.getResourceUri().getParentUri().toString()
         return repositoryFactory.getRepository(Pod::class).findById(fqPodId)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
-            .onItem().ifNotNull().transformToUni { pod ->
+            .onItem().ifNotNull().transformToUni { _ ->
                 val changeCommand = input.toChangeRequest(
                     fqPodId,
                     securityIdentity.takeIf { it.isResolvable }?.get()?.principal?.name
                         ?: AuthConstants.ANONYMOUS_USERNAME
                 )
-                changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
-                    .map { _ ->
-                        Response.created(URI.create("${uriInfo.getResourceUri()}/pending/${changeCommand.id}")).build()
-                    }
-                    .onFailure(RecordTooLargeException::class.java)
-                    .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
+                handlePublishChange(fqPodId, changeCommand, sync)
             }
     }
 

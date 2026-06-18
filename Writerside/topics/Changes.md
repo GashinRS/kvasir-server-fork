@@ -87,9 +87,11 @@ Request body:
 <warning>
 When a change request includes both insert and delete statements, the delete statements are always executed first. As such, update mutations (i.e. delete followed by insert) can be implemented in a single change request.
 
-When using the raw Changes API directly, a delete-only payload is treated as a delete operation. For update semantics, include at least one insert statement for the same resource (typically `rdf:type`).
+When using the raw Changes API directly, a delete-only payload is treated as a delete operation. For update semantics,
+include at least one insert statement for the same resource (typically `rdf:type`).
 
-For Slice-scoped GraphQL update semantics, raw ChangeRequest guidance, and built-in `_Updatable*` operations, see [Update mutations](Slice-Update-Mutations.md).
+For Slice-scoped GraphQL update semantics, raw ChangeRequest guidance, and built-in `_Updatable*` operations,
+see [Update mutations](Slice-Update-Mutations.md).
 </warning>
 
 ### Assertions
@@ -127,10 +129,11 @@ Request body:
 
 Note the `kss:assert` keyword, which is followed by an array of assertions. Each assertion must specify the type of
 assertion and a GraphQL query [(see Querying)](Querying.md). Kvasir supports:
+
 - `kss:AssertEmptyResult` (query must return no results),
 - `kss:AssertNonEmptyResult` (query must return results),
 - `kss:AssertCountBounds` (a target field must stay within optional `kss:minCount` / `kss:maxCount` bounds).
-If one of the assertions fails, the entire transaction is discarded.
+  If one of the assertions fails, the entire transaction is discarded.
 
 Use the URL returned via the `Location` header to check the status of the change request. When the change resource
 is available on the server (remember: eventual consistency), you should see a `resultCode` of `ASSERTION_FAILED`.
@@ -357,6 +360,27 @@ This should return a `200 OK` response with a JSON-LD object containing the reco
   }
 }
 ```
+
+## Synchronous change request
+
+By default, the Change Request API processes change requests asynchronously. This means that when you submit a change
+request, the server will return a `201 Created` response with a `Location` header pointing to the URL where you can
+check the status of the change request. The server will then process the change request in the background, and you can
+check the status of the change request by querying the URL returned in the `Location` header.
+
+However, it is also possible to have the endpoint behave in a synchronous way, by including the query parameter
+`?sync=true` in the request URL. The server still processes the change request in the same way, but instead of returning
+a `201 Created` response with a `Location` header, it will subscribe to a Kafka topic were processed change requests are
+published to and await the matching result. When encountering this event, a `200 OK` response is returned with the
+details of the change request result in the response body. This allows clients to immediately see the result of the
+change request without having to poll the status URL. If no matching event is received within a configurable timeout, a
+`408 Request Timeout` response is returned.
+
+> While this approach can be more convenient for clients that always want to check the result of a change request, it is
+> strongly recommended to use the asynchronous approach, especially for change requests that are expected to take a long
+> time to process, as it allows the server to better manage its resources (e.g. by not having to keep connections open
+> while waiting for results).
+> {style="warning"}
 
 ## Streaming changes
 

@@ -3,6 +3,7 @@ package kvasir.services.api.kg.changes
 import io.quarkus.test.common.http.TestHTTPEndpoint
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.security.TestSecurity
+import io.restassured.RestAssured.given
 import jakarta.inject.Inject
 import kvasir.definitions.kg.ChangeRecordRequest
 import kvasir.definitions.kg.ChangeRecordType
@@ -11,6 +12,7 @@ import kvasir.definitions.kg.QueryRequest
 import kvasir.definitions.kg.changes.Assertion
 import kvasir.definitions.kg.changes.AssertionPhase
 import kvasir.definitions.kg.changes.ChangeStatusCode
+import kvasir.definitions.kg.changes.ProcessedChange
 import kvasir.definitions.kg.slices.EmbeddedSliceSchema
 import kvasir.definitions.kg.slices.Slice
 import kvasir.definitions.persistence.RepositoryFactory
@@ -453,6 +455,86 @@ class InboxApiTest : AbstractPodTest() {
         // Delete the data
         val delete = ChangeRequestInput(context = TestConstants.CONTEXT, delete = validPersonData)
         testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(delete), podUri, sliceUri = sliceId)
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
+    fun testSyncModeReturnsCommittedChangeDirectly() {
+        val personData = TestDataGenerator.generatePersonData(1)
+        val insert = ChangeRequestInput(insert = personData)
+
+        // POST with sync=true — should block and return 200 + ProcessedChange body without polling
+        val responseBody = given()
+            .contentType(RDFMediaTypes.JSON_LD)
+            .accept(RDFMediaTypes.JSON_LD)
+            .body(JsonLdHelper.encode(insert))
+            .queryParam("sync", "true")
+            .post("$podUri/changes")
+            .then()
+            .statusCode(200)
+            .extract().body().asString()
+
+        val processedChange = JsonLdHelper.decode(responseBody, ProcessedChange::class.java)
+        assertEquals(ChangeStatusCode.COMMITTED, processedChange.getStatusCode(),
+            "Sync response should carry a COMMITTED ProcessedChange")
+        assertTrue(processedChange.nrOfInserts > 0,
+            "ProcessedChange should report at least one insert")
+
+        // The inserted data should be immediately available in the KG (change is fully applied)
+        val result = knowledgeGraph.query(
+            QueryRequest(
+                TestConstants.CONTEXT,
+                "alice",
+                podUri,
+                query = "{ ex_Person { id so_givenName so_familyName } }"
+            )
+        ).toUni().await().indefinitely()
+        val persons = result.data?.get("ex_Person") as List<Map<String, Any>>
+        assertTrue(persons.isNotEmpty(), "Inserted person should be retrievable from the KG immediately after sync POST")
+
+        // Clean up
+        val delete = ChangeRequestInput(delete = personData)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(delete), podUri)
+    }
+
+    @Test
+    @TestSecurity(user = "alice")
+    fun testSyncModeReturnsNonCommittedStatusOnAssertionFailure() {
+        // Insert a person first (async is fine here)
+        val personData = TestDataGenerator.generatePersonData(1)
+        val personId = personData.first()[JsonLdKeywords.id]!!
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(ChangeRequestInput(insert = personData)), podUri)
+
+        // Now post a change with an assertion that will fail (person already exists)
+        val conflictingInsert = ChangeRequestInput(
+            context = TestConstants.CONTEXT,
+            assert = listOf(
+                Assertion(
+                    KvasirVocab.AssertEmptyResult,
+                    "{ ex_Person(id: \"$personId\") { id } }"
+                )
+            ),
+            insert = personData
+        )
+
+        // sync=true will return 400, with ASSERTION_FAILED in the body
+        val responseBody = given()
+            .contentType(RDFMediaTypes.JSON_LD)
+            .accept(RDFMediaTypes.JSON_LD)
+            .body(JsonLdHelper.encode(conflictingInsert))
+            .queryParam("sync", "true")
+            .post("$podUri/changes")
+            .then()
+            .statusCode(400)
+            .extract().body().asString()
+
+        val processedChange = JsonLdHelper.decode(responseBody, ProcessedChange::class.java)
+        assertEquals(ChangeStatusCode.ASSERTION_FAILED, processedChange.getStatusCode(),
+            "Sync response should carry an ASSERTION_FAILED ProcessedChange when the pre-condition is not met")
+
+        // Clean up
+        val delete = ChangeRequestInput(delete = personData)
+        testHelpers.requestChangeViaHTTPSync(JsonLdHelper.encode(delete), podUri)
     }
 
     private fun getExpectedChangeRecords(changeRequestInput: ChangeRequestInput): Set<Pair<ChangeRecordType, RDFStatement>> {

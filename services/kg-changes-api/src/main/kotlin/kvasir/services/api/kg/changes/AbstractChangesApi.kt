@@ -1,28 +1,34 @@
 package kvasir.services.api.kg.changes
 
+import io.quarkus.security.identity.SecurityIdentity
 import io.smallrye.mutiny.Uni
+import io.smallrye.reactive.messaging.MutinyEmitter
+import io.smallrye.reactive.messaging.kafka.KafkaRecord
+import jakarta.enterprise.inject.Instance
 import jakarta.inject.Inject
 import jakarta.ws.rs.NotFoundException
 import jakarta.ws.rs.core.Link
 import jakarta.ws.rs.core.Response
 import kvasir.definitions.kg.*
-import kvasir.definitions.kg.changes.ChangeProcessingHistoryEntry
-import kvasir.definitions.kg.changes.ChangeStatusCode
-import kvasir.definitions.kg.changes.PendingChangeRequest
-import kvasir.definitions.kg.changes.ProcessedChange
+import kvasir.definitions.kg.changes.*
 import kvasir.definitions.persistence.RepositoryFactory
 import kvasir.definitions.rdf.JsonLdHelper
 import kvasir.definitions.rdf.KvasirVocab
 import kvasir.definitions.reactive.notNullOrFail
+import kvasir.definitions.reactive.toUni
+import kvasir.plugins.messaging.kafka.Channels
 import kvasir.utils.http.KvasirUriInfo
 import kvasir.utils.http.getChildUri
 import kvasir.utils.http.getParentUri
 import kvasir.utils.idgen.ChangeRequestId
 import kvasir.utils.idgen.InvalidChangeRequestIdException
 import kvasir.utils.rdf.RDFTransformer
+import org.apache.kafka.common.errors.RecordTooLargeException
+import org.eclipse.microprofile.reactive.messaging.Channel
 import org.jboss.resteasy.reactive.RestResponse
 import java.net.URI
 import java.util.*
+import java.util.concurrent.TimeoutException
 
 abstract class AbstractChangesApi {
 
@@ -31,6 +37,45 @@ abstract class AbstractChangesApi {
 
     @Inject
     protected lateinit var knowledgeGraph: KnowledgeGraph
+
+    @Inject
+    protected lateinit var syncChangeAwaiter: SyncChangeAwaiter
+
+    @Channel(Channels.CHANGES_INCOMING_PUBLISH)
+    protected lateinit var changeEmitter: MutinyEmitter<ChangeRequest>
+
+    @Inject
+    protected lateinit var uriInfo: KvasirUriInfo
+
+    @Inject
+    protected lateinit var securityIdentity: Instance<SecurityIdentity>
+
+    protected fun handlePublishChange(fqPodId: String, changeCommand: ChangeRequest, sync: Boolean): Uni<Response> {
+        return if (sync) {
+            // Subscribe eagerly BEFORE emitting to Kafka to avoid missing the result.
+            val syncFuture = syncChangeAwaiter.awaitChange(changeCommand.id)
+                .subscribeAsCompletionStage()
+
+            changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
+                .chain { _ -> syncFuture.toUni() }
+                .map { processedChange ->
+                    Response.status(mapProcessedChangeStatusCode(processedChange))
+                        .entity(JsonLdHelper.encode(qualifyProcessedChangeId(uriInfo, processedChange))).build()
+                }
+                .onFailure(TimeoutException::class.java)
+                .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_TIMEOUT).build() }
+                .onFailure(RecordTooLargeException::class.java)
+                .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
+        } else {
+            changeEmitter.sendMessage(KafkaRecord.of(fqPodId, changeCommand))
+                .map { _ ->
+                    Response.created(URI.create("${uriInfo.getResourceUri()}/pending/${changeCommand.id}"))
+                        .build()
+                }
+                .onFailure(RecordTooLargeException::class.java)
+                .recoverWithItem { _ -> Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build() }
+        }
+    }
 
     protected fun fetchChange(
         fqPodId: String,
@@ -112,7 +157,9 @@ abstract class AbstractChangesApi {
                         .build()
                 } else {
                     val changeId = results.items[0].id
-                    val fqChangeId = fqSliceId?.let { sliceTag?.let { tagId -> "$it/tags/$tagId/changes/$changeId"} ?: "$it/changes/$changeId" } ?: "$fqPodId/changes/$changeId"
+                    val fqChangeId = fqSliceId?.let {
+                        sliceTag?.let { tagId -> "$it/tags/$tagId/changes/$changeId" } ?: "$it/changes/$changeId"
+                    } ?: "$fqPodId/changes/$changeId"
                     // Change was processed, permanently redirect to changes API
                     Response.seeOther(URI.create(fqChangeId)).build()
                 }
@@ -172,6 +219,14 @@ abstract class AbstractChangesApi {
             id = parentUri.getChildUri(processedChange.id).toASCIIString(),
             origRequestId = "${parentUri}/pending/${processedChange.origRequestId}"
         )
+    }
+
+    protected fun mapProcessedChangeStatusCode(processedChange: ProcessedChange): Response.Status {
+        return when (processedChange.getStatusCode()) {
+            ChangeStatusCode.COMMITTED -> Response.Status.OK
+            ChangeStatusCode.ASSERTION_FAILED, ChangeStatusCode.VALIDATION_ERROR -> Response.Status.BAD_REQUEST
+            else -> Response.Status.INTERNAL_SERVER_ERROR
+        }
     }
 
 }
