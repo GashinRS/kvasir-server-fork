@@ -7,6 +7,7 @@ import io.quarkus.arc.properties.IfBuildProperty
 import io.quarkus.logging.Log
 import io.quarkus.security.runtime.QuarkusSecurityIdentity
 import io.quarkus.vertx.http.runtime.security.QuarkusHttpUser
+import io.smallrye.mutiny.infrastructure.Infrastructure
 import io.vertx.core.http.HttpHeaders
 import io.vertx.core.http.HttpServerRequest
 import io.vertx.ext.web.RoutingContext
@@ -18,26 +19,33 @@ import kvasir.plugins.policyagent.openfga.extractors.DefaultContextExtractor
 import kvasir.plugins.policyagent.openfga.extractors.DefaultRelationExtractor
 import kvasir.plugins.policyagent.openfga.utils.contextualizeSubject
 import kvasir.plugins.policyagent.openfga.utils.getContextForParents
+import org.eclipse.microprofile.config.inject.ConfigProperty
 import org.jose4j.jwt.consumer.JwtConsumerBuilder
 import java.security.Principal
+import java.time.Duration
 
 @ApplicationScoped
 @IfBuildProperty(name = "openfga.pep.enabled", stringValue = "true")
 class OpenFgaAuthHandler(
     private val fgaManager: OpenFgaManager,
-    private val openFgaPolicyEnforcerConfig: OpenFgaPolicyEnforcerConfig
+    private val openFgaPolicyEnforcerConfig: OpenFgaPolicyEnforcerConfig,
+    @param:ConfigProperty(name = "kvasir-ext.openfga.pep.check-timeout-ms")
+    private val checkTimeoutMs: Long
 ) : AuthHandler {
 
     private val postCheckHook = PostCheckDelegator()
 
     override fun handle(ctx: RoutingContext) {
-        val relEx = DefaultRelationExtractor()
-        val contextEx = DefaultContextExtractor()
+        try {
+            // 1. Capture the exact Vert.x Event Loop thread processing THIS specific request
+            val currentVertxContext = ctx.vertx().getOrCreateContext()
 
-        val securityIdentity = (ctx.user() as QuarkusHttpUser).securityIdentity
+            val relEx = DefaultRelationExtractor()
+            val contextEx = DefaultContextExtractor()
 
-        fgaManager.storeNames.flatMap { storeNames ->
-            val store = extractStore(ctx, storeNames)
+            val securityIdentity = (ctx.user() as QuarkusHttpUser).securityIdentity
+
+            val store = extractStore(ctx)
             val subject = extractSubject(securityIdentity.principal)
             val relation = relEx.extractRelation(ctx.request().method())
             val `object` = extractObject(ctx.request().path())
@@ -45,28 +53,43 @@ class OpenFgaAuthHandler(
             val tuple = ClientTupleKey().user(subject).relation(relation)._object(`object`)
             val contextualTuples = getContextForParents(ctx.request().path())
             fgaManager.check(store, tuple, contextualTuples, context)
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+                .ifNoItem().after(Duration.ofMillis(checkTimeoutMs))
+                .failWith { RuntimeException("OpenFGA check timed out") }
                 .chain { isAllowed ->
                     postCheckHook.handle(ctx.request(), store, tuple, contextualTuples, context, isAllowed)
+                        .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+                        .ifNoItem().after(Duration.ofMillis(checkTimeoutMs))
+                        .failWith { RuntimeException("Post-check processing timed out") }
                 }
-        }
-            .subscribe().with(
-                { _ ->
-                    ctx.next()
-                },
-                { err ->
-                    if (err is ClientErrorException) {
-                        ctx.fail(err.response.status)
-                    } else {
-                        Log.warn("Exception in OpenFGA Auth Handler", err)
-                        ctx.fail(err)
+                // 2. Force Mutiny to complete directly on the captured Vert.x Context Thread
+                .emitOn { command -> currentVertxContext.runOnContext { command.run() } }
+                .subscribe().with(
+                    { _ ->
+                        if (!ctx.failed() && !ctx.response().ended()) {
+                            ctx.next()
+                        }
+                    },
+                    { err ->
+                        if (!ctx.failed() && !ctx.response().ended()) {
+                            if (err is ClientErrorException) {
+                                ctx.fail(err.response.status)
+                            } else {
+                                Log.warn("Exception in OpenFGA Auth Handler", err)
+                                ctx.fail(err)
+                            }
+                        }
                     }
-                }
-            )
+                )
+        } catch (e: Exception) {
+            Log.warn("Exception while processing OpenFGA auth check", e)
+            ctx.fail(500)
+        }
     }
 
-    private fun extractStore(ctx: RoutingContext, existingStores: Set<String>): String {
+    private fun extractStore(ctx: RoutingContext): String {
         val pathSegments = ctx.request().path().removePrefix("/").split("/")
-        return if (pathSegments.isNotEmpty() && existingStores.contains(pathSegments[0])) {
+        return if (pathSegments.isNotEmpty()) {
             pathSegments[0]
         } else {
             throw IllegalArgumentException("No valid store found in the request path")

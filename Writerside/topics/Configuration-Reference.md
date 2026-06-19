@@ -1,4 +1,5 @@
 # Configuration Reference
+
 <show-structure for="chapter,procedure" depth="3"/>
 
 This page provides a reference of the configuration options available for Kvasir.
@@ -23,8 +24,9 @@ For example, the configuration variable `kvasir.pod.auto-ingest-rdf` can be set 
 
 The following sections provide an overview of the main configuration categories and their options.
 
-> Configuration variables that do not specify a default value are unset by default and must be explicitly configured when required.
-{style=note}
+> Configuration variables that do not specify a default value are unset by default and must be explicitly configured
+> when required.
+> {style=note}
 
 ## Kvasir Core Configuration
 
@@ -37,7 +39,7 @@ default: <code>http://localhost:8080/</code>
 The base URI where Kvasir is accessible.
 </def>
 <def title="kvasir.http.webclient-uri">
-default: <code>${kvasir.http.base-uri}/_ui/</code>
+default: <code>${kvasir.http.base-uri}/\_ui/</code>
 
 The URI where the Kvasir web client is accessible.
 </def>
@@ -50,7 +52,8 @@ If true, HTTP requests to the base URI will be redirected to the web client URI.
 
 ### Default Pod Configuration
 
-Default configuration related to Pods. May be overridden per Pod (see [Pod configuration](Pod-Management.md#pod-configuration)).
+Default configuration related to Pods. May be overridden per Pod (
+see [Pod configuration](Pod-Management.md#pod-configuration)).
 
 <deflist type="full">
 <def title="kvasir.pod.default-context">
@@ -114,7 +117,8 @@ Whether to require DPoP (Demonstrating Proof-of-Possession) tokens for protected
 <def title="kvasir.pod.auth.skip-dpop-ath-check">
 default: <code>false</code>
 
-Whether to skip the access token hash (ath) check for DPoP tokens. This setting is primarily intended for backward compatibility with clients that implement an earlier version of the DPoP specification.
+Whether to skip the access token hash (ath) check for DPoP tokens. This setting is primarily intended for backward
+compatibility with clients that implement an earlier version of the DPoP specification.
 </def>
 <def title="kvasir.pod.auth.http-endpoint-policy-enforcer.url">
 URL of the external HTTP endpoint for the policy enforcer.
@@ -156,7 +160,8 @@ If set to true, authorization is delegated to the configured UMA server for all 
 <def title="kvasir.bootstrap.pods[i].auto-register-http-endpoint-policy-enforcer">
 default: <code>false</code>
 
-If set to true, authorization is delegated to the configured HTTP Endpoint Policy Enforcer for all resources (by default).
+If set to true, authorization is delegated to the configured HTTP Endpoint Policy Enforcer for all resources (by
+default).
 </def>
 <def title="kvasir.bootstrap.pods[i].generate-clients[i].client-id">
 Client id for the client to generate (using the built-in Keycloak).
@@ -186,7 +191,8 @@ The list of relations that apply to the target resource. For example, "reader", 
 <def title="kvasir.bootstrap.exit-after-setup">
 default: <code>false</code>
 
-If true, the Kvasir init-service will terminate after the setup is completed (or failed). (Useful for init containers, e.g. in Kubernetes).
+If true, the Kvasir init-service will terminate after the setup is completed (or failed). (Useful for init containers,
+e.g. in Kubernetes).
 </def>
 </deflist>
 
@@ -224,14 +230,11 @@ default: <code>localhost:9092</code>
 Comma-separated list of Kafka brokers.
 </def>
 
-[//]: # (<def title="kvasir.messaging.kafka.advertised-hostname">)
-
-[//]: # (default: <code>localhost</code>)
-
-[//]: # ()
-[//]: # (Hostname to advertise to Kafka clients.)
-
-[//]: # (</def>)
+[//]: # '<def title="kvasir.messaging.kafka.advertised-hostname">'
+[//]: # "default: <code>localhost</code>"
+[//]: #
+[//]: # "Hostname to advertise to Kafka clients."
+[//]: # "</def>"
 
 </deflist>
 
@@ -295,4 +298,41 @@ default: <code>kvasirkvasir</code>
 
 S3 secret key.
 </def>
+<def title="kvasir.storage.s3.publish-event-types">
+default: <code>restore-object,delete-object,put-object,complete-multipart-upload,create-object,get-object,get-object-metadata,write-object-metadata</code>
+
+Comma-separated list of storage event types that should be published to Kafka.
+Publishing all storage event types can add considerable overhead, especially in high concurrent usage environments. In
+some cases, there is no way around this (e.g. when auditing is required), while in other cases only specific types are
+needed (e.g.
+only the events for operations that modify the storage are required to support `auto-ingest-rdf` on a Pod), or this
+feature can be disabled entirely to avoid the introduced overhead entirely.
+</def>
+<def title="kvasir.storage.s3.proxy-pool-size">
+default: <code>200</code>
+
+Maximum concurrent HTTP connections from the storage-api reverse proxy to the S3 backend.
+</def>
+<def title="kvasir.storage.s3.proxyMaxChunkSize">
+default: <code>-1</code>
+
+Maximum size of a single HTTP chunk (in bytes) used by the Vert.x reverse-proxy client when
+streaming data to/from S3. Set to -1 to use the Vert.x default (8192 bytes).
+Larger values (e.g. 65536) reduce allocation overhead for large files but add overhead for
+small payloads.
+</def>
+<def title="kvasir.storage.s3.proxyReceiveBufferSize">
+default <code>-1</code>
+
+Socket receive buffer size (in bytes) for the Vert.x reverse-proxy client connections
+to s3
+</def>
+<def title="kvasir.storage.s3.proxySendBufferSize">
+default: <code>-1</code>
+
+Socket send buffer size (in bytes) for the Vert.x reverse-proxy client connections
+to s3
+
+</def>
+
 </deflist>

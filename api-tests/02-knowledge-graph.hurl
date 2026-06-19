@@ -61,6 +61,9 @@ Authorization: Bearer {{token}}
 HTTP 201
 [Captures]
 change_url: header "Location"
+[Asserts]
+# Verify the change URL is rooted at kvasir_url — catches misconfigured kvasir.http.base-uri
+header "Location" startsWith "{{kvasir_url}}/"
 
 # Poll until the change processor until not pending and a redirect to the change status is returned
 GET {{change_url}}

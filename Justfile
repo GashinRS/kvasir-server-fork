@@ -564,3 +564,57 @@ kind-test *args:
 [group('kind')]
 kind-load-image image:
     kind load docker-image {{image}} --name kvasir
+
+# ── Time-series Benchmarks (Kvasir KG) ──────────────────────────────────────
+
+# Load time-series sensor data into Kvasir (configure via benchmarks/.env)
+[group('benchmarks')]
+bench-timeseries-load *args:
+    cd benchmarks && python load_data.py
+
+# Run time-series query benchmarks against Kvasir (configure via benchmarks/.env)
+[group('benchmarks')]
+bench-timeseries-run *args:
+    cd benchmarks && python run_benchmarks.py
+
+# ── Comparative Benchmarks (Kvasir vs CSS) ──────────────────────────────────
+
+# Start the CSS server for comparative benchmarks
+[group('benchmarks')]
+bench-compare-css-up:
+    docker compose -f benchmarks/comparative/docker-compose.css.yml up -d
+
+# Stop the CSS server — pass --wipe to also remove volumes (deletes all CSS pod data)
+[group('benchmarks')]
+[arg("wipe", long="wipe", value="true")]
+bench-compare-css-down wipe="false":
+    docker compose -f benchmarks/comparative/docker-compose.css.yml down \
+      {{ if wipe == "true" { "--volumes --remove-orphans" } else { "" } }}
+
+# Install Python dependencies for comparative benchmarks
+[group('benchmarks')]
+bench-compare-install:
+    pip install -r benchmarks/comparative/requirements.txt
+
+# Run comparative benchmarks. Use --scenario 1|2 to select scenario, --platform kvasir|kvasir-candidate|css|s3 to select platform(s).
+[group('benchmarks')]
+bench-compare *args:
+    cd benchmarks/comparative && python run_all.py {{args}}
+
+# Merge multiple CSV files into a single HTML report — pass --csv and optional --output to report.py.
+# If called without arguments, defaults to results/results.csv → results/report.html.
+#
+# Examples:
+#   just bench-compare-merge                         # default (results/results.csv)
+#   just bench-compare-merge --csv results/kvasir.csv results/css.csv
+#   just bench-compare-merge --csv results/kvasir.csv results/css.csv --output results/merged.html
+[group('benchmarks')]
+[doc('Generate the HTML report from results/results.csv. Use --csv to specify multiple CSVs, and --output to specify output file.')]
+bench-compare-report *args:
+    cd benchmarks/comparative && python report.py {{args}}
+
+# Serve the benchmark report at http://localhost:8766
+[group('benchmarks')]
+bench-compare-serve:
+    npx --yes http-server benchmarks/comparative/results -p 8766 -o
+

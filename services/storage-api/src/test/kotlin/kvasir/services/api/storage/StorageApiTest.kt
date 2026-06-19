@@ -1,5 +1,6 @@
 package kvasir.services.api.storage
 
+import com.google.common.hash.Hashing
 import io.quarkus.logging.Log
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured
@@ -52,6 +53,71 @@ class StorageApiTest : AbstractPodTest() {
 
         // Delete file
         `when`().delete("/$podName/s3/test.txt").then().statusCode(204)
+    }
+
+    @Test
+    fun testPutWithClientProvidedContentHash() {
+        val content = "Client-hashed upload content"
+        val contentBytes = content.toByteArray(Charsets.UTF_8)
+        val sha256Hash = Hashing.sha256().hashBytes(contentBytes).toString()
+
+        // Upload with client-provided x-amz-content-sha256 header (streaming path)
+        given()
+            .body(contentBytes)
+            .contentType(ContentType.TEXT)
+            .header(HEADER_X_AMZ_CONTENT_SHA256, sha256Hash)
+            .`when`()
+            .put("/$podName/s3/hashed-upload.txt")
+            .then()
+            .statusCode(200)
+
+        // Verify content was stored correctly
+        val returnedContent =
+            `when`()
+                .get("/$podName/s3/hashed-upload.txt")
+                .then()
+                .statusCode(200)
+                .extract()
+                .body()
+                .asString()
+        assertEquals(content, returnedContent)
+
+        // Delete file
+        `when`().delete("/$podName/s3/hashed-upload.txt").then().statusCode(204)
+    }
+
+    @Test
+    fun testPutLargeBinaryWithClientProvidedContentHash() {
+        val content = Random.nextBytes(5 * 1024 * 1024) // 5 MB
+        val sha256Hash = Hashing.sha256().hashBytes(content).toString()
+
+        // Upload with client-provided hash — body is streamed, not buffered by the proxy
+        given()
+            .body(content)
+            .contentType(ContentType.BINARY)
+            .header(HEADER_X_AMZ_CONTENT_SHA256, sha256Hash)
+            .`when`()
+            .put("/$podName/s3/hashed-large-binary.bin")
+            .then()
+            .statusCode(200)
+
+        // Download and verify integrity
+        val returnedContent =
+            `when`()
+                .get("/$podName/s3/hashed-large-binary.bin")
+                .then()
+                .statusCode(200)
+                .extract()
+                .body()
+                .asByteArray()
+
+        assertEquals(
+            CRC32().apply { this.update(content, 0, content.size) }.value,
+            CRC32().apply { this.update(returnedContent, 0, returnedContent.size) }.value,
+        )
+
+        // Delete file
+        `when`().delete("/$podName/s3/hashed-large-binary.bin").then().statusCode(204)
     }
 
     @Test

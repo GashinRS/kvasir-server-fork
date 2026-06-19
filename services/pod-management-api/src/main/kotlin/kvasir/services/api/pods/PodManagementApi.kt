@@ -165,7 +165,7 @@ class PodManagementApi(
     @OpenFgaPolicyEnforcer
     fun getRuntimeConfig(@PathParam("podId") podId: String): Uni<PodConfig> {
         val fqPodId = uriInfo.getResourceUri().getParentUri(1).toASCIIString()
-        return podConfigProvider.getPodConfigById(fqPodId)
+        return podConfigProvider.getPodConfigById(fqPodId, disableCache = true)
             .onItem().ifNull().failWith(NotFoundException("Pod not found"))
             .onItem().ifNotNull().transform { it!! }
     }

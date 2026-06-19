@@ -42,107 +42,64 @@ private val supportedStorageEventTypes = setOf(
 class RDFStorageMutationListener(
     private val s3Client: S3AsyncClient,
     private val podConfigProvider: PodConfigProvider,
-    @Channel(Channels.CHANGES_INCOMING_PUBLISH)
+    @param:Channel(Channels.CHANGES_INCOMING_PUBLISH)
     private val emitter: MutinyEmitter<ChangeRequest>,
-    @ConfigProperty(name = "kvasir-ext.simple-rdf-processor.shutdown-on-error", defaultValue = "true")
+    @param:ConfigProperty(name = "kvasir-ext.simple-rdf-processor.shutdown-on-error", defaultValue = "true")
     private val shutdownOnError: Boolean
 ) {
 
     @Incoming(Channels.STORAGE_EVENTS_SUBSCRIBE)
     fun consumeAndLog(message: Message<StorageEvent>): CompletionStage<Void> {
-        return podConfigProvider.getPodConfigById(message.payload.podId).map { it?.autoIngestRdf() ?: false }
-            .chain { autoIngestRdfEnabled ->
-                if (autoIngestRdfEnabled && message.payload.eventType.mutation) {
-                    val event = message.payload
-                    val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
-                    // If the event operation type is DELETE_OBJECT, look up the previous version
-                    (if (event.eventType == StorageEventType.DELETE_OBJECT) {
-                        lookupPreviousVersionId(bucketId, event.objectId)
-                    } else {
-                        Uni.createFrom().item(event.versionId)
-                    })
-                        .chain { versionId ->
-                            // Lookup object contentType
-                            s3Client.getObjectContentType(bucketId, event.objectId, versionId).chain { rawContentType ->
-                                val contentType =
-                                    MediaType.valueOf(rawContentType).let { "${it.type}/${it.subtype}" }
-                                val isSupportedRDFObject = RDFMediaTypes.supportedTypes.contains(contentType)
+        return if (!message.payload.eventType.mutation) {
+            message.ack()
+        } else {
+            podConfigProvider.getPodConfigById(message.payload.podId)
+                .map { it?.autoIngestRdf() ?: false }
+                .chain { autoIngestRdfEnabled ->
+                    if (autoIngestRdfEnabled) {
+                        val event = message.payload
+                        val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
+                        // If the event operation type is DELETE_OBJECT, look up the previous version
+                        (if (event.eventType == StorageEventType.DELETE_OBJECT) {
+                            lookupPreviousVersionId(bucketId, event.objectId)
+                        } else {
+                            Uni.createFrom().item(event.versionId)
+                        })
+                            .chain { versionId ->
+                                // Lookup object contentType
+                                s3Client.getObjectContentType(bucketId, event.objectId, versionId)
+                                    .chain { rawContentType ->
+                                        val contentType =
+                                            MediaType.valueOf(rawContentType).let { "${it.type}/${it.subtype}" }
+                                        val isSupportedRDFObject = RDFMediaTypes.supportedTypes.contains(contentType)
 
-                                // Now we have all the parameters, and we can map the event to a change request if applicable
-                                if (isSupportedRDFObject && supportedStorageEventTypes.contains(event.eventType)) {
-                                    val changeRequest = mapToChangeRequest(event, versionId)
-                                    // Emit the change request
-                                    emitter.sendMessage(KafkaRecord.of(changeRequest.podId, changeRequest))
-                                } else {
-                                    // No change request should be produced
-                                    Uni.createFrom().voidItem()
-                                }
+                                        // Now we have all the parameters, and we can map the event to a change request if applicable
+                                        if (isSupportedRDFObject && supportedStorageEventTypes.contains(event.eventType)) {
+                                            val changeRequest = mapToChangeRequest(event, versionId)
+                                            // Emit the change request
+                                            emitter.sendMessage(KafkaRecord.of(changeRequest.podId, changeRequest))
+                                        } else {
+                                            // No change request should be produced
+                                            Uni.createFrom().voidItem()
+                                        }
+                                    }
                             }
-                        }
-                } else {
-                    Uni.createFrom().voidItem()
+                    } else {
+                        Uni.createFrom().voidItem()
+                    }
                 }
-            }
-            .onFailure().invoke { err ->
-                Log.error("Error in simple rdf processor${if (shutdownOnError) ", shutting down." else ""}", err)
-                if (shutdownOnError) {
-                    exitProcess(1)
+                .onFailure().invoke { err ->
+                    Log.error("Error in simple rdf processor${if (shutdownOnError) ", shutting down." else ""}", err)
+                    if (shutdownOnError) {
+                        exitProcess(1)
+                    }
                 }
-            }
-            .eventually {
-                // Always ack the incoming event
-                message.ack().toUni()
-            }
-            .convert().toCompletionStage()
-//
-//        return storageEvents
-//            .onItem().transformToUniAndConcatenate { event ->
-//                podConfigProvider.getPodConfigById(event.payload.podId).map { event to (it?.autoIngestRdf() ?: false) }
-//            }
-//            .filter { (message, autoIngestEnabled) -> autoIngestEnabled && message.payload.eventType.mutation }
-//            .map { (message, _) -> message }
-//            .onItem()
-//            .transformToUniAndConcatenate { message ->
-//                val event = message.payload
-//                val bucketId = event.sliceId?.let { S3Utils.getBucket(it) } ?: S3Utils.getBucket(event.podId)
-//                // If the event operation type is DELETE_OBJECT, look up the previous version
-//                (if (event.eventType == StorageEventType.DELETE_OBJECT) {
-//                    lookupPreviousVersionId(bucketId, event.objectId)
-//                } else {
-//                    Uni.createFrom().item(event.versionId)
-//                }).chain { versionId ->
-//                    // Lookup object contentType
-//                    s3Client.getObjectContentType(bucketId, event.objectId, versionId).map { rawContentType ->
-//                        val contentType =
-//                            MediaType.valueOf(rawContentType).let { "${it.type}/${it.subtype}" }
-//                        val isSupportedRDFObject = RDFMediaTypes.supportedTypes.contains(contentType)
-//
-//                        // Now we have all the parameters, and we can map the event to a change request if applicable
-//                        if (isSupportedRDFObject) {
-//                            mapToChangeRequest(event, versionId)
-//                        } else {
-//                            // Return null to indicate no change request should be produced
-//                            null
-//                        }
-//                    }
-//                }.eventually {
-//                    // Always ack the incoming event
-//                    message.ack().toUni()
-//                }
-//                    // Handling errors so the processor can continue processing other events
-//                    .onFailure().recoverWithItem { err ->
-//                        Log.warn("Error in simple-rdf-processor, ignoring event $event", err)
-//                        null
-//                    }
-//            }
-//            // Handling errors so the processor can continue processing other events
-//            .onFailure().recoverWithItem { err ->
-//                Log.warn("Error in simple-rdf-processor", err)
-//                null
-//            }
-//            // Only emit non-null change requests
-//            .filter { changeRequest -> changeRequest != null }
-//            .map { changeRequest -> KafkaRecord.of(changeRequest!!.podId, changeRequest) }
+                .eventually {
+                    // Always ack the incoming event
+                    message.ack().toUni()
+                }
+                .convert().toCompletionStage()
+        }
     }
 
     private fun lookupPreviousVersionId(bucketId: String, objectId: String): Uni<String?> {

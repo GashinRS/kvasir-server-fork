@@ -1,0 +1,21 @@
+services:
+  css:
+    image: solidproject/community-server:7
+    ports:
+      - "3000:3000"
+    volumes:
+      - css_data:/data
+      - ./css-seed.json:/config/seed.json
+    # Use the built-in file-based config with file locking (fair comparison with Kvasir S3)
+    # CSS_CONFIG env var overrides the --config CLI parameter
+    environment:
+      NODE_ENV: production
+      CSS_CONFIG: config/file.json
+      CSS_ROOT_FILE_PATH: /data
+      CSS_BASE_URL: ${CSS_BASE_URL:-http://localhost:3000}
+      CSS_SEED_CONFIG: /config/seed.json
+
+volumes:
+  css_data:
+    driver: local
+

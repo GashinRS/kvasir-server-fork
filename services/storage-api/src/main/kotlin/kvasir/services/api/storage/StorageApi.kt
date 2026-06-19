@@ -3,12 +3,13 @@ package kvasir.services.api.storage
 import com.google.common.hash.Hashing
 import io.quarkus.logging.Log
 import io.quarkus.runtime.Startup
-import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.vertx.UniHelper
 import io.smallrye.reactive.messaging.kafka.KafkaRecord
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.http.HttpClientOptions
+import io.vertx.core.http.HttpMethod
 import io.vertx.core.http.impl.HttpServerRequestWrapper
 import io.vertx.core.net.HostAndPort
 import io.vertx.ext.web.Router
@@ -34,6 +35,7 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
+import kotlin.jvm.optionals.getOrNull
 
 internal const val HEADER_X_AMZ_CONTENT_SHA256 = "x-amz-content-sha256"
 internal const val HEADER_X_AMZ_DATE = "x-amz-date"
@@ -52,28 +54,64 @@ class StorageApi(
 ) {
 
     fun onStart(@Observes router: Router, vertx: Vertx) {
-        Log.debug("storage-api proxying S3 requests to ${s3Config.endpoint()}")
+        Log.debug(
+            "storage-api proxying S3 requests to ${s3Config.endpoint()} " +
+                "(pool=${s3Config.proxyPoolSize()}, chunkSize=${s3Config.proxyMaxChunkSize()}, " +
+                "rcvBuf=${s3Config.proxyReceiveBufferSize()}, sndBuf=${s3Config.proxySendBufferSize()})"
+        )
         val s3Url = URI.create(s3Config.endpoint())
-        val proxyClient = vertx.createHttpClient()
+        val options = HttpClientOptions()
+            .setMaxPoolSize(s3Config.proxyPoolSize())
+            .setKeepAlive(true)
+            .setPipelining(false)
+        if (s3Config.proxyMaxChunkSize() > 0) options.setMaxChunkSize(s3Config.proxyMaxChunkSize())
+        if (s3Config.proxyReceiveBufferSize() > 0) options.setReceiveBufferSize(s3Config.proxyReceiveBufferSize())
+        if (s3Config.proxySendBufferSize() > 0) options.setSendBufferSize(s3Config.proxySendBufferSize())
+        val proxyClient = vertx.createHttpClient(options)
         val proxy = HttpProxy.reverseProxy(proxyClient)
         proxy.origin(s3Url.port, s3Url.host).addInterceptor(s3Interceptor)
 
-        router.route("/:podId/s3/*")
-            .handler(BodyHandler.create().setBodyLimit(-1))
-            .apply {
-                if (authHandler.isResolvable) {
-                    this.handler(authHandler.get())
-                }
-            }
-            .handler { ctx ->
-                ctx.body().buffer()?.let {
-                    if (it.length() > 0) {
-                        val reqContext = (ctx.request() as HttpServerRequestWrapper).context()
-                        reqContext.putLocal(BODY_KEY, it)
+        // Write methods: buffer the full request body so the S3 interceptor can sign it.
+        // If the client provides a pre-computed x-amz-content-sha256 header, skip body buffering
+        // entirely so the proxy can stream the body through without loading it into memory.
+        listOf(HttpMethod.PUT, HttpMethod.POST).forEach { method ->
+            router.route(method, "/:podId/s3/*")
+                .handler { ctx ->
+                    if (ctx.request().getHeader(HEADER_X_AMZ_CONTENT_SHA256) != null) {
+                        // Client provided content hash — skip body buffering for streaming
+                        ctx.next()
+                    } else {
+                        BodyHandler.create().setBodyLimit(-1).handle(ctx)
                     }
                 }
-                proxy.handle(ctx.request())
-            }
+                .apply {
+                    if (authHandler.isResolvable) {
+                        this.handler(authHandler.get())
+                    }
+                }
+                .handler { ctx ->
+                    if (ctx.request().getHeader(HEADER_X_AMZ_CONTENT_SHA256) == null) {
+                        ctx.body().buffer()?.let {
+                            if (it.length() > 0) {
+                                val reqContext = (ctx.request() as HttpServerRequestWrapper).context()
+                                reqContext.putLocal(BODY_KEY, it)
+                            }
+                        }
+                    }
+                    proxy.handle(ctx.request())
+                }
+        }
+
+        // Read / delete methods: skip BodyHandler entirely to avoid unnecessary buffering under load.
+        listOf(HttpMethod.GET, HttpMethod.HEAD, HttpMethod.DELETE).forEach { method ->
+            router.route(method, "/:podId/s3/*")
+                .apply {
+                    if (authHandler.isResolvable) {
+                        this.handler(authHandler.get())
+                    }
+                }
+                .handler { ctx -> proxy.handle(ctx.request()) }
+        }
     }
 
 }
@@ -97,16 +135,34 @@ class S3Interceptor(
 
     override fun handleProxyRequest(context: ProxyContext): Future<ProxyResponse> {
         val proxiedRequest = context.request().proxiedRequest()
-        val buffer =
-            (proxiedRequest as HttpServerRequestWrapper).context().getLocal<Buffer?>(BODY_KEY) ?: Buffer.buffer()
+        val method = context.request().method.name()
+        val emptyBody = method in setOf("GET", "HEAD", "DELETE")
+        val clientProvidedHash = context.request().headers().get(HEADER_X_AMZ_CONTENT_SHA256)
 
-        context.request().body = Body.body(buffer)
+        // When the client provides x-amz-content-sha256, skip body buffering — the proxy
+        // streams the body directly to S3. Otherwise, read the buffered body for hashing.
+        val buffer: Buffer? = if (clientProvidedHash != null && !emptyBody) {
+            // Body is being streamed; do not override it
+            null
+        } else if (emptyBody) {
+            Buffer.buffer()
+        } else {
+            (proxiedRequest as HttpServerRequestWrapper).context().getLocal<Buffer?>(BODY_KEY) ?: Buffer.buffer()
+        }
+
+        if (buffer != null) {
+            context.request().body = Body.body(buffer)
+        }
         val podId = context.request().proxiedRequest().getParam("podId")
         val sliceId = context.request().proxiedRequest().getParam("sliceId")
         val target = replacePath(context.request().uri, podId, sliceId)
         context.request().uri = target
         val isoDateTime = getIsoDateTime(context)
-        val payloadHash = getPayloadHash(context, buffer)
+        val payloadHash = when {
+            emptyBody -> "UNSIGNED-PAYLOAD"
+            clientProvidedHash != null -> clientProvidedHash
+            else -> getPayloadHash(context, buffer!!)
+        }
         val targetUri = URI.create(target);
         val targetDecoded = arrayOf(targetUri.path, targetUri.query ?: "").joinToString("?");
         val signUri = uk.co.lucasweb.aws.v4.signer.HttpRequest(context.request().method.name(), targetDecoded)
@@ -136,37 +192,42 @@ class S3Interceptor(
         // Hack to remove access-control-allow-origin header that Minio handler internally puts here
         resp.headers().remove("access-control-allow-origin")
         val operationType = determineOperationType(context)
-        return context.sendResponse().compose {
-            UniHelper.toFuture(
-                if (resp.statusCode in 200..399 && operationType != null) {
-                    val podId = context.request().proxiedRequest().getParam("podId")
-                    val sliceId = context.request().proxiedRequest().getParam("sliceId")
-                    val bucket = sliceId?.let { S3Utils.getBucket("${config.baseUri()}$podId/slices/$it") }
-                        ?: S3Utils.getBucket("${config.baseUri()}$podId")
-                    val event = StorageEvent(
-                        id = "urn:kvasir:storage-events:${UUID.randomUUID()}",
-                        timestamp = Instant.now(),
-                        requestingUser = authHandler.takeIf { it.isResolvable }?.get()
-                            ?.getPrincipalForProxiedRequest(context.request().proxiedRequest())?.name
-                            ?: AuthConstants.ANONYMOUS_USERNAME,
-                        podId = "${config.baseUri()}$podId",
-                        sliceId = sliceId?.let { "${config.baseUri()}$podId/slices/$it" },
-                        objectId = URLDecoder.decode(
-                            context.request().uri.substringAfter("/$bucket/").substringBefore("?"),
-                            Charsets.UTF_8.name()
-                        ),
-                        externalObjectUri = "${config.baseUri().removeSuffix("/")}${
-                            context.request().proxiedRequest().path()
-                        }",
-                        internalStorageUri = "${s3Config.endpoint()}${context.request().uri}",
-                        versionId = context.response().headers().get("x-amz-version-id"),
-                        eventType = operationType
-                    )
-                    storageEventEmitterProvider.getEmitter().sendMessage(KafkaRecord.of(podId, event)).replaceWithVoid()
-                } else {
-                    Uni.createFrom().voidItem()
-                }
-            )
+        return if (resp.statusCode in 200..399 && operationType != null && s3Config.publishEventTypes().getOrNull()
+                ?.contains(operationType) == true
+        ) {
+            context.sendResponse().compose {
+                UniHelper.toFuture(
+                    run {
+                        val podId = context.request().proxiedRequest().getParam("podId")
+                        val sliceId = context.request().proxiedRequest().getParam("sliceId")
+                        val bucket = sliceId?.let { S3Utils.getBucket("${config.baseUri()}$podId/slices/$it") }
+                            ?: S3Utils.getBucket("${config.baseUri()}$podId")
+                        val event = StorageEvent(
+                            id = "urn:kvasir:storage-events:${UUID.randomUUID()}",
+                            timestamp = Instant.now(),
+                            requestingUser = authHandler.takeIf { it.isResolvable }?.get()
+                                ?.getPrincipalForProxiedRequest(context.request().proxiedRequest())?.name
+                                ?: AuthConstants.ANONYMOUS_USERNAME,
+                            podId = "${config.baseUri()}$podId",
+                            sliceId = sliceId?.let { "${config.baseUri()}$podId/slices/$it" },
+                            objectId = URLDecoder.decode(
+                                context.request().uri.substringAfter("/$bucket/").substringBefore("?"),
+                                Charsets.UTF_8.name()
+                            ),
+                            externalObjectUri = "${config.baseUri().removeSuffix("/")}${
+                                context.request().proxiedRequest().path()
+                            }",
+                            internalStorageUri = "${s3Config.endpoint()}${context.request().uri}",
+                            versionId = context.response().headers().get("x-amz-version-id"),
+                            eventType = operationType
+                        )
+                        storageEventEmitterProvider.getEmitter().sendMessage(KafkaRecord.of(podId, event))
+                            .replaceWithVoid()
+                    }
+                )
+            }
+        } else {
+            context.sendResponse()
         }
     }
 

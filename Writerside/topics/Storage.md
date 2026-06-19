@@ -44,6 +44,42 @@ Response body:
 Hello World!
 ```
 
+### Performance considerations
+
+#### Client-Provided Content Hash (`x-amz-content-sha256`)
+
+##### Context
+
+For write operations (PUT/POST), the proxy must compute the SHA-256 hash of the request body
+to produce a valid AWS Signature V4. By default, this requires the proxy to buffer the entire
+request body in memory before forwarding it to S3. For large files this increases memory
+pressure and latency.
+
+##### Possible optimization
+
+Clients can **pre-compute** the SHA-256 hash of the body and include it in the request via the
+`x-amz-content-sha256` header. When this header is present:
+
+1. The proxy **skips body buffering** entirely.
+2. The request body is **streamed** directly through to S3 without being loaded into memory.
+3. The provided hash value is used as-is for the AWS Signature V4 calculation.
+
+This significantly reduces memory usage and improves upload throughput, especially for large
+objects.
+
+##### Usage
+
+```http
+PUT /{podId}/s3/path/to/object HTTP/1.1
+Authorization: Bearer <token>
+Content-Type: application/octet-stream
+x-amz-content-sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+<binary body>
+```
+
+The hash value must be the lowercase hex-encoded SHA-256 digest of the raw request body.
+
 ## Solid-compatible storage API
 
 Each Kvasir pod exposes a [Solid](https://solidproject.org) compatible storage API at the base path `/{podId}/solid/`.

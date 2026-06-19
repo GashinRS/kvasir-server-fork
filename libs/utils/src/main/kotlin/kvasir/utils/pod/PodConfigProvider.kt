@@ -1,5 +1,7 @@
 package kvasir.utils.pod
 
+import io.quarkus.cache.Cache
+import io.quarkus.cache.CacheName
 import io.smallrye.config.SmallRyeConfigBuilder
 import io.smallrye.config.source.yaml.YamlConfigSource
 import io.smallrye.mutiny.Uni
@@ -16,7 +18,9 @@ import org.yaml.snakeyaml.Yaml
 class PodConfigProvider(
     val config: HttpConfig,
     val podConfig: PodConfig,
-    val repositoryFactory: RepositoryFactory
+    val repositoryFactory: RepositoryFactory,
+    @param:CacheName("pod-config-cache")
+    val podConfigCache: Cache
 ) {
 
     companion object {
@@ -54,12 +58,16 @@ class PodConfigProvider(
         }
     }
 
-    fun getPodConfigById(podId: String): Uni<PodConfig?> {
-        return repositoryFactory.getRepository(Pod::class)
-            .findById(podId)
-            .map { pod ->
-                pod?.let { fromPod(it) }
-            }
+    fun getPodConfigById(podId: String, disableCache: Boolean = false): Uni<PodConfig?> {
+        val configFetcher = { podId: String ->
+            repositoryFactory.getRepository(Pod::class)
+                .findById(podId)
+                .map { pod ->
+                    pod?.let { fromPod(it) }
+                }
+        }
+
+        return if (!disableCache) podConfigCache.getAsync(podId, configFetcher) else configFetcher(podId)
     }
 
     fun getPodConfigByName(podName: String): Uni<PodConfig?> {
