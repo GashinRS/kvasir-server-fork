@@ -14,6 +14,8 @@ writing, this feature is restricted to files of limited size in JSON-LD or Turtl
 
 ### Uploading a file
 
+#### Basic upload
+
 The following example uploads a text-file to the S3 API of the pod of Alice:
 
 **PUT** `http://localhost:8080/alice/s3/test.txt`
@@ -31,6 +33,75 @@ Hello World!
 ```
 
 This should return a `200 OK` response.
+
+#### Multipart upload
+
+Kvasir limits the maximum body size of a single HTTP request (default 50MB). For larger files, multipart uploads can be
+used. This is done as follows:
+
+##### Step 1: Initiate a multipart upload
+
+First, you tell the Storage API you want to start a multipart upload. You target the specific URI where the file will
+eventually live.
+
+**POST** `http://localhost:8080/alice/s3/large-file.bin?uploads`
+
+Note: The `?uploads` parameter tells the Storage API to initialize the process.
+
+The response is a `200 OK`, with an XML body containing a unique UploadId:
+
+```xml
+
+<InitiateMultipartUploadResult>
+    <Bucket>my-bucket</Bucket>
+    <Key>large-file.bin</Key>
+    <UploadId>mp-upload-id-abc-123-xyz</UploadId>
+</InitiateMultipartUploadResult>
+```
+
+You will need this ID for all subsequent steps.
+
+##### Step 2: Upload the parts
+
+Next, you chop your file into pieces (each piece must be at least 5 MB, except for the last part) and upload them
+individually.
+
+You must specify a partNumber (1 to 10,000) and include the uploadId you just received. For example, to upload the first
+part:
+
+**PUT** `http://localhost:8080/alice/s3/large-file.bin?partNumber=1&uploadId=mp-upload-id-abc-123-xyz`
+(with the body containing the first part of your file)
+
+This should return a `200 OK` response, with an ETag header containing the MD5 hash of the part.
+The client should store the ETag for each part, as it will be needed when completing the upload.
+
+##### Step 3: Complete the multipart upload
+
+Once all pieces are uploaded, you tell the Storage API to stitch them together. You do this by sending a POST request
+with the uploadId and an XML body listing every part number and its corresponding ETag in strict sequential order.
+
+**POST** `http://localhost:8080/alice/s3/large-file.bin?uploadId=mp-upload-id-abc-123-xyz`
+
+With the request body containing the parts and their corresponding ETags, for example:
+
+```xml
+<CompleteMultipartUpload>
+  <Part>
+    <PartNumber>1</PartNumber>
+    <ETag>"1b2cf535f27731c974343645a3985328"</ETag>
+  </Part>
+  <Part>
+    <PartNumber>2</PartNumber>
+    <ETag>"ee90535f27731c974343645a3985329f"</ETag>
+  </Part>
+</CompleteMultipartUpload>
+```
+
+##### Alternative step: Abort the multipart upload
+
+If you want to abort the upload and cleanup the intermediary state, you send a DELETE request instead of completing it:
+
+**DELETE** `http://localhost:8080/alice/s3/large-file.bin?uploadId=mp-upload-id-abc-123-xyz`
 
 ### Downloading a file
 
@@ -93,7 +164,8 @@ The provided implementation is backed by S3. This implies that:
 
 ### Known limitations
 
-- Although the Solid storage API does support [Solid-OIDC (WebID) for authentication](Identity-and-Security.md), authorization via WAC or ACP is not implemented (use [Kvasir mechanisms](Access-Control.md) instead).
+- Although the Solid storage API does support [Solid-OIDC (WebID) for authentication](Identity-and-Security.md),
+  authorization via WAC or ACP is not implemented (use [Kvasir mechanisms](Access-Control.md) instead).
 - The Solid storage API does not support Solid notifications.
 - The Solid storage API does not implement locking at this time. This implies that concurrent modifications may lead to
   unexpected results.

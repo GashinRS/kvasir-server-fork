@@ -3,7 +3,6 @@ package kvasir.services.api.storage
 import com.google.common.hash.Hashing
 import io.quarkus.logging.Log
 import io.quarkus.test.junit.QuarkusTest
-import io.restassured.RestAssured
 import io.restassured.RestAssured.given
 import io.restassured.RestAssured.`when`
 import io.restassured.http.ContentType
@@ -168,6 +167,87 @@ class StorageApiTest : AbstractPodTest() {
                 .await()
                 .indefinitely()
         assertEquals(413, respStatus)
+    }
+
+    @Test
+    fun testPutLargeResourceMultipart() {
+        // Try to upload a 120 MB file, this is too large for the configured limit, but should work via multipart
+        val content = Random.nextBytes(120 * 1024 * 1024)
+
+        // Create an upload
+        val initResponse = given()
+            .`when`()
+            .post("/$podName/s3/multipart-large-binary.bin?uploads")
+            .then()
+            .statusCode(200)
+            .extract()
+        
+        val uploadId = initResponse.xmlPath().getString("InitiateMultipartUploadResult.UploadId")
+
+        // Upload the parts
+        val partSize = 5 * 1024 * 1024 // 5 MB
+        val parts = content.size / partSize + if (content.size % partSize > 0) 1 else 0
+        val etags = mutableListOf<String>()
+        for (partNumber in 1..parts) {
+            val start = (partNumber - 1) * partSize
+            val end = minOf(start + partSize, content.size)
+            val partContent = content.copyOfRange(start, end)
+            val etag = given()
+                .body(partContent)
+                .contentType(ContentType.BINARY)
+                .`when`()
+                .put("/$podName/s3/multipart-large-binary.bin?partNumber=$partNumber&uploadId=$uploadId")
+                .then()
+                .statusCode(200)
+                .extract()
+                .header("ETag")
+
+            etags.add(etag)
+        }
+
+        // Complete the upload
+        val completeXml = buildString {
+            append("<CompleteMultipartUpload>")
+            etags.forEachIndexed { index, etag ->
+                append("<Part><PartNumber>${index + 1}</PartNumber><ETag>$etag</ETag></Part>")
+            }
+            append("</CompleteMultipartUpload>")
+        }
+
+        val completeResponse = given()
+            .body(completeXml)
+            .contentType(ContentType.XML)
+            .`when`()
+            .post("/$podName/s3/multipart-large-binary.bin?uploadId=$uploadId")
+            .then()
+            .statusCode(200)
+            .extract()
+        
+        // Extract ETag from XML response body (not from response headers)
+        val etagFromXml = completeResponse.xmlPath()
+            .getString("CompleteMultipartUploadResult.ETag")
+            .removeSurrounding("\"")
+        
+        // Final etag should end with a dash followed by the number of parts
+        assertEquals(parts.toString(), etagFromXml.substringAfterLast("-"))
+
+        val returnedContent =
+            `when`()
+                .get("/$podName/s3/multipart-large-binary.bin")
+                .then()
+                .statusCode(200)
+                .extract()
+                .body()
+                .asByteArray()
+
+        // CRC32 Checksum to verify content integrity
+        assertEquals(
+            CRC32().apply { this.update(content, 0, content.size) }.value,
+            CRC32().apply { this.update(returnedContent, 0, returnedContent.size) }.value,
+        )
+
+        // Delete file
+        `when`().delete("/$podName/s3/multipart-large-binary.bin").then().statusCode(204)
     }
 }
 

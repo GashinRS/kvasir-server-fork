@@ -56,8 +56,8 @@ class StorageApi(
     fun onStart(@Observes router: Router, vertx: Vertx) {
         Log.debug(
             "storage-api proxying S3 requests to ${s3Config.endpoint()} " +
-                "(pool=${s3Config.proxyPoolSize()}, chunkSize=${s3Config.proxyMaxChunkSize()}, " +
-                "rcvBuf=${s3Config.proxyReceiveBufferSize()}, sndBuf=${s3Config.proxySendBufferSize()})"
+                    "(pool=${s3Config.proxyPoolSize()}, chunkSize=${s3Config.proxyMaxChunkSize()}, " +
+                    "rcvBuf=${s3Config.proxyReceiveBufferSize()}, sndBuf=${s3Config.proxySendBufferSize()})"
         )
         val s3Url = URI.create(s3Config.endpoint())
         val options = HttpClientOptions()
@@ -255,13 +255,17 @@ class S3Interceptor(
     // TODO: Implement the determineMutationType method properly
     private fun determineOperationType(context: ProxyContext): StorageEventType? {
         val method = context.request().method.name()
+        val hasUploadId = context.request().proxiedRequest().params()
+            .contains("uploadId")
         return when {
             method == "GET" -> StorageEventType.GET_OBJECT
             method == "HEAD" -> StorageEventType.GET_OBJECT_METADATA
-            method == "PUT" -> StorageEventType.PUT_OBJECT
-            method == "DELETE" -> StorageEventType.DELETE_OBJECT
-            method == "POST" && context.request().proxiedRequest().params()
-                .contains("uploadId") -> StorageEventType.COMPLETE_MULTIPART_UPLOAD
+            // Ignore emitting PUT event for requests with an uploadId. This represents multipart uploads. Only trigger when the multipart upload is completed (see POST)
+            method == "PUT" && !hasUploadId -> StorageEventType.PUT_OBJECT
+            // Ignore emitting DELETE event for requests with an uploadId. This represents aborting multipart uploads.
+            method == "DELETE" && !hasUploadId -> StorageEventType.DELETE_OBJECT
+            // Only emit in combination with uploadId. This represents a completed multipart upload
+            method == "POST" && hasUploadId -> StorageEventType.COMPLETE_MULTIPART_UPLOAD
 
             else -> null
         }
