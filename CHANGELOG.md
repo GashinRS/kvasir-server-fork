@@ -1,3 +1,11 @@
+## [0.19.0-beta.8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.7...v0.19.0-beta.8) - 2026-06-19
+
+### Bug Fixes
+
+- **(compose)** Keycloak now uses correct config options and persists data to postgresql ([98fc3c6](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/98fc3c66acaf8e61761a7c3d7738fece22369776))
+
+- Various performance optimizations ([8723581](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/872358165de02f7e95a0a3f236bf7c68ea97596e))
+
 ## [0.19.0-beta.7](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.6...v0.19.0-beta.7) - 2026-06-15
 
 ### Features

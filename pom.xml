@@ -12,7 +12,7 @@
         <module>services</module>
     </modules>
     <properties>
-        <revision>0.19.0-beta.7</revision>
+        <revision>0.19.0-beta.8</revision>
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <kotlin.version>2.3.0</kotlin.version>
         <maven.compiler.release>25</maven.compiler.release>
