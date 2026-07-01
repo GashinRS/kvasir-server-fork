@@ -3,6 +3,11 @@ package kvasir.definitions.kg
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
+import graphql.language.ListType
+import graphql.language.NonNullType
+import graphql.language.ObjectTypeDefinition
+import graphql.language.TypeName
+import graphql.schema.idl.SchemaParser
 import io.smallrye.mutiny.Multi
 import io.smallrye.mutiny.Uni
 import kvasir.definitions.annotations.GenerateNoArgConstructor
@@ -125,8 +130,18 @@ data class QueryResult(
     val extensions: Map<String, Any>? = null
 ) {
 
-    fun toJsonLD(context: Map<String, Any>): List<Map<String, Any>> {
-        val dataAsGraph = transform(data, context)?.let {
+    /**
+     * Converts this GraphQL query result into a JSON-LD representation.
+     *
+     * @param context The JSON-LD context to apply (prefix map).
+     * @param schema Optional GraphQL SDL string. When provided, field types are resolved from the schema
+     *   so that scalar values are mapped correctly — e.g. `ID` fields become `{"@id": "..."}` instead of
+     *   plain strings, and temporal scalars (`DateTime`, `Date`, `Time`) become typed JSON-LD value objects.
+     *   When `null`, all scalar leaf values are passed through as-is (legacy behaviour).
+     */
+    fun toJsonLD(context: Map<String, Any>, schema: String? = null): List<Map<String, Any>> {
+        val fieldTypeMap = schema?.let { buildFieldTypeMap(it) }
+        val dataAsGraph = transform(data, context, TYPE_QUERY, fieldTypeMap)?.let {
             when (it) {
                 is List<*> -> mapOf(JsonLdKeywords.graph to it)
                 else -> mapOf(JsonLdKeywords.graph to listOf(it))
@@ -163,16 +178,74 @@ data class QueryResult(
         )
     }
 
-    private fun transform(graphQLData: Any?, context: Map<String, Any>): Any? {
+    /**
+     * Builds a two-level map: `typeName → fieldName → scalarTypeName` from a GraphQL SDL string.
+     * Only fields whose base type resolves to a known scalar (or any leaf type name) are recorded.
+     * Parsing errors are silently swallowed, returning an empty map.
+     */
+    private fun buildFieldTypeMap(schema: String): Map<String, Map<String, String>> {
+        return try {
+            SchemaParser().parse(schema).types().values
+                .filterIsInstance<ObjectTypeDefinition>()
+                .associate { typeDef ->
+                    typeDef.name to typeDef.fieldDefinitions.mapNotNull { field ->
+                        unwrapBaseTypeName(field.type)?.let { field.name to it }
+                    }.toMap()
+                }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    /** Unwraps `NonNull` and `List` wrappers from a GraphQL type to reach the named base type. */
+    private fun unwrapBaseTypeName(type: graphql.language.Type<*>): String? {
+        return when (type) {
+            is NonNullType -> unwrapBaseTypeName(type.type)
+            is ListType -> unwrapBaseTypeName(type.type)
+            is TypeName -> type.name
+            else -> null
+        }
+    }
+
+    /**
+     * Recursively transforms a GraphQL query result value into a JSON-LD–compatible structure.
+     *
+     * @param graphQLData The current node value from the GraphQL result.
+     * @param context The JSON-LD prefix map.
+     * @param parentTypeName The GraphQL type name of the object that owns the current node (used to look up field types).
+     * @param fieldTypeMap Lookup table produced by [buildFieldTypeMap], or `null` when no schema is available.
+     */
+    private fun transform(
+        graphQLData: Any?,
+        context: Map<String, Any>,
+        parentTypeName: String? = null,
+        fieldTypeMap: Map<String, Map<String, String>>? = null
+    ): Any? {
         return when (graphQLData) {
             null -> null
             is Map<*, *> -> {
                 val transformedMap = graphQLData
                     .mapValues { (key, value) ->
-                        if (key == FIELD_TYPENAME_NAME) {
+                        val keyStr = key as String
+                        if (keyStr == FIELD_TYPENAME_NAME) {
                             JsonLdHelper.getFQName(value as String, context, "_")
                         } else {
-                            transform(value, context)
+                            // Determine the declared field type from the schema (if available)
+                            val fieldTypeName = fieldTypeMap?.get(parentTypeName)?.get(keyStr)
+                            if (keyStr != FIELD_ID_NAME && fieldTypeName != null && isGraphQLScalarName(fieldTypeName) && value != null) {
+                                // Known scalar field: apply type-aware JSON-LD conversion
+                                when (value) {
+                                    is Collection<*> -> value.map { item ->
+                                        if (item != null) convertResultScalarToJsonLd(item, fieldTypeName) else null
+                                    }
+
+                                    else -> convertResultScalarToJsonLd(value, fieldTypeName)
+                                }
+                            } else {
+                                // Object type (or unknown): recurse, carrying the child type name forward
+                                val childTypeName = fieldTypeName?.takeUnless { isGraphQLScalarName(it) }
+                                transform(value, context, childTypeName, fieldTypeMap)
+                            }
                         }
                     }
                     .mapKeys { e ->
@@ -201,7 +274,9 @@ data class QueryResult(
                 }
             }
 
-            is Collection<*> -> graphQLData.map { transform(it!!, context) }
+            // For collections of objects, carry the parent type name forward so each element
+            // can resolve its fields against the correct type in the schema.
+            is Collection<*> -> graphQLData.map { transform(it!!, context, parentTypeName, fieldTypeMap) }
 
             else -> graphQLData
         }

@@ -266,10 +266,10 @@ class MaterializeRecords(
         var deleteStatementsCount = 0
         var insertStatementsCount = 0
         return bindWhere(request)
-            .map { bindings ->
+            .map { (bindings, schema) ->
                 val records = mutableListOf<ChangeRecord>()
                 // Delete the specified records
-                val deleteJsonLd = materializeRecords(request, request.delete, bindings)
+                val deleteJsonLd = materializeRecords(request, request.delete, bindings, schema)
                 val deleteStatements = RDFTransformer.toStatements(deleteJsonLd, request.sliceId ?: request.podId)
                 deleteStatementsCount = deleteStatements.size
                 records.addAll(
@@ -280,7 +280,7 @@ class MaterializeRecords(
                         )
                     }
                 )
-                val insertJsonLd = materializeRecords(request, request.insert, bindings)
+                val insertJsonLd = materializeRecords(request, request.insert, bindings, schema)
                 val insertStatements = RDFTransformer.toStatements(insertJsonLd, request.sliceId ?: request.podId)
                 insertStatementsCount = insertStatements.size
                 records.addAll(
@@ -298,9 +298,9 @@ class MaterializeRecords(
             }
     }
 
-    private fun bindWhere(request: ChangeRequest): Uni<QueryResult> {
+    private fun bindWhere(request: ChangeRequest): Uni<Pair<QueryResult, String?>> {
         return if (request.with == null) {
-            Uni.createFrom().item(QueryResult(data = emptyMap()))
+            Uni.createFrom().item(QueryResult(data = emptyMap()) to null)
         } else {
             Log.debug("Binding 'with' clauses for change request ${request.id}...")
             // For change requests on a Slice, load the Slice schema
@@ -311,6 +311,7 @@ class MaterializeRecords(
                     .onItem().ifNotNull().transform { it!! }
             } ?: Uni.createFrom().nullItem())
                 .chain { slice ->
+                    val schema = try { slice?.schema?.tryReadingEmbeddedSDL() } catch (_: RuntimeException) { null }
                     val q = QueryRequest(
                         context = slice?.context ?: request.context,
                         atChangeId = request.previousChangeId,
@@ -319,7 +320,7 @@ class MaterializeRecords(
                         sliceId = request.sliceId,
                         sliceTag = request.sliceTag,
                         query = request.with!!,
-                        predefinedSchema = slice?.schema?.tryReadingEmbeddedSDL()
+                        predefinedSchema = schema
                     )
                     kg.query(q).toUni()
                         .chain { result ->
@@ -327,7 +328,7 @@ class MaterializeRecords(
                                 Uni.createFrom()
                                     .failure(IllegalArgumentException("Error executing 'with' clause: ${result.errors}"))
                             } else {
-                                Uni.createFrom().item(result)
+                                Uni.createFrom().item(result to schema)
                             }
                         }
                 }
@@ -337,7 +338,8 @@ class MaterializeRecords(
     private fun materializeRecords(
         request: ChangeRequest,
         records: List<Any>,
-        bindings: QueryResult
+        bindings: QueryResult,
+        schema: String? = null
     ): List<Map<String, Any>> {
         return records.flatMap { record ->
             when (record) {
@@ -345,7 +347,7 @@ class MaterializeRecords(
                 is String -> {
                     if (record == "*") {
                         // Return bindings as is
-                        bindings.toJsonLD(request.context)
+                        bindings.toJsonLD(request.context, schema)
                             .find { it[JsonLdKeywords.id] == KvasirNamedGraphs.queryResultDataGraph }?.let {
                                 val graph = it[JsonLdKeywords.graph]
                                 if (graph is List<*>) {

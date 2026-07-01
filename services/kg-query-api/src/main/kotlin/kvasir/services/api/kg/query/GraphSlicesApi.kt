@@ -154,7 +154,7 @@ class GraphSlicesApi(
             ), fqPodId, fqSliceId
         ).chain { slice ->
             executeQuery(fqPodId, slice, input).toUni().map {
-                it.toJsonLD(slice.context)
+                it.toJsonLD(slice.context, slice.schema.tryReadingEmbeddedSDL())
             }
         }
     }
@@ -274,7 +274,7 @@ class GraphSlicesApi(
             tag
         ).chain { slice ->
             executeQuery(fqPodId, slice, input).toUni().map {
-                it.toJsonLD(slice.context)
+                it.toJsonLD(slice.context, slice.schema.tryReadingEmbeddedSDL())
             }
         }
     }
