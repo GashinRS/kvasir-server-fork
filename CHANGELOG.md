@@ -1,3 +1,13 @@
+## [0.19.0-beta.9](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.8...v0.19.0-beta.9) - 2026-06-25
+
+### Bug Fixes
+
+- **(kubernetes)** Added logic to switch between Keycloak admin-client grant types and change secret config ([10f2f60](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/10f2f60db4d93f45528b85d27cf14f6167b409d5))
+
+- Fixed GraphQL JSON-LD output incorrect handling of special scalar values (ids, datetime, etc) ([5fc6c6f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/5fc6c6fa61863ef554ec907c7ca4363b09a10a14))
+
+- Fixed multi-part uploads should not result in storage events (except for the complete request) ([0ad241f](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/commit/0ad241f5480e8850f8389ebd100359175e3b9fc4))
+
 ## [0.19.0-beta.8](https://gitlab.ilabt.imec.be/kvasir/kvasir-server/-/compare/v0.19.0-beta.7...v0.19.0-beta.8) - 2026-06-19
 
 ### Bug Fixes
