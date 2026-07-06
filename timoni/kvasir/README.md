@@ -154,20 +154,10 @@ values: {
   pep: openfga: url: "http://openfga.openfga:8380"
  }
 
- // sensitive admin-client + s3 credentials sourced from Secrets — see "Secret management"
  secrets: {
-  keycloak: {
-   mode:       "existing"
-   secretName: "kvasir-keycloak"
-  }
-  s3: {
-   mode:       "existing"
-   secretName: "kvasir-s3"
-  }
-  clickhouse: {
-   mode:       "existing"
-   secretName: "kvasir-clickhouse"
-  }
+  keycloak:   secretName: "kvasir-keycloak"
+  s3:         secretName: "kvasir-s3"
+  clickhouse: secretName: "kvasir-clickhouse"
  }
 }
 ```
@@ -179,11 +169,6 @@ them per integration from Kubernetes Secrets, scrubs them from the generated
 `application.yaml`, and injects them as environment variables via `secretKeyRef`.
 Quarkus picks them up through [MicroProfile Config env-var
 mapping](https://download.eclipse.org/microprofile/microprofile-config-3.1/microprofile-config-spec-3.1.html#default_configsources.env.mapping).
-
-**Sensitive fields have no schema defaults.** Setting an inline value in
-`applicationConfig` for a registered sensitive field requires choosing one of the
-sources below. A bare inline value with no source is a build/vet-time error — this
-prevents secrets from accidentally leaking into the rendered ConfigMap.
 
 For local/dev usage with managed placeholder secrets, see
 [`dev-values.cue`](./dev-values.cue) and the
@@ -206,34 +191,26 @@ For local/dev usage with managed placeholder secrets, see
 
 #### Resolution order
 
-Per (integration, field), the highest-priority source wins:
+Per (integration, field), the module infers the source from what's configured:
 
-1. **Per-field `ref`** — `secrets.<integration>.fields.<field>.ref` points at any
-   Secret/key. Highest priority; useful for cross-Secret overrides.
-2. **Integration `secretName`** — `secrets.<integration>.mode: "existing"` plus
-   `secretName` and `fields.<field>.key` (defaulted per field, see table). The
-   recommended production wiring.
-3. **Module-managed Secret** — `secrets.<integration>.mode: "managed"`. The module
-   materializes a Secret named `<instance>-<integration>-secret` from the inline
-   values present in `fields.<field>.inlineValue`, scrubs them from the ConfigMap,
-   and wires env refs. Mutually exclusive with `mode: "existing"`. Requires at least
-   one inline value for the integration.
-4. **No source** — `secrets.<integration>.mode: "none"` (the default). The field
-   stays unset; Quarkus uses its own default if any. Warnings are emitted during
-   `timoni build` for integrations in "none" mode.
-
-> **Note:** The default mode is `"none"`. For production deployments, explicitly set
-> `mode: "existing"` or `mode: "managed"` for each integration.
+1. **Field-level `secretName`** — `secrets.<integration>.fields.<field>.secretName`
+   points at any Secret. Highest priority; useful for cross-Secret overrides.
+2. **Integration `secretName`** — `secrets.<integration>.secretName` plus optional
+   `fields.<field>.key` override. The recommended production wiring.
+3. **Module-managed Secret** — `secrets.<integration>.fields.<field>.value` set.
+   The module materializes a Secret named `<instance>-<integration>-secret` from
+   the inline values, scrubs them from the ConfigMap, and wires env refs.
+4. **No source** — neither `secretName` nor `value` configured. The field stays
+   unset; Quarkus uses its own default if any.
 
 #### Schema
 
-| Key                                                  | Type     | Default    | Description                                                                                                  |
-| ---------------------------------------------------- | -------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
-| `secrets.<integration>: mode:`                       | `string` | `"none"`   | Secret mode: `"none"` (disabled), `"existing"` (reference external), or `"managed"` (module-managed).        |
-| `secrets.<integration>: secretName:`                 | `string` | _unset_    | Name of an existing Secret for this integration. Required when `mode: "existing"`.                           |
-| `secrets.<integration>: fields.<field>: inlineValue:`| `string` | _unset_    | Inline value for module-managed secrets. Required when `mode: "managed"`.                                    |
-| `secrets.<integration>: fields.<field>: ref: name:`  | `string` | _unset_    | Per-field override: name of a different Secret to source this field from.                                    |
-| `secrets.<integration>: fields.<field>: ref: key:`   | `string` | _unset_    | Per-field override: key within the referenced Secret.                                                        |
+| Key                                                  | Type     | Default    | Description                                                                |
+| ---------------------------------------------------- | -------- | ---------- | -------------------------------------------------------------------------- |
+| `secrets.<integration>: secretName:`                 | `string` | _unset_    | Name of an existing Secret for this integration.                           |
+| `secrets.<integration>: fields.<field>: key:`        | `string` | field name | Override just the secret key (uses integration's `secretName`).            |
+| `secrets.<integration>: fields.<field>: secretName:` | `string` | _unset_    | Per-field override: name of a different Secret to source this field from. |
+| `secrets.<integration>: fields.<field>: value:`      | `string` | _unset_    | Inline value for module-managed secrets (dev/CI only).                     |
 
 Integrations: `keycloak`, `s3`, `clickhouse`, `policyEnforcer`.
 
@@ -243,18 +220,9 @@ Integrations: `keycloak`, `s3`, `clickhouse`, `policyEnforcer`.
 
 ```cue
 values: secrets: {
- keycloak: {
-  mode:       "existing"
-  secretName: "kvasir-keycloak"
- }
- s3: {
-  mode:       "existing"
-  secretName: "kvasir-s3"
- }
- clickhouse: {
-  mode:       "existing"
-  secretName: "kvasir-clickhouse"
- }
+ keycloak:   secretName: "kvasir-keycloak"
+ s3:         secretName: "kvasir-s3"
+ clickhouse: secretName: "kvasir-clickhouse"
 }
 ```
 
@@ -276,28 +244,28 @@ stringData:
 
 **Custom upstream key names (External Secrets Operator / OpenBAO):**
 
-When the upstream secret store dictates the key names, override `fields.<field>.ref`:
+When the upstream secret store dictates the key names, use `fields.<field>.key` to override
+just the key while keeping the integration's `secretName`:
 
 ```cue
 values: secrets: keycloak: {
- mode:       "existing"
  secretName: "kvasir-keycloak-from-vault"
  fields: {
-  "admin-username": ref: {
-   name: "kvasir-keycloak-from-vault"
-   key:  "KC_ADMIN_USERNAME"
-  }
-  "admin-password": ref: {
-   name: "kvasir-keycloak-from-vault"
-   key:  "KC_ADMIN_PASSWORD"
-  }
-  "admin-client-id": ref: {
-   name: "kvasir-keycloak-from-vault"
-   key:  "KC_ADMIN_CLIENT_ID"
-  }
-  "admin-client-secret": ref: {
-   name: "kvasir-keycloak-from-vault"
-   key:  "KC_ADMIN_CLIENT_SECRET"
+  "admin-client-id": key:     "KC_ADMIN_CLIENT_ID"
+  "admin-client-secret": key: "KC_ADMIN_CLIENT_SECRET"
+ }
+}
+```
+
+**Cross-Secret references (sourcing a field from a different Secret):**
+
+```cue
+values: secrets: keycloak: {
+ secretName: "kvasir-keycloak"
+ fields: {
+  "admin-client-secret": {
+   secretName: "platform-shared-secrets"
+   key:        "keycloak-client-secret"
   }
  }
 }
@@ -308,41 +276,29 @@ values: secrets: keycloak: {
 ```cue
 values: secrets: {
  keycloak: {
-  mode:       "existing"
   secretName: "kvasir-keycloak"
   fields: {
-   "admin-password": ref: {
-    name: "platform-keycloak-admin"
-    key:  "password"
+   "admin-password": {
+    secretName: "platform-keycloak-admin"
+    key:        "password"
    }
-   "admin-client-secret": ref: {
-    name: "platform-keycloak-admin"
-    key:  "client-secret"
+   "admin-client-secret": {
+    secretName: "platform-keycloak-admin"
+    key:        "client-secret"
    }
   }
  }
- s3: {
-  mode:       "existing"
-  secretName: "kvasir-s3"
- }
- clickhouse: {
-  mode:       "existing"
-  secretName: "kvasir-clickhouse"
- }
+ s3:         secretName: "kvasir-s3"
+ clickhouse: secretName: "kvasir-clickhouse"
 }
 ```
 
 **Module-managed Secret from inline values (dev/CI):**
 
 ```cue
-values: {
- secrets: s3: {
-  mode: "managed"
-  fields: {
-   "access-key": inlineValue: "dev-ak"
-   "secret-key": inlineValue: "dev-sk"
-  }
- }
+values: secrets: s3: fields: {
+ "access-key": value: "dev-ak"
+ "secret-key": value: "dev-sk"
 }
 ```
 
@@ -361,7 +317,7 @@ and one row in `#SecretFieldRegistry` in the module.
 #### Dev/local overlay
 
 The repository ships [`dev-values.cue`](./dev-values.cue) — a ready-to-apply
-overlay that uses `mode: "managed"` on every integration with placeholder
+overlay that uses inline `value` fields on every integration with placeholder
 credentials. Use it for local clusters (kind, k3d, minikube) where out-of-band
 Secret provisioning would be friction:
 

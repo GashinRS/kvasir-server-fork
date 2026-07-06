@@ -13,21 +13,17 @@ This directory is excluded from the published OCI artifact via
 
 ## Positive cases (expected: vet succeeds, build emits expected shape)
 
-| File                          | Scenario                                                                                                   |
-|-------------------------------|------------------------------------------------------------------------------------------------------------|
-| `pos-managed.cue`             | `mode: "managed"` for every integration with inline values → module-managed Secret per integration.        |
-| `pos-existing-secret.cue`     | `mode: "existing"` + `secretName` per integration; no inline sensitive values → no managed Secret rendered.|
-| `pos-perfield-ref.cue`        | Per-field `ref` overrides on top of `mode: "existing"` → no managed Secret, env refs cross-Secret.         |
-| `pos-mixed.cue`               | Mix: keycloak `mode: "existing"` + per-field `ref`, s3 `mode: "none"`, clickhouse `mode: "managed"`.       |
+| File                       | Scenario                                                                           |
+|----------------------------|------------------------------------------------------------------------------------|
+| `pos-existing-secret.cue`  | `secretName` per integration → env refs to existing Secrets, no managed Secret.    |
+| `pos-field-secretname.cue` | Field-level `secretName` (no key) + mixed managed/existing within same integration.|
+| `pos-key-override.cue`     | Per-field `key` overrides → uses integration's secretName with custom key names.   |
+| `pos-managed.cue`          | Per-field `value` for every integration → module-managed Secret per integration.   |
+| `pos-mixed.cue`            | Mix: keycloak existing + per-field override, s3 unconfigured, clickhouse managed.  |
+| `pos-perfield-ref.cue`     | Per-field `secretName` + `key` override → env refs cross-Secret.                   |
 
-## Negative cases (expected: vet fails with a specific message)
-
-| File                          | Expected error fragment                                                                       |
-|-------------------------------|-----------------------------------------------------------------------------------------------|
-| `neg-manage-empty.cue`        | `is set to 'managed' mode, but field .* is missing its required 'inlineValue'`                |
-
-## Render-assertion cases (used by build-grep step)
+## Render-assertion cases (used by CI script)
 
 `pos-managed.cue`, `pos-existing-secret.cue`, and `pos-perfield-ref.cue` are
-also rendered by `timoni build` and grepped for expected `Secret` presence/absence
-and `secretKeyRef` shapes.
+rendered by `timoni build` in `.ci/scripts/timoni-secrets-regression.sh` and
+grepped for expected `Secret` presence/absence and `secretKeyRef` shapes.

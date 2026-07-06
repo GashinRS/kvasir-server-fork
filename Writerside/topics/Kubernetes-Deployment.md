@@ -366,18 +366,9 @@ values: {
     }
 
     secrets: {
-        keycloak: {
-            mode:       "existing"
-            secretName: "kvasir-keycloak"
-        }
-        s3: {
-            mode:       "existing"
-            secretName: "kvasir-s3"
-        }
-        clickhouse: {
-            mode:       "existing"
-            secretName: "kvasir-clickhouse"
-        }
+        keycloak:   secretName: "kvasir-keycloak"
+        s3:         secretName: "kvasir-s3"
+        clickhouse: secretName: "kvasir-clickhouse"
     }
 }
 ```
@@ -390,15 +381,35 @@ and injects them as environment variables.
 
 ### Supported integrations
 
-| Integration      | Fields (field name = secret key)                                             |
+| Integration      | Fields (field name = default secret key)                                     |
 | ---------------- | ---------------------------------------------------------------------------- |
 | `keycloak`       | `admin-username`, `admin-password`, `admin-client-id`, `admin-client-secret` |
 | `s3`             | `access-key`, `secret-key`                                                   |
 | `clickhouse`     | `user`, `password`                                                           |
 | `policyEnforcer` | `basic-auth-password`, `api-key-value`                                       |
 
-> For keycloak secret, what fields get bound are decided by the `auth.keycloak.admin-client.grant-type` value. If it is `client_credentials`, then `admin-client-id` and `admin-client-secret` are used. If it is `password`, then the `admin-username` and `admin-password` are used.
-> {style="note"}
+### Resolution order
+
+Per (integration, field), the module infers the source from what's configured:
+
+1. **Field-level `secretName`** — `secrets.<integration>.fields.<field>.secretName`
+   points at any Secret. Highest priority; useful for cross-Secret overrides.
+2. **Integration `secretName`** — `secrets.<integration>.secretName` plus optional
+   `fields.<field>.key` override. The recommended production wiring.
+3. **Module-managed Secret** — `secrets.<integration>.fields.<field>.value` set.
+   The module materializes a Secret named `<instance>-<integration>-secret` from
+   the inline values, scrubs them from the ConfigMap, and wires env refs.
+4. **No source** — neither `secretName` nor `value` configured. The field stays
+   unset; Quarkus uses its own default if any.
+
+### Schema
+
+| Key                                                  | Type     | Default    | Description                                                               |
+| ---------------------------------------------------- | -------- | ---------- | ------------------------------------------------------------------------- |
+| `secrets.<integration>: secretName:`                 | `string` | _unset_    | Name of an existing Secret for this integration.                          |
+| `secrets.<integration>: fields.<field>: key:`        | `string` | field name | Override just the secret key (uses integration's `secretName`).           |
+| `secrets.<integration>: fields.<field>: secretName:` | `string` | _unset_    | Per-field override: name of a different Secret to source this field from. |
+| `secrets.<integration>: fields.<field>: value:`      | `string` | _unset_    | Inline value for module-managed secrets (dev/CI only).                    |
 
 ### Using existing Secrets (recommended for production)
 
@@ -406,18 +417,9 @@ Reference pre-created Secrets:
 
 ```cue
 values: secrets: {
-    keycloak: {
-        mode:       "existing"
-        secretName: "kvasir-keycloak"
-    }
-    s3: {
-        mode:       "existing"
-        secretName: "kvasir-s3"
-    }
-    clickhouse: {
-        mode:       "existing"
-        secretName: "kvasir-clickhouse"
-    }
+    keycloak:   secretName: "kvasir-keycloak"
+    s3:         secretName: "kvasir-s3"
+    clickhouse: secretName: "kvasir-clickhouse"
 }
 ```
 
@@ -437,28 +439,30 @@ stringData:
 
 ### Custom key names
 
-When using External Secrets Operator or other tools with different key names:
+When the upstream secret store (External Secrets Operator, OpenBAO, etc.) dictates
+the key names, use `fields.<field>.key` to override just the key:
 
 ```cue
 values: secrets: keycloak: {
-    mode:       "existing"
     secretName: "kvasir-keycloak-from-vault"
     fields: {
-        "admin-username": ref: {
-            name: "kvasir-keycloak-from-vault"
-            key:  "KC_ADMIN_USERNAME"
-        }
-        "admin-password": ref: {
-            name: "kvasir-keycloak-from-vault"
-            key:  "KC_ADMIN_PASSWORD"
-        }
-        "admin-client-id": ref: {
-            name: "kvasir-keycloak-from-vault"
-            key:  "KC_ADMIN_CLIENT_ID"
-        }
-        "admin-client-secret": ref: {
-            name: "kvasir-keycloak-from-vault"
-            key:  "KC_ADMIN_CLIENT_SECRET"
+        "admin-client-id": key:     "KC_ADMIN_CLIENT_ID"
+        "admin-client-secret": key: "KC_ADMIN_CLIENT_SECRET"
+    }
+}
+```
+
+### Cross-Secret references
+
+To source a field from a different Secret entirely:
+
+```cue
+values: secrets: keycloak: {
+    secretName: "kvasir-keycloak"
+    fields: {
+        "admin-client-secret": {
+            secretName: "platform-shared-secrets"
+            key:        "keycloak-client-secret"
         }
     }
 }
@@ -469,20 +473,15 @@ values: secrets: keycloak: {
 For local development, the module can create Secrets from inline values:
 
 ```cue
-values: {
-    secrets: s3: {
-        mode: "managed"
-        fields: {
-            "access-key": inlineValue: "dev-access-key"
-            "secret-key": inlineValue: "dev-secret-key"
-        }
-    }
+values: secrets: s3: fields: {
+    "access-key": value: "dev-access-key"
+    "secret-key": value: "dev-secret-key"
 }
 ```
 
 This emits `Secret/<instance>-s3-secret` and wires environment variables automatically.
 
-> **Warning:** Do not use `mode: "managed"` in production. Inline values are visible
+> **Warning:** Do not use inline `value` in production. Inline values are visible
 > in your values files and version control.
 > {style="warning"}
 

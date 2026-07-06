@@ -46,8 +46,8 @@ import (
 		}
 		stringData: {
 			for fieldName, meta in #fields {
-				if meta.inlineValue != null {
-					"\(fieldName)": meta.inlineValue
+				if meta.value != _|_ {
+					"\(fieldName)": meta.value
 				}
 			}
 		}

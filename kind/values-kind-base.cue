@@ -69,22 +69,14 @@ values: {
 	}
 
 	secrets: {
-		keycloak: {
-			mode: "managed"
-			fields: {
-				"admin-username": inlineValue: "admin"
-				"admin-password": inlineValue: "admin"
-			}
+		keycloak: fields: {
+			"admin-username": value: "admin"
+			"admin-password": value: "admin"
 		}
-		s3: {
-			mode: "managed"
-			fields: {
-				"access-key": inlineValue: "kvasir"
-				"secret-key": inlineValue: "kvasirkvasir"
-			}
+		s3: fields: {
+			"access-key": value: "kvasir"
+			"secret-key": value: "kvasirkvasir"
 		}
-		clickhouse: {
-			mode: "none"
-		}
+		clickhouse: {}
 	}
 }

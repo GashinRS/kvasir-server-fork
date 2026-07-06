@@ -2,17 +2,14 @@
 # .ci/scripts/timoni-secrets-regression.sh
 #
 # Regression suite for the Timoni kvasir module's secret-management framework.
-# Exercises every supported resolution path (managed, existingSecret, per-field
-# ref, mixed) and every validation gate (inline-without-source, manage+existing
-# conflict, manage-empty).
+# Exercises every supported resolution path (managed via value, existing via
+# secretName, per-field overrides, mixed) and verifies correct output.
 #
 # Two test phases:
 #   1. Vet matrix      — `timoni mod vet` on positive fixtures (must pass).
 #   2. Build assertions — `timoni build` on positive fixtures, grep rendered
 #                        YAML for expected Secret presence/absence and
-#                        secretKeyRef shapes; `timoni build` on negative
-#                        fixtures, assert non-zero exit + expected error
-#                        substring.
+#                        secretKeyRef shapes.
 #
 # Test fixtures live in timoni/kvasir/test-values/ — see the README there.
 #
@@ -149,16 +146,13 @@ build_assert pos-existing-secret \
   '+secretKeyRef'
 
 # pos-perfield-ref: NO managed Secret; per-field refs to platform-* Secret + custom
-# upstream key names (AWS_ACCESS_KEY_ID) propagate into env refs.
+# key names propagate into env refs.
 build_assert pos-perfield-ref \
   '-name: default-keycloak-secret' \
   '-name: default-s3-secret' \
   '-name: default-clickhouse-secret' \
   '+name: platform-keycloak-admin' \
   '+name: test-keycloak'
-
-echo "==> Phase 3: build negative fixtures (must fail with specific messages)"
-build_fail neg-manage-empty "missing its required 'inlineValue'"
 
 echo
 echo "Summary: ${PASS} passed, ${FAIL} failed"

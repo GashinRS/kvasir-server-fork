@@ -111,24 +111,19 @@ import (
 	// the Quarkus TLS Registry for server-only TLS (not mTLS).
 	kafkaTLS: #KafkaTLS
 
-	// Sensitive credential sourcing. Sensitive fields in `applicationConfig`
-	// have no defaults; they MUST be sourced from one of:
-	//   - per-field `ref` (cross-Secret override)
-	//   - `mode: "existing"` and `secretName` -> reference an existing Secret
-	//      using `fields.<field>` as secret Key
-	//   - `mode: "managed"` and `inlineValue` -> create a secret managed by the
-	//      Timoni module and source the inline value from that secret (not suited for prod)
-	//   - `mode: "none"` disable the integrations secret
+	// Sensitive credential sourcing. Set `secretName` at integration level,
+	// or per-field `secretName`/`key` overrides, or `value` for dev/test.
 	secrets: #Secrets
 
 	_resolvedSecretSource: #ResolveSecrets & {#secrets: secrets, #instanceName: metadata.name}
 
 	secrets: #SecretsSchema & {#appConfig: applicationConfig} & #Secrets
 
-	// Warnings for integrations with mode: "none" (secrets disabled)
 	_secretWarnings: [
 		for integration, binding in secrets
-		if binding.mode == "none" {"WARNING: secrets.\(integration).mode is 'none' - credentials not configured. Set mode to 'existing' or 'managed' for production."},
+		if binding.secretName == _|_ && len([for k, v in binding.fields if v.value != _|_ || v.secretName != _|_ {v}]) == 0 {
+			"WARNING: secrets.\(integration) has no secretName and no field values configured."
+		},
 	]
 
 	// startupProbe gives the container a generous bootstrap budget before the
@@ -169,61 +164,33 @@ import (
 	ingress: #IngressConfig
 }
 
-// Resolved source per (integration, field). One of:
-//   kind: "ref"            — per-field cross-Secret override
-//   kind: "existingSecret" — integration's external Secret
-//   kind: "managed"        — module-managed Secret materializing inline value
-//   kind: "none"           — no source AND no inline value (field unset)
-// Inline value present without any of {ref, existingSecret, manage:true}
-// triggers a validation error in _validateSecrets, not a "none" entry.
-//
-// This map is the single source of truth consumed by configmap.cue
-// (scrubbing) and deployment.cue (env injection).
 #ResolveSecrets: {
 	#secrets:      #Secrets
 	#instanceName: string
 
-	// Evaluated map output
 	out: {
 		for integration, binding in #secrets {
 			"\(integration)": {
 				for _fieldKey, meta in binding.fields {
-
-					// Compute names dynamically 
 					let _managedSecretName = "\(#instanceName)-\(integration)-secret"
+					let _effectiveKey = [if meta.key != _|_ {meta.key}, _fieldKey][0]
+					let _effectiveSecretName = [if meta.secretName != _|_ {meta.secretName}, if binding.secretName != _|_ {binding.secretName}, ""][0]
+
 					"\(_fieldKey)": {
 						env:  meta.env
-						kind: *"none" | "ref" | "existing" | "managed"
-						// Case A: The user gave an explicit per-field override reference
-						if meta.ref != _|_ {
-							kind:       "ref"
-							secretName: meta.ref.name
-							secretKey:  meta.ref.key
-						}
+						kind: *"none" | "existing" | "managed"
 
-						// Case B: No override, and we are using standard cluster existing secrets
-						if meta.ref == _|_ && binding.mode == "existing" {
-						if binding.secretName == _|_ {error("Integration \(integration) has empty secretName value. " +
-							"Set secrets.\(integration).secretName to reference an existing secret. Make sure the secret's keys match those of " +
-							"secrets.\(integration).fields[].")
-						}
-							kind:       "existing"
-							secretName: binding.secretName
-							secretKey:  _fieldKey
-						}
-
-						// Case C: No override, and user provided inline installation values
-						if meta.ref == _|_ && binding.mode == "managed" {
-
-							if meta.inlineValue == _|_ {
-								// Triggers a clear, actionable failure at vet/build time
-								_err: error("Secret integration '\(integration)' is set to 'managed' mode, but field '\(_fieldKey)' is missing its required 'inlineValue'.")
-							}
+						if meta.value != _|_ {
 							kind:       "managed"
 							secretName: _managedSecretName
-							secretKey:  _fieldKey
-							// Validate that they actually passed a string during installation
-							value: meta.inlineValue & string
+							secretKey:  _effectiveKey
+							value:      meta.value & string
+						}
+
+						if meta.value == _|_ && _effectiveSecretName != "" {
+							kind:       "existing"
+							secretName: _effectiveSecretName
+							secretKey:  _effectiveKey
 						}
 					}
 				}
@@ -327,43 +294,33 @@ import (
 		sa: #ServiceAccount & {#config: config}
 		cm: #ConfigMap & {#config: config}
 
-		if config.deploymentMode == "monolith" {
-			svc: #Service & {#config: config}
-			deploy: #Deployment & {
-				#config: config
-				#cmName: cm.metadata.name
-			}
-		}
+		for _svcName, _meta in #ServiceCatalog
+		if _meta.kind != "job" && ((config.deploymentMode == "monolith" && _svcName == "monolith") || (config.deploymentMode == "microservices" && _svcName != "monolith" && _svcName != "init-service")) {
+			let _objName = [if _svcName == "monolith" {"deploy"}, "deploy-\(_svcName)"][0]
+			(_objName): (#ServiceDeployment & {
+				#config:      config
+				#serviceName: _svcName
+				#cmName:      cm.metadata.name
+			}).out
 
-		if config.deploymentMode == "microservices" {
-			for _svcName, _meta in #ServiceCatalog
-			if _svcName != "init-service" && _svcName != "monolith" && _meta.kind != "job" {
-				"deploy-\(_svcName)": (#ServiceDeployment & {
+			if _meta.kind == "http" {
+				let _svcObjName = [if _svcName == "monolith" {"svc"}, "svc-\(_svcName)"][0]
+				(_svcObjName): (#ServiceService & {
 					#config:      config
 					#serviceName: _svcName
-					#cmName:      cm.metadata.name
-				}).out
-
-				if _meta.kind == "http" {
-					"svc-\(_svcName)": (#ServiceService & {
-						#config:      config
-						#serviceName: _svcName
-					}).out
-				}
-			}
-
-			if config.init.enabled {
-				"job-init": (#InitJob & {
-					#config: config
-					#cmName: cm.metadata.name
 				}).out
 			}
 		}
 
-		for integration, binding in config.secrets
-		if binding.mode == "managed" {
-			// Calculate if at least one field has an active string value
-			let _hasValues = [for k, v in binding.fields if (v.inlineValue & string) != _|_ {v}]
+		if config.deploymentMode == "microservices" && config.init.enabled {
+			"job-init": (#InitJob & {
+				#config: config
+				#cmName: cm.metadata.name
+			}).out
+		}
+
+		for integration, binding in config.secrets {
+			let _hasValues = [for k, v in binding.fields if (v.value & string) != _|_ {v}]
 
 			if len(_hasValues) > 0 {
 				"secret-\(integration)": (#ManagedSecret & {
