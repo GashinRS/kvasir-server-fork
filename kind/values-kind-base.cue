@@ -56,8 +56,6 @@ values: {
 				"admin-client": {
 					"server-url": "http://keycloak.keycloak:8280"
 					"grant-type": "password"
-					"username":   "admin"
-					"password":   "admin"
 					realm:        "master"
 				}
 			}
@@ -65,19 +63,28 @@ values: {
 
 		storage: {
 			s3: {
-				endpoint:     "http://seaweedfs-s3.seaweedfs:8333"
-				"access-key": "kvasir"
-				"secret-key": "kvasirkvasir"
+				endpoint: "http://seaweedfs-s3.seaweedfs:8333"
 			}
 		}
 	}
 
 	secrets: {
 		keycloak: {
-			manage: true
+			mode: "managed"
+			fields: {
+				"admin-username": inlineValue: "admin"
+				"admin-password": inlineValue: "admin"
+			}
 		}
 		s3: {
-			manage: true
+			mode: "managed"
+			fields: {
+				"access-key": inlineValue: "kvasir"
+				"secret-key": inlineValue: "kvasirkvasir"
+			}
+		}
+		clickhouse: {
+			mode: "none"
 		}
 	}
 }

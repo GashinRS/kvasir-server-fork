@@ -5,13 +5,13 @@ import (
 )
 
 #Deployment: {
-	#config: #Config
-	#cmName: string
+	#config:    #Config
+	#cmName:    string
 	apiVersion: "apps/v1"
 	kind:       "Deployment"
 	metadata:   #config.metadata
 
-	let _sourced = #config._resolvedSecretSource
+	let _sourced = #config._resolvedSecretSource.out
 
 	// Derive the env var list from the resolved source map. Each (integration,
 	// field) with kind != "none" becomes one env entry pointing to its Secret.

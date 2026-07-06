@@ -1,9 +1,6 @@
 package templates
 
 import (
-	"list"
-	"strings"
-
 	corev1 "k8s.io/api/core/v1"
 	timoniv1 "timoni.sh/core/v1alpha1"
 )
@@ -117,122 +114,22 @@ import (
 	// Sensitive credential sourcing. Sensitive fields in `applicationConfig`
 	// have no defaults; they MUST be sourced from one of:
 	//   - per-field `ref` (cross-Secret override)
-	//   - integration-level `existingSecret` (external Secret)
-	//   - `manage: true` (module emits a Secret from inline values)
-	// Setting an inline value without one of the above is a validation error.
-	// See #SecretBinding for full resolution rules.
+	//   - `mode: "existing"` and `secretName` -> reference an existing Secret
+	//      using `fields.<field>` as secret Key
+	//   - `mode: "managed"` and `inlineValue` -> create a secret managed by the
+	//      Timoni module and source the inline value from that secret (not suited for prod)
+	//   - `mode: "none"` disable the integrations secret
 	secrets: #Secrets
 
-	// Inline values discovered in `applicationConfig` along the property paths
-	// registered in #SecretFieldRegistry. Per integration, only fields that
-	// resolve to a concrete (non-null) value are present. Used by #Instance to
-	// build module-managed Secrets and by _resolvedSecretSource for validation.
-	_inlineValues: {
-		for integration, fields in #SecretFieldRegistry {
-			"\(integration)": {
-				for field, meta in fields
-				let _parts = strings.Split(meta.property, ".")
-				let _val = (#Lookup & {in: applicationConfig, path: list.Drop(_parts, 1)}).out
-				if _val != null {
-					"\(field)": _val
-				}
-			}
-		}
-	}
+	_resolvedSecretSource: #ResolveSecrets & {#secrets: secrets, #instanceName: metadata.name}
 
-	// Resolved source per (integration, field). One of:
-	//   kind: "ref"            — per-field cross-Secret override
-	//   kind: "existingSecret" — integration's external Secret
-	//   kind: "managed"        — module-managed Secret materializing inline value
-	//   kind: "none"           — no source AND no inline value (field unset)
-	// Inline value present without any of {ref, existingSecret, manage:true}
-	// triggers a validation error in _validateSecrets, not a "none" entry.
-	//
-	// This map is the single source of truth consumed by configmap.cue
-	// (scrubbing) and deployment.cue (env injection).
-	_resolvedSecretSource: {
-		for integration, fields in #SecretFieldRegistry {
-			let _integration = integration
-			"\(integration)": {
-				for field, meta in fields {
-					let _field_name = field
-					let _binding = secrets[_integration]
-					let _field = _binding.fields[_field_name]
-					let _hasRef = _field.ref != _|_
-					let _hasExisting = _binding.existingSecret != _|_
-					let _hasManaged = _binding.manage && (*_inlineValues[_integration][_field_name] | null) != null
-					let _env = (#ResolvedEnvName & {"meta": meta}).out
-					let _managedName = (#ManagedSecretName & {
-						instanceName: metadata.name
-						integration:  _integration
-					}).out
+	secrets: #SecretsSchema & {#appConfig: applicationConfig} & #Secrets
 
-					"\(_field_name)": {
-						property: meta.property
-						env:      _env
-						if _hasRef {
-							kind:       "ref"
-							secretName: _field.ref.name
-							secretKey:  _field.ref.key
-						}
-						if !_hasRef && _hasExisting {
-							kind:       "existingSecret"
-							secretName: _binding.existingSecret
-							secretKey:  _field.key
-						}
-						if !_hasRef && !_hasExisting && _hasManaged {
-							kind:       "managed"
-							secretName: _managedName
-							secretKey:  _field.key
-						}
-						if !_hasRef && !_hasExisting && !_hasManaged {
-							kind: "none"
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Validation gate (vet/build-time errors). Three rules:
-	//   1. Inline value without explicit source → error.
-	//   2. `manage: true` with `existingSecret` set → error.
-	//   3. `manage: true` with no inline values for the integration → error.
-	// Exposed (non-hidden) so #Instance pulls it into evaluation.
-	validateSecrets: {
-		for integration, fields in #SecretFieldRegistry
-		for field, _ in fields
-		let _binding = secrets[integration]
-		let _field = _binding.fields[field]
-		let _inline = *_inlineValues[integration][field] | null
-		let _hasRef = _field.ref != _|_
-		let _hasExisting = _binding.existingSecret != _|_
-		let _hasManaged = _binding.manage
-		if _inline != null && !_hasRef && !_hasExisting && !_hasManaged {
-			"\(integration)_\(field)_unsourced": error(
-								"applicationConfig sets sensitive field \(_resolvedSecretSource[integration][field].property) inline; " +
-				"set secrets.\(integration).manage: true, secrets.\(integration).existingSecret, " +
-				"or secrets.\(integration).fields.\(field).ref to source it from a Kubernetes Secret",
-				)
-		}
-	}
-
-	validateSecretModes: {
-		for integration, binding in secrets {
-			if binding.manage && binding.existingSecret != _|_ {
-				"\(integration)_manage_and_existing": error(
-									"secrets.\(integration): `manage: true` cannot be combined with `existingSecret`. " +
-					"Use one. For mixed sourcing, set `manage: true` and override individual fields with `fields.<field>.ref`.",
-					)
-			}
-			if binding.manage && len(_inlineValues[integration]) == 0 {
-				"\(integration)_manage_empty": error(
-								"secrets.\(integration).manage: true requires at least one inline value in applicationConfig " +
-					"for one of this integration's registered fields. Either provide inline values or unset `manage`.",
-					)
-			}
-		}
-	}
+	// Warnings for integrations with mode: "none" (secrets disabled)
+	_secretWarnings: [
+		for integration, binding in secrets
+		if binding.mode == "none" {"WARNING: secrets.\(integration).mode is 'none' - credentials not configured. Set mode to 'existing' or 'managed' for production."},
+	]
 
 	// startupProbe gives the container a generous bootstrap budget before the
 	// liveness probe starts firing. Per Kubernetes guidance the default mirrors
@@ -270,6 +167,69 @@ import (
 
 	// Traefik IngressRoute configuration. Disabled by default.
 	ingress: #IngressConfig
+}
+
+// Resolved source per (integration, field). One of:
+//   kind: "ref"            — per-field cross-Secret override
+//   kind: "existingSecret" — integration's external Secret
+//   kind: "managed"        — module-managed Secret materializing inline value
+//   kind: "none"           — no source AND no inline value (field unset)
+// Inline value present without any of {ref, existingSecret, manage:true}
+// triggers a validation error in _validateSecrets, not a "none" entry.
+//
+// This map is the single source of truth consumed by configmap.cue
+// (scrubbing) and deployment.cue (env injection).
+#ResolveSecrets: {
+	#secrets:      #Secrets
+	#instanceName: string
+
+	// Evaluated map output
+	out: {
+		for integration, binding in #secrets {
+			"\(integration)": {
+				for _fieldKey, meta in binding.fields {
+
+					// Compute names dynamically 
+					let _managedSecretName = "\(#instanceName)-\(integration)-secret"
+					"\(_fieldKey)": {
+						env:  meta.env
+						kind: *"none" | "ref" | "existing" | "managed"
+						// Case A: The user gave an explicit per-field override reference
+						if meta.ref != _|_ {
+							kind:       "ref"
+							secretName: meta.ref.name
+							secretKey:  meta.ref.key
+						}
+
+						// Case B: No override, and we are using standard cluster existing secrets
+						if meta.ref == _|_ && binding.mode == "existing" {
+						if binding.secretName == _|_ {error("Integration \(integration) has empty secretName value. " +
+							"Set secrets.\(integration).secretName to reference an existing secret. Make sure the secret's keys match those of " +
+							"secrets.\(integration).fields[].")
+						}
+							kind:       "existing"
+							secretName: binding.secretName
+							secretKey:  _fieldKey
+						}
+
+						// Case C: No override, and user provided inline installation values
+						if meta.ref == _|_ && binding.mode == "managed" {
+
+							if meta.inlineValue == _|_ {
+								// Triggers a clear, actionable failure at vet/build time
+								_err: error("Secret integration '\(integration)' is set to 'managed' mode, but field '\(_fieldKey)' is missing its required 'inlineValue'.")
+							}
+							kind:       "managed"
+							secretName: _managedSecretName
+							secretKey:  _fieldKey
+							// Validate that they actually passed a string during installation
+							value: meta.inlineValue & string
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 #IngressConfig: {
@@ -401,12 +361,17 @@ import (
 		}
 
 		for integration, binding in config.secrets
-		if binding.manage && len(config._inlineValues[integration]) > 0 {
-			"secret-\(integration)": (#ManagedSecret & {
-				#config:      config
-				#integration: integration
-				#fields:      config._inlineValues[integration]
-			}).out
+		if binding.mode == "managed" {
+			// Calculate if at least one field has an active string value
+			let _hasValues = [for k, v in binding.fields if (v.inlineValue & string) != _|_ {v}]
+
+			if len(_hasValues) > 0 {
+				"secret-\(integration)": (#ManagedSecret & {
+					#config:      config
+					#integration: integration
+					#fields:      binding.fields
+				}).out
+			}
 		}
 
 		if config.ingress.enabled {
@@ -425,5 +390,10 @@ import (
 
 	tests: {
 		"test-svc": #TestJob & {#config: config}
+	}
+
+	// Warnings about secret configuration (exposed during timoni build)
+	if len(config._secretWarnings) > 0 {
+		warnings: config._secretWarnings
 	}
 }

@@ -27,5 +27,10 @@ values: {
 		pep: openfga: url: "http://openfga.example.svc.cluster.local:8080"
 	}
 
-	secrets: clickhouse: manage: true
+	secrets: {
+		clickhouse: mode: "managed"
+		keycloak: mode:   "none"
+		s3: mode:         "none"
+	}
+
 }

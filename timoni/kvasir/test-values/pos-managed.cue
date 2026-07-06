@@ -5,42 +5,29 @@
 // No `package` declaration — consumed only via `--values`.
 
 values: {
-	applicationConfig: {
-		kg: clickhouse: {
-			host:     "clickhouse.example.svc.cluster.local"
-			port:     8123
-			user:     "test-user"
-			password: "test-password"
-		}
-
-		messaging: kafka: "bootstrap-servers": "kafka.example.svc.cluster.local:9092"
-
-		storage: s3: {
-			endpoint:     "http://s3.example.svc.cluster.local:8333"
-			region:       "us-east-1"
-			"access-key": "test-ak"
-			"secret-key": "test-sk"
-		}
-
-		auth: keycloak: {
-			url:   "http://keycloak.example.svc.cluster.local:8080"
-			realm: "kvasir"
-			"admin-client": {
-				"server-url":    "http://keycloak.example.svc.cluster.local:8080"
-				"realm":         "master"
-				"client-id":     "admin-cli"
-				"client-secret": "test-admin-client-secret"
-				"username":      "admin"
-				"password":      "test-admin-password"
-			}
-		}
-
-		pep: openfga: url: "http://openfga.example.svc.cluster.local:8080"
-	}
+	applicationConfig: auth: keycloak: "admin-client": "grant-type": "password"
 
 	secrets: {
-		keycloak: manage:   true
-		s3: manage:         true
-		clickhouse: manage: true
+		keycloak: {
+			mode: "managed"
+			fields: {
+				"admin-username": inlineValue: "kcadmin"
+				"admin-password": inlineValue: "kcadminpassword"
+			}
+		}
+		s3: {
+			mode: "managed"
+			fields: {
+				"access-key": inlineValue: "test-ak"
+				"secret-key": inlineValue: "test-sk"
+			}
+		}
+		clickhouse: {
+			mode: "managed"
+			fields: {
+				"user": inlineValue:     "chuser"
+				"password": inlineValue: "chpassword"
+			}
+		}
 	}
 }

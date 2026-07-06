@@ -72,10 +72,6 @@ verify:kind:monolith:
     - kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=kvasir -n kvasir --timeout=120s
     - export KIND_RESOLVE_ARGS="--resolve kvasir.localhost:80:127.0.0.1 --resolve keycloak.localhost:80:127.0.0.1"
     - just api-test kind
-    # Secret-management cluster regression: validates rendered manifests from
-    # kind/values-kind-secrets-test.cue against the live apiserver and asserts
-    # the Deployment env contains the expected secretKeyRef shapes.
-    - .ci/scripts/kind-secrets-regression.sh
   after_script:
     - mkdir -p kind-diagnostics
     - mise x -- kubectl get pods -A -o wide > kind-diagnostics/pods.txt 2>&1

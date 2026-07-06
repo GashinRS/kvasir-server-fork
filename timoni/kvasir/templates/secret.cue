@@ -22,7 +22,7 @@ import (
 #ManagedSecret: {
 	#config:      #Config
 	#integration: string
-	#fields: [string]: string
+	#fields: [string]: #SecretField
 
 	let _name = (#ManagedSecretName & {instanceName: #config.metadata.name, integration: #integration}).out
 
@@ -45,8 +45,10 @@ import (
 			}
 		}
 		stringData: {
-			for fieldName, value in #fields {
-				(#config.secrets[#integration].fields[fieldName].key): value
+			for fieldName, meta in #fields {
+				if meta.inlineValue != null {
+					"\(fieldName)": meta.inlineValue
+				}
 			}
 		}
 	}

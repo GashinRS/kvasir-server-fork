@@ -9,8 +9,8 @@ import (
 	#config:      #Config
 	#serviceName: string
 	#serviceMeta: #ServiceCatalog[#serviceName]
-	#svcConfig:   *#config.services[#serviceName] | {}
-	#cmName:      string
+	#svcConfig: *#config.services[#serviceName] | {}
+	#cmName: string
 
 	let _hasHttp = #serviceMeta.kind == "http"
 	let _enabled = *#svcConfig.enabled | true
@@ -18,7 +18,10 @@ import (
 	let _resources = *#svcConfig.resources | #config.resources
 	let _imageRef = "gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/\(#serviceMeta.imageSuffix):\(#config.image.tag)"
 
-	let _sourced = #config._resolvedSecretSource
+	let _sourced = #config._resolvedSecretSource.out
+
+	// Derive the env var list from the resolved source map. Each (integration,
+	// field) with kind != "none" becomes one env entry pointing to its Secret.
 	let _envFromSecrets = [
 		for integration, fields in _sourced
 		for field, src in fields
@@ -38,7 +41,7 @@ import (
 			metadata: {
 				name:      "\(#config.metadata.name)-\(#serviceName)"
 				namespace: #config.metadata.namespace
-				labels:    #config.metadata.labels & {
+				labels: #config.metadata.labels & {
 					"app.kubernetes.io/component": #serviceName
 				}
 				if #config.metadata.annotations != _|_ {
@@ -211,7 +214,7 @@ import (
 	#config:      #Config
 	#serviceName: string
 	#serviceMeta: #ServiceCatalog[#serviceName]
-	#svcConfig:   *#config.services[#serviceName] | {}
+	#svcConfig: *#config.services[#serviceName] | {}
 
 	let _hasHttp = #serviceMeta.kind == "http"
 	let _enabled = *#svcConfig.enabled | true
@@ -223,7 +226,7 @@ import (
 			metadata: {
 				name:      "\(#config.metadata.name)-\(#serviceName)"
 				namespace: #config.metadata.namespace
-				labels:    #config.metadata.labels & {
+				labels: #config.metadata.labels & {
 					"app.kubernetes.io/component": #serviceName
 				}
 				if #config.service.annotations != _|_ {

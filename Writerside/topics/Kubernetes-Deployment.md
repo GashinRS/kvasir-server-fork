@@ -366,9 +366,18 @@ values: {
     }
 
     secrets: {
-        keycloak:   existingSecret: "kvasir-keycloak"
-        s3:         existingSecret: "kvasir-s3"
-        clickhouse: existingSecret: "kvasir-clickhouse"
+        keycloak: {
+            mode:       "existing"
+            secretName: "kvasir-keycloak"
+        }
+        s3: {
+            mode:       "existing"
+            secretName: "kvasir-s3"
+        }
+        clickhouse: {
+            mode:       "existing"
+            secretName: "kvasir-clickhouse"
+        }
     }
 }
 ```
@@ -381,12 +390,15 @@ and injects them as environment variables.
 
 ### Supported integrations
 
-| Integration      | Fields                                                                 | Default Secret keys                                                          |
-| ---------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `keycloak`       | `adminUsername`, `adminPassword`, `adminClientId`, `adminClientSecret` | `admin-username`, `admin-password`, `admin-client-id`, `admin-client-secret` |
-| `s3`             | `accessKey`, `secretKey`                                               | `access-key`, `secret-key`                                                   |
-| `clickhouse`     | `user`, `password`                                                     | `user`, `password`                                                           |
-| `policyEnforcer` | `basicAuthPassword`, `apiKeyValue`                                     | `basic-auth-password`, `api-key-value`                                       |
+| Integration      | Fields (field name = secret key)                                             |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `keycloak`       | `admin-username`, `admin-password`, `admin-client-id`, `admin-client-secret` |
+| `s3`             | `access-key`, `secret-key`                                                   |
+| `clickhouse`     | `user`, `password`                                                           |
+| `policyEnforcer` | `basic-auth-password`, `api-key-value`                                       |
+
+> For keycloak secret, what fields get bound are decided by the `auth.keycloak.admin-client.grant-type` value. If it is `client_credentials`, then `admin-client-id` and `admin-client-secret` are used. If it is `password`, then the `admin-username` and `admin-password` are used.
+> {style="note"}
 
 ### Using existing Secrets (recommended for production)
 
@@ -394,9 +406,18 @@ Reference pre-created Secrets:
 
 ```cue
 values: secrets: {
-    keycloak:   existingSecret: "kvasir-keycloak"
-    s3:         existingSecret: "kvasir-s3"
-    clickhouse: existingSecret: "kvasir-clickhouse"
+    keycloak: {
+        mode:       "existing"
+        secretName: "kvasir-keycloak"
+    }
+    s3: {
+        mode:       "existing"
+        secretName: "kvasir-s3"
+    }
+    clickhouse: {
+        mode:       "existing"
+        secretName: "kvasir-clickhouse"
+    }
 }
 ```
 
@@ -410,8 +431,6 @@ metadata:
   namespace: kvasir
 type: Opaque
 stringData:
-  admin-username: "admin"
-  admin-password: "secure-password"
   admin-client-id: "kvasir-admin"
   admin-client-secret: "secure-client-secret"
 ```
@@ -422,12 +441,25 @@ When using External Secrets Operator or other tools with different key names:
 
 ```cue
 values: secrets: keycloak: {
-    existingSecret: "kvasir-keycloak-from-vault"
+    mode:       "existing"
+    secretName: "kvasir-keycloak-from-vault"
     fields: {
-        adminUsername:     key: "KC_ADMIN_USERNAME"
-        adminPassword:     key: "KC_ADMIN_PASSWORD"
-        adminClientId:     key: "KC_ADMIN_CLIENT_ID"
-        adminClientSecret: key: "KC_ADMIN_CLIENT_SECRET"
+        "admin-username": ref: {
+            name: "kvasir-keycloak-from-vault"
+            key:  "KC_ADMIN_USERNAME"
+        }
+        "admin-password": ref: {
+            name: "kvasir-keycloak-from-vault"
+            key:  "KC_ADMIN_PASSWORD"
+        }
+        "admin-client-id": ref: {
+            name: "kvasir-keycloak-from-vault"
+            key:  "KC_ADMIN_CLIENT_ID"
+        }
+        "admin-client-secret": ref: {
+            name: "kvasir-keycloak-from-vault"
+            key:  "KC_ADMIN_CLIENT_SECRET"
+        }
     }
 }
 ```
@@ -438,19 +470,19 @@ For local development, the module can create Secrets from inline values:
 
 ```cue
 values: {
-    applicationConfig: {
-        storage: s3: {
-            "access-key": "dev-access-key"
-            "secret-key": "dev-secret-key"
+    secrets: s3: {
+        mode: "managed"
+        fields: {
+            "access-key": inlineValue: "dev-access-key"
+            "secret-key": inlineValue: "dev-secret-key"
         }
     }
-    secrets: s3: manage: true
 }
 ```
 
 This emits `Secret/<instance>-s3-secret` and wires environment variables automatically.
 
-> **Warning:** Do not use `manage: true` in production. Inline values are visible
+> **Warning:** Do not use `mode: "managed"` in production. Inline values are visible
 > in your values files and version control.
 > {style="warning"}
 

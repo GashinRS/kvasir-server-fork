@@ -156,9 +156,18 @@ values: {
 
  // sensitive admin-client + s3 credentials sourced from Secrets — see "Secret management"
  secrets: {
-  keycloak:   existingSecret: "kvasir-keycloak"
-  s3:         existingSecret: "kvasir-s3"
-  clickhouse: existingSecret: "kvasir-clickhouse"
+  keycloak: {
+   mode:       "existing"
+   secretName: "kvasir-keycloak"
+  }
+  s3: {
+   mode:       "existing"
+   secretName: "kvasir-s3"
+  }
+  clickhouse: {
+   mode:       "existing"
+   secretName: "kvasir-clickhouse"
+  }
  }
 }
 ```
@@ -182,18 +191,18 @@ For local/dev usage with managed placeholder secrets, see
 
 #### Supported integrations and fields
 
-| Integration      | Field               | Default Secret key    | Quarkus property                                                    | Container env var                                                   |
-| ---------------- | ------------------- | --------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `keycloak`       | `adminUsername`     | `admin-username`      | `kvasir.auth.keycloak.admin-client.username`                        | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_USERNAME`                        |
-| `keycloak`       | `adminPassword`     | `admin-password`      | `kvasir.auth.keycloak.admin-client.password`                        | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_PASSWORD`                        |
-| `keycloak`       | `adminClientId`     | `admin-client-id`     | `kvasir.auth.keycloak.admin-client.client-id`                       | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_CLIENT_ID`                       |
-| `keycloak`       | `adminClientSecret` | `admin-client-secret` | `kvasir.auth.keycloak.admin-client.client-secret`                   | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET`                   |
-| `s3`             | `accessKey`         | `access-key`          | `kvasir.storage.s3.access-key`                                      | `KVASIR_STORAGE_S3_ACCESS_KEY`                                      |
-| `s3`             | `secretKey`         | `secret-key`          | `kvasir.storage.s3.secret-key`                                      | `KVASIR_STORAGE_S3_SECRET_KEY`                                      |
-| `clickhouse`     | `user`              | `user`                | `kvasir.kg.clickhouse.user`                                         | `KVASIR_KG_CLICKHOUSE_USER`                                         |
-| `clickhouse`     | `password`          | `password`            | `kvasir.kg.clickhouse.password`                                     | `KVASIR_KG_CLICKHOUSE_PASSWORD`                                     |
-| `policyEnforcer` | `basicAuthPassword` | `basic-auth-password` | `kvasir.pod.auth.http-endpoint-policy-enforcer.basic-auth.password` | `KVASIR_POD_AUTH_HTTP_ENDPOINT_POLICY_ENFORCER_BASIC_AUTH_PASSWORD` |
-| `policyEnforcer` | `apiKeyValue`       | `api-key-value`       | `kvasir.pod.auth.http-endpoint-policy-enforcer.api-key.key-value`   | `KVASIR_POD_AUTH_HTTP_ENDPOINT_POLICY_ENFORCER_API_KEY_KEY_VALUE`   |
+| Integration      | Field                  | Default Secret key     | Quarkus property                                                    | Container env var                                                   |
+| ---------------- | ---------------------- | ---------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `keycloak`       | `admin-username`       | `admin-username`       | `kvasir.auth.keycloak.admin-client.username`                        | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_USERNAME`                        |
+| `keycloak`       | `admin-password`       | `admin-password`       | `kvasir.auth.keycloak.admin-client.password`                        | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_PASSWORD`                        |
+| `keycloak`       | `admin-client-id`      | `admin-client-id`      | `kvasir.auth.keycloak.admin-client.client-id`                       | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_CLIENT_ID`                       |
+| `keycloak`       | `admin-client-secret`  | `admin-client-secret`  | `kvasir.auth.keycloak.admin-client.client-secret`                   | `KVASIR_AUTH_KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET`                   |
+| `s3`             | `access-key`           | `access-key`           | `kvasir.storage.s3.access-key`                                      | `KVASIR_STORAGE_S3_ACCESS_KEY`                                      |
+| `s3`             | `secret-key`           | `secret-key`           | `kvasir.storage.s3.secret-key`                                      | `KVASIR_STORAGE_S3_SECRET_KEY`                                      |
+| `clickhouse`     | `user`                 | `user`                 | `kvasir.kg.clickhouse.user`                                         | `KVASIR_KG_CLICKHOUSE_USER`                                         |
+| `clickhouse`     | `password`             | `password`             | `kvasir.kg.clickhouse.password`                                     | `KVASIR_KG_CLICKHOUSE_PASSWORD`                                     |
+| `policyEnforcer` | `basic-auth-password`  | `basic-auth-password`  | `kvasir.pod.auth.http-endpoint-policy-enforcer.basic-auth.password` | `KVASIR_POD_AUTH_HTTP_ENDPOINT_POLICY_ENFORCER_BASIC_AUTH_PASSWORD` |
+| `policyEnforcer` | `api-key-value`        | `api-key-value`        | `kvasir.pod.auth.http-endpoint-policy-enforcer.api-key.key-value`   | `KVASIR_POD_AUTH_HTTP_ENDPOINT_POLICY_ENFORCER_API_KEY_KEY_VALUE`   |
 
 #### Resolution order
 
@@ -201,27 +210,30 @@ Per (integration, field), the highest-priority source wins:
 
 1. **Per-field `ref`** — `secrets.<integration>.fields.<field>.ref` points at any
    Secret/key. Highest priority; useful for cross-Secret overrides.
-2. **Integration `existingSecret`** — `secrets.<integration>.existingSecret` plus
-   `fields.<field>.key` (defaulted per field, see table). The recommended
-   production wiring.
-3. **Module-managed Secret** — `secrets.<integration>.manage: true`. The module
+2. **Integration `secretName`** — `secrets.<integration>.mode: "existing"` plus
+   `secretName` and `fields.<field>.key` (defaulted per field, see table). The
+   recommended production wiring.
+3. **Module-managed Secret** — `secrets.<integration>.mode: "managed"`. The module
    materializes a Secret named `<instance>-<integration>-secret` from the inline
-   values present in `applicationConfig`, scrubs them from the ConfigMap, and
-   wires env refs. Mutually exclusive with `existingSecret`. Requires at least
+   values present in `fields.<field>.inlineValue`, scrubs them from the ConfigMap,
+   and wires env refs. Mutually exclusive with `mode: "existing"`. Requires at least
    one inline value for the integration.
-4. **No source** — leaving all of the above unset is valid only when no inline
-   value is set for the field (the field stays unset; Quarkus uses its own
-   default if any). An inline value with no source is a vet/build-time error.
+4. **No source** — `secrets.<integration>.mode: "none"` (the default). The field
+   stays unset; Quarkus uses its own default if any. Warnings are emitted during
+   `timoni build` for integrations in "none" mode.
+
+> **Note:** The default mode is `"none"`. For production deployments, explicitly set
+> `mode: "existing"` or `mode: "managed"` for each integration.
 
 #### Schema
 
-| Key                                                 | Type     | Default   | Description                                                                                                 |
-| --------------------------------------------------- | -------- | --------- | ----------------------------------------------------------------------------------------------------------- |
-| `secrets.<integration>: existingSecret:`            | `string` | _unset_   | Name of an existing Secret for this integration. Mutually exclusive with `manage`.                          |
-| `secrets.<integration>: manage:`                    | `bool`   | `false`   | Materialize a module-managed Secret from inline values. Mutually exclusive with `existingSecret`.           |
-| `secrets.<integration>: fields.<field>: key:`       | `string` | see table | Key within `existingSecret` (or the managed Secret) for this field. Defaults are listed in the table above. |
-| `secrets.<integration>: fields.<field>: ref: name:` | `string` | _unset_   | Per-field override: name of a different Secret to source this field from.                                   |
-| `secrets.<integration>: fields.<field>: ref: key:`  | `string` | _unset_   | Per-field override: key within the referenced Secret.                                                       |
+| Key                                                  | Type     | Default    | Description                                                                                                  |
+| ---------------------------------------------------- | -------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| `secrets.<integration>: mode:`                       | `string` | `"none"`   | Secret mode: `"none"` (disabled), `"existing"` (reference external), or `"managed"` (module-managed).        |
+| `secrets.<integration>: secretName:`                 | `string` | _unset_    | Name of an existing Secret for this integration. Required when `mode: "existing"`.                           |
+| `secrets.<integration>: fields.<field>: inlineValue:`| `string` | _unset_    | Inline value for module-managed secrets. Required when `mode: "managed"`.                                    |
+| `secrets.<integration>: fields.<field>: ref: name:`  | `string` | _unset_    | Per-field override: name of a different Secret to source this field from.                                    |
+| `secrets.<integration>: fields.<field>: ref: key:`   | `string` | _unset_    | Per-field override: key within the referenced Secret.                                                        |
 
 Integrations: `keycloak`, `s3`, `clickhouse`, `policyEnforcer`.
 
@@ -231,9 +243,18 @@ Integrations: `keycloak`, `s3`, `clickhouse`, `policyEnforcer`.
 
 ```cue
 values: secrets: {
- keycloak:   existingSecret: "kvasir-keycloak"
- s3:         existingSecret: "kvasir-s3"
- clickhouse: existingSecret: "kvasir-clickhouse"
+ keycloak: {
+  mode:       "existing"
+  secretName: "kvasir-keycloak"
+ }
+ s3: {
+  mode:       "existing"
+  secretName: "kvasir-s3"
+ }
+ clickhouse: {
+  mode:       "existing"
+  secretName: "kvasir-clickhouse"
+ }
 }
 ```
 
@@ -255,16 +276,29 @@ stringData:
 
 **Custom upstream key names (External Secrets Operator / OpenBAO):**
 
-When the upstream secret store dictates the key names, override `fields.<field>.key`:
+When the upstream secret store dictates the key names, override `fields.<field>.ref`:
 
 ```cue
 values: secrets: keycloak: {
- existingSecret: "kvasir-keycloak-from-vault"
+ mode:       "existing"
+ secretName: "kvasir-keycloak-from-vault"
  fields: {
-  adminUsername:     key: "KC_ADMIN_USERNAME"
-  adminPassword:     key: "KC_ADMIN_PASSWORD"
-  adminClientId:     key: "KC_ADMIN_CLIENT_ID"
-  adminClientSecret: key: "KC_ADMIN_CLIENT_SECRET"
+  "admin-username": ref: {
+   name: "kvasir-keycloak-from-vault"
+   key:  "KC_ADMIN_USERNAME"
+  }
+  "admin-password": ref: {
+   name: "kvasir-keycloak-from-vault"
+   key:  "KC_ADMIN_PASSWORD"
+  }
+  "admin-client-id": ref: {
+   name: "kvasir-keycloak-from-vault"
+   key:  "KC_ADMIN_CLIENT_ID"
+  }
+  "admin-client-secret": ref: {
+   name: "kvasir-keycloak-from-vault"
+   key:  "KC_ADMIN_CLIENT_SECRET"
+  }
  }
 }
 ```
@@ -274,14 +308,27 @@ values: secrets: keycloak: {
 ```cue
 values: secrets: {
  keycloak: {
-  existingSecret: "kvasir-keycloak"
+  mode:       "existing"
+  secretName: "kvasir-keycloak"
   fields: {
-   adminPassword:     ref: {name: "platform-keycloak-admin", key: "password"}
-   adminClientSecret: ref: {name: "platform-keycloak-admin", key: "client-secret"}
+   "admin-password": ref: {
+    name: "platform-keycloak-admin"
+    key:  "password"
+   }
+   "admin-client-secret": ref: {
+    name: "platform-keycloak-admin"
+    key:  "client-secret"
+   }
   }
  }
- s3:         existingSecret: "kvasir-s3"
- clickhouse: existingSecret: "kvasir-clickhouse"
+ s3: {
+  mode:       "existing"
+  secretName: "kvasir-s3"
+ }
+ clickhouse: {
+  mode:       "existing"
+  secretName: "kvasir-clickhouse"
+ }
 }
 ```
 
@@ -289,15 +336,13 @@ values: secrets: {
 
 ```cue
 values: {
- applicationConfig: {
-  storage: s3: {
-   endpoint:     "http://seaweedfs:8333"
-   region:       "us-east-1"
-   "access-key": "dev-ak"
-   "secret-key": "dev-sk"
+ secrets: s3: {
+  mode: "managed"
+  fields: {
+   "access-key": inlineValue: "dev-ak"
+   "secret-key": inlineValue: "dev-sk"
   }
  }
- secrets: s3: manage: true
 }
 ```
 
@@ -316,7 +361,7 @@ and one row in `#SecretFieldRegistry` in the module.
 #### Dev/local overlay
 
 The repository ships [`dev-values.cue`](./dev-values.cue) — a ready-to-apply
-overlay that uses `manage: true` on every integration with placeholder
+overlay that uses `mode: "managed"` on every integration with placeholder
 credentials. Use it for local clusters (kind, k3d, minikube) where out-of-band
 Secret provisioning would be friction:
 

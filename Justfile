@@ -519,11 +519,12 @@ kind-deploy-kvasir mode="mono":
       *) echo "Unknown mode: {{mode}}. Use mono[lith] or ms/micro[services]."; exit 1 ;;
     esac
 
+    VALUES_STRING="--values kind/values-kind-base.cue"
     # Select values file based on mode
     if [ "$MODE" = "microservices" ]; then
-      VALUES_FILE="kind/values-kind-microservices.cue"
+      VALUES_STRING="$VALUES_STRING --values kind/values-kind-microservices.cue"
     else
-      VALUES_FILE="kind/values-kind.cue"
+      VALUES_STRING="$VALUES_STRING --values kind/values-kind-monolith.cue"
     fi
 
     # Build image override file if env vars are set
@@ -535,15 +536,12 @@ kind-deploy-kvasir mode="mono":
       [ -n "${KVASIR_TAG:-}" ]         && printf '  tag: "%s"\n'        "${KVASIR_TAG}"         >> "$OVERRIDE_FILE"
       [ -n "${KVASIR_PULL_POLICY:-}" ] && printf '  pullPolicy: "%s"\n' "${KVASIR_PULL_POLICY}" >> "$OVERRIDE_FILE"
       printf '}\n' >> "$OVERRIDE_FILE"
+      VALUES_STRING="$VALUES_STRING --values $OVERRIDE_FILE"
     fi
 
+    echo "Applying with values $VALUES_STRING"
     # Apply Timoni module
-    if [ -n "$OVERRIDE_FILE" ]; then
-      timoni apply -n kvasir kvasir timoni/kvasir --values "$VALUES_FILE" --values "$OVERRIDE_FILE"
-      rm -f "$OVERRIDE_FILE"
-    else
-      timoni apply -n kvasir kvasir timoni/kvasir --values "$VALUES_FILE"
-    fi
+    timoni apply -n kvasir kvasir timoni/kvasir $VALUES_STRING
 
     # Wait for init job (microservices only)
     if [ "$MODE" = "microservices" ]; then

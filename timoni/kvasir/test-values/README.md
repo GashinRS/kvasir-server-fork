@@ -13,20 +13,18 @@ This directory is excluded from the published OCI artifact via
 
 ## Positive cases (expected: vet succeeds, build emits expected shape)
 
-| File                          | Scenario                                                                                     |
-|-------------------------------|----------------------------------------------------------------------------------------------|
-| `pos-managed.cue`             | `manage: true` for every integration with inline values → module-managed Secret per integration. |
-| `pos-existing-secret.cue`     | `existingSecret` per integration; no inline sensitive values → no managed Secret rendered.    |
-| `pos-perfield-ref.cue`        | Per-field `ref` overrides on top of `existingSecret` → no managed Secret, env refs cross-Secret. |
-| `pos-mixed.cue`               | Mix: keycloak `existingSecret` + per-field `ref`, s3 `existingSecret` with custom keys, clickhouse `manage`. |
+| File                          | Scenario                                                                                                   |
+|-------------------------------|------------------------------------------------------------------------------------------------------------|
+| `pos-managed.cue`             | `mode: "managed"` for every integration with inline values → module-managed Secret per integration.        |
+| `pos-existing-secret.cue`     | `mode: "existing"` + `secretName` per integration; no inline sensitive values → no managed Secret rendered.|
+| `pos-perfield-ref.cue`        | Per-field `ref` overrides on top of `mode: "existing"` → no managed Secret, env refs cross-Secret.         |
+| `pos-mixed.cue`               | Mix: keycloak `mode: "existing"` + per-field `ref`, s3 `mode: "none"`, clickhouse `mode: "managed"`.       |
 
 ## Negative cases (expected: vet fails with a specific message)
 
 | File                          | Expected error fragment                                                                       |
-|-------------------------------|------------------------------------------------------------------------------------------------|
-| `neg-inline-no-source.cue`    | `sets sensitive field … inline`                                                                |
-| `neg-manage-and-existing.cue` | ``cannot be combined with `existingSecret```                                                   |
-| `neg-manage-empty.cue`        | `requires at least one inline value`                                                           |
+|-------------------------------|-----------------------------------------------------------------------------------------------|
+| `neg-manage-empty.cue`        | `is set to 'managed' mode, but field .* is missing its required 'inlineValue'`                |
 
 ## Render-assertion cases (used by build-grep step)
 

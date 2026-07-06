@@ -19,7 +19,7 @@ timoni:lint:
   needs: []
   script:
     - mise install
-    - mise x -- timoni mod vet timoni/kvasir
+    - mise x -- just timoni-lint
     # Secret-management regression suite: vet matrix + build assertions over
     # positive/negative fixtures in timoni/kvasir/test-values/.
     - mise x -- .ci/scripts/timoni-secrets-regression.sh

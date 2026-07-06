@@ -31,4 +31,11 @@ values: {
 			values: ["linux"]
 		}]
 	}]
+
+	secrets: {
+		keycloak: secretName:   "keycloak-external-credentials"
+		s3: secretName:         "s3-external-keys"
+		clickhouse: secretName: "ch-user-credentials"
+	}
+
 }

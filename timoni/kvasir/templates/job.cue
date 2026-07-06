@@ -18,7 +18,10 @@ import (
 	let _serviceMeta = #ServiceCatalog["init-service"]
 	let _imageRef = "gitlab.ilabt.imec.be:4567/kvasir/kvasir-server/\(_serviceMeta.imageSuffix):\(#config.image.tag)"
 
-	let _sourced = #config._resolvedSecretSource
+	let _sourced = #config._resolvedSecretSource.out
+
+	// Derive the env var list from the resolved source map. Each (integration,
+	// field) with kind != "none" becomes one env entry pointing to its Secret.
 	let _envFromSecrets = [
 		for integration, fields in _sourced
 		for field, src in fields
@@ -40,7 +43,7 @@ import (
 			metadata: {
 				name:      "\(#config.metadata.name)-init"
 				namespace: #config.metadata.namespace
-				labels:    #config.metadata.labels & {
+				labels: #config.metadata.labels & {
 					"app.kubernetes.io/component": "init"
 				}
 				annotations: timoniv1.Action.Force
