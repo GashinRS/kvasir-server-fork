@@ -12,6 +12,7 @@ import kvasir.definitions.kg.graphql.*
 import kvasir.definitions.persistence.SortOrder
 import kvasir.plugins.kg.clickhouse.graphql.SELF_REF_SELECTOR
 import kvasir.plugins.kg.clickhouse.graphql.SelectorReplacingFilterVisitor
+import kvasir.plugins.kg.clickhouse.graphql.ToSQLFilterVisitor
 import kvasir.plugins.kg.clickhouse.graphql.newFilterParser
 import kvasir.plugins.kg.clickhouse.graphql.resolver.*
 import kvasir.plugins.kg.clickhouse.specs.COLLAPSE_EXPR
@@ -30,96 +31,74 @@ class ScalarCollectionNode(
     val fieldDefinition: GraphQLFieldDefinition,
     val parent: CompositeNode,
     val overrideJoinType: String? = null
-) : JoinableNode, NodeWithFilterForParent {
+) : JoinableNode, NodeWithFilterForParent, NodeWithSubjectConstraint {
 
     override val name: String = fieldDefinition.name
     override val nameInResult: String = field.alias ?: field.name
     override val joinIdentifier = getVariableNameForField(fieldDefinition, parent.context) + "_col"
     val paginationInfo = field.getPaginationInfo(parent.env.variables)
     val sortOrder = field.getStringArgument(ARG_SORT_NAME, parent.env.variables)?.let { SortOrder.valueOf(it) }
+    private val parsedFilter = getFilter(field, fieldDefinition, parent.env)?.let { rsql ->
+        try {
+            newFilterParser().parse(rsql)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Failed to parse RSQL filter for field '$name': $rsql", e)
+        }
+    }
+    private val parentFilter = parsedFilter?.let { filter ->
+        SelectorReplacingFilterVisitor(
+            setOf(name, nameInResult, SELF_REF_SELECTOR),
+            nameInResult,
+            true
+        ).visitNode(filter)
+    }
+    private val relationValueFilter = parsedFilter?.let { filter ->
+        SelectorReplacingFilterVisitor(
+            setOf(name, nameInResult, SELF_REF_SELECTOR),
+            "value",
+            true
+        ).visitNode(filter)
+    }
+
+    private val reverse = fieldDefinition.getDirectiveArg<BooleanValue>(
+        DIRECTIVE_PREDICATE_NAME,
+        ARG_REVERSE_NAME
+    )?.isValue ?: false
 
     override fun getJoinStatements(): List<String> {
         // LEFT JOIN if the field is optional, otherwise (INNER) JOIN
         val joinType =
             overrideJoinType ?: (if (isOptional(field, fieldDefinition)) "LEFT " else "")
         val paginationProj = paginationInfo?.let { "count() OVER (PARTITION BY id) as $COUNT" }
-        val (relTableId, projection) = when (name) {
-            FIELD_PREDICATES_NAME -> {
-                val relTableId = parent.atChangeId?.let {
-                    // Time travel query: collapse state
-                    "$DATA_TABLE WHERE change_id <= '$it' $COLLAPSE_EXPR"
-                } ?: "$CURRENT_DATA_TABLE FINAL WHERE sign = 1" // Else use current state
-                val projection =
-                    listOfNotNull(
-                        "subject as id",
-                        "predicate as value",
-                        "datatype",
-                        paginationProj
-                    ).joinToString()
-                relTableId to projection
-            }
-            FIELD_RELATIONS_NAME -> {
-                val relTableId = parent.atChangeId?.let {
-                    // Time travel query: collapse state
-                    "$DATA_TABLE WHERE datatype = '' AND change_id <= '$it' $COLLAPSE_EXPR"
-                } ?: "$CURRENT_DATA_TABLE FINAL WHERE datatype = '' AND sign = 1" // Else use current state
-                val projection =
-                    listOfNotNull(
-                        "subject as id",
-                        "predicate as value",
-                        "object as $RELATIONS_PROJ_TARGET",
-                        "datatype",
-                        paginationProj
-                    ).joinToString()
-                relTableId to projection
-            }
-
-            else -> {
-                val fqFieldName = getFQName(fieldDefinition, parent.context)
-                // Check if the relation is reversed based on the presence of the @predicate directive with reverse: true
-                // TODO: make reverse work when defined in context vs. in the graphql schema
-                val reverse = fieldDefinition.getDirectiveArg<BooleanValue>(
-                    DIRECTIVE_PREDICATE_NAME,
-                    ARG_REVERSE_NAME
-                )?.isValue ?: false
-                val relTableId = parent.atChangeId?.let {
-                    // Time travel query: collapse state
-                    "$DATA_TABLE WHERE predicate = '$fqFieldName' AND change_id <= '$it' $COLLAPSE_EXPR"
-                } ?: "$CURRENT_DATA_TABLE FINAL WHERE predicate = '$fqFieldName' AND sign = 1" // Else use current state
-                val projection =
-                    listOfNotNull(
-                        if(!reverse) "subject as id" else "object as id",
-                        if(!reverse) "object as value" else "subject as value",
-                        "datatype",
-                        paginationProj
-                    ).joinToString()
-                relTableId to projection
-            }
-        }
-
+        val (relTableId, baseProjection) = getRelationScan(parent.subjectConstraints, relationValueFilter)
+        val projection =
+            listOfNotNull(
+                "id",
+                "value",
+                RELATIONS_PROJ_TARGET.takeIf { name == FIELD_RELATIONS_NAME },
+                "datatype",
+                paginationProj
+            ).joinToString()
+        val relationFilter = relationValueFilter?.let { " WHERE ${ToSQLFilterVisitor(parent.context).visitNode(it)}" } ?: ""
         val limit = paginationInfo?.let { (pageSize, offset) -> " LIMIT $offset, $pageSize BY id" } ?: ""
-        val orderBy = sortOrder?.let { "ORDER BY value $it " } ?: ""
+        val orderBy = sortOrder?.let { " ORDER BY value $it" }
+            ?: paginationInfo?.let { " ORDER BY id ASC, value ASC" }
+            ?: ""
         return listOf(
-            "$joinType JOIN (SELECT $projection FROM $relTableId $orderBy$limit) AS $joinIdentifier ON ${parent.scope}.subject = $joinIdentifier.id"
+            "$joinType JOIN (SELECT $projection FROM (SELECT $baseProjection FROM $relTableId) AS ${joinIdentifier}_src$relationFilter$orderBy$limit) AS $joinIdentifier ON ${parent.scope}.subject = $joinIdentifier.id"
         )
     }
 
     override fun getNodeFilter(): Node? {
-        // Get optional field filter
-        return getFilter(field, fieldDefinition, parent.env)?.let { rsql ->
-            // Replace references to the field itself in the filter expression with a reference to the field as projected in the joined relation CTE, so that the filter can be correctly applied in the context of the joined table.
-            SelectorReplacingFilterVisitor(
-                setOf(name, nameInResult, SELF_REF_SELECTOR),
-                nameInResult,
-                true
-            ).visitNode(
-                try {
-                    newFilterParser().parse(rsql)
-                } catch (e: Exception) {
-                    throw IllegalArgumentException("Failed to parse RSQL filter for field '$name': $rsql", e)
-                }
-            )
-        }
+        return parentFilter
+    }
+
+    override fun getSubjectConstraint(): SubjectConstraint? {
+        val filter = relationValueFilter ?: return null
+        val (relTableId, baseProjection) = getRelationScan(emptyList(), filter)
+        return SubjectConstraint(
+            "SELECT id FROM (SELECT $baseProjection FROM $relTableId) AS ${joinIdentifier}_candidates GROUP BY id"
+        )
     }
 
     override fun getArgFilter(): Node? {
@@ -131,24 +110,119 @@ class ScalarCollectionNode(
     override fun isPaginated(): Boolean = paginationInfo != null
 
     override fun buildProjection(): String {
-        val innerArray = if (fieldDefinition.type.innerType<GraphQLNamedType>() == Scalars.GraphQLID) {
+        val arrayExpr = if (fieldDefinition.type.innerType<GraphQLNamedType>() == Scalars.GraphQLID) {
             // Special handling for fields that return IDs: empty strings caused by the LEFT JOIN for optional fields should be filtered out, as they do not represent actual values but just the absence of a relation.
-            "groupUniqArrayIf($joinIdentifier.value, $joinIdentifier.value != '') AS $nameInResult"
+            "groupUniqArrayIf($joinIdentifier.value, $joinIdentifier.value != '')"
         } else {
-            "groupUniqArrayIf($joinIdentifier.value, $joinIdentifier.id != '') AS $nameInResult"
+            "groupUniqArrayIf($joinIdentifier.value, $joinIdentifier.id != '')"
         }
-        return sortOrder?.let {
+        val sortedArrayExpr = sortOrder?.let {
             when (it) {
-                SortOrder.ASC -> "arraySort($innerArray)"
-                SortOrder.DESC -> "arrayReverseSort($innerArray)"
+                SortOrder.ASC -> "arraySort($arrayExpr)"
+                SortOrder.DESC -> "arrayReverseSort($arrayExpr)"
             }
-        } ?: innerArray
+        } ?: "arraySort($arrayExpr)"
+        return "$sortedArrayExpr AS $nameInResult"
     }
 
     override fun isGroupingKey(): Boolean {
         // Collection fields should not be grouping keys, as they are aggregated with groupUniqArray
         return false
     }
+
+    private fun getRelationScan(
+        subjectConstraints: Collection<SubjectConstraint>,
+        valueFilter: Node? = null
+    ): Pair<String, String> {
+        val scan = when (name) {
+            FIELD_PREDICATES_NAME -> RelationScan(
+                baseConditions = emptyList(),
+                idExpression = "subject",
+                valueExpression = "predicate",
+                subjectConstraintExpression = "subject"
+            )
+
+            FIELD_RELATIONS_NAME -> RelationScan(
+                baseConditions = listOf("datatype = ''"),
+                idExpression = "subject",
+                valueExpression = "predicate",
+                extraProjections = listOf("object as $RELATIONS_PROJ_TARGET"),
+                subjectConstraintExpression = "subject"
+            )
+
+            else -> {
+                val fqFieldName = getFQName(fieldDefinition, parent.context)
+                RelationScan(
+                    baseConditions = listOf("predicate = '$fqFieldName'"),
+                    idExpression = if (!reverse) "subject" else "object",
+                    valueExpression = if (!reverse) "object" else "subject",
+                    subjectConstraintExpression = if (!reverse) "subject" else "object"
+                )
+            }
+        }
+        val pushedValueFilter = valueFilter?.let { filter ->
+            val filterForStorageColumn = SelectorReplacingFilterVisitor(
+                "value",
+                scan.valueExpression,
+                true
+            ).visitNode(filter)
+            ToSQLFilterVisitor(parent.context).visitNode(filterForStorageColumn)
+        }
+        val source = relationSource(scan, subjectConstraints, pushedValueFilter)
+        val projection = listOf(
+            "${scan.idExpression} as id",
+            "${scan.valueExpression} as value",
+            *scan.extraProjections.toTypedArray(),
+            "datatype"
+        ).joinToString()
+        return source to projection
+    }
+
+    private fun relationSource(
+        scan: RelationScan,
+        subjectConstraints: Collection<SubjectConstraint>,
+        pushedValueFilter: String?
+    ): String {
+        val subjectConstraint = buildSubjectConstraintCondition(
+            scan.subjectConstraintExpression,
+            subjectConstraints,
+            parent.context
+        )
+        val prewhereConditions = listOfNotNull(
+            *scan.baseConditions.toTypedArray(),
+            pushedValueFilter
+        )
+        val prewhere = prewhereConditions
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(" AND ", " PREWHERE ")
+            ?: ""
+        val historicalConditions = listOfNotNull(
+            parent.atChangeId?.let { "change_id <= '$it'" },
+            subjectConstraint
+        )
+        return parent.atChangeId?.let {
+            val where = historicalConditions
+                .takeIf { historicalConditions.isNotEmpty() }
+                ?.joinToString(" AND ", " WHERE ")
+                ?: ""
+            "$DATA_TABLE$prewhere$where $COLLAPSE_EXPR"
+        } ?: run {
+            val currentConditions = listOfNotNull(
+                "sign = 1",
+                subjectConstraint
+            )
+            val where = currentConditions.joinToString(" AND ", " WHERE ")
+            "$CURRENT_DATA_TABLE FINAL$prewhere$where"
+        }
+    }
+
+    private data class RelationScan(
+        val baseConditions: List<String>,
+        val idExpression: String,
+        val valueExpression: String,
+        val subjectConstraintExpression: String,
+        val extraProjections: List<String> = emptyList()
+    )
 }
 
 /**

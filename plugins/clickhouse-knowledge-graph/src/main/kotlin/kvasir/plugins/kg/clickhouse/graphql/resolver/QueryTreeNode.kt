@@ -1,6 +1,10 @@
 package kvasir.plugins.kg.clickhouse.graphql.resolver
 
+import cz.jirutka.rsql.parser.ast.ComparisonNode
 import cz.jirutka.rsql.parser.ast.Node
+import cz.jirutka.rsql.parser.ast.RSQLOperators
+import kvasir.definitions.rdf.JSONObject
+import kvasir.plugins.kg.clickhouse.graphql.ToSQLFilterVisitor
 
 /**
  * Represents a node in the query tree, which corresponds to a field in the GraphQL query. Each node is responsible for
@@ -73,4 +77,49 @@ interface NodeWithFilterForParent : QueryTreeNode {
      * Returns an RSQL AST representing a filter derived from a field argument.
      */
     fun getArgFilter(): Node? = null
+}
+
+/**
+ * A constraint that limits a composite node to a smaller set of subjects.
+ *
+ * [candidateSubjectSQL] is used for subjects discovered through a selective child relation.
+ * [exactSubjectIds] is used when GraphQL already supplies the exact IDs, notably while hydrating
+ * a subscription event. Keeping exact IDs distinct lets the resolver emit a direct predicate
+ * instead of constructing a potentially large ClickHouse `IN (subquery)` set.
+ */
+data class SubjectConstraint(
+    val candidateSubjectSQL: String? = null,
+    val exactSubjectIds: List<String>? = null
+) {
+    init {
+        require((candidateSubjectSQL != null) xor (exactSubjectIds != null)) {
+            "A subject constraint must contain either candidate SQL or exact subject IDs"
+        }
+        require(exactSubjectIds?.isNotEmpty() != false) {
+            "An exact subject constraint must contain at least one ID"
+        }
+    }
+}
+
+/**
+ * A node that can provide a candidate subject set for its parent. This is used to hydrate
+ * sibling fields only for subjects that already satisfy selective relation filters.
+ */
+interface NodeWithSubjectConstraint : QueryTreeNode {
+    fun getSubjectConstraint(): SubjectConstraint?
+}
+
+fun buildSubjectConstraintCondition(
+    subjectExpr: String,
+    constraints: Collection<SubjectConstraint>,
+    context: JSONObject
+): String? {
+    return constraints.distinct()
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString(" AND ") { constraint ->
+            constraint.exactSubjectIds?.let { subjectIds ->
+                val operator = if (subjectIds.size == 1) RSQLOperators.EQUAL else RSQLOperators.IN
+                ToSQLFilterVisitor(context).visitNode(ComparisonNode(operator, subjectExpr, subjectIds))
+            } ?: "$subjectExpr IN (${checkNotNull(constraint.candidateSubjectSQL)})"
+        }
 }

@@ -41,6 +41,23 @@ open class CompositeNode(
     override val joinIdentifier =
         getVariableNameForField(fieldDefinition, context, fieldDefinition.name.takeIf { parent == null }) + "_nested"
     val paginationInfo = field.getPaginationInfo(env.variables)
+    private val exactSubjectConstraints = field.getArrayArgumentAsString(ARG_ID_NAME, env.variables)
+        ?.distinct()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { listOf(SubjectConstraint(exactSubjectIds = it)) }
+        ?: emptyList()
+    private var candidateSubjectConstraints: List<SubjectConstraint> = emptyList()
+    private var buildingWithLimit = true
+    val subjectConstraints: List<SubjectConstraint>
+        get() = when {
+            exactSubjectConstraints.isNotEmpty() -> exactSubjectConstraints
+            buildingWithLimit && canPageRootSubjects() -> listOf(
+                SubjectConstraint(
+                    candidateSubjectSQL = "SELECT subject AS id FROM (${getRootPageSubjectsSource(true)}) AS ${scope}_page_constraint"
+                )
+            )
+            else -> candidateSubjectConstraints
+        }
     private var nodeFilter: Node? = null
     private val argFilter = run {
         // For all arguments that are not default relation arguments (e.g. related to pagination), but include the id argument if present.
@@ -137,6 +154,10 @@ open class CompositeNode(
                         }
                 )
 
+            candidateSubjectConstraints = selectedChildren.filterIsInstance<NodeWithSubjectConstraint>()
+                .mapNotNull { child -> child.getSubjectConstraint() }
+                .distinct()
+
             nodeFilter = selectedChildren.filterIsInstance<NodeWithFilterForParent>().map { it.getNodeFilter() }
                 .plus(getFilter(field, fieldDefinition, env)?.let {
                     SelectorReplacingFilterVisitor(
@@ -200,7 +221,7 @@ open class CompositeNode(
                         SyntheticScalarNode(
                             FIELD_TYPES_NAME,
                             this,
-                            "groupUniqArray($scope.type_uri)",
+                            "arraySort(groupUniqArray($scope.type_uri))",
                             groupingKey = false
                         ).takeIf { selectedChildren.none { it.name == FIELD_TYPES_NAME } },
                         SyntheticScalarNode(
@@ -219,8 +240,13 @@ open class CompositeNode(
                         },
                         paginationInfo?.let {
                             val overExpr = parent?.let { "PARTITION BY $SUBJECT_MATCH" } ?: ""
+                            val countExpr = if (parent == null && canPageRootSubjects()) {
+                                "any($scope.$COUNT)"
+                            } else {
+                                "count() OVER ($overExpr)"
+                            }
                             SyntheticScalarNode(
-                                COUNT, this, "count() OVER ($overExpr)",
+                                COUNT, this, countExpr,
                                 groupingKey = false,
                                 includeInResultMap = false
                             )
@@ -259,6 +285,7 @@ open class CompositeNode(
     }
 
     fun build(includeLimit: Boolean = true): String {
+        buildingWithLimit = includeLimit
         // Project the fields
         val projection = children.joinToString { it.buildProjection() }
         val rsqlToSQL = ToSQLFilterVisitor(context)
@@ -286,14 +313,13 @@ open class CompositeNode(
             val byExpr = parent?.let { " BY $SUBJECT_MATCH" } ?: ""
             " LIMIT $offset, $pageSize$byExpr"
         }
-            ?.takeIf { includeLimit } ?: ""
+            ?.takeIf { includeLimit && !canPageRootSubjects() } ?: ""
         // Generate the GROUP BY clause for scalar fields
         val groupBy = children.filter { it.isGroupingKey() }.joinToString { it.nameInResult }
-        val orderBy = sortKeys?.let(SortKey.Companion::toSQL) ?: ""
-        val source = atChangeId?.let {
-            // Time travel query: collapse state
-            "(SELECT subject, type_uri FROM $SUBJECT_TYPES WHERE change_id <= '$it' GROUP BY subject, type_uri, graph HAVING argMax(sign, change_id) > 0) AS $scope"
-        } ?: "$CURRENT_SUBJECT_TYPES AS $scope FINAL"
+        val orderBy = sortKeys?.let(SortKey.Companion::toSQL)
+            ?: paginationInfo?.let { " ORDER BY id ASC" }
+            ?: ""
+        val source = getSubjectTypesSource(includeLimit)
         return "SELECT $projection FROM $source $joins $where GROUP BY $groupBy$orderBy$limit"
     }
 
@@ -338,9 +364,25 @@ open class CompositeNode(
             ARG_REVERSE_NAME
         )?.isValue ?: false
         val fqParentRelName = getFQName(fieldDefinition, context)
+        val subjectConstraintExpression = if (!reverse) "object" else "subject"
+        val subjectConstraint = buildSubjectConstraintCondition(subjectConstraintExpression, subjectConstraints, context)
         val source = atChangeId?.let {
-            "$DATA_TABLE WHERE predicate = '$fqParentRelName' AND datatype = '' AND change_id <= '$it' $COLLAPSE_EXPR"
-        } ?: "$CURRENT_DATA_TABLE WHERE predicate = '$fqParentRelName' AND datatype = '' AND sign = 1"
+            val conditions = listOfNotNull(
+                "predicate = '$fqParentRelName'",
+                "datatype = ''",
+                "change_id <= '$it'",
+                subjectConstraint
+            ).joinToString(" AND ")
+            "$DATA_TABLE WHERE $conditions $COLLAPSE_EXPR"
+        } ?: run {
+            val conditions = listOfNotNull(
+                "predicate = '$fqParentRelName'",
+                "datatype = ''",
+                "sign = 1",
+                subjectConstraint
+            ).joinToString(" AND ")
+            "$CURRENT_DATA_TABLE WHERE $conditions"
+        }
         val projection = if (!reverse) {
             listOf(
                 "subject as id",
@@ -353,6 +395,54 @@ open class CompositeNode(
             )
         }.joinToString()
         return "$joinType JOIN (SELECT $projection FROM $source) AS $relJoinIdentifier ON $relJoinIdentifier.value = ${scope}.subject"
+    }
+
+    private fun getSubjectTypesSource(includeLimit: Boolean): String {
+        if (canPageRootSubjects()) {
+            val rootPage = getRootPageSubjectsSource(includeLimit)
+            val typeCondition = getTypeCondition("type_uri")
+            return "(SELECT st.subject, st.type_uri, page.$COUNT FROM (SELECT subject, type_uri FROM $CURRENT_SUBJECT_TYPES FINAL WHERE $typeCondition) AS st INNER JOIN ($rootPage) AS page ON st.subject = page.subject) AS $scope"
+        }
+
+        val subjectConstraint = buildSubjectConstraintCondition("subject", subjectConstraints, context)
+        return atChangeId?.let {
+            val conditions = listOfNotNull(
+                "change_id <= '$it'",
+                subjectConstraint
+            ).joinToString(" AND ")
+            "(SELECT subject, type_uri FROM $SUBJECT_TYPES WHERE $conditions GROUP BY subject, type_uri, graph HAVING argMax(sign, change_id) > 0) AS $scope"
+        } ?: subjectConstraint?.let {
+            "(SELECT subject, type_uri FROM $CURRENT_SUBJECT_TYPES FINAL WHERE $it) AS $scope"
+        } ?: "$CURRENT_SUBJECT_TYPES AS $scope FINAL"
+    }
+
+    private fun canPageRootSubjects(): Boolean {
+        return parent == null &&
+            atChangeId == null &&
+            paginationInfo != null &&
+            candidateSubjectConstraints.isNotEmpty() &&
+            sortKeys == null &&
+            argFilter == null
+    }
+
+    private fun getRootPageSubjectsSource(includeLimit: Boolean): String {
+        val typeCondition = getTypeCondition("type_uri")
+        val candidateJoins = candidateSubjectConstraints.mapIndexed { index, constraint ->
+            "INNER JOIN (${checkNotNull(constraint.candidateSubjectSQL)}) AS ${scope}_candidate_$index ON st.subject = ${scope}_candidate_$index.id"
+        }.joinToString(" ")
+        val limit = paginationInfo
+            ?.takeIf { includeLimit }
+            ?.let { (pageSize, offset) -> " LIMIT $offset, $pageSize" }
+            ?: ""
+        return "SELECT subject, $COUNT FROM (SELECT st.subject AS subject, count() OVER () AS $COUNT FROM (SELECT subject, type_uri FROM $CURRENT_SUBJECT_TYPES FINAL WHERE $typeCondition) AS st $candidateJoins GROUP BY st.subject ORDER BY st.subject ASC$limit)"
+    }
+
+    private fun getTypeCondition(typeExpr: String): String {
+        val targetTypes = getTypeURIsToMatch(type)
+        return targetTypes
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(prefix = "$typeExpr IN (", postfix = ")") { "'$it'" }
+            ?: "1"
     }
 
 }

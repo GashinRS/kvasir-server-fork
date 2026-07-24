@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS `{cfg.database}`.data (
     change_id String,
     sign  Int8,
     PROJECTION subject_sort (SELECT * ORDER BY subject, predicate, object, datatype, language, graph, change_id, sign),
+    PROJECTION object_sort (SELECT * ORDER BY predicate, object, subject, datatype, language, graph, change_id, sign),
     INDEX idx_change_id change_id TYPE minmax GRANULARITY 4
 ) ENGINE = ReplacingMergeTree
     PARTITION BY toYYYYMM(timestamp)
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS `{cfg.database}`.current_data (
     change_id String,
     sign  Int8,
     PROJECTION subject_sort (SELECT * ORDER BY subject, predicate, object, datatype, language, graph),
+    PROJECTION object_sort (SELECT * ORDER BY predicate, object, subject, datatype, language, graph),
     INDEX idx_change_id change_id TYPE minmax GRANULARITY 4
 ) ENGINE = ReplacingMergeTree
     PARTITION BY toYYYYMM(timestamp)
